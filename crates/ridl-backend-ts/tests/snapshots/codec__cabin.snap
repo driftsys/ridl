@@ -268,31 +268,78 @@ export const Cabin = {
   average: { iface: 1, ord: 4, kind: "query", request: codecWindow, reply: codecAverage },
 } as const;
 
+/** One occurrence of an event of interface `Cabin`, as `CabinClient.onEvent` delivers it. */
+export type CabinEvent =
+  | { readonly event: "warning"; readonly occurrence: $rt.Occurrence<t.Warning> };
+
 /**
  * The cabin's own interface: a signal, an event, a command and a query, so
  * the proof covers every interaction kind that carries a payload.
  */
 export class CabinClient {
-  readonly #port: $rt.Caller;
+  readonly #port: $rt.Caller & $rt.SignalReader & $rt.EventSource;
   readonly #codec: $rt.Codec;
-  readonly #ids: { readonly setLevel: { readonly request: number }; readonly average: { readonly request: number; readonly reply: number } };
+  readonly #ids: { readonly temperature: { readonly payload: number }; readonly warning: { readonly payload: number }; readonly setLevel: { readonly request: number }; readonly average: { readonly request: number; readonly reply: number } };
 
-  private constructor(port: $rt.Caller, codec: $rt.Codec) {
+  private constructor(port: $rt.Caller & $rt.SignalReader & $rt.EventSource, codec: $rt.Codec) {
     this.#port = port;
     this.#codec = codec;
     this.#ids = {
+      temperature: { payload: codec.typeId(Cabin.temperature.payload.type) },
+      warning: { payload: codec.typeId(Cabin.warning.payload.type) },
       setLevel: { request: codec.typeId(Cabin.setLevel.request.type) },
       average: { request: codec.typeId(Cabin.average.request.type), reply: codec.typeId(Cabin.average.reply.type) },
     };
   }
 
   /**
-   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when the
-   * catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   * Binds the client to a port and a loaded codec, and registers the check of each
+   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or
+   * of the codec differs from `CATALOG_HASH`.
    */
-  static bind<P extends $rt.Caller>(port: P, codec: $rt.Codec): CabinClient {
+  static bind<P extends $rt.Caller & $rt.SignalReader & $rt.EventSource>(port: P, codec: $rt.Codec): CabinClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
-    return new CabinClient(port, codec);
+    const client = new CabinClient(port, codec);
+    {
+      const entry = signalCheck(codec, Cabin.temperature, client.#ids.temperature.payload);
+      port.checkWith(entry.iface, entry.ord, entry.check);
+    }
+    return client;
+  }
+
+  /** Subscribes to signal `temperature`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  subscribeTemperature(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Cabin.temperature.iface, Cabin.temperature.ord, opts);
+  }
+
+  /**
+   * The current cabin air temperature.
+   *
+   * @remarks
+   * Rules:
+   * - period 10000 us
+   *
+   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   */
+  temperature(): $rt.Sample<t.Temperature> {
+    const raw = this.#port.sample(Cabin.temperature.iface, Cabin.temperature.ord);
+    return raw === undefined ? $rt.initSample(t.initTemperature) : $rt.decodeSample(this.#codec, Cabin.temperature.payload, this.#ids.temperature.payload, raw, t.initTemperature);
+  }
+
+  /** Waits for the next publish of signal `temperature`. `opts.bound` and `opts.signal` limit the wait. */
+  async readTemperature(opts?: $rt.WaitOptions): Promise<$rt.Sample<t.Temperature>> {
+    const raw = await this.#port.read(Cabin.temperature.iface, Cabin.temperature.ord, opts);
+    return $rt.decodeSample(this.#codec, Cabin.temperature.payload, this.#ids.temperature.payload, raw, t.initTemperature);
+  }
+
+  /** Calls `listener` with every accepted publish of signal `temperature` and returns the function that removes it. */
+  watchTemperature(listener: (sample: $rt.Sample<t.Temperature>) => void): () => void {
+    return this.#port.watch(Cabin.temperature.iface, Cabin.temperature.ord, (raw) => listener($rt.decodeSample(this.#codec, Cabin.temperature.payload, this.#ids.temperature.payload, raw, t.initTemperature)));
+  }
+
+  /** Subscribes to event `warning`. The promise resolves when the provider answered. */
+  subscribeWarning(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Cabin.warning.iface, Cabin.warning.ord, opts);
   }
 
   /**
@@ -327,6 +374,24 @@ export class CabinClient {
     const raw = await this.#port.query(Cabin.average.iface, Cabin.average.ord, args, { ...opts, bound: opts?.bound ?? 200 });
     return $rt.decodeReply(this.#codec, Cabin.average.reply, this.#ids.average.reply, raw);
   }
+
+  /**
+   * Calls `listener` with every accepted occurrence of every subscribed event of the
+   * interface, in arrival order, and returns the function that removes it. An occurrence
+   * that the port refused has `occurrence.detected` set and no value.
+   */
+  onEvent(listener: (event: CabinEvent) => void): () => void {
+    return this.#port.listen(Cabin.warning.iface, (raw) => {
+      switch (raw.ord) {
+        case Cabin.warning.ord:
+          listener({
+            event: "warning",
+            occurrence: $rt.decodeOccurrence(this.#codec, Cabin.warning.payload, this.#ids.warning.payload, raw),
+          });
+          break;
+      }
+    });
+  }
 }
 
 /** The members of interface `Horn`, interface number `2`. */
@@ -335,8 +400,71 @@ export const Horn = {
   active: { iface: 2, ord: 1, kind: "signal", payload: codecHealth },
 } as const;
 
-function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): $rt.SignalCheckEntry {
-  const typeId = codec.typeId(entry.payload.type);
+/**
+ * A second interface with a signal and nothing else, so the emitted crate
+ * holds more than one interface module and the per-interface buffer bound is
+ * visibly computed per interface rather than fixed.
+ */
+export class HornClient {
+  readonly #port: $rt.SignalReader;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly active: { readonly payload: number } };
+
+  private constructor(port: $rt.SignalReader, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      active: { payload: codec.typeId(Horn.active.payload.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec, and registers the check of each
+   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or
+   * of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.SignalReader>(port: P, codec: $rt.Codec): HornClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new HornClient(port, codec);
+    {
+      const entry = signalCheck(codec, Horn.active, client.#ids.active.payload);
+      port.checkWith(entry.iface, entry.ord, entry.check);
+    }
+    return client;
+  }
+
+  /** Subscribes to signal `active`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  subscribeActive(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Horn.active.iface, Horn.active.ord, opts);
+  }
+
+  /**
+   * The health of the horn.
+   *
+   * @remarks
+   * Rules:
+   * - period 10000 us
+   *
+   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   */
+  active(): $rt.Sample<t.Health> {
+    const raw = this.#port.sample(Horn.active.iface, Horn.active.ord);
+    return raw === undefined ? $rt.initSample(t.initHealth) : $rt.decodeSample(this.#codec, Horn.active.payload, this.#ids.active.payload, raw, t.initHealth);
+  }
+
+  /** Waits for the next publish of signal `active`. `opts.bound` and `opts.signal` limit the wait. */
+  async readActive(opts?: $rt.WaitOptions): Promise<$rt.Sample<t.Health>> {
+    const raw = await this.#port.read(Horn.active.iface, Horn.active.ord, opts);
+    return $rt.decodeSample(this.#codec, Horn.active.payload, this.#ids.active.payload, raw, t.initHealth);
+  }
+
+  /** Calls `listener` with every accepted publish of signal `active` and returns the function that removes it. */
+  watchActive(listener: (sample: $rt.Sample<t.Health>) => void): () => void {
+    return this.#port.watch(Horn.active.iface, Horn.active.ord, (raw) => listener($rt.decodeSample(this.#codec, Horn.active.payload, this.#ids.active.payload, raw, t.initHealth)));
+  }
+}
+
+function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }, typeId: number = codec.typeId(entry.payload.type)): $rt.SignalCheckEntry {
   return {
     iface: entry.iface,
     ord: entry.ord,

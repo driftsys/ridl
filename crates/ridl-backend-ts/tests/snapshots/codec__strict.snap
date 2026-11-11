@@ -253,12 +253,14 @@ export class ControlClient {
   }
 
   /**
-   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when the
-   * catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   * Binds the client to a port and a loaded codec, and registers the check of each
+   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or
+   * of the codec differs from `CATALOG_HASH`.
    */
   static bind<P extends $rt.Caller>(port: P, codec: $rt.Codec): ControlClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
-    return new ControlClient(port, codec);
+    const client = new ControlClient(port, codec);
+    return client;
   }
 
   /**

@@ -138,14 +138,21 @@ string (D-11), and satisfy `MemberRef` structurally. Stream functions also use
 the runtime types, errors and adapters described in D-17; they import nothing
 from the WebSocket package. A module with a signal also uses the runtime's
 `$rt.Codec`, `$rt.SignalCheckEntry` and `$rt.CodecError` for `signalChecks`. A
-module writes `<Interface>Client` for an interface that has at least one call
-method with a codec and a finite bound, and the class uses `$rt.Caller`,
-`$rt.CallOptions`, `$rt.Codec` and the values `$rt.checkCatalog`,
-`$rt.encodeRequest` and `$rt.decodeReply`; a client class name that another
-declaration of the file takes is refused like any other collision. The names the
-file declares are checked before anything is written, and a second declaration
-of one is refused with an error that names both: an interface or an induced
-tuple named after a reserved name of the file (`CATALOG_NAME`, `CATALOG_HASH`,
+module writes `<Interface>Client` for an interface that has at least one call,
+signal or event method with a codec and a finite bound, and the class uses the
+ports its members need (`$rt.Caller`, `$rt.SignalReader`, `$rt.EventSource`),
+`$rt.CallOptions`, `$rt.WaitOptions`, `$rt.Sample`, `$rt.Occurrence`,
+`$rt.Codec` and the values `$rt.checkCatalog`, `$rt.encodeRequest`,
+`$rt.decodeReply`, `$rt.decodeSample`, `$rt.decodeOccurrence` and
+`$rt.initSample`. It also writes `<Interface>Event` for an interface with an
+event. A signal gets a method only when its payload type is a type of the
+package with an `init<Name>` function in `<base>.ts` and the signal has no
+`= value` init override; the class says why when a signal gets none. A client
+class name, an event union name or a method name that another declaration or
+member takes is refused like any other collision. The names the file declares
+are checked before anything is written, and a second declaration of one is
+refused with an error that names both: an interface or an induced tuple named
+after a reserved name of the file (`CATALOG_NAME`, `CATALOG_HASH`,
 `PAYLOAD_TYPES`, `RULES`, `RuleError` when the module reaches an enum or an enum
 set, `signalChecks` and `signalCheck` when the package has a signal, an import
 alias `flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two enum sets

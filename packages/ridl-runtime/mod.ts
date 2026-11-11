@@ -22,7 +22,14 @@ export type {
   WaitOptions,
 } from "./src/ports.ts";
 export type { Detection, SignalCheck, SignalCheckEntry } from "./src/checks.ts";
-export { checkCatalog, decodeReply, encodeRequest } from "./src/calls.ts";
+export {
+  checkCatalog,
+  decodeOccurrence,
+  decodeReply,
+  decodeSample,
+  encodeRequest,
+  initSample,
+} from "./src/calls.ts";
 export { codePointLength } from "./src/length.ts";
 export { checkWellFormed, isWellFormedString } from "./src/well_formed.ts";
 export { offFloatPoints, offFloatStep } from "./src/step.ts";

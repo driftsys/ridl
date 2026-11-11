@@ -790,29 +790,96 @@ export const Sensors = {
   pick: { iface: 1, ord: 12, kind: "signal", payload: codecPick },
 } as const;
 
+/** One occurrence of an event of interface `Sensors`, as `SensorsClient.onEvent` delivers it. */
+export type SensorsEvent =
+  | { readonly event: "result"; readonly occurrence: $rt.Occurrence<t.SensorResult> }
+  | { readonly event: "bounds"; readonly occurrence: $rt.Occurrence<t.BoundsSummary> };
+
 /** The client of interface `Sensors`. */
 export class SensorsClient {
-  readonly #port: $rt.Caller;
+  readonly #port: $rt.Caller & $rt.SignalReader & $rt.EventSource;
   readonly #codec: $rt.Codec;
-  readonly #ids: { readonly setLimit: { readonly request: number }; readonly profile: { readonly request: number; readonly reply: number }; readonly span: { readonly request: number; readonly reply: number } };
+  readonly #ids: { readonly latest: { readonly payload: number }; readonly result: { readonly payload: number }; readonly bounds: { readonly payload: number }; readonly setLimit: { readonly request: number }; readonly profile: { readonly request: number; readonly reply: number }; readonly span: { readonly request: number; readonly reply: number }; readonly setting: { readonly payload: number }; readonly note: { readonly payload: number }; readonly pick: { readonly payload: number } };
 
-  private constructor(port: $rt.Caller, codec: $rt.Codec) {
+  private constructor(port: $rt.Caller & $rt.SignalReader & $rt.EventSource, codec: $rt.Codec) {
     this.#port = port;
     this.#codec = codec;
     this.#ids = {
+      latest: { payload: codec.typeId(Sensors.latest.payload.type) },
+      result: { payload: codec.typeId(Sensors.result.payload.type) },
+      bounds: { payload: codec.typeId(Sensors.bounds.payload.type) },
       setLimit: { request: codec.typeId(Sensors.setLimit.request.type) },
       profile: { request: codec.typeId(Sensors.profile.request.type), reply: codec.typeId(Sensors.profile.reply.type) },
       span: { request: codec.typeId(Sensors.span.request.type), reply: codec.typeId(Sensors.span.reply.type) },
+      setting: { payload: codec.typeId(Sensors.setting.payload.type) },
+      note: { payload: codec.typeId(Sensors.note.payload.type) },
+      pick: { payload: codec.typeId(Sensors.pick.payload.type) },
     };
   }
 
   /**
-   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when the
-   * catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   * Binds the client to a port and a loaded codec, and registers the check of each
+   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or
+   * of the codec differs from `CATALOG_HASH`.
    */
-  static bind<P extends $rt.Caller>(port: P, codec: $rt.Codec): SensorsClient {
+  static bind<P extends $rt.Caller & $rt.SignalReader & $rt.EventSource>(port: P, codec: $rt.Codec): SensorsClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
-    return new SensorsClient(port, codec);
+    const client = new SensorsClient(port, codec);
+    {
+      const entry = signalCheck(codec, Sensors.latest, client.#ids.latest.payload);
+      port.checkWith(entry.iface, entry.ord, entry.check);
+    }
+    {
+      const entry = signalCheck(codec, Sensors.setting, client.#ids.setting.payload);
+      port.checkWith(entry.iface, entry.ord, entry.check);
+    }
+    {
+      const entry = signalCheck(codec, Sensors.note, client.#ids.note.payload);
+      port.checkWith(entry.iface, entry.ord, entry.check);
+    }
+    {
+      const entry = signalCheck(codec, Sensors.pick, client.#ids.pick.payload);
+      port.checkWith(entry.iface, entry.ord, entry.check);
+    }
+    return client;
+  }
+
+  /** Subscribes to signal `latest`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  subscribeLatest(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Sensors.latest.iface, Sensors.latest.ord, opts);
+  }
+
+  /**
+   * @remarks
+   * Rules:
+   * - period 100000 us
+   *
+   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   */
+  latest(): $rt.Sample<t.SensorReading> {
+    const raw = this.#port.sample(Sensors.latest.iface, Sensors.latest.ord);
+    return raw === undefined ? $rt.initSample(t.initSensorReading) : $rt.decodeSample(this.#codec, Sensors.latest.payload, this.#ids.latest.payload, raw, t.initSensorReading);
+  }
+
+  /** Waits for the next publish of signal `latest`. `opts.bound` and `opts.signal` limit the wait. */
+  async readLatest(opts?: $rt.WaitOptions): Promise<$rt.Sample<t.SensorReading>> {
+    const raw = await this.#port.read(Sensors.latest.iface, Sensors.latest.ord, opts);
+    return $rt.decodeSample(this.#codec, Sensors.latest.payload, this.#ids.latest.payload, raw, t.initSensorReading);
+  }
+
+  /** Calls `listener` with every accepted publish of signal `latest` and returns the function that removes it. */
+  watchLatest(listener: (sample: $rt.Sample<t.SensorReading>) => void): () => void {
+    return this.#port.watch(Sensors.latest.iface, Sensors.latest.ord, (raw) => listener($rt.decodeSample(this.#codec, Sensors.latest.payload, this.#ids.latest.payload, raw, t.initSensorReading)));
+  }
+
+  /** Subscribes to event `result`. The promise resolves when the provider answered. */
+  subscribeResult(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Sensors.result.iface, Sensors.result.ord, opts);
+  }
+
+  /** Subscribes to event `bounds`. The promise resolves when the provider answered. */
+  subscribeBounds(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Sensors.bounds.iface, Sensors.bounds.ord, opts);
   }
 
   /**
@@ -854,11 +921,120 @@ export class SensorsClient {
     return $rt.decodeReply(this.#codec, Sensors.span.reply, this.#ids.span.reply, raw);
   }
 
+  /** Subscribes to signal `setting`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  subscribeSetting(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Sensors.setting.iface, Sensors.setting.ord, opts);
+  }
+
+  /**
+   * @remarks
+   * Rules:
+   * - period 1000000 us
+   *
+   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   */
+  setting(): $rt.Sample<t.Setting> {
+    const raw = this.#port.sample(Sensors.setting.iface, Sensors.setting.ord);
+    return raw === undefined ? $rt.initSample(t.initSetting) : $rt.decodeSample(this.#codec, Sensors.setting.payload, this.#ids.setting.payload, raw, t.initSetting);
+  }
+
+  /** Waits for the next publish of signal `setting`. `opts.bound` and `opts.signal` limit the wait. */
+  async readSetting(opts?: $rt.WaitOptions): Promise<$rt.Sample<t.Setting>> {
+    const raw = await this.#port.read(Sensors.setting.iface, Sensors.setting.ord, opts);
+    return $rt.decodeSample(this.#codec, Sensors.setting.payload, this.#ids.setting.payload, raw, t.initSetting);
+  }
+
+  /** Calls `listener` with every accepted publish of signal `setting` and returns the function that removes it. */
+  watchSetting(listener: (sample: $rt.Sample<t.Setting>) => void): () => void {
+    return this.#port.watch(Sensors.setting.iface, Sensors.setting.ord, (raw) => listener($rt.decodeSample(this.#codec, Sensors.setting.payload, this.#ids.setting.payload, raw, t.initSetting)));
+  }
+
+  /** Subscribes to signal `note`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  subscribeNote(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Sensors.note.iface, Sensors.note.ord, opts);
+  }
+
+  /**
+   * @remarks
+   * Rules:
+   * - period 1000000 us
+   *
+   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   */
+  note(): $rt.Sample<t.Note> {
+    const raw = this.#port.sample(Sensors.note.iface, Sensors.note.ord);
+    return raw === undefined ? $rt.initSample(t.initNote) : $rt.decodeSample(this.#codec, Sensors.note.payload, this.#ids.note.payload, raw, t.initNote);
+  }
+
+  /** Waits for the next publish of signal `note`. `opts.bound` and `opts.signal` limit the wait. */
+  async readNote(opts?: $rt.WaitOptions): Promise<$rt.Sample<t.Note>> {
+    const raw = await this.#port.read(Sensors.note.iface, Sensors.note.ord, opts);
+    return $rt.decodeSample(this.#codec, Sensors.note.payload, this.#ids.note.payload, raw, t.initNote);
+  }
+
+  /** Calls `listener` with every accepted publish of signal `note` and returns the function that removes it. */
+  watchNote(listener: (sample: $rt.Sample<t.Note>) => void): () => void {
+    return this.#port.watch(Sensors.note.iface, Sensors.note.ord, (raw) => listener($rt.decodeSample(this.#codec, Sensors.note.payload, this.#ids.note.payload, raw, t.initNote)));
+  }
+
+  /** Subscribes to signal `pick`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait. */
+  subscribePick(opts?: $rt.WaitOptions): Promise<void> {
+    return this.#port.subscribe(Sensors.pick.iface, Sensors.pick.ord, opts);
+  }
+
+  /**
+   * @remarks
+   * Rules:
+   * - period 1000000 us
+   *
+   * @returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value.
+   */
+  pick(): $rt.Sample<t.Pick> {
+    const raw = this.#port.sample(Sensors.pick.iface, Sensors.pick.ord);
+    return raw === undefined ? $rt.initSample(t.initPick) : $rt.decodeSample(this.#codec, Sensors.pick.payload, this.#ids.pick.payload, raw, t.initPick);
+  }
+
+  /** Waits for the next publish of signal `pick`. `opts.bound` and `opts.signal` limit the wait. */
+  async readPick(opts?: $rt.WaitOptions): Promise<$rt.Sample<t.Pick>> {
+    const raw = await this.#port.read(Sensors.pick.iface, Sensors.pick.ord, opts);
+    return $rt.decodeSample(this.#codec, Sensors.pick.payload, this.#ids.pick.payload, raw, t.initPick);
+  }
+
+  /** Calls `listener` with every accepted publish of signal `pick` and returns the function that removes it. */
+  watchPick(listener: (sample: $rt.Sample<t.Pick>) => void): () => void {
+    return this.#port.watch(Sensors.pick.iface, Sensors.pick.ord, (raw) => listener($rt.decodeSample(this.#codec, Sensors.pick.payload, this.#ids.pick.payload, raw, t.initPick)));
+  }
+
+  /**
+   * Calls `listener` with every accepted occurrence of every subscribed event of the
+   * interface, in arrival order, and returns the function that removes it. An occurrence
+   * that the port refused has `occurrence.detected` set and no value.
+   */
+  onEvent(listener: (event: SensorsEvent) => void): () => void {
+    return this.#port.listen(Sensors.result.iface, (raw) => {
+      switch (raw.ord) {
+        case Sensors.result.ord:
+          listener({
+            event: "result",
+            occurrence: $rt.decodeOccurrence(this.#codec, Sensors.result.payload, this.#ids.result.payload, raw),
+          });
+          break;
+        case Sensors.bounds.ord:
+          listener({
+            event: "bounds",
+            occurrence: $rt.decodeOccurrence(this.#codec, Sensors.bounds.payload, this.#ids.bounds.payload, raw),
+          });
+          break;
+      }
+    });
+  }
+
   // fetch has no method: inline fallible replies have no codec
+
+  // extras has no method: its payload type has no init function
 }
 
-function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): $rt.SignalCheckEntry {
-  const typeId = codec.typeId(entry.payload.type);
+function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }, typeId: number = codec.typeId(entry.payload.type)): $rt.SignalCheckEntry {
   return {
     iface: entry.iface,
     ord: entry.ord,

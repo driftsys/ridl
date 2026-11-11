@@ -3209,9 +3209,10 @@ _codec-ts-check:
     sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/#$PWD/packages/ridl-runtime/#" crates/ridl-backend-ts/tests/fixtures/codec/deno.json > "$tmp/deno.json"
     cp crates/ridl-backend-ts/tests/fixtures/codec/roundtrip_test.ts "$tmp/roundtrip_test.ts"
     cp crates/ridl-backend-ts/tests/fixtures/codec/client_test.ts "$tmp/client_test.ts"
-    deno lint --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts" "$tmp/client_test.ts"
+    cp crates/ridl-backend-ts/tests/fixtures/codec/feed_test.ts "$tmp/feed_test.ts"
+    deno lint --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts" "$tmp/client_test.ts" "$tmp/feed_test.ts"
     deno check --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
-    deno test --config "$tmp/deno.json" "$tmp/roundtrip_test.ts" "$tmp/client_test.ts"
+    deno test --config "$tmp/deno.json" "$tmp/roundtrip_test.ts" "$tmp/client_test.ts" "$tmp/feed_test.ts"
     # The second fixture: a package whose only payload root is a `ridl.std`
     # scalar, so its module imports `ridl.std.codec.ts` and no barrel of its
     # own (`flatc` runs on `ridl.std.fbs` alone: the package has no table).

@@ -1191,13 +1191,23 @@ fn an_interface_named_as_a_client_class_is_refused() {
     );
 }
 
-/// An interface with no command or query has no client class yet, so its
-/// name leaves `<Name>Client` free.
+/// An interface with no member that the client class carries has no client
+/// class, so its name leaves `<Name>Client` free.
 ///
 /// Mutation: register the client class name of every interface.
 #[test]
-fn an_interface_without_a_call_reserves_no_client_class_name() {
+fn an_interface_without_a_carried_member_reserves_no_client_class_name() {
     let mut model = cabin_model();
+    // A signal with an init override has no method, so `Horn` has no member
+    // for the class to carry.
+    let horn = interface(&mut model, "Horn");
+    for slot in &mut horn.slots {
+        if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) = &mut slot.occupant
+            && let Some(v1::interaction::Shape::Signal(signal)) = &mut interaction.shape
+        {
+            signal.declared_init = Some("1".to_string());
+        }
+    }
     interface(&mut model, "Cabin").identity =
         Some(v1::interface::Identity::Declared(v1::Spellings {
             declared: "HornClient".to_string(),
@@ -1249,6 +1259,145 @@ fn a_member_named_as_a_method_of_the_client_class_is_refused() {
             )
         );
     }
+}
+
+/// Renames the member `from` of the interface `Sensors` to `to`.
+fn rename_sensors_member(model: &mut v1::Model, from: &str, to: &str) {
+    let sensors = interface(model, "Sensors");
+    let interaction = sensors
+        .slots
+        .iter_mut()
+        .find_map(|slot| match slot.occupant.as_mut() {
+            Some(v1::interaction_slot::Occupant::Interaction(interaction))
+                if interaction.name.as_ref().map(|n| n.declared.as_str()) == Some(from) =>
+            {
+                Some(interaction)
+            }
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("Sensors declares {from}"));
+    interaction.name = Some(v1::Spellings {
+        declared: to.to_string(),
+        ..Default::default()
+    });
+}
+
+/// A member whose name equals a method that another member generates is
+/// refused, with an error that names both members. A signal generates
+/// `subscribeX`, `x`, `readX` and `watchX`, and an event `subscribeX`.
+///
+/// Mutation: leave one of the four signal method names out of the list that
+/// `check_names` registers, or leave the event's `subscribe` name out.
+#[test]
+fn a_member_named_as_a_generated_method_is_refused() {
+    for (from, to, other) in [
+        ("setLimit", "subscribeLatest", "latest"),
+        ("setLimit", "readLatest", "latest"),
+        ("setLimit", "watchLatest", "latest"),
+        ("setLimit", "subscribeResult", "result"),
+        ("result", "latest", "latest"),
+    ] {
+        let mut model = common_model();
+        rename_sensors_member(&mut model, from, to);
+        let method = if to == "latest" {
+            "subscribeLatest"
+        } else {
+            to
+        };
+        assert_eq!(
+            refusal(&model),
+            format!(
+                "`Sensors.{to}` in package `veh.common` generates the method `{method}`, which \
+                 collides with the method `{method}` that `Sensors.{other}` generates in the \
+                 client class `SensorsClient`"
+            ),
+            "{from} renamed {to}"
+        );
+    }
+}
+
+/// A signal named after a method of the class that the module writes for
+/// another purpose is refused, as a command or a query is.
+///
+/// Mutation: register the reserved method names only for commands and queries.
+#[test]
+fn a_signal_named_as_a_reserved_method_is_refused() {
+    for (member, taken) in [
+        ("bind", "the static method `bind`"),
+        ("onEvent", "the method `onEvent`"),
+    ] {
+        let mut model = common_model();
+        rename_sensors_member(&mut model, "latest", member);
+        assert_eq!(
+            refusal(&model),
+            format!(
+                "`Sensors.{member}` in package `veh.common` collides with {taken} of the client \
+                 class `SensorsClient`, which the codec module also declares"
+            )
+        );
+    }
+}
+
+/// A declaration named as the event union of an interface is refused, with an
+/// error that names both; an interface with no event reserves no such name.
+///
+/// Mutation: skip the registration of the event union name, or register it
+/// for an interface with no event.
+#[test]
+fn an_interface_named_as_an_event_union_is_refused() {
+    let mut model = cabin_model();
+    interface(&mut model, "Horn").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "CabinEvent".to_string(),
+            ..Default::default()
+        }));
+    assert_eq!(
+        refusal(&model),
+        "`CabinEvent` in package `veh.cabin` collides with `Cabin event union`, which the \
+         codec module also declares"
+    );
+    // `Horn` has a signal and no event, so `HornEvent` stays free.
+    let mut model = cabin_model();
+    interface(&mut model, "Cabin").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "HornEvent".to_string(),
+            ..Default::default()
+        }));
+    let source = module(&model, "veh.cabin");
+    assert!(source.contains("export type HornEventEvent ="), "{source}");
+    assert!(!source.contains("export type HornEvent ="), "{source}");
+}
+
+/// A signal and an event become methods only when the client class can say
+/// what the channel holds before its first value and what type it decodes to:
+/// a signal with an init override, or whose payload type has no init function,
+/// gets no method, and the class says why.
+///
+/// Mutation: drop the init test of `discover_feed`.
+#[test]
+fn a_signal_without_a_usable_init_has_no_method() {
+    let source = module(&common_model(), "veh.common");
+    assert!(
+        source.contains("// extras has no method: its payload type has no init function"),
+        "{source}"
+    );
+    assert!(!source.contains("  extras(): "), "{source}");
+    let mut model = common_model();
+    let sensors = interface(&mut model, "Sensors");
+    for slot in &mut sensors.slots {
+        if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) = &mut slot.occupant
+            && let Some(v1::interaction::Shape::Signal(signal)) = &mut interaction.shape
+            && interaction.name.as_ref().map(|n| n.declared.as_str()) == Some("note")
+        {
+            signal.declared_init = Some("x".to_string());
+        }
+    }
+    let source = module(&model, "veh.common");
+    assert!(
+        source.contains("// note has no method: its `= value` init override"),
+        "{source}"
+    );
+    assert!(!source.contains("  note(): "), "{source}");
 }
 
 /// A command takes its bound from the member's recorded maximum, in

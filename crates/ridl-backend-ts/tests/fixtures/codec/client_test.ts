@@ -40,6 +40,9 @@ function scripted(verify: (id: number, bytes: Uint8Array) => VerifyResult) {
 
 const accept = (): VerifyResult => ({ ok: true });
 const port = () => new FakePort(codec.CATALOG_HASH.slice());
+/** The calls of a client, without the checks that `bind` registers. */
+const sent = (fake: FakePort) =>
+  fake.calls.filter((call) => call.method !== "checkWith");
 
 Deno.test("a command sends the verified request bytes and resolves", async () => {
   const { loaded, verified, ids } = scripted(accept);
@@ -50,11 +53,11 @@ Deno.test("a command sends the verified request bytes and resolves", async () =>
     limit: speed(10),
     actual: speed(20),
   });
-  assert.equal(fake.calls.length, 1);
-  assert.equal(fake.calls[0].method, "command");
-  assert.equal(fake.calls[0].iface, codec.Sensors.iface);
-  assert.equal(fake.calls[0].ord, codec.Sensors.setLimit.ord);
-  assert.deepEqual(fake.calls[0].args, bytes);
+  assert.equal(sent(fake).length, 1);
+  assert.equal(sent(fake)[0].method, "command");
+  assert.equal(sent(fake)[0].iface, codec.Sensors.iface);
+  assert.equal(sent(fake)[0].ord, codec.Sensors.setLimit.ord);
+  assert.deepEqual(sent(fake)[0].args, bytes);
   assert.deepEqual(verified, [{
     id: ids.get(codec.Sensors.setLimit.request.type),
     bytes,
@@ -75,10 +78,10 @@ Deno.test("a query with one named parameter sends that value as the request", as
   const reply = await client.profile("ann" as ridl_std.Name);
   assert.deepEqual(reply, profile);
   assert.deepEqual(
-    fake.calls[0].args,
+    sent(fake)[0].args,
     codec.Sensors.profile.request.encode("ann" as ridl_std.Name),
   );
-  assert.equal(fake.calls[0].method, "query");
+  assert.equal(sent(fake)[0].method, "query");
 });
 
 Deno.test("a query verifies the reply, then decodes it", async () => {
@@ -148,7 +151,7 @@ Deno.test("a rule text the module does not know rejects with a CodecError", asyn
     client.setLimit(speed(1), speed(2)),
     CodecError,
   );
-  assert.equal(fake.calls.length, 0);
+  assert.equal(sent(fake).length, 0);
 });
 
 Deno.test("a request that fails verification sends nothing", async () => {
@@ -171,7 +174,7 @@ Deno.test("a request that fails verification sends nothing", async () => {
       return true;
     },
   );
-  assert.equal(fake.calls.length, 0);
+  assert.equal(sent(fake).length, 0);
 });
 
 Deno.test("the bound defaults to the declared maximum and opts.bound overrides it", async () => {
@@ -189,10 +192,10 @@ Deno.test("the bound defaults to the declared maximum and opts.bound overrides i
   const signal = new AbortController().signal;
   await client.setLimit(speed(1), speed(2), { signal });
   assert.deepEqual(
-    fake.calls.map((call) => (call.opts as { bound: number }).bound),
+    sent(fake).map((call) => (call.opts as { bound: number }).bound),
     [50, 7, 100, 9, 50],
   );
-  assert.equal((fake.calls[4].opts as { signal?: AbortSignal }).signal, signal);
+  assert.equal((sent(fake)[4].opts as { signal?: AbortSignal }).signal, signal);
 });
 
 Deno.test("bind resolves each payload type once and a call resolves none", async () => {
@@ -211,6 +214,12 @@ Deno.test("bind resolves each payload type once and a call resolves none", async
       codec.Sensors.profile.reply.type,
       codec.Sensors.span.request.type,
       codec.Sensors.span.reply.type,
+      codec.Sensors.latest.payload.type,
+      codec.Sensors.result.payload.type,
+      codec.Sensors.bounds.payload.type,
+      codec.Sensors.setting.payload.type,
+      codec.Sensors.note.payload.type,
+      codec.Sensors.pick.payload.type,
     ].sort(),
   );
   const before = resolved.length;
@@ -293,7 +302,7 @@ Deno.test("a query addresses its member, verifies the request and defaults its b
   const client = codec.SensorsClient.bind(fake, loaded);
   await client.profile("ann" as ridl_std.Name);
   await client.span();
-  const [first, second] = fake.calls;
+  const [first, second] = sent(fake);
   assert.equal(first.iface, codec.Sensors.iface);
   assert.equal(first.ord, codec.Sensors.profile.ord);
   assert.equal((first.opts as { bound: number }).bound, 100);

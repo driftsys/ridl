@@ -24,12 +24,17 @@
 //! they verify requests before sending, verify named elements before decoding,
 //! decode raw text as UTF-8, and preserve raw byte streams. Uploads encode and
 //! verify whole named elements, and split raw bytes or text at the member limit.
-//! Each non-internal interface with a command or a query also gets
-//! `<Interface>Client`, a class over a runtime `Caller`: `bind` checks the
-//! catalog hash of the port and of the codec and resolves each payload type id
-//! once, and one method per command and query verifies the request before it
-//! is sent and the reply before it is decoded. A query whose reply is an inline
-//! `T | E` has no method.
+//! Each non-internal interface with a command, a query, a signal or an event
+//! also gets `<Interface>Client`, a class over the runtime ports that its
+//! members need (`Caller`, `SignalReader`, `EventSource`): `bind` checks the
+//! catalog hash of the port and of the codec, resolves each payload type id
+//! once and registers the check of each signal with the port. One method per
+//! command and query verifies the request before it is sent and the reply
+//! before it is decoded. A signal gets `subscribeX`, `x`, `readX` and `watchX`,
+//! whose samples carry the decoded value, and an event gets `subscribeX`; one
+//! `onEvent` delivers the occurrences as the union `<Interface>Event`. A query
+//! whose reply is an inline `T | E` has no method, and neither has a signal
+//! with an init override or without an init function of its payload type.
 //! Typed functions are omitted for calls with two or more parameter streams,
 //! uploads with an inline `T | E` reply, and calls whose request, named element
 //! or upload reply has no finite FlatBuffers bound.
@@ -206,6 +211,19 @@ struct CallMember<'a> {
     bound_ms: Option<String>,
 }
 
+/// A signal or an event that the client class of its interface carries, with
+/// the types its methods need.
+struct FeedMember<'a> {
+    interaction: &'a v1::Interaction,
+    /// An event; a signal otherwise.
+    event: bool,
+    /// The type the payload decodes to.
+    value_type: String,
+    /// The `init<Name>` function of `<base>.ts` that gives the channel init of
+    /// a signal; `None` for an event.
+    init: Option<String>,
+}
+
 /// A stream direction with a resolved payload codec when its elements are named.
 struct StreamElement {
     form: &'static str,
@@ -263,8 +281,12 @@ struct Codec<'a> {
     /// and ordinal.
     call_members: BTreeMap<(u32, u32), CallMember<'a>>,
     /// The commands and queries of a non-internal interface that the client
-    /// class leaves out, with the reason.
+    /// class leaves out, with the reason. The signals and events it leaves out
+    /// are here too.
     call_omissions: BTreeMap<(u32, u32), String>,
+    /// The signals and events the client classes carry, by interface number
+    /// and ordinal.
+    feed_members: BTreeMap<(u32, u32), FeedMember<'a>>,
     /// The member table entries of the signals that have one, as
     /// `<Interface>.<member>`, in declaration order.
     signal_entries: Vec<String>,
@@ -334,6 +356,7 @@ impl<'a> Codec<'a> {
             stream_omissions: BTreeMap::new(),
             call_members: BTreeMap::new(),
             call_omissions: BTreeMap::new(),
+            feed_members: BTreeMap::new(),
             signal_entries: Vec::new(),
             needs_domain: false,
         };
@@ -609,37 +632,75 @@ impl<'a> Codec<'a> {
                     format!("{} interface-table metadata key `iface`", spelled.declared),
                 )?;
                 let has_client = interface.slots.iter().any(|slot| {
-                    self.call_members
-                        .contains_key(&(interface.number, slot.ordinal))
+                    let key = (interface.number, slot.ordinal);
+                    self.call_members.contains_key(&key) || self.feed_members.contains_key(&key)
                 });
                 if has_client {
-                    register(
-                        format!("{}Client", spelled.declared),
-                        format!("{} client class", spelled.declared),
-                    )?;
+                    let class = format!("{}Client", spelled.declared);
+                    register(class.clone(), format!("{} client class", spelled.declared))?;
+                    // The method names of the class, each with what took it:
+                    // `Err` names the member that generates it, `Ok` the
+                    // method of the class that the module writes for another
+                    // purpose.
+                    let mut taken: BTreeMap<String, Result<&str, String>> = BTreeMap::from([
+                        ("bind".to_string(), Ok("the static method `bind`")),
+                        ("constructor".to_string(), Ok("the constructor")),
+                        ("onEvent".to_string(), Ok("the method `onEvent`")),
+                    ]);
+                    let mut has_event = false;
                     for slot in &interface.slots {
-                        let Some(call) = self.call_members.get(&(interface.number, slot.ordinal))
-                        else {
+                        let key = (interface.number, slot.ordinal);
+                        let (interaction, methods) = if let Some(call) = self.call_members.get(&key)
+                        {
+                            let member = interaction_member(call.interaction);
+                            (call.interaction, vec![member.to_string()])
+                        } else if let Some(feed) = self.feed_members.get(&key) {
+                            let member = interaction_member(feed.interaction);
+                            let pascal = pascal_member(member);
+                            has_event |= feed.event;
+                            let methods = if feed.event {
+                                vec![format!("subscribe{pascal}")]
+                            } else {
+                                vec![
+                                    format!("subscribe{pascal}"),
+                                    member.to_string(),
+                                    format!("read{pascal}"),
+                                    format!("watch{pascal}"),
+                                ]
+                            };
+                            (feed.interaction, methods)
+                        } else {
                             continue;
                         };
-                        let member = call
-                            .interaction
-                            .name
-                            .as_ref()
-                            .map_or("", |n| n.declared.as_str());
-                        let taken = match member {
-                            "bind" => Some("the static method `bind`"),
-                            "constructor" => Some("the constructor"),
-                            "onEvent" => Some("the method `onEvent`"),
-                            _ => None,
-                        };
-                        if let Some(taken) = taken {
-                            return refuse(format!(
-                                "`{}.{member}` in package `{}` collides with {taken} of the \
-                                 client class `{}Client`, which the codec module also declares",
-                                spelled.declared, self.package, spelled.declared
-                            ));
+                        let member = interaction_member(interaction);
+                        for method in methods {
+                            match taken.get(&method) {
+                                Some(Ok(reserved)) => {
+                                    return refuse(format!(
+                                        "`{}.{member}` in package `{}` collides with {reserved} of the \
+                                         client class `{class}`, which the codec module also declares",
+                                        spelled.declared, self.package
+                                    ));
+                                }
+                                Some(Err(other)) => {
+                                    return refuse(format!(
+                                        "`{}.{member}` in package `{}` generates the method \
+                                         `{method}`, which collides with the method `{method}` that \
+                                         `{}.{other}` generates in the client class `{class}`",
+                                        spelled.declared, self.package, spelled.declared
+                                    ));
+                                }
+                                None => {
+                                    taken.insert(method, Err(member.to_string()));
+                                }
+                            }
                         }
+                    }
+                    if has_event {
+                        register(
+                            format!("{}Event", spelled.declared),
+                            format!("{} event union", spelled.declared),
+                        )?;
                     }
                 }
                 for slot in &interface.slots {
@@ -1428,6 +1489,7 @@ impl<'a> Codec<'a> {
         let uses_runtime_values = !self.signal_entries.is_empty()
             || !self.stream_calls.is_empty()
             || !self.call_members.is_empty()
+            || !self.feed_members.is_empty()
             || body.contains("$rt.checkWellFormed(");
         let uses_payload_codec = !self.used_locals.is_empty() || !self.foreign_payloads.is_empty();
         if uses_runtime_values {
@@ -2139,8 +2201,9 @@ impl<'a> Codec<'a> {
         let path = format!("{name}.{member}");
         let key = (interface.number, slot.ordinal);
         let (params, request_payload, query) = match &interaction.shape {
-            Some(Shape::Command(c)) => (&c.params, c.request.as_ref(), None),
-            Some(Shape::Query(q)) => (&q.params, q.request.as_ref(), Some(q)),
+            Some(Shape::Command(c)) => (Some(&c.params), c.request.as_ref(), None),
+            Some(Shape::Query(q)) => (Some(&q.params), q.request.as_ref(), Some(q)),
+            Some(Shape::Signal(_) | Shape::Event(_)) => (None, None, None),
             _ => return Ok(()),
         };
         if let Some((_, Err(unbounded))) = roles.iter().find(|(_, payload)| payload.is_err()) {
@@ -2148,6 +2211,9 @@ impl<'a> Codec<'a> {
                 .insert(key, format!("{unbounded} has no finite FlatBuffers bound"));
             return Ok(());
         }
+        let Some(params) = params else {
+            return self.discover_feed(key, interaction, &path);
+        };
         if let Some(q) = query
             && matches!(
                 q.reply.as_ref().and_then(|r| r.kind.as_ref()),
@@ -2209,6 +2275,81 @@ impl<'a> Codec<'a> {
                 param_types,
                 bindings,
                 bound_ms,
+            },
+        );
+        Ok(())
+    }
+
+    /// Selects the signal or event that the client class carries as methods,
+    /// or records why it leaves the member out. A signal needs the init
+    /// function of its payload type in `<base>.ts`, because the sample of a
+    /// signal that has no value yet carries the init value.
+    fn discover_feed(
+        &mut self,
+        key: (u32, u32),
+        interaction: &'a v1::Interaction,
+        path: &str,
+    ) -> Result<(), GenerateError> {
+        use v1::interaction::Shape;
+        let (payload, signal) = match &interaction.shape {
+            Some(Shape::Signal(s)) => (s.payload.as_ref(), Some(s)),
+            Some(Shape::Event(e)) => (e.payload.as_ref(), None),
+            _ => return Ok(()),
+        };
+        let Some(reference) = payload.and_then(|p| p.r#type.as_ref()) else {
+            return refuse(format!(
+                "malformed codegen model: `{path}` has a payload with no type"
+            ));
+        };
+        let init = match signal {
+            None => None,
+            Some(signal) => {
+                if signal.declared_init.is_some() {
+                    self.call_omissions.insert(
+                        key,
+                        "its `= value` init override has no TypeScript form yet".to_string(),
+                    );
+                    return Ok(());
+                }
+                match self.resolve(reference, path)? {
+                    Target::Local(_, declaration)
+                        if declaration.init.as_ref().is_some_and(|init| init.derivable) =>
+                    {
+                        Some(format!("t.init{}", declared_name(declaration)))
+                    }
+                    Target::Local(..) => {
+                        self.call_omissions
+                            .insert(key, "its payload type has no init function".to_string());
+                        return Ok(());
+                    }
+                    Target::Foreign(..) => {
+                        self.call_omissions.insert(
+                            key,
+                            "its payload type is declared in another package, whose init function this module does not import"
+                                .to_string(),
+                        );
+                        return Ok(());
+                    }
+                }
+            }
+        };
+        let value_type = self.ts_type(
+            &v1::Type {
+                kind: Some(v1::r#type::Kind::Named(reference.clone())),
+                ..Default::default()
+            },
+            path,
+        )?;
+        if init.is_some() {
+            self.needs_domain_values = true;
+        }
+        self.feed_members.insert(
+            key,
+            FeedMember {
+                interaction,
+                event: signal.is_none(),
+                value_type,
+                init,
             },
         );
         Ok(())
@@ -2785,31 +2926,67 @@ impl<'a> Codec<'a> {
         Ok(())
     }
 
-    /// Writes `<name>Client`, the class that carries each command and query
-    /// of the interface as a method over a `$rt.Caller`, when the interface
-    /// has one. `bind` checks the catalog hash of the port and of the codec
-    /// and resolves each payload type id once.
+    /// Writes `<name>Client`, the class that carries each command, query,
+    /// signal and event of the interface as methods over the ports its kinds
+    /// need, when the interface has one, and `<name>Event`, the union that
+    /// `onEvent` delivers, when it has an event. `bind` checks the catalog
+    /// hash of the port and of the codec, resolves each payload type id once
+    /// and registers the check of each signal.
     fn emit_client(&self, out: &mut String, interface: &v1::Interface, name: &str) {
-        let members: Vec<(&v1::InteractionSlot, &CallMember<'a>)> = interface
+        enum Item<'m, 'a> {
+            Call(&'m CallMember<'a>),
+            Feed(&'m FeedMember<'a>),
+        }
+        let items: Vec<Item<'_, 'a>> = interface
             .slots
             .iter()
             .filter_map(|slot| {
+                let key = (interface.number, slot.ordinal);
                 self.call_members
-                    .get(&(interface.number, slot.ordinal))
-                    .map(|call| (slot, call))
+                    .get(&key)
+                    .map(Item::Call)
+                    .or_else(|| self.feed_members.get(&key).map(Item::Feed))
             })
             .collect();
-        if members.is_empty() {
+        if items.is_empty() {
             return;
         }
         let class = format!("{name}Client");
-        let member_name = |call: &CallMember<'a>| -> String {
-            call.interaction
+        let member_of = |interaction: &v1::Interaction| -> String {
+            interaction
                 .name
                 .as_ref()
                 .map_or("", |n| n.declared.as_str())
                 .to_string()
         };
+        let member_name = |item: &Item<'_, 'a>| -> String {
+            match item {
+                Item::Call(call) => member_of(call.interaction),
+                Item::Feed(feed) => member_of(feed.interaction),
+            }
+        };
+        let has_calls = items.iter().any(|item| matches!(item, Item::Call(_)));
+        let has_signals = items
+            .iter()
+            .any(|item| matches!(item, Item::Feed(feed) if !feed.event));
+        let events: Vec<&FeedMember<'a>> = items
+            .iter()
+            .filter_map(|item| match item {
+                Item::Feed(feed) if feed.event => Some(*feed),
+                _ => None,
+            })
+            .collect();
+        let mut ports = Vec::new();
+        if has_calls {
+            ports.push("$rt.Caller");
+        }
+        if has_signals {
+            ports.push("$rt.SignalReader");
+        }
+        if !events.is_empty() {
+            ports.push("$rt.EventSource");
+        }
+        let port_type = ports.join(" & ");
         let parts = crate::TsDocParts {
             doc: &interface.doc,
             links: &interface.links,
@@ -2822,126 +2999,193 @@ impl<'a> Codec<'a> {
         if docs.is_empty() {
             docs = format!("/** The client of interface `{name}`. */\n");
         }
+        if !events.is_empty() {
+            let _ = writeln!(
+                out,
+                "\n/** One occurrence of an event of interface `{name}`, as `{class}.onEvent` delivers it. */\nexport type {name}Event ="
+            );
+            for (index, feed) in events.iter().enumerate() {
+                let member = member_of(feed.interaction);
+                let end = if index + 1 == events.len() { ";" } else { "" };
+                let _ = writeln!(
+                    out,
+                    "  | {{ readonly event: \"{member}\"; readonly occurrence: $rt.Occurrence<{}> }}{end}",
+                    feed.value_type
+                );
+            }
+        }
         out.push('\n');
         out.push_str(&docs);
         let _ = writeln!(out, "export class {class} {{");
-        out.push_str("  readonly #port: $rt.Caller;\n  readonly #codec: $rt.Codec;\n");
-        let ids: Vec<String> = members
+        let _ = writeln!(
+            out,
+            "  readonly #port: {port_type};\n  readonly #codec: $rt.Codec;"
+        );
+        let ids: Vec<String> = items
             .iter()
-            .map(|(_, call)| {
-                let reply = if call.reply_type.is_some() {
-                    "; readonly reply: number"
-                } else {
-                    ""
+            .map(|item| {
+                let shape = match item {
+                    Item::Call(call) if call.reply_type.is_some() => {
+                        "readonly request: number; readonly reply: number"
+                    }
+                    Item::Call(_) => "readonly request: number",
+                    Item::Feed(_) => "readonly payload: number",
                 };
-                format!(
-                    "readonly {}: {{ readonly request: number{reply} }}",
-                    member_name(call)
-                )
+                format!("readonly {}: {{ {shape} }}", member_name(item))
             })
             .collect();
         let _ = writeln!(out, "  readonly #ids: {{ {} }};\n", ids.join("; "));
-        out.push_str(
-            "  private constructor(port: $rt.Caller, codec: $rt.Codec) {\n    this.#port = port;\n    this.#codec = codec;\n    this.#ids = {\n",
+        let _ = writeln!(
+            out,
+            "  private constructor(port: {port_type}, codec: $rt.Codec) {{\n    this.#port = port;\n    this.#codec = codec;\n    this.#ids = {{"
         );
-        for (_, call) in &members {
-            let member = member_name(call);
-            let reply = if call.reply_type.is_some() {
-                format!(", reply: codec.typeId({name}.{member}.reply.type)")
-            } else {
-                String::new()
-            };
-            let _ = writeln!(
-                out,
-                "      {member}: {{ request: codec.typeId({name}.{member}.request.type){reply} }},"
-            );
+        for item in &items {
+            let member = member_name(item);
+            match item {
+                Item::Call(call) => {
+                    let reply = if call.reply_type.is_some() {
+                        format!(", reply: codec.typeId({name}.{member}.reply.type)")
+                    } else {
+                        String::new()
+                    };
+                    let _ = writeln!(
+                        out,
+                        "      {member}: {{ request: codec.typeId({name}.{member}.request.type){reply} }},"
+                    );
+                }
+                Item::Feed(_) => {
+                    let _ = writeln!(
+                        out,
+                        "      {member}: {{ payload: codec.typeId({name}.{member}.payload.type) }},"
+                    );
+                }
+            }
         }
         out.push_str("    };\n  }\n\n");
         let _ = writeln!(
             out,
-            "  /**\n   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when the\n   * catalog hash of the port or of the codec differs from `CATALOG_HASH`.\n   */\n  static bind<P extends $rt.Caller>(port: P, codec: $rt.Codec): {class} {{\n    $rt.checkCatalog(CATALOG_HASH, port, codec);\n    return new {class}(port, codec);\n  }}"
+            "  /**\n   * Binds the client to a port and a loaded codec, and registers the check of each\n   * signal with the port. Throws `CatalogMismatch` when the catalog hash of the port or\n   * of the codec differs from `CATALOG_HASH`.\n   */\n  static bind<P extends {port_type}>(port: P, codec: $rt.Codec): {class} {{\n    $rt.checkCatalog(CATALOG_HASH, port, codec);\n    const client = new {class}(port, codec);"
         );
-        for (_, call) in &members {
-            let member = member_name(call);
-            let mut signature: Vec<String> = call
-                .bindings
-                .iter()
-                .zip(&call.param_types)
-                .map(|(binding, ty)| format!("{binding}: {ty}"))
-                .collect();
-            let (opts, bound, note) = match &call.bound_ms {
-                Some(ms) => (
-                    "opts?: Partial<$rt.CallOptions>",
-                    format!("{{ ...opts, bound: opts?.bound ?? {ms} }}"),
-                    format!("The bound defaults to the declared maximum response time, {ms} ms."),
-                ),
-                None => (
-                    "opts: $rt.CallOptions",
-                    "opts".to_string(),
-                    "The member has no maximum response time inside the range of a port bound, so `opts.bound` is required."
-                        .to_string(),
-                ),
-            };
-            signature.push(opts.to_string());
-            let abort = if call.reply_type.is_none() {
-                "`opts.signal` aborts the call; a provider that already received the command may still run it."
-            } else {
-                "`opts.signal` aborts the call."
-            };
-            let mut extra = vec![format!("@param opts - {note} {abort}")];
-            if call.reply_type.is_none() {
-                extra.push("@returns Resolves when the provider accepted the command.".to_string());
+        for item in &items {
+            if let Item::Feed(feed) = item
+                && !feed.event
+            {
+                let member = member_of(feed.interaction);
+                let _ = writeln!(
+                    out,
+                    "    {{\n      const entry = signalCheck(codec, {name}.{member}, client.#ids.{member}.payload);\n      port.checkWith(entry.iface, entry.ord, entry.check);\n    }}"
+                );
             }
-            out.push('\n');
-            out.push_str(&self.call_docs(
-                call.interaction,
-                &call.params,
-                &call.bindings,
-                "  ",
-                &extra,
-            ));
-            let returns = call.reply_type.as_deref().unwrap_or("void");
-            let _ = writeln!(
-                out,
-                "  async {member}({}): Promise<{returns}> {{",
-                signature.join(", ")
-            );
-            let value = if call.named_request {
-                call.bindings[0].clone()
-            } else {
-                let fields = call
-                    .params
-                    .iter()
-                    .zip(&call.bindings)
-                    .map(|(p, b)| {
-                        format!(
-                            "{}: {b}",
-                            p.name.as_ref().map_or("", |n| n.declared.as_str())
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                if fields.is_empty() {
-                    "{}".to_string()
-                } else {
-                    format!("{{ {} }}", fields.join(", "))
+        }
+        out.push_str("    return client;\n  }\n");
+        for item in &items {
+            let member = member_name(item);
+            match item {
+                Item::Feed(feed) => {
+                    self.emit_feed_methods(out, name, &member, feed);
                 }
-            };
+                Item::Call(call) => {
+                    let mut signature: Vec<String> = call
+                        .bindings
+                        .iter()
+                        .zip(&call.param_types)
+                        .map(|(binding, ty)| format!("{binding}: {ty}"))
+                        .collect();
+                    let (opts, bound, note) = match &call.bound_ms {
+                    Some(ms) => (
+                        "opts?: Partial<$rt.CallOptions>",
+                        format!("{{ ...opts, bound: opts?.bound ?? {ms} }}"),
+                        format!("The bound defaults to the declared maximum response time, {ms} ms."),
+                    ),
+                    None => (
+                        "opts: $rt.CallOptions",
+                        "opts".to_string(),
+                        "The member has no maximum response time inside the range of a port bound, so `opts.bound` is required."
+                            .to_string(),
+                    ),
+                };
+                    signature.push(opts.to_string());
+                    let abort = if call.reply_type.is_none() {
+                        "`opts.signal` aborts the call; a provider that already received the command may still run it."
+                    } else {
+                        "`opts.signal` aborts the call."
+                    };
+                    let mut extra = vec![format!("@param opts - {note} {abort}")];
+                    if call.reply_type.is_none() {
+                        extra.push(
+                            "@returns Resolves when the provider accepted the command.".to_string(),
+                        );
+                    }
+                    out.push('\n');
+                    out.push_str(&self.call_docs(
+                        call.interaction,
+                        &call.params,
+                        &call.bindings,
+                        "  ",
+                        &extra,
+                    ));
+                    let returns = call.reply_type.as_deref().unwrap_or("void");
+                    let _ = writeln!(
+                        out,
+                        "  async {member}({}): Promise<{returns}> {{",
+                        signature.join(", ")
+                    );
+                    let value = if call.named_request {
+                        call.bindings[0].clone()
+                    } else {
+                        let fields = call
+                            .params
+                            .iter()
+                            .zip(&call.bindings)
+                            .map(|(p, b)| {
+                                format!(
+                                    "{}: {b}",
+                                    p.name.as_ref().map_or("", |n| n.declared.as_str())
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        if fields.is_empty() {
+                            "{}".to_string()
+                        } else {
+                            format!("{{ {} }}", fields.join(", "))
+                        }
+                    };
+                    let _ = writeln!(
+                        out,
+                        "    const args = $rt.encodeRequest(this.#codec, {name}.{member}.request, this.#ids.{member}.request, {value});"
+                    );
+                    if call.reply_type.is_some() {
+                        let _ = writeln!(
+                            out,
+                            "    const raw = await this.#port.query({name}.{member}.iface, {name}.{member}.ord, args, {bound});\n    return $rt.decodeReply(this.#codec, {name}.{member}.reply, this.#ids.{member}.reply, raw);"
+                        );
+                    } else {
+                        let _ = writeln!(
+                            out,
+                            "    await this.#port.command({name}.{member}.iface, {name}.{member}.ord, args, {bound});"
+                        );
+                    }
+                    out.push_str("  }\n");
+                }
+            }
+        }
+        if let Some(first) = events.first() {
+            let first_member = member_of(first.interaction);
+            out.push_str(
+                "\n  /**\n   * Calls `listener` with every accepted occurrence of every subscribed event of the\n   * interface, in arrival order, and returns the function that removes it. An occurrence\n   * that the port refused has `occurrence.detected` set and no value.\n   */\n",
+            );
             let _ = writeln!(
                 out,
-                "    const args = $rt.encodeRequest(this.#codec, {name}.{member}.request, this.#ids.{member}.request, {value});"
+                "  onEvent(listener: (event: {name}Event) => void): () => void {{\n    return this.#port.listen({name}.{first_member}.iface, (raw) => {{\n      switch (raw.ord) {{"
             );
-            if call.reply_type.is_some() {
+            for feed in &events {
+                let member = member_of(feed.interaction);
                 let _ = writeln!(
                     out,
-                    "    const raw = await this.#port.query({name}.{member}.iface, {name}.{member}.ord, args, {bound});\n    return $rt.decodeReply(this.#codec, {name}.{member}.reply, this.#ids.{member}.reply, raw);"
-                );
-            } else {
-                let _ = writeln!(
-                    out,
-                    "    await this.#port.command({name}.{member}.iface, {name}.{member}.ord, args, {bound});"
+                    "        case {name}.{member}.ord:\n          listener({{\n            event: \"{member}\",\n            occurrence: $rt.decodeOccurrence(this.#codec, {name}.{member}.payload, this.#ids.{member}.payload, raw),\n          }});\n          break;"
                 );
             }
-            out.push_str("  }\n");
+            out.push_str("      }\n    });\n  }\n");
         }
         for slot in &interface.slots {
             if let Some(reason) = self.call_omissions.get(&(interface.number, slot.ordinal))
@@ -2958,11 +3202,60 @@ impl<'a> Codec<'a> {
         out.push_str("}\n");
     }
 
+    /// Writes the methods of one signal or event of a client class: `subscribe`
+    /// for both, and for a signal the held value, the next value and the
+    /// watcher.
+    fn emit_feed_methods(&self, out: &mut String, name: &str, member: &str, feed: &FeedMember<'_>) {
+        let pascal = pascal_member(member);
+        let target = format!("{name}.{member}.iface, {name}.{member}.ord");
+        let ty = &feed.value_type;
+        let subscribe_note = if feed.event {
+            "The promise resolves when the provider answered."
+        } else {
+            "The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait."
+        };
+        let kind = if feed.event { "event" } else { "signal" };
+        out.push('\n');
+        let _ = writeln!(
+            out,
+            "  /** Subscribes to {kind} `{member}`. {subscribe_note} */\n  subscribe{pascal}(opts?: $rt.WaitOptions): Promise<void> {{\n    return this.#port.subscribe({target}, opts);\n  }}"
+        );
+        let Some(init) = &feed.init else {
+            return;
+        };
+        let decode = format!(
+            "$rt.decodeSample(this.#codec, {name}.{member}.payload, this.#ids.{member}.payload, raw, {init})"
+        );
+        out.push('\n');
+        out.push_str(&self.call_docs(
+            feed.interaction,
+            &[],
+            &[],
+            "  ",
+            &[
+                "@returns The held sample at once. Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value."
+                    .to_string(),
+            ],
+        ));
+        let _ = writeln!(
+            out,
+            "  {member}(): $rt.Sample<{ty}> {{\n    const raw = this.#port.sample({target});\n    return raw === undefined ? $rt.initSample({init}) : {decode};\n  }}"
+        );
+        let _ = writeln!(
+            out,
+            "\n  /** Waits for the next publish of signal `{member}`. `opts.bound` and `opts.signal` limit the wait. */\n  async read{pascal}(opts?: $rt.WaitOptions): Promise<$rt.Sample<{ty}>> {{\n    const raw = await this.#port.read({target}, opts);\n    return {decode};\n  }}"
+        );
+        let _ = writeln!(
+            out,
+            "\n  /** Calls `listener` with every accepted publish of signal `{member}` and returns the function that removes it. */\n  watch{pascal}(listener: (sample: $rt.Sample<{ty}>) => void): () => void {{\n    return this.#port.watch({target}, (raw) => listener({decode}));\n  }}"
+        );
+    }
+
     /// Writes `signalChecks`, which gives `connect` one check per signal that
     /// has a member table entry.
     fn emit_signal_checks(&self, out: &mut String) {
         out.push_str(
-            "\nfunction signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): $rt.SignalCheckEntry {\n  const typeId = codec.typeId(entry.payload.type);\n  return {\n    iface: entry.iface,\n    ord: entry.ord,\n    check: (bytes) => {\n      const result = codec.verify(typeId, bytes);\n      if (result.ok) return undefined;\n      if (result.kind !== \"rule\") return \"corrupt\";\n      const rule = (RULES as readonly string[]).find((known) => known === result.rule);\n      if (rule === undefined) throw new $rt.CodecError(\"unknown rule during signal verification\");\n      return { rule: rule as (typeof RULES)[number] };\n    },\n  };\n}\n",
+            "\nfunction signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }, typeId: number = codec.typeId(entry.payload.type)): $rt.SignalCheckEntry {\n  return {\n    iface: entry.iface,\n    ord: entry.ord,\n    check: (bytes) => {\n      const result = codec.verify(typeId, bytes);\n      if (result.ok) return undefined;\n      if (result.kind !== \"rule\") return \"corrupt\";\n      const rule = (RULES as readonly string[]).find((known) => known === result.rule);\n      if (rule === undefined) throw new $rt.CodecError(\"unknown rule during signal verification\");\n      return { rule: rule as (typeof RULES)[number] };\n    },\n  };\n}\n",
         );
         out.push_str(
             "\n/** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */\nexport function signalChecks(codec: $rt.Codec): readonly $rt.SignalCheckEntry[] {\n  return [\n",
@@ -3127,6 +3420,24 @@ impl<'a> Codec<'a> {
             "`{path}` has a payload that is not a named type or an induced tuple, which the codec \
              module does not carry"
         ))
+    }
+}
+
+/// The declared name of an interaction.
+fn interaction_member(interaction: &v1::Interaction) -> &str {
+    interaction
+        .name
+        .as_ref()
+        .map_or("", |name| name.declared.as_str())
+}
+
+/// The member name with its first character in upper case, as the methods of
+/// the client class spell it after `subscribe`, `read` and `watch`.
+fn pascal_member(member: &str) -> String {
+    let mut chars = member.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
     }
 }
 
