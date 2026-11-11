@@ -46,7 +46,7 @@ interface Bounds {
         "cannot translate contract clause `rate == 0.1`",
         "the literal has no exact binary64 value, so `==` and `!=` cannot be checked exactly",
         "`==` and `!=` require an exactly representable binary64 literal",
-        "every float comparison requires a finite binary64 bound",
+        "a literal outside the finite binary64 range is refused",
     ] {
         assert!(note.contains(part), "missing `{part}` in note:\n{note}");
     }

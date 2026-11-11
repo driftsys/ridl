@@ -965,7 +965,9 @@ diag_codes! {
 
         /// A `require`/`ensure` expression outside the guaranteed subset (ridl §13,
         /// §16.3; expr-core specification §8 — one code for the whole boundary,
-        /// with a message naming the offending form). Error. Emitted by the checker.
+        /// with a message naming the offending form). Also covers a numeric literal
+        /// outside the finite binary64 range (expr-core §5.3). Error. Emitted by
+        /// the checker.
         RIDL_306 = "RIDL-306", Error,
             "`require`/`ensure` expression outside the guaranteed subset";
 

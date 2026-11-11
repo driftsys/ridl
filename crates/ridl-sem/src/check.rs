@@ -13129,6 +13129,44 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
     }
 
     #[test]
+    fn contract_literal_binary64_range_is_checked_in_source() {
+        let max =
+            num_bigint::BigInt::parse_bytes(format!("{:.0}", f64::MAX).as_bytes(), 10).unwrap();
+        let outside = &max + num_bigint::BigInt::from(1);
+        assert_eq!(outside.to_string().len(), 309);
+        for clause in ["require x", "ensure result"] {
+            for (literal, refused) in [(&outside, true), (&max, false)] {
+                let source = format!(
+                    "package app\n/// A rate.\ntype Rate: float [0.0..1.0 step 0.1]\n/// Contract bounds.\ninterface I {{\n  /// Read the rate.\n  query q(x: Rate): Rate [ {clause} > {literal}.0 ] @[..50ms]\n}}\n"
+                );
+                let checked = check_ridl("app", &source);
+                assert_eq!(
+                    codes(&checked),
+                    if refused { vec!["RIDL-306"] } else { vec![] },
+                    "{clause}: {:?}",
+                    checked.diagnostics
+                );
+                assert_eq!(
+                    checked.diagnostics.len(),
+                    usize::from(refused),
+                    "{:?}",
+                    checked.diagnostics
+                );
+                for diagnostic in &checked.diagnostics {
+                    let range = diagnostic.primary.range;
+                    let start = usize::from(range.start());
+                    let end = usize::from(range.end());
+                    assert_eq!(
+                        &source[start..end],
+                        format!("{literal}.0"),
+                        "{diagnostic:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn respelling_a_literal_does_not_change_contract_source() {
         // A respelled literal is the same exact rational (expr-core §7), so it
         // must not read as a contract edit in `ridl diff`.

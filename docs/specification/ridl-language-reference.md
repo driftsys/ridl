@@ -1895,16 +1895,16 @@ driftsys/ridl#172; the other items in that issue retain their own dispositions.
 
 ### 16.3 Contracts and Errors (RIDL-3xx)
 
-| Code     | Rule                                                                                                                                    | Severity |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| RIDL-301 | `require` or `ensure` on `signal`, `event`, or `fixed`                                                                                  | error    |
-| RIDL-302 | `ensure` on `command`                                                                                                                   | error    |
-| RIDL-303 | fallible query return with no success path — a bare `error` type in return position, or an `error`-typed left arm of an inline `T \| E` | error    |
-| RIDL-304 | `error`-typed or result-union parameter on a `command` or `query` — failure flowing toward a provider                                   | warning  |
-| RIDL-305 | `ensure` clause that never references `result`                                                                                          | warning  |
-| RIDL-306 | `require`/`ensure` expression outside the guaranteed subset (expr-core specification §8)                                                | error    |
-| RIDL-307 | contract-error category name declared in an `error` enum (`INVALID_VALUE`, …)                                                           | warning  |
-| RIDL-308 | named result union in query return position — the inline `T \| E` spelling is canonical there (§10.1)                                   | warning  |
+| Code     | Rule                                                                                                                                                    | Severity |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| RIDL-301 | `require` or `ensure` on `signal`, `event`, or `fixed`                                                                                                  | error    |
+| RIDL-302 | `ensure` on `command`                                                                                                                                   | error    |
+| RIDL-303 | fallible query return with no success path — a bare `error` type in return position, or an `error`-typed left arm of an inline `T \| E`                 | error    |
+| RIDL-304 | `error`-typed or result-union parameter on a `command` or `query` — failure flowing toward a provider                                                   | warning  |
+| RIDL-305 | `ensure` clause that never references `result`                                                                                                          | warning  |
+| RIDL-306 | `require`/`ensure` expression outside the guaranteed subset (expr-core specification §8), including a numeric literal outside the finite binary64 range | error    |
+| RIDL-307 | contract-error category name declared in an `error` enum (`INVALID_VALUE`, …)                                                                           | warning  |
+| RIDL-308 | named result union in query return position — the inline `T \| E` spelling is canonical there (§10.1)                                                   | warning  |
 
 ### 16.4 Evolution and Profile (RIDL-4xx)
 
