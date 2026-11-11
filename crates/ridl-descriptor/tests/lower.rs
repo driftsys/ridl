@@ -25,7 +25,7 @@ fn lower_one(package: &Package) -> Result<Vec<u8>, LowerError> {
 }
 
 #[test]
-fn a_declaration_without_a_kind_is_skipped() {
+fn a_declaration_without_a_kind_is_an_internal_error() {
     let package = Package {
         name: "u".to_owned(),
         interfaces: vec![Interface {
@@ -41,24 +41,14 @@ fn a_declaration_without_a_kind_is_skipped() {
         }],
         ..Default::default()
     };
-    let result = lower_one(&package);
-    assert!(
-        result.is_ok(),
-        "a declaration without a kind is skipped: {result:?}"
-    );
-    let bytes = result.unwrap();
-    let catalog = verify(&bytes).unwrap();
-    let interfaces = catalog.interfaces().unwrap();
-    assert_eq!(interfaces.len(), 1);
-    let interface = interfaces.get(0).unwrap().unwrap();
-    assert_eq!(interface.name().unwrap(), "Vehicle");
-    assert_eq!(interface.members().unwrap().len(), 0);
+    let expected = LowerError::MissingKind {
+        interface: "Vehicle".to_owned(),
+        declaration: "missing".to_owned(),
+    };
+    assert_eq!(lower_one(&package), Err(expected.clone()));
     assert_eq!(
-        interface
-            .reserved_ordinals()
-            .map_or(0, |ordinals| ordinals.len()),
-        0,
-        "a declaration without a kind is not a reserved slot"
+        expected.to_string(),
+        "internal error: declaration `missing` of interface `Vehicle` has no kind"
     );
 }
 

@@ -157,6 +157,8 @@ the order given. It returns `Result<Vec<u8>, LowerError>`.
 - **A fixed member with no payload** is `LowerError::MissingFixedPayload`, an
   internal error that `ridlc` returns as an I/O error, so the build stops with
   exit code 2.
+- **A declaration with no kind** is `LowerError::MissingKind`, an internal error
+  that `ridlc` returns as an I/O error, so the build stops with exit code 2.
 - **An interface name** is the catalog name: the name relative to the unit, so
   `cluster.SpeedDisplay` for an interface of the source package
   `com.example.hmi.cluster` in the unit `com.example.hmi`, and the short name
