@@ -1,5 +1,207 @@
 # Changelog
 
+## [0.18.0] (2026-11-11)
+
+### Features
+
+- **xtask:** add the copilot host to the eval runner and fix the corpus eval
+  tasks ([#1344]) ([a9f1f4e])
+- **ridl-backend-ts:** reject a lone surrogate in the generated encode ([#1330])
+  ([c68773b]), closes [#399]
+- **ts-runtime:** reject a lone surrogate in a string scalar constructor
+  ([#1322]) ([b6982f2]), refs [#399]
+- **ts-transport-ws:** run the cabin web programs through a bounded session with
+  checks ([#1306]) ([48e9605])
+- **ridl-backend-ts:** decode named scalars unchecked and compare make<Name>
+  with verify ([#1309]) ([fe08f0a])
+- **ridl-backend-ts:** check the length and pattern in the string and bytes
+  constructors ([#1303]) ([dd773ea])
+- **ridl-rt:** report caller forgets to stream providers ([#1298]) ([f1007e0]),
+  closes [#1170]
+- **ridl-backend-ts:** emit signalChecks in the codec module ([#1296])
+  ([224976d])
+- **ridl-backend-ts:** check the step in the numeric constructors ([#1290])
+  ([940cf8e])
+- **ts-transport-ws:** check each live signal payload with a registered check
+  ([#1286]) ([8a4b064])
+- **ridl-backend-ts:** emit checking constructors for numeric named scalars
+  ([#1270]) ([adf5f3a]), refs [#923]
+- **ridl-transport-ws:** add a bound and an abort signal to connect, subscribe
+  and read ([#1272]) ([8e8b98e]), closes [#994]
+
+### Bug Fixes
+
+- **ridl-backend-ts:** import the runtime as a namespace so no declaration
+  collides ([#1337]) ([5918f6e])
+- **ridl:** allow history reset after intentional unit removal ([#1333])
+  ([74f683c]), closes [#1324]
+- **ridl-backend-ts:** TypeScript lane review fixes ([#1338]) ([e5dd7f4])
+- **ridl:** preserve lock files when merging or writing fails ([#1327])
+  ([952cb7e]), refs [#1202], [#1202]
+- **ridl:** correct baseline refusals for removed units ([#1325]) ([c3d89f3]),
+  refs [#797], [#797], [#797], [#797], [#797]
+- **ridl:** return exit 2 when stdout writes fail ([#1318]) ([3dccf1a]), refs
+  driftsys/ridl#697, driftsys/ridl#697, driftsys/ridl#697, driftsys/ridl#697
+- **ridl-backend-proto:** refuse C++ struct accessor collisions ([#1317])
+  ([811ec10]), refs driftsys/ridl#1215, driftsys/ridl#1215, driftsys/ridl#1215
+- **ridl-descriptor:** reject fixed members without payloads ([#1315])
+  ([457a5ff])
+- **ridl-core:** report a permission error on a member or entry path ([#1316])
+  ([aace863]), refs [#807], [#807]
+- **ridl-diff:** list the backend keys of an added or removed system, offers or
+  requires line ([#1313]) ([0b9a3d1]), closes [#1000]
+- **ridl-transport-ws:** keep the payload limit when insert replaces a member
+  ([#1314]) ([6b9c810]), refs [#1101]
+- **ridl-diff:** classify widened received constraints as breaking ([#1302])
+  ([04ce16b])
+- **ridl-backend-rust:** preserve exact float clause comparisons ([#1301])
+  ([eac38f7]), closes [#1092]
+- **ridl:** require remote evidence for catalog history under flatbuffers and
+  proto3 ([#1300]) ([1335344]), closes [#1228]
+- **ci:** verify the SHA-256 of the Deno release zip in bootstrap and CI
+  ([#1305]) ([9f1a065]), closes [#995]
+- **ridl-diff:** report remote strict enum appends ([#1288]) ([96f4c3c])
+- **ridl-ir:** translate upload clauses on ordinary parameters ([#1289])
+  ([e660964]), closes [#1221]
+- **ridl-backend-rust:** refuse podbuf f32 map keys that narrow to one value
+  ([#1285]) ([9e21899]), refs [#1280], [#1280], [#1280], [#1280]
+
+### Documentation
+
+- **repo:** record that the ridl-authoring skill stays minimal ([#1343])
+  ([d8fa1a6])
+- **ridl:** align the CLI reference and ADR-0010 with the exit-2 and
+  unreadable-path behaviour ([#1345]) ([6f92664]), closes [#1326], [#1340], refs
+  [#1320], [#1328], [#1329]
+- **repo:** archive the K3 lane driver ([#1342]) ([3261a55])
+- **docs:** garden the TypeScript checking constructor design ([#1311])
+  ([fc8065b])
+- **repo:** archive the K2 lane driver and name both forget methods ([#1310])
+  ([9d10499])
+- **ts-transport-ws:** document the signal check and archive its design note
+  ([#1299]) ([2872b5b])
+- **roadmap:** schedule the stream forget signal for the next release ([#1279])
+  ([f4ab0df])
+
+### BREAKING CHANGES
+
+- the proto backend now refuses packages with these
+struct field pairs that earlier versions accepted.
+- Generated float contract predicates now enforce exact
+rational literal bounds. Inexact literal equality and bounds requiring
+infinity are refused, so an affected interface has no generated face or
+descriptors and carries a refusal note instead.
+- Generated TypeScript modules import the `@driftsys/ridl-runtime` package, and
+it must be the package of the same release as the generator that wrote the
+module. Regenerate every TypeScript module and update the package together.
+- The generated `encode<Name>` function of a TypeScript module throws
+`ConstraintError` with the rule `utf8` for a string that holds a lone
+surrogate. Earlier versions wrote U+FFFD in its place.
+- Generated TypeScript modules add the checking constructors `make<Name>`,
+which throw `ConstraintError`. A constructor `make<Name>Unchecked` exists only
+for a named scalar that has a check, and the decoder uses the unchecked form.
+An internal named scalar gets no constructors.
+- In the `ridl-transport-ws` TypeScript package, `read` of a publish that the
+provider refused, or that is over the payload limit, resolves with an invalid
+result instead of rejecting with `corrupt`. The field `Sample.lastGood` is
+required.
+
+[0.18.0]: https://github.com/driftsys/ridl/compare/v0.17.0...v0.18.0
+[a9f1f4e]: https://github.com/driftsys/ridl/commit/a9f1f4e
+[#1344]: https://github.com/driftsys/ridl/issues/1344
+[c68773b]: https://github.com/driftsys/ridl/commit/c68773b
+[#1330]: https://github.com/driftsys/ridl/issues/1330
+[#399]: https://github.com/driftsys/ridl/issues/399
+[b6982f2]: https://github.com/driftsys/ridl/commit/b6982f2
+[#1322]: https://github.com/driftsys/ridl/issues/1322
+[48e9605]: https://github.com/driftsys/ridl/commit/48e9605
+[#1306]: https://github.com/driftsys/ridl/issues/1306
+[fe08f0a]: https://github.com/driftsys/ridl/commit/fe08f0a
+[#1309]: https://github.com/driftsys/ridl/issues/1309
+[dd773ea]: https://github.com/driftsys/ridl/commit/dd773ea
+[#1303]: https://github.com/driftsys/ridl/issues/1303
+[f1007e0]: https://github.com/driftsys/ridl/commit/f1007e0
+[#1298]: https://github.com/driftsys/ridl/issues/1298
+[#1170]: https://github.com/driftsys/ridl/issues/1170
+[224976d]: https://github.com/driftsys/ridl/commit/224976d
+[#1296]: https://github.com/driftsys/ridl/issues/1296
+[940cf8e]: https://github.com/driftsys/ridl/commit/940cf8e
+[#1290]: https://github.com/driftsys/ridl/issues/1290
+[8a4b064]: https://github.com/driftsys/ridl/commit/8a4b064
+[#1286]: https://github.com/driftsys/ridl/issues/1286
+[adf5f3a]: https://github.com/driftsys/ridl/commit/adf5f3a
+[#1270]: https://github.com/driftsys/ridl/issues/1270
+[#923]: https://github.com/driftsys/ridl/issues/923
+[8e8b98e]: https://github.com/driftsys/ridl/commit/8e8b98e
+[#1272]: https://github.com/driftsys/ridl/issues/1272
+[#994]: https://github.com/driftsys/ridl/issues/994
+[5918f6e]: https://github.com/driftsys/ridl/commit/5918f6e
+[#1337]: https://github.com/driftsys/ridl/issues/1337
+[74f683c]: https://github.com/driftsys/ridl/commit/74f683c
+[#1333]: https://github.com/driftsys/ridl/issues/1333
+[#1324]: https://github.com/driftsys/ridl/issues/1324
+[e5dd7f4]: https://github.com/driftsys/ridl/commit/e5dd7f4
+[#1338]: https://github.com/driftsys/ridl/issues/1338
+[952cb7e]: https://github.com/driftsys/ridl/commit/952cb7e
+[#1327]: https://github.com/driftsys/ridl/issues/1327
+[#1202]: https://github.com/driftsys/ridl/issues/1202
+[c3d89f3]: https://github.com/driftsys/ridl/commit/c3d89f3
+[#1325]: https://github.com/driftsys/ridl/issues/1325
+[#797]: https://github.com/driftsys/ridl/issues/797
+[3dccf1a]: https://github.com/driftsys/ridl/commit/3dccf1a
+[#1318]: https://github.com/driftsys/ridl/issues/1318
+[811ec10]: https://github.com/driftsys/ridl/commit/811ec10
+[#1317]: https://github.com/driftsys/ridl/issues/1317
+[457a5ff]: https://github.com/driftsys/ridl/commit/457a5ff
+[#1315]: https://github.com/driftsys/ridl/issues/1315
+[aace863]: https://github.com/driftsys/ridl/commit/aace863
+[#1316]: https://github.com/driftsys/ridl/issues/1316
+[#807]: https://github.com/driftsys/ridl/issues/807
+[0b9a3d1]: https://github.com/driftsys/ridl/commit/0b9a3d1
+[#1313]: https://github.com/driftsys/ridl/issues/1313
+[#1000]: https://github.com/driftsys/ridl/issues/1000
+[6b9c810]: https://github.com/driftsys/ridl/commit/6b9c810
+[#1314]: https://github.com/driftsys/ridl/issues/1314
+[#1101]: https://github.com/driftsys/ridl/issues/1101
+[04ce16b]: https://github.com/driftsys/ridl/commit/04ce16b
+[#1302]: https://github.com/driftsys/ridl/issues/1302
+[eac38f7]: https://github.com/driftsys/ridl/commit/eac38f7
+[#1301]: https://github.com/driftsys/ridl/issues/1301
+[#1092]: https://github.com/driftsys/ridl/issues/1092
+[1335344]: https://github.com/driftsys/ridl/commit/1335344
+[#1300]: https://github.com/driftsys/ridl/issues/1300
+[#1228]: https://github.com/driftsys/ridl/issues/1228
+[9f1a065]: https://github.com/driftsys/ridl/commit/9f1a065
+[#1305]: https://github.com/driftsys/ridl/issues/1305
+[#995]: https://github.com/driftsys/ridl/issues/995
+[96f4c3c]: https://github.com/driftsys/ridl/commit/96f4c3c
+[#1288]: https://github.com/driftsys/ridl/issues/1288
+[e660964]: https://github.com/driftsys/ridl/commit/e660964
+[#1289]: https://github.com/driftsys/ridl/issues/1289
+[#1221]: https://github.com/driftsys/ridl/issues/1221
+[9e21899]: https://github.com/driftsys/ridl/commit/9e21899
+[#1285]: https://github.com/driftsys/ridl/issues/1285
+[#1280]: https://github.com/driftsys/ridl/issues/1280
+[d8fa1a6]: https://github.com/driftsys/ridl/commit/d8fa1a6
+[#1343]: https://github.com/driftsys/ridl/issues/1343
+[6f92664]: https://github.com/driftsys/ridl/commit/6f92664
+[#1345]: https://github.com/driftsys/ridl/issues/1345
+[#1326]: https://github.com/driftsys/ridl/issues/1326
+[#1340]: https://github.com/driftsys/ridl/issues/1340
+[#1320]: https://github.com/driftsys/ridl/issues/1320
+[#1328]: https://github.com/driftsys/ridl/issues/1328
+[#1329]: https://github.com/driftsys/ridl/issues/1329
+[3261a55]: https://github.com/driftsys/ridl/commit/3261a55
+[#1342]: https://github.com/driftsys/ridl/issues/1342
+[fc8065b]: https://github.com/driftsys/ridl/commit/fc8065b
+[#1311]: https://github.com/driftsys/ridl/issues/1311
+[9d10499]: https://github.com/driftsys/ridl/commit/9d10499
+[#1310]: https://github.com/driftsys/ridl/issues/1310
+[2872b5b]: https://github.com/driftsys/ridl/commit/2872b5b
+[#1299]: https://github.com/driftsys/ridl/issues/1299
+[f4ab0df]: https://github.com/driftsys/ridl/commit/f4ab0df
+[#1279]: https://github.com/driftsys/ridl/issues/1279
+
 ## [0.17.0] (2026-11-09)
 
 ### Features

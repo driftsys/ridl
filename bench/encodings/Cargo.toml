@@ -13,7 +13,7 @@ members = [
   "generated/bench_stress",
 ]
 
-# The generated manifest requires `ridl-rt = "0.17"`. The bench measures the
+# The generated manifest requires `ridl-rt = "0.18"`. The bench measures the
 # `ridl-rt` in this tree, so the requirement is patched to the local path.
 [patch.crates-io]
 ridl-rt = { path = "../../crates/ridl-rt" }

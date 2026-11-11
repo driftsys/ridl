@@ -16,7 +16,7 @@ std = ["ridl-rt/std"]
 debug = ["ridl-rt/debug"]
 
 [dependencies]
-ridl-rt = { version = "0.17", features = ["flatbuffers", "proto3", "podbuf"] }
+ridl-rt = { version = "0.18", features = ["flatbuffers", "proto3", "podbuf"] }
 regex = { version = "1.13", optional = true }
 
 [lib]
