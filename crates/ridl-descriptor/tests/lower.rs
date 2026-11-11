@@ -25,6 +25,44 @@ fn lower_one(package: &Package) -> Result<Vec<u8>, LowerError> {
 }
 
 #[test]
+fn a_declaration_without_a_kind_is_skipped() {
+    let package = Package {
+        name: "u".to_owned(),
+        interfaces: vec![Interface {
+            name: "Vehicle".to_owned(),
+            number: 1,
+            interactions: vec![Decl {
+                name: "missing".to_owned(),
+                ordinal: 1,
+                kind: None,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let result = lower_one(&package);
+    assert!(
+        result.is_ok(),
+        "a declaration without a kind is skipped: {result:?}"
+    );
+    let bytes = result.unwrap();
+    let catalog = verify(&bytes).unwrap();
+    let interfaces = catalog.interfaces().unwrap();
+    assert_eq!(interfaces.len(), 1);
+    let interface = interfaces.get(0).unwrap().unwrap();
+    assert_eq!(interface.name().unwrap(), "Vehicle");
+    assert_eq!(interface.members().unwrap().len(), 0);
+    assert_eq!(
+        interface
+            .reserved_ordinals()
+            .map_or(0, |ordinals| ordinals.len()),
+        0,
+        "a declaration without a kind is not a reserved slot"
+    );
+}
+
+#[test]
 fn the_compatible_catalogs_are_written_in_order() {
     let package = Package {
         name: "u".to_owned(),

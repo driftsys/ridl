@@ -251,8 +251,9 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-descriptor/tests/lower.rs",
-        lines: 7,
-        why: "the `vehicle()` helper and three tests, each reading the catalog \
+        lines: 8,
+        why: "the `vehicle()` helper, a test that reads back the interface a \
+              declaration with no kind leaves without a member, and three tests, each reading the catalog \
               descriptor's own `Catalog.interfaces` field back out of a \
               buffer, a test that zeroes the number of the one interface its \
               package declares, a test that sets a limit on the one command \

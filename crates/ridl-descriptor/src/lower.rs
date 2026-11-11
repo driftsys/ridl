@@ -142,6 +142,7 @@ pub fn lower(
     Ok(crate::finish(&catalog))
 }
 
+/// Skips a declaration with no kind; `ridl-sem` always sets the kind.
 fn member_of(decl: &Decl, interface: &str, ctx: &Ctx<'_>) -> Result<Option<Member>, LowerError> {
     let Some(kind) = decl.kind.as_ref() else {
         return Ok(None);
