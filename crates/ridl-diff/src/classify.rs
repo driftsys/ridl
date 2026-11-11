@@ -1607,7 +1607,7 @@ pub fn explain(category: Category) -> &'static str {
             "narrowest unsigned integer that holds the largest arm ordinal: a value\n",
             "above 255, a flag at bit 8 or an arm past ordinal 255 widens a `u8` to\n",
             "a `u16`, a value above 65535 or a flag at bit 16 a `u16` to a `u32`,\n",
-            "and a value above 4294967295 or a flag at bit 32 a `u32` to a `u64`.\n",
+            "and a flag at bit 32 widens a `u32` to a `u64`.\n",
             "A negative value appended to an enum that has values is below its\n",
             "highest value, an insert, which the generic rule reports as a breaking\n",
             "`decl_added` line and not as a width line; the integer turns signed\n",

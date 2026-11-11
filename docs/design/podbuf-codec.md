@@ -67,6 +67,11 @@ reporting follows
 [ADR-0031 decision 13](../decisions/ADR-0031-podbuf-projection-rules.md)'s
 remote strict enum amendment.
 
+A declared enum uses the narrowest integer that holds its live values, signed
+when any value is negative. TYPL-225 limits those values to int32, so source
+enums need at most 32 bits. Enum sets retain widths up to 64 bits
+([ADR-0014 decision 16](../decisions/ADR-0014-ir-encodings.md)).
+
 **The model carries two additions beyond the heads.** `Declaration.podbuf` is
 the size state of a declaration as a payload root, which becomes `MAX_SIZE`.
 `PodbufProjection.boxes` holds the one-field head of each named scalar, enum or

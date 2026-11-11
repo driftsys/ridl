@@ -223,7 +223,8 @@ impl<'a> Walk<'a, '_> {
 /// product inside the walk does not fit. `RefusedMember` for every other
 /// failure inside the message: a member the proto backend refuses, a name
 /// inside the message that does not resolve, and an enum value outside int32
-/// (a live value requires hand-built IR; source rejects it with TYPL-225).
+/// (a live value requires hand-built IR; TYPL-225 rejects it in source; a
+/// retired value outside int32 remains legal in source).
 pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> SizeState {
     let Some((decl, declaring)) = ctx.resolve(home, type_name) else {
         return SizeState::Absent(AbsentCause::Unresolved);
@@ -1175,6 +1176,22 @@ mod tests {
             assert_eq!(
                 state_in(&format!("Holds{name}"), &ctx),
                 SizeState::Bounded(bound)
+            );
+        }
+    }
+
+    #[test]
+    fn live_enum_values_outside_int32_are_refused() {
+        // Hand-built IR can carry live values that TYPL-225 rejects in source.
+        for value in [-2147483649, 2147483648] {
+            let mut package = fixture();
+            package.decls.push(enum_decl("Wide", &[0, value]));
+            let others: [&Package; 0] = [];
+            let ctx = Ctx::new(&package, &others);
+            assert_eq!(
+                state_in("Wide", &ctx),
+                SizeState::Absent(AbsentCause::RefusedMember),
+                "{value}"
             );
         }
     }

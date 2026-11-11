@@ -7754,6 +7754,17 @@ mod tests {
     }
 
     #[test]
+    fn reserved_enum_values_are_exempt_from_int32_domain() {
+        for value in ["2147483648", "-2147483649"] {
+            let checked = check_source(
+                "app",
+                &format!("package app\nenum E {{ reserved {value}, A = 0 }}\n"),
+            );
+            assert!(codes(&checked).is_empty(), "{value}: {:?}", codes(&checked));
+        }
+    }
+
+    #[test]
     fn enum_int32_check_preserves_other_checks() {
         let checked = check_source(
             "app",

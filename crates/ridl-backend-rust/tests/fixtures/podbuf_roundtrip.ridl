@@ -216,7 +216,7 @@ struct Tuning32 {
 }
 
 /// Two open enums and a 64-bit open enum set.
-struct Wide64 {
+struct WideValues {
   big    : Big
   signed : OpenSigned32
   wide   : WideFlags

@@ -1645,6 +1645,22 @@ mod tests {
     }
 
     #[test]
+    fn enum_width_at_int32_boundaries() {
+        assert_eq!(
+            enum_width(&values(&[i64::from(i32::MIN)])),
+            (v2::IntWidth::I32, true)
+        );
+        assert_eq!(
+            enum_width(&values(&[i64::from(i32::MAX)])),
+            (v2::IntWidth::U32, false)
+        );
+        assert_eq!(
+            enum_width(&values(&[i64::from(i32::MIN), i64::from(i32::MAX)])),
+            (v2::IntWidth::I32, true)
+        );
+    }
+
+    #[test]
     fn an_enum_takes_the_narrowest_width_and_the_signedness_of_its_values() {
         assert_eq!(
             enum_width(&values(&[0, 1, 2, 3])),

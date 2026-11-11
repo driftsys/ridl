@@ -230,7 +230,8 @@ pub enum AbsentCause {
     /// outside the integral and string scalars, a field number proto3
     /// reserves or exceeds, a stream, a field with no type), a name inside
     /// the message that does not resolve, and an enum value outside int32
-    /// (a live value requires hand-built IR; source rejects it with TYPL-225). A
+    /// (a live value requires hand-built IR; TYPL-225 rejects it in source; a
+    /// retired value outside int32 remains legal in source). A
     /// size problem is never this cause: it is [`AbsentCause::NoBound`] or
     /// [`AbsentCause::Overflow`]. This variant's text is the normative
     /// statement of the cause; the proto3 sizer's `state` implements it.

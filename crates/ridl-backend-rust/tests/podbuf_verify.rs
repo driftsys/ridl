@@ -468,11 +468,11 @@ fn the_64_bit_width_of_an_open_enum_set() {
     let out = run(
         "podbuf_open_64",
         &[
-            r#"roundtrip!(Wide64, Wide64 { big: Big::A, signed: OpenSigned32::Neg, wide: WideFlags::from(i64::MIN | 0b10) })"#,
+            r#"roundtrip!(WideValues, WideValues { big: Big::A, signed: OpenSigned32::Neg, wide: WideFlags::from(i64::MIN | 0b10) })"#,
             r#"{
-                let bytes = enc!(Wide64 { big: Big::A, signed: OpenSigned32::Neg, wide: WideFlags::from(i64::MIN | 0b10) });
+                let bytes = enc!(WideValues { big: Big::A, signed: OpenSigned32::Neg, wide: WideFlags::from(i64::MIN | 0b10) });
                 let buf = aligned(&bytes);
-                let v = Wide64::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
+                let v = WideValues::__ridl_podbuf_verify(&buf.0[..bytes.len()]).expect("verifies");
                 format!("{:#x}", v.wide().unknown_bits())
             }"#,
         ],

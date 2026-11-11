@@ -949,6 +949,24 @@ fn enumset_bit_beyond_31_needs_a_64_bit_width() {
 }
 
 #[test]
+fn a_hand_built_enum_at_max_safe_integer_is_representable() {
+    let mut values = warning_bits();
+    values[0].value = 9_007_199_254_740_991;
+    generate(&package(
+        "veh.common",
+        vec![public_decl(
+            "Warning",
+            v2::decl::Kind::EnumDef(v2::EnumDef {
+                values,
+                reserved: Vec::new(),
+                open: false,
+            }),
+        )],
+    ))
+    .expect("MAX_SAFE_INTEGER is exact");
+}
+
+#[test]
 fn a_hand_built_enum_beyond_max_safe_integer_is_unrepresentable() {
     // Source rejects these values with TYPL-225, but callers can build IR directly.
     for value in [9_007_199_254_740_992, -9_007_199_254_740_992] {

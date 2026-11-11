@@ -560,34 +560,6 @@ fn a_struct_field_typed_by_an_enum_projects_and_compiles() {
 }
 
 #[test]
-fn an_enum_value_outside_int32_is_refused() {
-    // proto3 enum values are int32; typl admits int64.
-    let package = v2::Package {
-        name: "veh.common".to_string(),
-        decls: vec![v2::Decl {
-            name: "Wide".to_string(),
-            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
-                values: vec![v2::EnumValue {
-                    name: "HUGE".to_string(),
-                    value: i64::from(i32::MAX) + 1,
-                    doc: String::new(),
-                    links: Vec::new(),
-                    see: Vec::new(),
-                    since: Vec::new(),
-                }],
-                reserved: Vec::new(),
-                open: false,
-            })),
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-
-    let error = generate(&package).expect_err("must refuse");
-    assert!(error.message.contains("int32"), "got: {}", error.message);
-}
-
-#[test]
 fn a_const_is_not_emitted() {
     // ADR-0013 decision 5: neither proto3 nor FlatBuffers has a constant
     // declaration, and no instance of a typl constant ever crosses a wire.
@@ -3434,5 +3406,51 @@ fn an_enum_states_whether_it_is_strict_or_open() {
             generated.proto_source
         );
         compile_with_protox("veh.common.proto", &generated.proto_source);
+    }
+}
+
+#[test]
+fn proto_backend_refuses_enum_values_outside_int32() {
+    // Source admits retired int64 values; live values outside int32 require hand-built IR.
+    for value in [-2147483649_i64, 2147483648] {
+        for retired in [true, false] {
+            let source = if retired {
+                format!("package app\nenum E {{ reserved {value}, A = 0 }}\n")
+            } else {
+                "package app\nenum E { A = 0 }\n".to_string()
+            };
+            let output = ridlc::compile("enum.typl", &source);
+            assert!(
+                !output
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.severity == ridl_core::diag::Severity::Error),
+                "{:?}",
+                output.diagnostics
+            );
+            let mut package = output.package;
+            if !retired {
+                let def = package
+                    .decls
+                    .iter_mut()
+                    .find_map(|decl| match decl.kind.as_mut() {
+                        Some(v2::decl::Kind::EnumDef(def)) => Some(def),
+                        _ => None,
+                    })
+                    .expect("enum");
+                def.values[0].value = value;
+            }
+            let error = generate(&package).expect_err("outside int32 must be refused");
+            assert!(
+                error.message.contains("int32"),
+                "retired={retired}, value={value}: {}",
+                error.message
+            );
+            assert!(
+                error.message.contains(&value.to_string()),
+                "{}",
+                error.message
+            );
+        }
     }
 }
