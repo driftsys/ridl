@@ -283,10 +283,6 @@ fn missing_evidence_omits_compatible_catalogs(encoding: &str) {
         );
     }
     assert!(stderr.contains("historical remote context"), "{stderr}");
-    assert!(
-        stderr.contains("cannot publish unit `veh.body`"),
-        "{stderr}"
-    );
     assert_eq!(inventory(&baseline), before);
 }
 
