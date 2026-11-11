@@ -1,16 +1,14 @@
 name: CodeQL
 
 # CodeQL code scanning, as a workflow rather than GitHub's default setup, so
-# that the Rust analysis can be skipped on a pull request that changes no file
-# it reads. The Rust analysis takes about 10 minutes; the other two take about
-# 1 minute each.
+# that the Rust analysis can run on main only. It takes about 10 minutes; the
+# other two analyses take about 1 minute each and run on pull requests too.
 #
 # The job names are the check names that the `main` ruleset requires:
 # `Analyze (actions)`, `Analyze (javascript-typescript)` and `Analyze (rust)`.
-# A job skipped by its `if:` reports "skipped", which satisfies a required
-# check; a workflow skipped by an `on:` paths filter reports nothing, which
-# would leave the check pending. That is why the Rust filter is a job, not a
-# paths filter.
+# On a pull request the Rust job is skipped by its `if:`, and a skipped job
+# satisfies a required check. The other two jobs upload an analysis on every
+# pull request, which is what produces the required `CodeQL` check.
 
 on:
   push:
@@ -29,46 +27,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Decides whether a pull request needs the Rust analysis. Fails closed, as
-  # the `changes` job of ci.yml does: it lists the paths that cannot affect the
-  # Rust analysis, and any other path runs it. A push, a scheduled run and a
-  # manual run always run it.
-  changes:
-    name: changes
-    runs-on: ubuntu-latest
-    outputs:
-      rust: ${{ steps.filter.outputs.rust }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          # The pull_request checkout is a merge commit; its first parent is
-          # the base branch tip.
-          fetch-depth: 2
-      - id: filter
-        env:
-          EVENT: ${{ github.event_name }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT" != "pull_request" ]; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          files="$(git diff --name-only --no-renames HEAD^1 HEAD)"
-          echo "$files"
-          # An empty list is a diff that did not read the change: run.
-          if [ -z "$files" ]; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          # Documentation, the editor extension, the TypeScript packages and
-          # the workflows contain no Rust source.
-          rust_skip='^(docs/|editors/|packages/|\.github/|\.claude/|\.githooks/)|\.md$'
-          if [ -n "$(grep -vE "$rust_skip" <<< "$files" || true)" ]; then
-            echo "rust=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "rust=false" >> "$GITHUB_OUTPUT"
-          fi
-
   analyze:
     name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
@@ -89,10 +47,12 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
+  # Runs on a push to main, on the weekly schedule and on a manual run. A
+  # Rust finding is therefore reported after the merge, not on the pull
+  # request.
   analyze-rust:
     name: Analyze (rust)
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
