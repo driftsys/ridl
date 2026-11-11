@@ -22,7 +22,7 @@ export class RuleError extends RangeError {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "streams.demo";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([35, 16, 53, 56, 203, 51, 77, 77, 56, 3, 12, 111, 125, 148, 42, 208, 243, 45, 253, 101, 144, 45, 178, 231, 123, 24, 19, 122, 10, 240, 6, 28]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([72, 109, 126, 220, 16, 117, 168, 206, 134, 46, 140, 233, 125, 248, 64, 149, 85, 43, 164, 153, 149, 196, 143, 224, 75, 194, 190, 64, 0, 154, 22, 235]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
   "streams.demo.ArgsFetchParams",
@@ -1195,7 +1195,8 @@ export const Feed = {
   uploadChoice: { iface: 1, ord: 22, kind: "query", request: codecFeedUploadChoiceParams, reply: codecUploadResult, streams: [{ no: 1, form: "elements", element: codecChunk }], limit: 512 },
   uploadTuple: { iface: 1, ord: 23, kind: "query", request: codecFeedUploadTupleParams, reply: codecFeedUploadTupleReply, streams: [{ no: 1, form: "bytes" }] },
   // uploadFallible has no entry: inline fallible replies have no codec
-  newest: { iface: 1, ord: 25, kind: "signal", payload: codecChunk },
+  uploadLabel: { iface: 1, ord: 25, kind: "command", request: codecText, streams: [{ no: 1, form: "bytes" }] },
+  newest: { iface: 1, ord: 26, kind: "signal", payload: codecChunk },
 } as const;
 
 const streamEntry2 = Feed.scalars;
@@ -1617,13 +1618,32 @@ export function Feed_uploadTuple(session: $rt.StreamSession, opts: $rt.StreamOpt
   return { upload, reply };
 }
 
+const streamEntry22 = Feed.uploadLabel;
+
+/**
+ * Receives bytes under a bounded text label.
+ *
+ * @remarks
+ * Rules:
+ * - response within 50000 us
+ */
+export function Feed_uploadLabel(session: $rt.StreamSession, label: t.Text, opts: $rt.StreamOptions): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
+  const entry = streamEntry22;
+  checkStreamSession(session, undefined);
+  const requestType = session.codec.typeId(entry.request.type);
+  const args = encodeStreamRequest(session, entry.request, requestType, label, undefined);
+  const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
+  const upload = $rt.byteUpload(raw.upload, 16128);
+  return { upload, accepted: raw.accepted };
+}
+
 /** The members of interface `Other`, interface number `2`. */
 export const Other = {
   iface: 2,
   fetch: { iface: 2, ord: 1, kind: "query", request: codecOtherFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry22 = Other.fetch;
+const streamEntry23 = Other.fetch;
 
 /**
  * Reads bytes.
@@ -1633,7 +1653,7 @@ const streamEntry22 = Other.fetch;
  * - response within 50000 us
  */
 export function Other_fetch(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry22;
+  const entry = streamEntry23;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
@@ -1647,7 +1667,7 @@ export const session = {
   fetch: { iface: 10, ord: 1, kind: "query", request: codecSessionFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry30 = session.fetch;
+const streamEntry31 = session.fetch;
 
 /**
  * Reads raw bytes.
@@ -1657,7 +1677,7 @@ const streamEntry30 = session.fetch;
  * - response within 50000 us
  */
 export function session_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry30;
+  const entry = streamEntry31;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
@@ -1671,7 +1691,7 @@ export const opts = {
   fetch: { iface: 7, ord: 1, kind: "query", request: codecOptsFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry27 = opts.fetch;
+const streamEntry28 = opts.fetch;
 
 /**
  * Reads raw bytes.
@@ -1681,7 +1701,7 @@ const streamEntry27 = opts.fetch;
  * - response within 50000 us
  */
 export function opts_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry27;
+  const entry = streamEntry28;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
@@ -1695,7 +1715,7 @@ export const entry = {
   fetch: { iface: 6, ord: 1, kind: "query", request: codecEntryFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry26 = entry.fetch;
+const streamEntry27 = entry.fetch;
 
 /**
  * Reads raw bytes.
@@ -1705,7 +1725,7 @@ const streamEntry26 = entry.fetch;
  * - response within 50000 us
  */
 export function entry_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry26;
+  const entry = streamEntry27;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
@@ -1719,7 +1739,7 @@ export const args = {
   fetch: { iface: 3, ord: 1, kind: "query", request: codecArgsFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry23 = args.fetch;
+const streamEntry24 = args.fetch;
 
 /**
  * Reads raw bytes.
@@ -1729,7 +1749,7 @@ const streamEntry23 = args.fetch;
  * - response within 50000 us
  */
 export function args_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry23;
+  const entry = streamEntry24;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
@@ -1743,7 +1763,7 @@ export const raw = {
   fetch: { iface: 8, ord: 1, kind: "query", request: codecRawFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry28 = raw.fetch;
+const streamEntry29 = raw.fetch;
 
 /**
  * Reads raw bytes.
@@ -1753,7 +1773,7 @@ const streamEntry28 = raw.fetch;
  * - response within 50000 us
  */
 export function raw_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry28;
+  const entry = streamEntry29;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
@@ -1767,7 +1787,7 @@ export const element = {
   fetch: { iface: 4, ord: 1, kind: "query", request: codecElementFetchParams, streams: [{ no: 0, form: "elements", element: codecChunk }] },
 } as const;
 
-const streamEntry24 = element.fetch;
+const streamEntry25 = element.fetch;
 
 /**
  * Reads numbered elements.
@@ -1777,7 +1797,7 @@ const streamEntry24 = element.fetch;
  * - response within 50000 us
  */
 export function element_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Chunk> {
-  const entry = streamEntry24;
+  const entry = streamEntry25;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const element = entry.streams[0].element;
@@ -1793,7 +1813,7 @@ export const requestType = {
   fetch: { iface: 9, ord: 1, kind: "query", request: codecRequestTypeFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry29 = requestType.fetch;
+const streamEntry30 = requestType.fetch;
 
 /**
  * Reads raw bytes.
@@ -1803,7 +1823,7 @@ const streamEntry29 = requestType.fetch;
  * - response within 50000 us
  */
 export function requestType_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry29;
+  const entry = streamEntry30;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
@@ -1817,7 +1837,7 @@ export const elementType = {
   fetch: { iface: 5, ord: 1, kind: "query", request: codecElementTypeFetchParams, streams: [{ no: 0, form: "elements", element: codecChunk }] },
 } as const;
 
-const streamEntry25 = elementType.fetch;
+const streamEntry26 = elementType.fetch;
 
 /**
  * Reads numbered elements.
@@ -1827,7 +1847,7 @@ const streamEntry25 = elementType.fetch;
  * - response within 50000 us
  */
 export function elementType_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Chunk> {
-  const entry = streamEntry25;
+  const entry = streamEntry26;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const element = entry.streams[0].element;
@@ -1843,7 +1863,7 @@ export const streamEntry = {
   fetch: { iface: 11, ord: 1, kind: "query", request: codecStreamEntryFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry31 = streamEntry.fetch;
+const streamEntry32 = streamEntry.fetch;
 
 /**
  * Reads raw bytes.
@@ -1853,7 +1873,7 @@ const streamEntry31 = streamEntry.fetch;
  * - response within 50000 us
  */
 export function streamEntry_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry31;
+  const entry = streamEntry32;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
@@ -1867,7 +1887,7 @@ export const streamEntry1 = {
   fetch: { iface: 12, ord: 1, kind: "query", request: codecStreamEntry1FetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry32 = streamEntry1.fetch;
+const streamEntry33 = streamEntry1.fetch;
 
 /**
  * Reads raw bytes.
@@ -1877,7 +1897,7 @@ const streamEntry32 = streamEntry1.fetch;
  * - response within 50000 us
  */
 export function streamEntry1_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry32;
+  const entry = streamEntry33;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
