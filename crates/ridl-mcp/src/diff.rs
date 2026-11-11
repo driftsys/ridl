@@ -626,6 +626,7 @@ mod tests {
         }
         assert_eq!(before, inventory(&copy.0));
     }
+
     #[test]
     fn widened_send_only_constraint_is_compatible() {
         let copy = crate::snapshot::tests::TempWorkspace::copy("ws");

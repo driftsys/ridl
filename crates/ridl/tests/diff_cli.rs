@@ -2056,18 +2056,22 @@ fn remote_constraint_comparison(received: bool, narrowed: bool) {
     let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
     assert!(report["changes"].as_array().unwrap().is_empty(), "{report}");
 }
+
 #[test]
 fn remote_constraint_widening_received() {
     remote_constraint_comparison(true, false);
 }
+
 #[test]
 fn remote_constraint_widening_send_only() {
     remote_constraint_comparison(false, false);
 }
+
 #[test]
 fn remote_constraint_narrowing_received() {
     remote_constraint_comparison(true, true);
 }
+
 #[test]
 fn remote_constraint_narrowing_send_only() {
     remote_constraint_comparison(false, true);

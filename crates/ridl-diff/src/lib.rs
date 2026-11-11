@@ -9,8 +9,9 @@
 //! tool-qualification boundary, ADR-0008 decision 9).
 //!
 //! Per-side context entry points also attribute remote layout growth, integer
-//! width changes, scalar constraint changes and strict enum appends to surviving old consumer uses
-//! (ADR-0031 decision 13; ADR-0008 decision 14 for scalar constraints).
+//! width changes, scalar constraint changes and strict enum appends to
+//! surviving old consumer uses (ADR-0031 decision 13; ADR-0008 decision 14 for
+//! scalar constraints).
 //!
 //! The comparison has two halves. The walk ([`walk`]) says *what* structurally
 //! differs, emitting one [`Change`] per difference with a [`Category`]; the
@@ -442,6 +443,7 @@ fn classify_all(
     new: &Package,
     scope: &[&Package],
     encodings: &[&str],
+    directions: &mut direction::DirectionCache,
 ) {
     for change in changes {
         let held_by = change.path.split('/').next().unwrap_or_default();
@@ -454,7 +456,7 @@ fn classify_all(
                 .find(|package| package.name == held_by)
                 .unwrap_or(new)
         };
-        change.verdict = classify::classify_in(change, old, new, scope, encodings);
+        change.verdict = classify::classify_in(change, old, new, scope, encodings, directions);
     }
 }
 
@@ -485,7 +487,7 @@ pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
     let mut changes = Vec::new();
     walk::walk_packages(old, new, &matching, &mut changes);
     let mut changes = walk::fold_strict_enum_appends(changes, old, new);
-    classify_all(&mut changes, old, new, &[], &[]);
+    classify_all(&mut changes, old, new, &[], &[], &mut Default::default());
     report(changes)
 }
 
@@ -698,6 +700,9 @@ fn diff_refs_scoped(
 
     let scope: Vec<&Package> = new.iter().chain(new_context).copied().collect();
     let matching = walk::Matching::new(old, new);
+    // The cache keys by package address, so it serves only packages that live
+    // for the whole comparison.
+    let mut directions = direction::DirectionCache::default();
 
     let old_by: BTreeMap<&str, &Package> =
         old.iter().map(|pkg| (pkg.name.as_str(), *pkg)).collect();
@@ -726,7 +731,14 @@ fn diff_refs_scoped(
                 let mut pair = Vec::new();
                 walk::walk_packages(old_pkg, new_pkg, &matching, &mut pair);
                 let mut pair = walk::fold_strict_enum_appends(pair, old_pkg, new_pkg);
-                classify_all(&mut pair, old_pkg, new_pkg, &scope, encodings);
+                classify_all(
+                    &mut pair,
+                    old_pkg,
+                    new_pkg,
+                    &scope,
+                    encodings,
+                    &mut directions,
+                );
                 // The encoding rules read the settled verdicts of the pair
                 // and the heads of both whole sides, so they run after the
                 // walk and the classifier of the pair.
@@ -737,7 +749,14 @@ fn diff_refs_scoped(
                     &pair, old_pkg, new_pkg,
                 ));
                 encoding_changes.append(&mut walk::proto3_width_changes(&pair, old_pkg, new_pkg));
-                classify_all(&mut encoding_changes, old_pkg, new_pkg, &scope, encodings);
+                classify_all(
+                    &mut encoding_changes,
+                    old_pkg,
+                    new_pkg,
+                    &scope,
+                    encodings,
+                    &mut directions,
+                );
                 pair.append(&mut encoding_changes);
                 changes.append(&mut pair);
             }
@@ -753,7 +772,16 @@ fn diff_refs_scoped(
                 };
                 let mut pair = Vec::new();
                 walk::walk_packages(old_pkg, &gone, &matching, &mut pair);
-                classify_all(&mut pair, old_pkg, &gone, &scope, encodings);
+                classify_all(
+                    &mut pair,
+                    old_pkg,
+                    &gone,
+                    &scope,
+                    encodings,
+                    // `gone` is dropped after this arm and its address can be
+                    // reused, so it gets its own cache.
+                    &mut Default::default(),
+                );
                 changes.append(&mut pair);
             }
             // A package present on one side only: the change classifies on its
@@ -767,7 +795,7 @@ fn diff_refs_scoped(
                     Some(format!("package {name}")),
                     None,
                 );
-                classify_all(&mut pair, old_pkg, old_pkg, &[], encodings);
+                classify_all(&mut pair, old_pkg, old_pkg, &[], encodings, &mut directions);
                 changes.append(&mut pair);
             }
         }
@@ -782,7 +810,7 @@ fn diff_refs_scoped(
                 None,
                 Some(format!("package {name}")),
             );
-            classify_all(&mut pair, new_pkg, new_pkg, &[], encodings);
+            classify_all(&mut pair, new_pkg, new_pkg, &[], encodings, &mut directions);
             changes.append(&mut pair);
         }
     }
