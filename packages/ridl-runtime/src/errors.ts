@@ -17,14 +17,19 @@ export class CodecError extends Error {
 /**
  * Thrown when the catalog hash of a module differs from the hash that the
  * generated TypeScript expects. Both values are lower-case hexadecimal.
+ * `holder` names whose hash differs; it is the wasm module unless a port.
  */
 export class CatalogMismatch extends Error {
   readonly expected: string;
   readonly actual: string;
 
-  constructor(expected: string, actual: string) {
+  constructor(
+    expected: string,
+    actual: string,
+    holder: string = "the wasm module",
+  ) {
     super(
-      `catalog hash mismatch: the TypeScript expects ${expected}, the wasm module has ${actual}`,
+      `catalog hash mismatch: the TypeScript expects ${expected}, ${holder} has ${actual}`,
     );
     this.name = "CatalogMismatch";
     this.expected = expected;

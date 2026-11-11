@@ -1080,7 +1080,7 @@ fn a_package_whose_only_payload_root_is_foreign_gets_a_module_without_a_barrel()
     let model = names_model();
     let source = module(&model, "veh.names");
     for line in [
-        "import type * as $rt from \"@driftsys/ridl-runtime\";",
+        "import * as $rt from \"@driftsys/ridl-runtime\";",
         "import type * as ridl_std from \"./ridl.std.js\";",
         "import * as ridl_std_codec from \"./ridl.std.codec.js\";",
         "export const PAYLOAD_TYPES = [\n] as const;",
@@ -1172,6 +1172,205 @@ fn every_signal_helper_name_is_refused() {
     }
 }
 
+/// An interface that takes the name of the client class of another interface
+/// is refused, with an error that names both.
+///
+/// Mutation: skip the registration of the client class name.
+#[test]
+fn an_interface_named_as_a_client_class_is_refused() {
+    let mut model = cabin_model();
+    interface(&mut model, "Horn").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "CabinClient".to_string(),
+            ..Default::default()
+        }));
+    assert_eq!(
+        refusal(&model),
+        "`CabinClient` in package `veh.cabin` collides with `Cabin client class`, which the \
+         codec module also declares"
+    );
+}
+
+/// An interface with no command or query has no client class yet, so its
+/// name leaves `<Name>Client` free.
+///
+/// Mutation: register the client class name of every interface.
+#[test]
+fn an_interface_without_a_call_reserves_no_client_class_name() {
+    let mut model = cabin_model();
+    interface(&mut model, "Cabin").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "HornClient".to_string(),
+            ..Default::default()
+        }));
+    let source = module(&model, "veh.cabin");
+    assert!(
+        source.contains("export class HornClientClient {"),
+        "{source}"
+    );
+    assert!(!source.contains("export class HornClient {"), "{source}");
+}
+
+/// A member whose name is a method of the client class that the module writes
+/// for another purpose is refused.
+///
+/// Mutation: drop one name from the list of the taken method names.
+#[test]
+fn a_member_named_as_a_method_of_the_client_class_is_refused() {
+    for (member, taken) in [
+        ("bind", "the static method `bind`"),
+        ("constructor", "the constructor"),
+        ("onEvent", "the method `onEvent`"),
+    ] {
+        let mut model = common_model();
+        let sensors = interface(&mut model, "Sensors");
+        let slot = sensors
+            .slots
+            .iter_mut()
+            .find_map(|slot| match slot.occupant.as_mut() {
+                Some(v1::interaction_slot::Occupant::Interaction(interaction))
+                    if interaction.name.as_ref().map(|n| n.declared.as_str())
+                        == Some("setLimit") =>
+                {
+                    Some(interaction)
+                }
+                _ => None,
+            })
+            .expect("Sensors declares setLimit");
+        slot.name = Some(v1::Spellings {
+            declared: member.to_string(),
+            ..Default::default()
+        });
+        assert_eq!(
+            refusal(&model),
+            format!(
+                "`Sensors.{member}` in package `veh.common` collides with {taken} of the client \
+                 class `SensorsClient`, which the codec module also declares"
+            )
+        );
+    }
+}
+
+/// A command takes its bound from the member's recorded maximum, in
+/// milliseconds with a fraction when the maximum is not a whole number of
+/// them, and a member with no recorded maximum requires `opts.bound`.
+///
+/// Mutation: write `opts?` for a member with no maximum, or the maximum
+/// without the division by 1000.
+#[test]
+fn a_call_bound_comes_from_the_recorded_maximum() {
+    for (max_us, bound) in [
+        ("50000", Some("50")),
+        ("1500", Some("1.5")),
+        ("2500", Some("2.5")),
+        ("999", Some("0.999")),
+        ("1005", Some("1.005")),
+        ("2147483647000", Some("2147483647")),
+        ("0", None),
+        ("2147483647001", None),
+        ("2147483648000", None),
+        ("not a number", None),
+    ] {
+        let mut model = common_model();
+        let sensors = interface(&mut model, "Sensors");
+        for slot in &mut sensors.slots {
+            if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
+                &mut slot.occupant
+                && interaction.name.as_ref().map(|n| n.declared.as_str()) == Some("setLimit")
+            {
+                interaction.timing = Some(v1::Timing {
+                    max_us: Some(max_us.to_string()),
+                    ..Default::default()
+                });
+            }
+        }
+        let source = module(&model, "veh.common");
+        let method = source
+            .lines()
+            .find(|line| line.starts_with("  async setLimit("))
+            .unwrap_or_else(|| panic!("no setLimit method in:\n{source}"));
+        match bound {
+            Some(ms) => {
+                assert!(
+                    method.contains("opts?: Partial<$rt.CallOptions>"),
+                    "{method}"
+                );
+                let call = format!("{{ ...opts, bound: opts?.bound ?? {ms} }});");
+                assert!(source.contains(&call), "no `{call}` in:\n{source}");
+            }
+            None => {
+                assert!(method.contains(", opts: $rt.CallOptions)"), "{method}");
+                assert!(!method.contains("opts?"), "{method}");
+            }
+        }
+    }
+}
+
+/// A member of an internal interface has no method, so the interface has no
+/// client class.
+///
+/// Mutation: drop the internal-interface test of `discover_call`.
+#[test]
+fn an_internal_interface_gets_no_client_class() {
+    let mut model = common_model();
+    interface(&mut model, "Sensors").visibility = v1::Visibility::Internal as i32;
+    let source = module(&model, "veh.common");
+    assert!(!source.contains("class SensorsClient"), "{source}");
+}
+
+/// A call whose payload has no finite bound has no table entry and no method,
+/// and the class says why.
+///
+/// Mutation: drop the unbounded-payload branch of `discover_call`.
+#[test]
+fn a_call_with_an_unbounded_payload_has_no_method() {
+    let mut model = common_model();
+    let root = model
+        .declarations
+        .iter()
+        .position(|d| d.name.as_ref().unwrap().declared == "DriverProfile")
+        .unwrap();
+    model
+        .flatbuffers
+        .as_mut()
+        .unwrap()
+        .roots
+        .iter_mut()
+        .filter(|r| r.tuple.is_none() && r.declaration as usize == root)
+        .for_each(|r| r.bound = None);
+    let source = module(&model, "veh.common");
+    assert!(
+        source.contains(
+            "// profile has no method: veh.common.DriverProfile has no finite FlatBuffers bound"
+        ),
+        "{source}"
+    );
+    assert!(!source.contains("async profile("), "{source}");
+    assert!(source.contains("async setLimit("), "{source}");
+}
+
+/// An optional parameter is typed `T | undefined` in the method signature.
+///
+/// Mutation: drop the `| undefined` suffix in `discover_call`.
+#[test]
+fn an_optional_parameter_is_typed_with_undefined() {
+    let mut model = common_model();
+    let sensors = interface(&mut model, "Sensors");
+    for slot in &mut sensors.slots {
+        if let Some(v1::interaction_slot::Occupant::Interaction(interaction)) = &mut slot.occupant
+            && interaction.name.as_ref().map(|n| n.declared.as_str()) == Some("setLimit")
+            && let Some(v1::interaction::Shape::Command(command)) = &mut interaction.shape
+        {
+            command.params[0].r#type.as_mut().unwrap().optional = true;
+        }
+    }
+    let source = module(&model, "veh.common");
+    assert!(
+        source.contains("async setLimit(limit: t.Speed | undefined, actual: t.Speed,"),
+        "{source}"
+    );
+}
+
 /// A name that the runtime package exports is free for an interface: the
 /// module reaches the runtime only through the `$rt` namespace import, and `$`
 /// cannot occur in a RIDL name.
@@ -1199,6 +1398,14 @@ fn an_interface_may_take_a_runtime_name() {
         assert!(source.contains("$rt.CodecError"), "{source}");
         assert!(source.contains("$rt.PayloadCodec<"), "{source}");
         assert!(source.contains("$rt.checkWellFormed("), "{source}");
+        // The client class takes the name with a suffix, so a bare name is one
+        // that no identifier character follows.
+        let bare_use = |bare: &str| {
+            source.match_indices(bare).any(|(at, _)| {
+                !source[at + bare.len()..]
+                    .starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_')
+            })
+        };
         for bare in [
             ": Codec",
             concat!(": Payload", "Codec<"),
@@ -1206,7 +1413,7 @@ fn an_interface_may_take_a_runtime_name() {
             ": SignalCheckEntry",
             concat!(" = check", "WellFormed("),
         ] {
-            assert!(!source.contains(bare), "{bare}: {source}");
+            assert!(!bare_use(bare), "{bare}: {source}");
         }
     }
 }
@@ -1801,7 +2008,7 @@ fn rule_error_model(declarations: &str, extra: &str) -> v1::Model {
 fn rule_error_is_not_reserved_without_an_enum() {
     let source = module(&rule_error_model("", ""), "only");
     assert!(source.contains("export const RuleError = {"), "{source}");
-    assert!(!source.contains("class RuleError"), "{source}");
+    assert!(!source.contains("class RuleError "), "{source}");
 }
 
 /// A no-zero strict enum reached only as a payload root, or only as a map
