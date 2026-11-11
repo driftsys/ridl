@@ -1,0 +1,68 @@
+name: CodeQL
+
+# CodeQL code scanning, as a workflow rather than GitHub's default setup, so
+# that the Rust analysis can run on main only. It takes about 10 minutes; the
+# other two analyses take about 1 minute each and run on pull requests too.
+#
+# The job names are the check names that the `main` ruleset requires:
+# `Analyze (actions)`, `Analyze (javascript-typescript)` and `Analyze (rust)`.
+# On a pull request the Rust job is skipped by its `if:`, and a skipped job
+# satisfies a required check. The other two jobs upload an analysis on every
+# pull request, which is what produces the required `CodeQL` check.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly, so that new queries run over code no pull request changed.
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
+
+  # Runs on a push to main, on the weekly schedule and on a manual run. A
+  # Rust finding is therefore reported after the merge, not on the pull
+  # request.
+  analyze-rust:
+    name: Analyze (rust)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: rust
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:rust
