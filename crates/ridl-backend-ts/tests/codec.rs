@@ -958,7 +958,7 @@ fn a_package_without_a_payload_type_has_no_codec_module() {
 fn the_extras_and_pick_conversions() {
     let source = module(&common_model(), "veh.common");
     for line in [
-        "function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }): fb.ExtrasWideT {",
+        "function packExtrasWide(value: { big: bigint; sparse: readonly t.Speed[] }, _at: string): fb.ExtrasWideT {",
         "  tuple.field2 = [...value.sparse];",
         "  object.blob = Array.from(value.blob);",
         "    blob: Uint8Array.from(object.blob) as Uint8Array,",
@@ -972,6 +972,12 @@ fn the_extras_and_pick_conversions() {
         "    tag: Uint8Array.from(object.tag) as Uint8Array,",
         "  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = checkWellFormed(key, \"veh.common.Extras.notes.key\"); entry.value = checkWellFormed(value, \"veh.common.Extras.notes.value\"); return entry; });",
         "    notes: object.notes.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),",
+        "  object.pair = packPairsPair(value.pair, \"veh.common.Pairs.pair\");",
+        "  object.list = value.list.map((element) => packPairsListElement(element, \"veh.common.Pairs.list[]\"));",
+        "function packPairsPair(value: { text: string; count: t.Speed }, at: string): fb.PairsPairT {",
+        "  tuple.field1 = checkWellFormed(value.text, at + \".text\");",
+        "  tuple.field2 = packPairsListElementDeep(value.deep, at + \".deep\");",
+        "  tuple.field1 = checkWellFormed(value.word, at + \".word\");",
         "  object.default_ = value.default;",
         "    new: t.makeCounterUnchecked(object.new_),",
         "  object.class_ = value.class;",
@@ -1863,7 +1869,8 @@ fn stream_reply_exports_match_model() {
     let actual: BTreeSet<_> = exported_functions(&source, "")
         .into_iter()
         .filter(|name| {
-            !name.starts_with("encode")
+            name != "signalChecks"
+                && !name.starts_with("encode")
                 && !name.starts_with("decode")
                 && !name.starts_with("Feed_upload")
                 && !name.starts_with("Feed_duplex")

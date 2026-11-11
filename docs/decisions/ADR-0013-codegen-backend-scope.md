@@ -288,9 +288,10 @@ language layer at `int64`/`float64`.
    length bounds; it checks a pattern on a string backing only when the
    generated crate's `validate-pattern` feature is on
    ([Generated code](../book/generated-code.md)). `ridl-backend-ts` emits
-   `make<Name>`, which checks the range, step, length and pattern and throws a
-   `ConstraintError`, and `make<Name>Unchecked`, which does not. The pattern
-   check is always on, with the ECMA-262 semantics of the checker.
+   `make<Name>`, which checks the well-formedness of a string (rule `utf8`),
+   then the range, step, length and pattern, and throws a `ConstraintError`, and
+   `make<Name>Unchecked`, which does not. An `internal` scalar has neither. The
+   pattern check is always on, with the ECMA-262 semantics of the checker.
 
    **`ridl diff`.** Constraint classification is owned by
    [ADR-0008](ADR-0008-e2-execution.md) decision 14, amended 2026-11-09. A

@@ -59,7 +59,8 @@ function describe(sample: Sample): string {
 /**
  * The time limit of each connect, subscribe and read step of the page, in
  * milliseconds. It is far above the time a step takes on a developer machine
- * (the whole run takes about one second), and the five steps together stay
+ * (the whole run takes about one second), and the six steps together (a
+ * connect, three fixed reads, a subscribe and a signal read, 24 s in all) stay
  * below the page limit of the browser test. A step that stalls fails with its
  * own name.
  */

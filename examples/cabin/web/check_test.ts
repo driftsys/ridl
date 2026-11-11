@@ -626,6 +626,11 @@ const divergences: readonly {
     why: "`.` excludes the line separator in JavaScript only",
   },
   {
+    subject: glyph,
+    value: "\u2029",
+    why: "`.` excludes the paragraph separator in JavaScript only",
+  },
+  {
     // `\d` is `[0-9]` in JavaScript; `regex` matches any Unicode decimal digit.
     subject: digited,
     value: "٣",

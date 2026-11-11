@@ -107,6 +107,8 @@ interface Feed {
   query uploadTuple(values: <bytes>): (first: Count, tail: Count) @[..50ms]
   /// Receives data with an unsupported inline fallible reply.
   query uploadFallible(values: <bytes>): Chunk | UploadError @[..50ms]
+  /// Reports the latest numbered element, so that this package has a signal and a stream.
+  signal newest : Chunk @1s
 
 }
 

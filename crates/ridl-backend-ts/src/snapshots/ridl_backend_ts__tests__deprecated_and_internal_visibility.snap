@@ -63,23 +63,7 @@ export function initOldFlag(): OldFlag {
   return false as OldFlag;
 }
 
-/**
- * Build a value with `makeRawTicks`.
- */
 type RawTicks = number & { readonly __ridl: 'veh.common.RawTicks' };
-
-/** Builds a `RawTicks`. Throws a `ConstraintError` when a checked constraint is broken. */
-function makeRawTicks(value: number): RawTicks {
-  if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'veh.common.RawTicks', value, 'a safe integer');
-  }
-  return value as RawTicks;
-}
-
-/** Builds a `RawTicks` without checking a value already known to satisfy its constraints. */
-function makeRawTicksUnchecked(value: number): RawTicks {
-  return value as RawTicks;
-}
 
 function initRawTicks(): RawTicks {
   return 0 as RawTicks;

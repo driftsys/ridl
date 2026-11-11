@@ -923,6 +923,136 @@ mod tests {
     use super::*;
 
     #[test]
+    fn second_of_three_rename_failure_restores_only_the_first_target() {
+        if let Some(order) = restore_errors(
+            "lock::tests::second_of_three_rename_failure_restores_only_the_first_target",
+            1,
+            &[0],
+        ) {
+            assert_eq!(
+                order,
+                [1, 0],
+                "report the rename, then restore only target 0"
+            );
+        }
+    }
+
+    #[test]
+    fn third_rename_failure_restores_previous_targets_in_reverse_order() {
+        if let Some(order) = restore_errors(
+            "lock::tests::third_rename_failure_restores_previous_targets_in_reverse_order",
+            2,
+            &[0, 1],
+        ) {
+            assert_eq!(order, [2, 1, 0], "never restore the failed target");
+        }
+    }
+
+    #[test]
+    fn a_restore_failure_is_reported_and_other_targets_are_restored() {
+        if let Some(order) = restore_errors(
+            "lock::tests::a_restore_failure_is_reported_and_other_targets_are_restored",
+            2,
+            &[1],
+        ) {
+            assert_eq!(order, [2, 1], "target 0 restores without an error");
+        }
+    }
+
+    #[test]
+    fn three_file_rename_failures_restore_all_replaced_targets() {
+        for failed_index in [1, 2] {
+            assert_restore_targets(failed_index, &[]);
+        }
+    }
+
+    /// Runs this test in a child to capture the real stderr writes. Creating
+    /// a file at a consumed temporary path makes that target's restore fail;
+    /// the resulting diagnostics expose the restore range and order.
+    fn restore_errors(
+        test_name: &str,
+        failed_index: usize,
+        blocked: &[usize],
+    ) -> Option<Vec<usize>> {
+        const CHILD: &str = "RIDL_LOCK_RESTORE_CHILD";
+        if std::env::var(CHILD).as_deref() != Ok(test_name) {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", test_name, "--nocapture"])
+                .env(CHILD, test_name)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            let stderr = String::from_utf8(output.stderr).unwrap();
+            assert!(stderr.contains("injected rename failure"), "{stderr}");
+            let order = stderr
+                .lines()
+                .map(|line| {
+                    let path = line
+                        .strip_prefix("error: cannot write ")
+                        .and_then(|line| line.split_once(": "))
+                        .expect("each diagnostic names the write path")
+                        .0;
+                    Path::new(path)
+                        .file_stem()
+                        .unwrap()
+                        .to_str()
+                        .unwrap()
+                        .parse()
+                        .expect("a numbered target")
+                })
+                .collect();
+            return Some(order);
+        }
+
+        assert_restore_targets(failed_index, blocked);
+        None
+    }
+
+    fn assert_restore_targets(failed_index: usize, blocked: &[usize]) {
+        let dir = tempfile::tempdir().unwrap();
+        let files: Vec<_> = (0..3)
+            .map(|index| {
+                let path = dir.path().join(format!("{index}.lock"));
+                std::fs::write(&path, format!("before {index}\n")).unwrap();
+                (path, format!("after {index}\n"))
+            })
+            .collect();
+        let mut temporaries = Vec::new();
+        let mut calls = 0;
+        let result = write_locks_with(&files, |from, to| {
+            let index = calls;
+            calls += 1;
+            if index == failed_index {
+                for &blocked_index in blocked {
+                    std::fs::write(&temporaries[blocked_index], "prevent restoration").unwrap();
+                }
+                return Err(std::io::Error::other("injected rename failure"));
+            }
+            temporaries.push(from.to_path_buf());
+            std::fs::rename(from, to)
+        });
+        assert_eq!(result, Err(ExitCode::from(2)));
+        assert_eq!(calls, failed_index + 1, "stop renaming at the failure");
+        for (index, (path, _)) in files.iter().enumerate() {
+            let expected = if index < failed_index && blocked.contains(&index) {
+                format!("after {index}\n")
+            } else {
+                format!("before {index}\n")
+            };
+            assert_eq!(
+                std::fs::read_to_string(path).unwrap(),
+                expected,
+                "target {index}"
+            );
+        }
+        assert_eq!(
+            std::fs::read_dir(dir.path()).unwrap().count(),
+            3,
+            "remove temporary files"
+        );
+    }
+
+    #[test]
     fn second_lock_rename_failure_restores_previous_bytes() {
         assert_second_rename_failure(Some(b"# keep these bytes\r\nnext 1\r\n"));
     }

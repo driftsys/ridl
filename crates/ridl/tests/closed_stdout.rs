@@ -1,4 +1,7 @@
-//! Reports end with one newline; a stdout write failure exits 2, overriding a verdict.
+//! Exactly one final newline is checked for `check` JSON and SARIF, `diff`
+//! JSON and explanations, and `test` text and JSON. Command report write
+//! failures exit 2, overriding a verdict; help and version exit 0 on a
+//! closed stdout pipe.
 
 #![cfg(unix)]
 
@@ -6,7 +9,7 @@ mod remote_support;
 
 use std::io;
 use std::path::Path;
-use std::process::{Command, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::sync::Mutex;
 
 // On macOS, pipe creation and setting close-on-exec are separate operations.
@@ -19,7 +22,7 @@ fn command(dir: &Path, args: &[&str]) -> Command {
     command
 }
 
-fn assert_closed_stdout(mut command: Command) {
+fn closed_stdout(mut command: Command) -> Output {
     let guard = PIPE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -31,9 +34,13 @@ fn assert_closed_stdout(mut command: Command) {
         .spawn()
         .expect("spawn ridl with no stdout reader");
     drop(guard);
-    let output = child
+    child
         .wait_with_output()
-        .expect("run ridl with no stdout reader");
+        .expect("run ridl with no stdout reader")
+}
+
+fn assert_closed_stdout(command: Command) {
+    let output = closed_stdout(command);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert_eq!(output.status.code(), Some(2), "stderr:\n{stderr}");
     let cause = io::Error::from_raw_os_error(32);
@@ -58,7 +65,7 @@ const SOURCE: &str = "package app\n/// A level.\ntype Level: integer [0..100]\n"
 const INTERFACE: &str =
     "package app\ntype Level: integer [0..100]\ninterface Status { signal level: Level @10ms }\n";
 
-fn successful_stdout(mut command: Command) -> Vec<u8> {
+fn captured_output(mut command: Command) -> Output {
     let guard = PIPE_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -68,7 +75,11 @@ fn successful_stdout(mut command: Command) -> Vec<u8> {
         .spawn()
         .expect("spawn ridl with captured stdout");
     drop(guard);
-    let output = child.wait_with_output().expect("capture ridl report");
+    child.wait_with_output().expect("capture ridl report")
+}
+
+fn successful_stdout(command: Command) -> Vec<u8> {
+    let output = captured_output(command);
     assert!(
         output.status.success(),
         "status: {}; stderr:\n{}",
@@ -291,4 +302,83 @@ fn scaffold_exits_2_when_stdout_reader_is_gone() {
         dir.path().join("demo/ridl.toml").is_file() && dir.path().join("demo/demo.ridl").is_file(),
         "the scaffolded manifest and source file must exist after reporting fails"
     );
+}
+
+#[test]
+fn test_text_stdout_has_exactly_one_final_newline() {
+    let dir = workspace(SOURCE);
+    successful_stdout(command(dir.path(), &["test", "--format", "text"]));
+}
+
+#[test]
+fn init_exits_2_when_stdout_reader_is_gone() {
+    let dir = tempfile::tempdir().unwrap();
+    assert_closed_stdout(command(dir.path(), &["init", "--name", "demo"]));
+    assert!(
+        dir.path().join("ridl.toml").is_file() && dir.path().join("demo.ridl").is_file(),
+        "the scaffolded manifest and source file must exist after reporting fails"
+    );
+}
+
+#[test]
+fn help_exits_0_when_stdout_reader_is_gone() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = closed_stdout(command(dir.path(), &["--help"]));
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+}
+
+#[test]
+fn version_exits_0_when_stdout_reader_is_gone() {
+    let dir = tempfile::tempdir().unwrap();
+    let output = closed_stdout(command(dir.path(), &["--version"]));
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+}
+
+#[test]
+fn lock_report_failure_leaves_both_units_complete_and_rerun_unchanged() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("ridl.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+    )
+    .unwrap();
+    for name in ["a", "b"] {
+        let member = dir.path().join(name);
+        std::fs::create_dir(&member).unwrap();
+        std::fs::write(
+            member.join("ridl.toml"),
+            format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            member.join("api.ridl"),
+            INTERFACE.replace("package app", &format!("package {name}")),
+        )
+        .unwrap();
+    }
+    assert_closed_stdout(command(dir.path(), &["lock"]));
+    let before: Vec<_> = ["a", "b"]
+        .map(|name| {
+            let path = dir.path().join(name).join("interfaces.lock");
+            assert!(
+                path.is_file(),
+                "both units must be written before reporting: {}",
+                path.display()
+            );
+            let bytes = std::fs::read(&path).unwrap();
+            assert!(String::from_utf8_lossy(&bytes).contains("next 2\nStatus 1\n"));
+            (path, bytes)
+        })
+        .into();
+    let output = captured_output(command(dir.path(), &["lock"]));
+    assert!(output.status.success(), "{output:?}");
+    assert!(
+        output.stdout.is_empty(),
+        "the rerun must allocate nothing: {output:?}"
+    );
+    for (path, bytes) in before {
+        assert_eq!(std::fs::read(path).unwrap(), bytes);
+    }
 }

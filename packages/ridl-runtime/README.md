@@ -2,7 +2,11 @@
 
 Loads the wasm codec module that `ridl build` generates and verifies encoded
 payloads with it. A payload is checked against the structure and the typl rules
-of its type before the caller uses it.
+of its type before the caller uses it. The package also holds the
+`ConstraintError` and the helpers that generated TypeScript calls to check a
+constrained value, and the types of the signal checks of a generated codec
+module. Generated TypeScript needs the release of this package that matches the
+release of `ridl` that generated it.
 
 The package has no dependency. It uses the platform `WebAssembly`, streams and
 text decoder APIs, so it runs in Deno, Bun, Node 22 or later, and in a browser.
@@ -188,6 +192,14 @@ measures; `offFloatStep(value, wire32, lattice)` and
 grid. See [Generated code](../../docs/book/generated-code.md) for what
 `make<Name>` checks.
 
+A generated codec module that has a signal exports `signalChecks(codec)`, which
+returns one `SignalCheckEntry` for each signal that has an entry in the member
+table of its interface. An entry holds the interface number `iface`, the member
+ordinal `ord` and a `SignalCheck`, a function that takes the payload bytes and
+returns a `Detection`, which is `"corrupt"` or `{ rule }` with the failed
+`PayloadRule`, or `undefined` when the payload passes. The package exports the
+three types.
+
 ## Limits
 
 - The module must export `memory`, `ridl_alloc`, `ridl_free`,
@@ -198,4 +210,5 @@ grid. See [Generated code](../../docs/book/generated-code.md) for what
 - The package verifies named payloads with wasm; stream adapters use the encoder
   and decoder supplied by the caller for named stream elements. For raw byte
   splitting and complete text code points, see the upload adapters above.
-- The package is not yet published.
+- `.github/workflows/npm-release.yml` publishes the package to npm on a `v*`
+  tag.

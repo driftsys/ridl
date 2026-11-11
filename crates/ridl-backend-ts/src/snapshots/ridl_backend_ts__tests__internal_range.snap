@@ -2,11 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
-import { ConstraintError } from '@driftsys/ridl-runtime';
-
 /**
- * Build a value with `makeValue`.
- *
  * @remarks
  * Rules:
  * - range 0 ..= 10
@@ -14,22 +10,3 @@ import { ConstraintError } from '@driftsys/ridl-runtime';
  * @range [0..10]
  */
 type Value = number & { readonly __ridl: 'test.ctor.Value' };
-
-/** Builds a `Value`. Throws a `ConstraintError` when a checked constraint is broken. */
-function makeValue(value: number): Value {
-  if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'test.ctor.Value', value, 'a safe integer');
-  }
-  if (value < 0) {
-    throw new ConstraintError('range', 'test.ctor.Value', value, '[0..10]');
-  }
-  if (value > 10) {
-    throw new ConstraintError('range', 'test.ctor.Value', value, '[0..10]');
-  }
-  return value as Value;
-}
-
-/** Builds a `Value` without checking a value already known to satisfy its constraints. */
-function makeValueUnchecked(value: number): Value {
-  return value as Value;
-}

@@ -2712,6 +2712,10 @@ gate-parity:
 # `python3 -m http.server` instead, reached through the same
 # RIDL_INSTALL_BASE_URL override install.sh's own tests use — install.ps1
 # already honours that variable, with the same name and the same default.
+#
+# It also runs scripts/verify-deno-zip.sh against a temporary pin file: a
+# matching zip passes, and a different zip, an absent target and a malformed
+# pin each fail.
 install-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -2925,6 +2929,40 @@ install-check:
         fi
         echo "install-check: install.ps1 rejects an unknown RIDL_INSTALL_BINARY"
     fi
+
+    # scripts/verify-deno-zip.sh: a matching zip passes, and a different zip,
+    # a target with no entry and a pin that is not 64 hexadecimal digits each
+    # fail. The pin file is a temporary one, so the real pins are not read.
+    verify="scripts/verify-deno-zip.sh"
+    zip="$scratch/deno-fixture.zip"
+    other="$scratch/deno-other.zip"
+    printf 'fixture zip\n' > "$zip"
+    printf 'another zip\n' > "$other"
+    if command -v sha256sum >/dev/null 2>&1; then
+        good_sum="$(sha256sum "$zip" | cut -d' ' -f1)"
+    else
+        good_sum="$(shasum -a 256 "$zip" | cut -d' ' -f1)"
+    fi
+    pins="$scratch/deno-pins"
+    printf '%s  deno-fixture-target.zip\n' "$good_sum" > "$pins"
+    bash "$verify" "$zip" fixture-target "$pins" >/dev/null
+    if bash "$verify" "$other" fixture-target "$pins" 2>"$scratch/zip-mismatch.err"; then
+        echo "install-check: verify-deno-zip.sh accepted a zip that differs from the pin" >&2
+        exit 1
+    fi
+    grep -q "does not match the pinned SHA-256" "$scratch/zip-mismatch.err"
+    if bash "$verify" "$zip" absent-target "$pins" 2>"$scratch/zip-absent.err"; then
+        echo "install-check: verify-deno-zip.sh accepted a target that the pin file lacks" >&2
+        exit 1
+    fi
+    grep -q "no valid SHA-256" "$scratch/zip-absent.err"
+    printf '%s  deno-fixture-target.zip\n' "${good_sum:0:63}" > "$pins"
+    if bash "$verify" "$zip" fixture-target "$pins" 2>"$scratch/zip-short.err"; then
+        echo "install-check: verify-deno-zip.sh accepted a pin of 63 digits" >&2
+        exit 1
+    fi
+    grep -q "no valid SHA-256" "$scratch/zip-short.err"
+    echo "install-check: verify-deno-zip.sh passes a matching zip and rejects a mismatch, an absent target and a malformed pin"
 
 # Check the TypeScript packages packages/ridl-runtime and
 # packages/ridl-transport-ws with Deno: formatting and lint of their .ts files,
@@ -3228,7 +3266,7 @@ _codec-ts-check:
     sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/ctor/deno.json > "$ctor/deno.json"
     # An unconstrained integer in RIDL source always has I64 width. Generate
     # the number-backed case from IR to isolate the safe-integer predicate.
-    cargo run -p ridl-backend-ts --example constructor_fixture -- "$ctor/number.ts"
+    cargo run --locked -p ridl-backend-ts --example constructor_fixture -- "$ctor/number.ts"
     cp crates/ridl-backend-ts/tests/fixtures/ctor/ctor_test.ts "$ctor/ctor_test.ts"
     deno lint --config "$ctor/deno.json" "$ctor/ctor.ts" "$ctor/number.ts" "$ctor/ctor_test.ts"
     deno check --config "$ctor/deno.json" "$ctor/ctor.ts" "$ctor/number.ts" "$ctor/ctor_test.ts"

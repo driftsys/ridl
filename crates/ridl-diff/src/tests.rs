@@ -7090,7 +7090,7 @@ fn decl_removed_explains_the_gone_unit_publication_override() {
         "{explanation}"
     );
     assert!(
-        explanation.contains("delete the unit's snapshots from the baseline"),
+        explanation.contains("ridl baseline CURRENT_SOURCE --reset-history --out BASELINE"),
         "{explanation}"
     );
     assert!(explanation.contains("RIDL-412"), "{explanation}");

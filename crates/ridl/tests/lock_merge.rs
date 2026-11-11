@@ -542,3 +542,53 @@ fn the_registered_driver_merges_two_branches_through_git() {
         "the merge committed cleanly"
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn a_merge_write_failure_exits_two_and_leaves_ours_unchanged() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if Command::new("id").arg("-u").output().unwrap().stdout == b"0\n" {
+        eprintln!("skipped: directory permissions do not restrict root");
+        return;
+    }
+    struct ReadOnlyDirectory(PathBuf);
+    impl Drop for ReadOnlyDirectory {
+        fn drop(&mut self) {
+            std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+    }
+
+    let dir = TempDir::new("write-failure");
+    let base = dir.write("base.lock", &lock(1, ""));
+    let before = format!("{HEADER}# preserve this comment\r\nnext 2\nA 1\n");
+    let ours = dir.write("readonly/ours.lock", &before);
+    let theirs = dir.write("theirs.lock", &lock(2, "B 1\n"));
+    let readonly = ReadOnlyDirectory(ours.parent().unwrap().to_path_buf());
+    std::fs::set_permissions(&readonly.0, std::fs::Permissions::from_mode(0o555)).unwrap();
+
+    let (code, stdout, stderr) = ridl_in(
+        dir.path(),
+        &[
+            "lock".as_ref(),
+            "merge".as_ref(),
+            base.as_os_str(),
+            ours.as_os_str(),
+            theirs.as_os_str(),
+            "7".as_ref(),
+        ],
+    );
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stdout.is_empty(), "{stdout}");
+    assert_eq!(std::fs::read(&ours).unwrap(), before.as_bytes());
+    assert!(
+        stderr.contains(&format!("error: cannot write {}: ", ours.display())),
+        "{stderr}"
+    );
+    assert!(stderr.contains("Permission denied"), "{stderr}");
+    assert_eq!(
+        std::fs::read_dir(&readonly.0).unwrap().count(),
+        1,
+        "no temporary file remains"
+    );
+}
