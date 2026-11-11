@@ -3273,6 +3273,21 @@ _codec-ts-check:
     deno check --config "$names/deno.json" "$names/names.codec.ts" "$names/names.ts" "$names/names_test.ts"
     deno test --config "$names/deno.json" "$names/names_test.ts"
 
+    # Packages with a signal or a stream and no string field, whose module still
+    # uses a runtime value, one of them with interfaces named like runtime types.
+    for kind in signal stream; do
+        if [ "$kind" = signal ]; then pkg=gauge; else pkg=feed; fi
+        bare="$tmp/bare-$kind"
+        mkdir -p "$bare"
+        "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-bare-$kind --emit typescript --emit flatbuffers --out-dir "$bare"
+        flatc --ts --gen-object-api -I "$bare" -o "$bare" "$bare/bare.$pkg.fbs"
+        sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-bare-$kind/deno.json > "$bare/deno.json"
+        cp crates/ridl-backend-ts/tests/fixtures/codec-bare-$kind/${kind}_test.ts "$bare/${kind}_test.ts"
+        deno lint --config "$bare/deno.json" "$bare/bare.$pkg.codec.ts" "$bare/${kind}_test.ts"
+        deno check --config "$bare/deno.json" "$bare/bare.$pkg.codec.ts" "$bare/${kind}_test.ts"
+        deno test --config "$bare/deno.json" "$bare/${kind}_test.ts"
+    done
+
     # Numeric constructors run without a loaded wasm codec.
     ctor="$tmp/ctor"
     mkdir -p "$ctor"

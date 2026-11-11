@@ -2767,3 +2767,69 @@ fn the_decoder_calls_the_unchecked_constructor_where_the_domain_module_has_one()
         );
     }
 }
+
+/// The model of the package `package` of the fixture directory `fixture`.
+fn fixture_model(fixture: &str, package: &str) -> v1::Model {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(fixture);
+    let output = ridlc::compile_workspace(&mut db, &entry)
+        .unwrap_or_else(|error| panic!("load {}: {error}", entry.display()));
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let package = &output
+        .checked
+        .iter()
+        .find(|p| p.ir.name == package)
+        .expect("the fixture declares the package")
+        .ir;
+    codegen::lower(package, &[&output.std_ir])
+}
+
+/// A module that uses a runtime value imports the namespace as a value, even
+/// when no string field makes it call `checkWellFormed`: `signalCheck` throws
+/// `$rt.CodecError`.
+#[test]
+fn a_signal_without_a_string_imports_the_runtime_as_a_value() {
+    let source = module(
+        &fixture_model("codec-bare-signal", "bare.gauge"),
+        "bare.gauge",
+    );
+    assert!(
+        source.contains("import * as $rt from \"@driftsys/ridl-runtime\";"),
+        "{source}"
+    );
+    assert!(!source.contains("import type * as $rt"), "{source}");
+    assert!(!source.contains("$rt.checkWellFormed("), "{source}");
+    assert!(source.contains("new $rt.CodecError("), "{source}");
+}
+
+/// The same for a stream: the functions throw `$rt.StreamError`. An interface
+/// named like a runtime stream type is free.
+#[test]
+fn a_stream_without_a_string_imports_the_runtime_as_a_value() {
+    let source = module(
+        &fixture_model("codec-bare-stream", "bare.feed"),
+        "bare.feed",
+    );
+    assert!(
+        source.contains("import * as $rt from \"@driftsys/ridl-runtime\";"),
+        "{source}"
+    );
+    assert!(!source.contains("import type * as $rt"), "{source}");
+    assert!(!source.contains("$rt.checkWellFormed("), "{source}");
+    assert!(source.contains("new $rt.StreamError("), "{source}");
+    assert!(source.contains("export const StreamError = {"), "{source}");
+    assert!(
+        source.contains("export const StreamSession = {"),
+        "{source}"
+    );
+    assert!(source.contains("session: $rt.StreamSession"), "{source}");
+}
