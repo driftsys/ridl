@@ -40,9 +40,11 @@ frozen by policy.
 
 Amended 2026-11-11: decision 1 permits history reset after intentional unit
 removal, with a note for each dropped unit that held allocated interface
-numbers. For a snapshot published before the IR recorded the unit, the gate
-cannot distinguish a removed package from a removed unit, so reset treats it as
-a removed unit even when the original unit remains.
+numbers. For a snapshot published before the IR recorded the unit, the gate uses
+the removed package's own name as its unit. A removed legacy subpackage is
+treated as a removed unit even when the original unit remains. A removed legacy
+unit-root package with a remaining subpackage receives per-number refusals for
+lost numbers, including with `--reset-history`.
 
 Amended 2026-11-11: decision 1 includes exit 2 when a command report cannot be
 written to stdout, and when lock merge renumbering exhausts the available
@@ -196,8 +198,11 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      [CLI reference](../book/cli-reference.md#baseline-publication-and-recovery)
      owns the recovery procedure. A package removed from a remaining unit still
      refuses under reset when its snapshot records the unit. For a snapshot
-     published before the IR recorded the unit, the gate cannot distinguish a
-     removed package from a removed unit, so reset treats it as a removed unit;
+     published before the IR recorded the unit, the gate uses the removed
+     package's own name as its unit. A removed legacy subpackage is treated as a
+     removed unit even when its original unit remains. A removed legacy
+     unit-root package with a remaining subpackage receives per-number refusals
+     for lost numbers, including with `--reset-history`;
    - the `ridl fmt` exit-2 cell's `vendor/` clause, added on 2026-10-13 when
      `vendor/` became the directory `ridl vendor` writes, verified via
      `fmt_never_touches_vendor` in `crates/ridl/tests/vendor_cli.rs`, which

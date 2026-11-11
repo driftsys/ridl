@@ -1600,7 +1600,7 @@ fn dropped_number_message(lost: &[DroppedNumber<'_>], out_dir: &Path) -> String 
          Publishing would lose the only record that the number was allocated, and `next` could \
          hand it to a later interface. Restore the line `{key} {number}` in the unit's \
          `interfaces.lock` from version control — `{key} {number} retired` when the interface is \
-         gone."
+         gone. Also make `next` greater than {number} if it is not already."
     )
 }
 

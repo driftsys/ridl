@@ -1832,9 +1832,81 @@ fn a_lost_subpackage_number_of_a_legacy_snapshot_is_named_relative_to_the_unit()
         "stderr:\n{stderr}"
     );
     assert!(
-        stderr.contains("Restore the line `cluster.Speed 5`"),
+        stderr.contains("Restore the line `cluster.Speed 5`")
+            && stderr.contains("make `next` greater than 5"),
         "stderr:\n{stderr}"
     );
+}
+
+/// Restoring a lost legacy number also requires a sufficient allocation bound.
+#[test]
+fn restoring_a_legacy_number_requires_raising_next() {
+    let dir = TempDir::new("gate-legacy-next");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 7")],
+    );
+    std::fs::remove_file(root.join("cluster/speed.ridl")).unwrap();
+    dir.write("cluster/gauge.ridl", "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Gauge { signal g : Level @[100ms..1s] }\n");
+    let (lock, code, stderr) = migrate(&root);
+    assert_eq!(code, 1, "lost number refuses: {stderr}");
+    assert!(stderr.contains("RIDL-412"), "{stderr}");
+    let restored = format!("{lock}cluster.Speed 7 retired\n");
+    std::fs::write(root.join("interfaces.lock"), &restored).unwrap();
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "invalid bound refuses: {stderr}");
+    assert!(stderr.contains("RIDL-410"), "{stderr}");
+    std::fs::write(
+        root.join("interfaces.lock"),
+        restored.replace("next 3", "next 8"),
+    )
+    .unwrap();
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "restored number publishes: {stderr}");
+}
+
+/// A remaining subpackage keeps the unit of a removed legacy root present.
+#[test]
+fn a_removed_legacy_root_with_a_remaining_subpackage_refuses_even_under_reset() {
+    let dir = TempDir::new("gate-legacy-root-removed");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 8\nSession 7\n",
+        &[("veh.hmi.ir.json", "\"number\": 1", "\"number\": 7")],
+    );
+    std::fs::remove_file(root.join("hmi.ridl")).unwrap();
+    dir.write(
+        "cluster/level.ridl",
+        "package veh.hmi.cluster\ntype Level: integer [0..9]\n",
+    );
+    dir.write(
+        "cluster/speed.ridl",
+        "package veh.hmi.cluster\ninterface Speed { signal v : Level @[100ms..1s] }\n",
+    );
+    std::fs::remove_file(root.join("cluster/interfaces.lock")).unwrap();
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\ncluster.Speed 2\n"),
+    );
+    let before = baseline_files(&root);
+    for reset in [false, true] {
+        let mut args = vec!["baseline".as_ref(), root.as_os_str()];
+        if reset {
+            args.push("--reset-history".as_ref());
+        }
+        let (code, _, stderr) = ridl(&args);
+        assert_eq!(code, 1, "remaining unit refuses (reset={reset}): {stderr}");
+        assert!(
+            stderr.contains("RIDL-412")
+                && stderr.contains("Restore the line `Session 7`")
+                && !stderr.contains("Reset drops unit"),
+            "{stderr}"
+        );
+        assert_eq!(before, baseline_files(&root));
+    }
 }
 
 /// A legacy root snapshot holds the inline `service zone` under number 7,
@@ -3197,7 +3269,7 @@ fn a_legacy_package_deleted_whole_is_refused_as_a_unit_gone() {
     );
 }
 
-/// Without a recorded unit, a removed package is treated as a removed unit
+/// Without a recorded unit, a removed subpackage is treated as a removed unit
 /// even when its original unit remains; plain publication still refuses it.
 #[test]
 fn resetting_a_legacy_package_removed_from_a_remaining_unit_prints_a_unit_note() {
