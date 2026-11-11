@@ -17,21 +17,24 @@ and `examples/docstore/web/`.
 
 ## 1. The problem
 
-ADR-0020 decision 7 says `@driftsys/ridl-runtime` carries "the port interfaces
-spelled in TypeScript, and the loader", and that the generated faces sit on it.
-Today the package holds the loader (`loadCodec`), the errors, the constructor
-helpers, the signal check types and the stream adapters. The only port-shaped
-type is `StreamTransport`, a structural interface for the four byte-stream
-methods. Nothing in TypeScript corresponds to the Rust `Caller`, `SignalReader`
-or `EventSource` ports.
+The ADR-0020 decision 6 table lists `@driftsys/ridl-runtime` as "the port
+interfaces spelled in TypeScript, and the loader", and decision 7 says the
+package carries them and that the generated faces sit on it. Today the package
+holds the loader (`loadCodec`), the errors, the constructor helpers, the signal
+check types and the stream adapters. The only port-shaped type is
+`StreamTransport`, a structural interface for the four byte-stream methods.
+Nothing in TypeScript corresponds to the Rust `Caller`, `SignalReader` or
+`EventSource` ports.
 
 The generated `<base>.codec.ts` module gives, per interface, a table
 (`export const Cabin`) with each member's `iface`, `ord`, `kind`, payload codecs
 and `limit`, plus `signalChecks(codec)`. Typed functions exist only for stream
 calls (`DocStore_fetch(session, ...)`, taking a `StreamSession`).
 
-What a TypeScript program writes by hand today to use the cabin package
-(`examples/cabin/web/main.ts` and `check.ts` do all of it):
+What a TypeScript program has to write by hand today to use the cabin package.
+`examples/cabin/web/main.ts` and `check.ts` do only the catalog comparison, the
+loading and the signal path; the command, query and event steps are what a
+program would write for the other members:
 
 - Compare the server's catalog hash with `CATALOG_HASH`.
 - Load the codec and pass `signalChecks(codec)` and the tables to `connect`.
@@ -125,14 +128,25 @@ export interface StreamCaller extends Caller {
 
 `RawSample` and `RawOccurrence` move from the transport (`Sample`, `Occurrence`,
 `Envelope`) into the runtime unchanged in shape; the transport re-exports them
-under their current names. `WaitOptions` moves the same way.
+under their current names (`Sample` and `Occurrence` stay the raw shapes there).
+`Envelope`, `WaitOptions`, `CallFailure` and `Contract` move the same way and
+are re-exported by the transport. The runtime's typed `Sample<T>` and
+`Occurrence<T>` are different types from the transport's `Sample` and
+`Occurrence`, so a program that imports both packages uses the import name to
+choose; the faces use the typed ones.
 
 **Why these methods.** They are the methods `Session` already has, with the
-target spelled as `(iface, ord)`, plus three additions: `catalogHash`, `watch`
-and `listen`. `watch` and `listen` replace filtering the one global `onPublish`
-and `onOccurrence` callback of `connect`; those callbacks stay, because a tool
-such as the observability server (D3) wants every publish. A runtime may
-implement only the ports its consumers need, as in Rust (RA-19).
+target spelled as `(iface, ord)` instead of a `Target`, plus three additions:
+`catalogHash`, `watch` and `listen`. A `Session` takes the kind of an
+interaction from the `interfaces` tables it was connected with, so
+`SignalReader.subscribe(iface, ord)` and `EventSource.subscribe(iface, ord)` are
+the same `Session` method, which builds the `Target` from the table. A
+`(iface, ord)` that the tables do not hold is a `RangeError`, as an unknown
+target is today. B2.2 changes the signatures; they are not unchanged. `watch`
+and `listen` replace filtering the one global `onPublish` and `onOccurrence`
+callback of `connect`; those callbacks stay, because a tool such as the
+observability server (D3) wants every publish. A runtime may implement only the
+ports its consumers need, as in Rust (RA-19).
 
 **What is not a port.** `connect`, `close` and `closed` stay transport methods:
 how a port is made and ended is the transport's concern, as `Loopback::attach`
@@ -197,8 +211,9 @@ Rules:
 - **The port bound.** `bind`'s type parameter names only the ports the
   interface's kinds need: `Caller` for a command or a query, `SignalReader` for
   a signal, `EventSource` for an event, `StreamCaller` for a stream member. This
-  is RA-19 of the Rust face, and a test constructs the signal-only `HornClient`
-  over an object that implements only `SignalReader`.
+  is RA-19 of the Rust face, and a test constructs the signal-only `GaugeClient`
+  of the `codec-bare-signal` fixture (`HornClient` of the cabin example is the
+  same case) over an object that implements only `SignalReader`.
 - **`bind`** compares `port.catalogHash` and `codec.catalogHash` with
   `CATALOG_HASH` and throws `CatalogMismatch` on a difference (Rust panics in
   `Bind::new`; TypeScript throws). It resolves every payload type id once with
@@ -256,11 +271,12 @@ clause translator. Translating the clauses to TypeScript is a separate story
 - Every call has a bound: the declared one, or `opts.bound`. The transport
   checks the range (`RangeError` before sending, as today).
 - `opts.signal` aborts a call. Abort before sending sends nothing. Abort after
-  sending rejects the promise with the signal's reason and forgets the call; a
-  command that the provider already received may still run, which the TSDoc says
-  and which matches `ridl-transport-ws-ts.md` for an aborted upload. `Session`
-  gains `signal` on `command` and `query`; `subscribe` and `read` have it
-  already (C1, #994).
+  sending rejects the promise with the signal's reason. The transport keeps the
+  pending acknowledgment until the response or the bound, as
+  `ridl-transport-ws-ts.md` says for a command, and consumes a late answer. A
+  command that the provider already received may still run, which the TSDoc
+  says. `Session` gains `signal` on `command` and `query`; `subscribe` and
+  `read` have it already (C1, #994).
 - Stream methods keep their present cancellation: cancelling the reader or
   aborting the upload.
 
@@ -294,8 +310,9 @@ it):
   by `StreamCaller` and `CallOptions`; `StreamError` is merged into `CallError`
   (decision 3 of section 9).
 - `@driftsys/ridl-transport-ws`: gains a dependency on the runtime; `Sample`,
-  `Occurrence`, `CallFailure`, `WaitOptions` become re-exports (no change of
-  shape); `SessionError` gains a superclass. `connect` keeps its options.
+  `Occurrence`, `Envelope`, `CallFailure`, `Contract`, `WaitOptions` become
+  re-exports (no change of shape); `SessionError` gains a superclass. `connect`
+  keeps its options.
 - The tables, `encode<Name>`, `decode<Name>`, `signalChecks`, `CATALOG_*`,
   `PAYLOAD_TYPES` and `RULES` do not change.
 
@@ -304,11 +321,13 @@ and rejected: there is no published consumer of them outside this repository's
 examples, and two APIs for one call double the tests.
 
 **Release.** B2 ships alone as the next minor (0.x: a minor carries breaking
-changes), as section 2, decision 3 of the lane driver already decided. The
-release notes carry a hand-written breaking note with the before and after of
-`main.ts`. The freeze dumps of both packages and of the generated cabin module
-change (ADR-0029); `freeze/surfaces.toml` is updated in the same pull request as
-each change.
+changes), as the lane driver planned. The driver keeps A2 in the second release;
+A2 merged before v0.18.0, so B2 is alone in its release. The release notes carry
+a hand-written breaking note with the before and after of `main.ts`. No freeze
+dump covers a TypeScript package or a generated TypeScript module (ADR-0029
+freezes the generated Rust crate and the Rust runtime crates), so B2 changes no
+dump and no row of `freeze/surfaces.toml`. `just freeze-check` stays in the
+gates to show that.
 
 **Records.**
 
@@ -376,18 +395,21 @@ each change.
 
 ## 11. Task breakdown (one pull request each, reviewed per task)
 
-| Task | Scope                                                                                                                                                                                                                                   | Depends on |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| B2.1 | Runtime: `ports.ts` (the four ports, `CallOptions`, `RawSample`, `RawOccurrence`, `Sample<T>`, `Occurrence<T>`), `CallError`/`CallFailure`/`Contract`, the test fake `tests/fake_port.ts` and its tests. `StreamTransport` kept for now | none       |
-| B2.2 | Transport: depend on the runtime, re-export the moved types, `SessionError extends CallError`, `catalogHash`, `watch`, `listen`, `signal` on `command` and `query`; a test that a `Session` is assignable to each port                  | B2.1       |
-| B2.3 | Backend: generate `<Interface>Client` for commands and queries (`bind`, catalog check, default bound, request verify, reply verify and decode); collision checks; fixtures `codec`, `codec-names`, `codec-single` regenerated           | B2.1       |
-| B2.4 | Backend: signals and events (`subscribeX`, `x()`, `readX`, `watchX`, `onEvent`, `<Interface>Event`, `checkWith` in `bind`); `codec-bare-signal` and the RA-19 test over a signal-only fake                                              | B2.3       |
-| B2.5 | Backend and runtime: stream members as methods; remove `<Interface>_<member>`, `StreamSession`, `StreamTransport`, `StreamOptions`; `codec-streams`, `codec-bare-stream` and `examples/docstore/web` moved                              | B2.4, B2.2 |
-| B2.6 | Demo and records: `examples/cabin/web` uses the face (section 12); ADR-0020 decision 7 amendment; `ts-codec-table.md`, `ridl-transport-ws-ts.md`, the book chapter and READMEs; freeze dumps                                            | B2.5       |
+| Task | Scope                                                                                                                                                                                                                                                                                                        | Depends on |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- |
+| B2.1 | Runtime: `ports.ts` (the four ports, `CallOptions`, `RawSample`, `RawOccurrence`, `Sample<T>`, `Occurrence<T>`), `CallError`/`CallFailure`/`Contract`, the test fake `tests/fake_port.ts` and its tests. `StreamTransport` kept for now                                                                      | none       |
+| B2.2 | Transport: depend on the runtime, re-export the moved types, `SessionError extends CallError`, `catalogHash`, `watch`, `listen`, `signal` on `command` and `query`; a test that a `Session` is assignable to each port                                                                                       | B2.1       |
+| B2.3 | Backend: generate `<Interface>Client` for commands and queries (`bind`, catalog check, default bound, request verify, reply verify and decode); collision checks; fixtures `codec`, `codec-names`, `codec-single` regenerated                                                                                | B2.1       |
+| B2.4 | Backend: signals and events (`subscribeX`, `x()`, `readX`, `watchX`, `onEvent`, `<Interface>Event`, `checkWith` in `bind`); `codec-bare-signal` and the RA-19 test over a signal-only fake                                                                                                                   | B2.3       |
+| B2.5 | Backend and runtime: stream members as methods; remove `<Interface>_<member>`, `StreamSession`, `StreamTransport`, `StreamOptions`; merge `StreamError` into `CallError` (D-20, the D-18 collision list and the book chapter follow); `codec-streams`, `codec-bare-stream` and `examples/docstore/web` moved | B2.4, B2.2 |
+| B2.6 | Demo and records: `examples/cabin/web` uses the face (section 12); ADR-0020 decision 7 amendment; `ts-codec-table.md`, `ridl-transport-ws-ts.md`, the book chapter and READMEs                                                                                                                               | B2.5       |
 
 B2.2 and B2.3 can run in parallel after B2.1. Each task regenerates the fixtures
-and freeze dumps it changes in its own pull request. The `/review` branch passes
-run once after B2.6, over the whole series.
+and snapshots it changes in its own pull request. Every fixture that declares an
+interface gets a client (`codec`, `codec-names`, `codec-single`, `codec-open`,
+`codec-strict`, `codec-foreign-only`, `codec-bare-signal`, `codec-streams`,
+`codec-bare-stream`), and the snapshots of `codec.rs` change with them. The
+`/review` branch passes run once after B2.6, over the whole series.
 
 ## 12. Test and demo plan
 
@@ -404,7 +426,7 @@ run once after B2.6, over the whole series.
   of the task review).
 - **Type tests** (`deno check` of fixtures that must not compile, via
   `// @ts-expect-error`): a member with no declared maximum requires `bound`;
-  `HornClient.bind` accepts a port with only `SignalReader`; a wrong argument
+  `GaugeClient.bind` accepts a port with only `SignalReader`; a wrong argument
   type is refused.
 - **Transport tests** (`packages/ridl-transport-ws/tests`): `watch` and `listen`
   remove their listener; `signal` on `command` and `query`; `SessionError` is
