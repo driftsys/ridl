@@ -608,8 +608,9 @@ skips only the publication refusal for a whole unit removed on purpose;
 provisional interface numbers (RIDL-411), numbers lost from a remaining unit
 (RIDL-412), packages removed from a remaining unit (RIDL-412) and untombstoned
 interaction removals (RIDL-408) still refuse publication. For a snapshot
-published before the IR recorded the unit, the gate cannot distinguish a removed
-package from a removed unit, so reset treats it as a removed unit. Repair skips
+published before the IR recorded the unit, a removed subpackage is treated as a
+removed unit. A removed legacy unit-root package with a remaining subpackage
+still receives per-number refusals for lost numbers under reset. Repair skips
 none of these checks. Restore corrupt local snapshots before either operation.
 There is no force option. The flags are mutually exclusive; the positional
 source defaults to `.` and output discovery is the same as ordinary publication.
@@ -655,19 +656,25 @@ no note. The note states the preservation and compatibility limits described
 prints no dropped-unit note. Otherwise restore the unit and its
 `interfaces.lock` from version control. A published snapshot written before the
 IR recorded the unit carries no `unit`. If its package was removed, the gate
-cannot distinguish a removed package from a removed unit, so reset treats it as
-a removed unit even when its original unit remains. Otherwise the gate compares
-it in the unit of the fresh package of the same name, so the migration to one
+uses the removed package's own name as its unit. A removed legacy subpackage is
+therefore treated as a removed unit even when its original unit remains. If a
+legacy unit-root package is removed while a subpackage remains, the unit is
+still present: lost numbers receive per-number refusals, including with
+`--reset-history`. If the package remains, the gate compares its legacy snapshot
+in the unit of the fresh package of the same name, so the migration to one
 `interfaces.lock` per unit — delete the per-package lock files, run `ridl lock`,
 run `ridl baseline` — passes RIDL-412 when the unit's new numbering reaches
 every published number. When it does not, because a legacy lock held retired
 entries, restore each entry's line from version control in the unit's
 `interfaces.lock`, with `retired` after the number when the interface is gone.
-Deleting managed snapshots allows a first publication only on a legacy baseline
-without `context.json`; it is not the documented migration procedure. A current
-baseline uses `--reset-history` to start a new history, subject to the refusal
-checks [above](#baseline-publication-and-recovery). A whole service removed from
-the source is reported by `ridl diff` as breaking but is not refused here (ridl
+Make `next` greater than the restored number if it is not already. For a legacy
+snapshot, a declared interface's key is relative to the unit used by the gate;
+an inline service keeps its `service:` key. Deleting managed snapshots allows a
+first publication only on a legacy baseline without `context.json`; it is not
+the documented migration procedure. A current baseline uses `--reset-history` to
+start a new history, subject to the refusal checks
+[above](#baseline-publication-and-recovery). A whole service removed from the
+source is reported by `ridl diff` as breaking but is not refused here (ridl
 §17.14), and a named-form service's list is a set the gate does not read.
 Deleting `doorClosed` outright, with `doorOpened` and `doorLocked` still
 declared:
@@ -2230,11 +2237,13 @@ Options:
 **It writes** one `interfaces.lock` per unit, in the directory of the unit's
 `ridl.toml` — the line table that gives every interface of the unit its number
 (ridl §11): a `#` header, `next N`, then one entry per interface, `Name N`, with
-the word `retired` after the number when the interface is gone. An interface of
-a subpackage is keyed by its name relative to the unit, such as `cluster.Speed`.
-A service's inline shape is an interface too and is keyed `service:` followed by
-the service's full dotted name. Only `ridl lock` writes the file: the compiler
-reads it beside the sources, and `ridl fmt` never touches it.
+the word `retired` after the number when the interface is gone. Every entry's
+number must be below `next`, including a line restored from version control. An
+interface of a subpackage is keyed by its name relative to the unit, such as
+`cluster.Speed`. A service's inline shape is an interface too and is keyed
+`service:` followed by the service's full dotted name. Only `ridl lock` writes
+the file: the compiler reads it beside the sources, and `ridl fmt` never touches
+it.
 
 Every form of `ridl lock` that writes, and `ridl lock merge`, prepares the lock
 files to be written before replacing any; if a replacement fails, it attempts to

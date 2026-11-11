@@ -1127,7 +1127,7 @@ diag_codes! {
         /// which is never allocated, and is matched by name. The fix is to
         /// restore the entry's line in `interfaces.lock` from version
         /// control, with `retired` after the number when the interface is
-        /// gone.
+        /// gone, and make `next` greater than that number if it is not already.
         RIDL_412 = "RIDL-412", Error,
             "published interface number dropped without a retired entry";
 
