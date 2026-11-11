@@ -1213,14 +1213,16 @@ pub(crate) fn __ridl_fb_encode_DiagError(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -1232,13 +1234,15 @@ pub(crate) fn __ridl_fb_verify_DiagError(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <DiagError as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <DiagError as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -1248,11 +1252,15 @@ pub(crate) fn __ridl_fb_decode_DiagError(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> DiagError {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <DiagError as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(DiagError::FilterInvalid)
         }
         _ => DiagError::FilterInvalid,
@@ -1260,10 +1268,10 @@ pub(crate) fn __ridl_fb_decode_DiagError(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DiagError {
-    /// The largest FlatBuffers buffer any legal `DiagError` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `DiagError` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = DiagErrorFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2421,14 +2429,16 @@ pub(crate) fn __ridl_fb_encode_HvacError(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -2440,13 +2450,15 @@ pub(crate) fn __ridl_fb_verify_HvacError(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <HvacError as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <HvacError as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -2456,11 +2468,15 @@ pub(crate) fn __ridl_fb_decode_HvacError(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> HvacError {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <HvacError as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(HvacError::CompressorOff)
         }
         _ => HvacError::CompressorOff,
@@ -2468,10 +2484,10 @@ pub(crate) fn __ridl_fb_decode_HvacError(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for HvacError {
-    /// The largest FlatBuffers buffer any legal `HvacError` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `HvacError` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = HvacErrorFbView<'a>;
     fn encode<'o>(
         &self,

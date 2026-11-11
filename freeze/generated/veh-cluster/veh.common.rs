@@ -2135,14 +2135,16 @@ pub(crate) fn __ridl_fb_encode_GearPosition(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -2154,15 +2156,15 @@ pub(crate) fn __ridl_fb_verify_GearPosition(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
         <GearPosition as ::core::convert::TryFrom<
             ::core::primitive::i64,
-        >>::try_from(__raw)
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -2172,11 +2174,15 @@ pub(crate) fn __ridl_fb_decode_GearPosition(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> GearPosition {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <GearPosition as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(GearPosition::Park)
         }
         _ => GearPosition::Park,
@@ -2184,10 +2190,10 @@ pub(crate) fn __ridl_fb_decode_GearPosition(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for GearPosition {
-    /// The largest FlatBuffers buffer any legal `GearPosition` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `GearPosition` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = GearPositionFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2258,14 +2264,16 @@ pub(crate) fn __ridl_fb_encode_Warning(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -2277,13 +2285,15 @@ pub(crate) fn __ridl_fb_verify_Warning(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Warning as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <Warning as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -2293,11 +2303,15 @@ pub(crate) fn __ridl_fb_decode_Warning(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Warning {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <Warning as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(Warning::LowFuel)
         }
         _ => Warning::LowFuel,
@@ -2305,10 +2319,10 @@ pub(crate) fn __ridl_fb_decode_Warning(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
-    /// The largest FlatBuffers buffer any legal `Warning` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `Warning` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = WarningFbView<'a>;
     fn encode<'o>(
         &self,

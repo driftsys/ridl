@@ -310,19 +310,15 @@ export function decodeStatus(bytes: Uint8Array): t.StatusValue {
   return unpackStatus(fb.StatusBox.getRootAsStatusBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function packStatus(value: t.StatusValue): bigint {
+function packStatus(value: t.StatusValue): number {
   const raw = typeof value === "number" ? value : value.unknown;
-  if (!Number.isSafeInteger(raw)) {
-    throw new RuleError("variant", `value ${raw} of streams.demo.Status is not a safe integer`);
+  if (!Number.isInteger(raw) || raw < -2147483648 || raw > 2147483647) {
+    throw new RuleError("variant", `value ${raw} of streams.demo.Status is not an int32`);
   }
-  return BigInt(raw);
+  return raw;
 }
-function unpackStatus(raw: bigint | null): t.StatusValue {
-  const value = raw ?? 0n;
-  if (value > 9007199254740991n || value < -9007199254740991n) {
-    throw new RuleError("variant", `value ${value} of streams.demo.Status is outside the safe integers`);
-  }
-  const n = Number(value);
+function unpackStatus(raw: number | null): t.StatusValue {
+  const n = raw ?? 0;
   return ([0, 1] as readonly number[]).includes(n)
     ? n as t.Status
     : { unknown: n };
@@ -331,7 +327,7 @@ function unpackStatus(raw: bigint | null): t.StatusValue {
 /** Encodes a `streams.demo.Permission` payload. */
 export function encodePermission(value: t.Permission): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.PermissionBoxT(BigInt(value)).pack(builder));
+  builder.finish(new fb.PermissionBoxT(value).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.Permission` payload the codec has verified. */
@@ -339,8 +335,8 @@ export function decodePermission(bytes: Uint8Array): t.Permission {
   return unpackPermission(fb.PermissionBox.getRootAsPermissionBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function unpackPermission(raw: number | bigint): t.Permission {
-  const n = Number(raw);
+function unpackPermission(raw: number): t.Permission {
+  const n = raw;
   if (!([0] as readonly number[]).includes(n)) {
     throw new RuleError("variant", `value ${raw} is not a value of streams.demo.Permission`);
   }

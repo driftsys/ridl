@@ -6384,7 +6384,7 @@ mod flatbuffers_width {
     }
 
     #[test]
-    fn an_open_enum_value_past_255_keeps_the_flatbuffers_long() {
+    fn an_open_enum_value_past_255_keeps_the_flatbuffers_int() {
         let (old, new) = (enum_of(256, true), enum_of(257, true));
         let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers"]);
         assert!(

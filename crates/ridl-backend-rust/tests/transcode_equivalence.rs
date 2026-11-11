@@ -576,14 +576,12 @@ fn a_podbuf_output_buffer_that_is_too_small_fails_with_a_capacity_error() {
 // Open enums
 // ---------------------------------------------------------------------------
 
-/// proto3 carries an enum as an int32, so an `Unknown` whose raw integer does
-/// not fit int32 can reach the proto3 encoder only from another encoding.
-/// The encoder refuses it with the contract error for an out-of-range value,
-/// `Rule::Range`, naming the enum; the transcode reports the same error. An
+/// FlatBuffers and proto3 carry enums as int32. Both encoders refuse an
+/// `Unknown` outside int32 with `Rule::Range`, naming the enum. An
 /// open enum set is refused the same way when its value is outside the
 /// wire width of the target encoding.
 #[test]
-fn an_unknown_outside_int32_is_refused_by_the_proto3_encoder() {
+fn an_unknown_outside_int32_is_refused_by_both_encoders() {
     let package = ir::compile_fixture("open_enums.ridl");
     let generated = ridl_backend_rust::generate_pipeline(
         &package,
@@ -610,12 +608,8 @@ fn main() {
     // Above int32 and below it: both bounds are checked.
     for raw in [1i64 << 40, i64::from(i32::MIN) - 1] {
         let wide = OpenMsg { status: DtcStatus::from(raw), flags: Flags::from(0) };
-        let flatbuffers = Ref::<OpenMsg, FlatBuffers>::encode(&wide, &mut a)
-            .expect("a FlatBuffers long holds any i64")
-            .bytes()
-            .to_vec();
-        match OpenMsg::transcode_flatbuffers_to_proto3(&flatbuffers, &mut out) {
-            Err(TranscodeError::Encode(EncodeError::Contract(violation))) => {
+        match Ref::<OpenMsg, FlatBuffers>::encode(&wide, &mut a) {
+            Err(EncodeError::Contract(violation)) => {
                 assert_eq!(violation.rule, Rule::Range);
                 assert_eq!(violation.type_name, Some("DtcStatus"));
             }

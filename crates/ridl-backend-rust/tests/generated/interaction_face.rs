@@ -952,14 +952,16 @@ pub(crate) fn __ridl_fb_encode_Health(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -971,13 +973,15 @@ pub(crate) fn __ridl_fb_verify_Health(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Health as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <Health as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -987,11 +991,15 @@ pub(crate) fn __ridl_fb_decode_Health(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Health {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <Health as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(Health::Ok)
         }
         _ => Health::Ok,
@@ -999,10 +1007,10 @@ pub(crate) fn __ridl_fb_decode_Health(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Health {
-    /// The largest FlatBuffers buffer any legal `Health` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `Health` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = HealthFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1070,12 +1078,15 @@ impl<'a> WarningFbView<'a> {
     }
     /// Reads `Warning`'s `health` field in place.
     pub fn health(&self) -> Health {
-        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 8usize) {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Health as ::core::convert::TryFrom<
                     ::core::primitive::i64,
                 >>::try_from(
-                        ::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64),
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::flatbuffers::read_i32(self.buf, __p)
+                                .unwrap_or(0i32),
+                        ),
                     )
                     .unwrap_or(Health::Ok)
             }
@@ -1111,11 +1122,13 @@ pub(crate) fn __ridl_fb_encode_Warning(
         offset: 8u16,
         value: {
             let __s = value.health;
-            ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+            ::ridl_rt::flatbuffers::Field::I32(
+                ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+            )
         },
     };
     __n += 1;
-    builder.push_table(16usize, 8usize, 2u16, &__fields[..__n])
+    builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
 }
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Warning(
@@ -1139,13 +1152,15 @@ pub(crate) fn __ridl_fb_verify_Warning(
             buf,
             table,
             1u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Health as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <Health as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -1166,11 +1181,15 @@ pub(crate) fn __ridl_fb_decode_Warning(
             }
             _ => Level::new_unchecked(0i64),
         },
-        health: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 8usize) {
+        health: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Health as ::core::convert::TryFrom<
                     ::core::primitive::i64,
-                >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+                >>::try_from(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                        ),
+                    )
                     .unwrap_or(Health::Ok)
             }
             _ => Health::Ok,
@@ -1179,10 +1198,10 @@ pub(crate) fn __ridl_fb_decode_Warning(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Warning {
-    /// The largest FlatBuffers buffer any legal `Warning` encodes to: 60 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 60usize;
-    type Buffer = [::core::primitive::u8; 60usize];
-    const BUFFER: Self::Buffer = [0u8; 60usize];
+    /// The largest FlatBuffers buffer any legal `Warning` encodes to: 56 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 56usize;
+    type Buffer = [::core::primitive::u8; 56usize];
+    const BUFFER: Self::Buffer = [0u8; 56usize];
     type View<'a> = WarningFbView<'a>;
     fn encode<'o>(
         &self,

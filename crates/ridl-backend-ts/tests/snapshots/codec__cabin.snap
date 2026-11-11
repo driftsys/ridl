@@ -91,7 +91,7 @@ export function decodeAverage(bytes: Uint8Array): t.Average {
 /** Encodes a `veh.cabin.Health` payload. */
 export function encodeHealth(value: t.Health): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.HealthBoxT(BigInt(value)).pack(builder));
+  builder.finish(new fb.HealthBoxT(value).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Health` payload the codec has verified. */
@@ -99,8 +99,8 @@ export function decodeHealth(bytes: Uint8Array): t.Health {
   return unpackHealth(fb.HealthBox.getRootAsHealthBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function unpackHealth(raw: number | bigint): t.Health {
-  const n = Number(raw);
+function unpackHealth(raw: number): t.Health {
+  const n = raw;
   if (!([0, 1, 2] as readonly number[]).includes(n)) {
     throw new RuleError("variant", `value ${raw} is not a value of veh.cabin.Health`);
   }
@@ -121,7 +121,7 @@ export function decodeWarning(bytes: Uint8Array): t.Warning {
 function packWarning(value: t.Warning): fb.WarningT {
   const object = new fb.WarningT();
   object.code = value.code;
-  object.health = BigInt(value.health);
+  object.health = value.health;
   return object;
 }
 function unpackWarning(object: fb.WarningT): t.Warning {
@@ -163,7 +163,7 @@ export function decodeDiagnostic(bytes: Uint8Array): t.Diagnostic {
 function packDiagnostic(value: t.Diagnostic): fb.DiagnosticT {
   const object = new fb.DiagnosticT();
   object.covers = value.covers;
-  object.health = BigInt(value.health);
+  object.health = value.health;
   object.loop = value.loop;
   return object;
 }

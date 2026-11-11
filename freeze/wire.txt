@@ -396,16 +396,16 @@ fbs mavlink/common.fbs [VfrHud] heading: short (id: 2);
 fbs mavlink/common.fbs [VfrHud] throttle: double (id: 3);
 fbs mavlink/common.fbs [VfrHud] }
 fbs mavlink/common.fbs enum CommandProtocolOrdinal : uint {
-fbs mavlink/common.fbs enum GpsFixType : long {
-fbs mavlink/common.fbs enum MavCmd : long {
-fbs mavlink/common.fbs enum MavFrame : long {
-fbs mavlink/common.fbs enum MavMissionResult : long {
-fbs mavlink/common.fbs enum MavMissionType : long {
-fbs mavlink/common.fbs enum MavParamError : long {
-fbs mavlink/common.fbs enum MavParamType : long {
-fbs mavlink/common.fbs enum MavResult : long {
+fbs mavlink/common.fbs enum GpsFixType : int {
+fbs mavlink/common.fbs enum MavCmd : int {
+fbs mavlink/common.fbs enum MavFrame : int {
+fbs mavlink/common.fbs enum MavMissionResult : int {
+fbs mavlink/common.fbs enum MavMissionType : int {
+fbs mavlink/common.fbs enum MavParamError : int {
+fbs mavlink/common.fbs enum MavParamType : int {
+fbs mavlink/common.fbs enum MavResult : int {
 fbs mavlink/common.fbs enum MissionProtocolOrdinal : uint {
-fbs mavlink/common.fbs enum MissionState : long {
+fbs mavlink/common.fbs enum MissionState : int {
 fbs mavlink/common.fbs enum ParameterProtocolOrdinal : uint {
 fbs mavlink/common.fbs enum TelemetryOrdinal : uint {
 fbs mavlink/common.fbs namespace common;
@@ -573,9 +573,9 @@ fbs mavlink/minimal.fbs [MavlinkVersionBox] }
 fbs mavlink/minimal.fbs [Uint32Box] value: uint (id: 0);
 fbs mavlink/minimal.fbs [Uint32Box] }
 fbs mavlink/minimal.fbs enum HeartbeatProtocolOrdinal : uint {
-fbs mavlink/minimal.fbs enum MavAutopilot : long {
-fbs mavlink/minimal.fbs enum MavState : long {
-fbs mavlink/minimal.fbs enum MavType : long {
+fbs mavlink/minimal.fbs enum MavAutopilot : int {
+fbs mavlink/minimal.fbs enum MavState : int {
+fbs mavlink/minimal.fbs enum MavType : int {
 fbs mavlink/minimal.fbs namespace minimal;
 fbs mavlink/minimal.fbs table Heartbeat {
 fbs mavlink/minimal.fbs table MavAutopilotBox {
@@ -609,7 +609,7 @@ fbs mavlink/standard.fbs [Uint16Box] value: ushort (id: 0);
 fbs mavlink/standard.fbs [Uint16Box] }
 fbs mavlink/standard.fbs [Uint32MillisecondsBox] value: double (id: 0);
 fbs mavlink/standard.fbs [Uint32MillisecondsBox] }
-fbs mavlink/standard.fbs enum MavBool : long {
+fbs mavlink/standard.fbs enum MavBool : int {
 fbs mavlink/standard.fbs namespace standard;
 fbs mavlink/standard.fbs table GlobalPositionInt {
 fbs mavlink/standard.fbs table Int16CentimetersPerSecondBox {
@@ -795,9 +795,9 @@ fbs veh-cluster/veh.cluster.fbs [WheelHistoryOrdinal] WHEEL_TICKS = 1,
 fbs veh-cluster/veh.cluster.fbs [WheelHistoryOrdinal] }
 fbs veh-cluster/veh.cluster.fbs [WheelSummaryOrdinal] WHEEL_HEALTH = 1,
 fbs veh-cluster/veh.cluster.fbs [WheelSummaryOrdinal] }
-fbs veh-cluster/veh.cluster.fbs enum DiagError : long {
+fbs veh-cluster/veh.cluster.fbs enum DiagError : int {
 fbs veh-cluster/veh.cluster.fbs enum FaultLogOrdinal : uint {
-fbs veh-cluster/veh.cluster.fbs enum HvacError : long {
+fbs veh-cluster/veh.cluster.fbs enum HvacError : int {
 fbs veh-cluster/veh.cluster.fbs enum VehClusterWheelsOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum VehHvacCabinOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum VehicleStatusOrdinal : uint {
@@ -890,8 +890,8 @@ fbs veh-cluster/veh.common.fbs [Warning] DOOR_OPEN = 2,
 fbs veh-cluster/veh.common.fbs [Warning] LOW_FUEL = 0,
 fbs veh-cluster/veh.common.fbs [Warning] SEATBELT = 3,
 fbs veh-cluster/veh.common.fbs [Warning] }
-fbs veh-cluster/veh.common.fbs enum GearPosition : long {
-fbs veh-cluster/veh.common.fbs enum Warning : long {
+fbs veh-cluster/veh.common.fbs enum GearPosition : int {
+fbs veh-cluster/veh.common.fbs enum Warning : int {
 fbs veh-cluster/veh.common.fbs namespace veh.common;
 fbs veh-cluster/veh.common.fbs table CounterBox {
 fbs veh-cluster/veh.common.fbs table DriverProfile {
@@ -957,7 +957,7 @@ fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs [FanSpeedBox] value: ubyte (i
 fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs [FanSpeedBox] }
 fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs [TemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs [TemperatureBox] }
-fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs enum AirDistribution : int {
 fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs enum DriverOrdinal : uint {
 fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs namespace vehicle.cabin.hvac.station.row1.driver;
 fbs vss/vehicle.cabin.hvac.station.row1.driver.fbs table AirDistributionBox {
@@ -983,7 +983,7 @@ fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs [PassengerOrdinal] TEMPERA
 fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs [PassengerOrdinal] }
 fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs [TemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs [TemperatureBox] }
-fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs enum AirDistribution : int {
 fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs enum PassengerOrdinal : uint {
 fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs namespace vehicle.cabin.hvac.station.row1.passenger;
 fbs vss/vehicle.cabin.hvac.station.row1.passenger.fbs table AirDistributionBox {
@@ -1006,7 +1006,7 @@ fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs [FanSpeedBox] value: ubyte (i
 fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs [FanSpeedBox] }
 fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs [TemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs [TemperatureBox] }
-fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs enum AirDistribution : int {
 fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs enum DriverOrdinal : uint {
 fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs namespace vehicle.cabin.hvac.station.row2.driver;
 fbs vss/vehicle.cabin.hvac.station.row2.driver.fbs table AirDistributionBox {
@@ -1032,7 +1032,7 @@ fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs [PassengerOrdinal] TEMPERA
 fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs [PassengerOrdinal] }
 fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs [TemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs [TemperatureBox] }
-fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs enum AirDistribution : int {
 fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs enum PassengerOrdinal : uint {
 fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs namespace vehicle.cabin.hvac.station.row2.passenger;
 fbs vss/vehicle.cabin.hvac.station.row2.passenger.fbs table AirDistributionBox {
@@ -1055,7 +1055,7 @@ fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs [FanSpeedBox] value: ubyte (i
 fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs [FanSpeedBox] }
 fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs [TemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs [TemperatureBox] }
-fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs enum AirDistribution : int {
 fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs enum DriverOrdinal : uint {
 fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs namespace vehicle.cabin.hvac.station.row3.driver;
 fbs vss/vehicle.cabin.hvac.station.row3.driver.fbs table AirDistributionBox {
@@ -1081,7 +1081,7 @@ fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs [PassengerOrdinal] TEMPERA
 fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs [PassengerOrdinal] }
 fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs [TemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs [TemperatureBox] }
-fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs enum AirDistribution : int {
 fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs enum PassengerOrdinal : uint {
 fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs namespace vehicle.cabin.hvac.station.row3.passenger;
 fbs vss/vehicle.cabin.hvac.station.row3.passenger.fbs table AirDistributionBox {
@@ -1104,7 +1104,7 @@ fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs [FanSpeedBox] value: ubyte (i
 fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs [FanSpeedBox] }
 fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs [TemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs [TemperatureBox] }
-fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs enum AirDistribution : int {
 fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs enum DriverOrdinal : uint {
 fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs namespace vehicle.cabin.hvac.station.row4.driver;
 fbs vss/vehicle.cabin.hvac.station.row4.driver.fbs table AirDistributionBox {
@@ -1130,7 +1130,7 @@ fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs [PassengerOrdinal] TEMPERA
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs [PassengerOrdinal] }
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs [TemperatureBox] value: double (id: 0);
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs [TemperatureBox] }
-fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs enum AirDistribution : long {
+fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs enum AirDistribution : int {
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs enum PassengerOrdinal : uint {
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs namespace vehicle.cabin.hvac.station.row4.passenger;
 fbs vss/vehicle.cabin.hvac.station.row4.passenger.fbs table AirDistributionBox {

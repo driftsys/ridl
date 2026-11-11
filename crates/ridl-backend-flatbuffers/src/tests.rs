@@ -331,7 +331,7 @@ fn an_enum_keeps_its_values_unprefixed_with_an_explicit_underlying_type() {
     assert!(
         generated
             .fbs_source
-            .contains("enum GearPosition : long {\n  PARK = 1,\n  DRIVE = 2,\n}"),
+            .contains("enum GearPosition : int {\n  PARK = 1,\n  DRIVE = 2,\n}"),
         "got:\n{}",
         generated.fbs_source
     );
@@ -2379,11 +2379,11 @@ fn an_enum_states_whether_it_is_strict_or_open() {
     for (open, comment) in [
         (
             false,
-            "// strict: a value outside this list is not valid\nenum Gear : long {",
+            "// strict: a value outside this list is not valid\nenum Gear : int {",
         ),
         (
             true,
-            "// open: a value outside this list is valid and is kept\nenum Gear : long {",
+            "// open: a value outside this list is valid and is kept\nenum Gear : int {",
         ),
     ] {
         let mut package = enum_package("Gear", vec![("PARK", 0)]);

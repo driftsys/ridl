@@ -783,14 +783,16 @@ pub(crate) fn __ridl_fb_encode_Mode(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -802,13 +804,15 @@ pub(crate) fn __ridl_fb_verify_Mode(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Mode as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <Mode as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -818,11 +822,15 @@ pub(crate) fn __ridl_fb_decode_Mode(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> Mode {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <Mode as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(Mode::Idle)
         }
         _ => Mode::Idle,
@@ -830,10 +838,10 @@ pub(crate) fn __ridl_fb_decode_Mode(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Mode {
-    /// The largest FlatBuffers buffer any legal `Mode` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `Mode` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = ModeFbView<'a>;
     fn encode<'o>(
         &self,
@@ -921,12 +929,15 @@ impl<'a> ReadingFbView<'a> {
     }
     /// Reads `Reading`'s `mode` field in place.
     pub fn mode(&self) -> Mode {
-        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 3u16, 8usize) {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 3u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Mode as ::core::convert::TryFrom<
                     ::core::primitive::i64,
                 >>::try_from(
-                        ::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64),
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::flatbuffers::read_i32(self.buf, __p)
+                                .unwrap_or(0i32),
+                        ),
                     )
                     .unwrap_or(Mode::Idle)
             }
@@ -994,16 +1005,18 @@ pub(crate) fn __ridl_fb_encode_Reading(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 3u16,
-        offset: 16u16,
+        offset: 12u16,
         value: {
             let __s = value.mode;
-            ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+            ::ridl_rt::flatbuffers::Field::I32(
+                ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+            )
         },
     };
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 4u16,
-        offset: 24u16,
+        offset: 16u16,
         value: {
             let __s = value.ratio;
             ::ridl_rt::flatbuffers::Field::F64(__s)
@@ -1012,14 +1025,14 @@ pub(crate) fn __ridl_fb_encode_Reading(
     __n += 1;
     __fields[__n] = ::ridl_rt::flatbuffers::TableField {
         slot: 5u16,
-        offset: 32u16,
+        offset: 24u16,
         value: {
             let __s = value.flag;
             ::ridl_rt::flatbuffers::Field::Bool(__s)
         },
     };
     __n += 1;
-    builder.push_table(33usize, 8usize, 6u16, &__fields[..__n])
+    builder.push_table(25usize, 8usize, 6u16, &__fields[..__n])
 }
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_Reading(
@@ -1072,13 +1085,15 @@ pub(crate) fn __ridl_fb_verify_Reading(
             buf,
             table,
             3u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <Mode as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <Mode as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     if let ::core::option::Option::Some(__p) = ::ridl_rt::flatbuffers::field(
@@ -1164,11 +1179,15 @@ pub(crate) fn __ridl_fb_decode_Reading(
                 ),
             )
         },
-        mode: match ::ridl_rt::flatbuffers::field(buf, table, 3u16, 8usize) {
+        mode: match ::ridl_rt::flatbuffers::field(buf, table, 3u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <Mode as ::core::convert::TryFrom<
                     ::core::primitive::i64,
-                >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+                >>::try_from(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                        ),
+                    )
                     .unwrap_or(Mode::Idle)
             }
             _ => Mode::Idle,
@@ -1189,10 +1208,10 @@ pub(crate) fn __ridl_fb_decode_Reading(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Reading {
-    /// The largest FlatBuffers buffer any legal `Reading` encodes to: 186 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 186usize;
-    type Buffer = [::core::primitive::u8; 186usize];
-    const BUFFER: Self::Buffer = [0u8; 186usize];
+    /// The largest FlatBuffers buffer any legal `Reading` encodes to: 182 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 182usize;
+    type Buffer = [::core::primitive::u8; 182usize];
+    const BUFFER: Self::Buffer = [0u8; 182usize];
     type View<'a> = ReadingFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2125,16 +2144,16 @@ pub(crate) fn __ridl_fb_encode_Outcome(
                     let __box = [
                         ::ridl_rt::flatbuffers::TableField {
                             slot: 0u16,
-                            offset: 8u16,
+                            offset: 4u16,
                             value: {
                                 let __s = *__a;
-                                ::ridl_rt::flatbuffers::Field::I64(
-                                    ::core::primitive::i64::from(__s),
+                                ::ridl_rt::flatbuffers::Field::I32(
+                                    ::core::primitive::i64::from(__s) as ::core::primitive::i32,
                                 )
                             },
                         },
                     ];
-                    builder.push_table(16usize, 8usize, 1u16, &__box)?
+                    builder.push_table(8usize, 4usize, 1u16, &__box)?
                 },
             )
         }
@@ -2225,15 +2244,15 @@ pub(crate) fn __ridl_fb_verify_Outcome(
                     buf,
                     __t,
                     0u16,
-                    8usize,
+                    4usize,
                 )
                 .map_err(::ridl_rt::payload::VerifyError::Structure)?
             {
-                let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+                let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
                     .map_err(::ridl_rt::payload::VerifyError::Structure)?;
                 <Mode as ::core::convert::TryFrom<
                     ::core::primitive::i64,
-                >>::try_from(__raw)
+                >>::try_from(::core::primitive::i64::from(__raw))
                     .map_err(::ridl_rt::payload::VerifyError::Contract)?;
             }
         }
@@ -2298,12 +2317,14 @@ pub(crate) fn __ridl_fb_decode_Outcome(
         3u8 => {
             Outcome::Mode({
                 let __t = ::ridl_rt::flatbuffers::follow(buf, __value).unwrap_or(0usize);
-                match ::ridl_rt::flatbuffers::field(buf, __t, 0u16, 8usize) {
+                match ::ridl_rt::flatbuffers::field(buf, __t, 0u16, 4usize) {
                     ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                         <Mode as ::core::convert::TryFrom<
                             ::core::primitive::i64,
                         >>::try_from(
-                                ::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64),
+                                ::core::primitive::i64::from(
+                                    ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                                ),
                             )
                             .unwrap_or(Mode::Idle)
                     }
@@ -2338,10 +2359,10 @@ pub(crate) fn __ridl_fb_decode_Outcome(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for Outcome {
-    /// The largest FlatBuffers buffer any legal `Outcome` encodes to: 231 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 231usize;
-    type Buffer = [::core::primitive::u8; 231usize];
-    const BUFFER: Self::Buffer = [0u8; 231usize];
+    /// The largest FlatBuffers buffer any legal `Outcome` encodes to: 227 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 227usize;
+    type Buffer = [::core::primitive::u8; 227usize];
+    const BUFFER: Self::Buffer = [0u8; 227usize];
     type View<'a> = OutcomeFbView<'a>;
     fn encode<'o>(
         &self,

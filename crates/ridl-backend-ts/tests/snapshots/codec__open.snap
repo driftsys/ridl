@@ -55,19 +55,15 @@ export function decodeDtcStatus(bytes: Uint8Array): t.DtcStatusValue {
   return unpackDtcStatus(fb.DtcStatusBox.getRootAsDtcStatusBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function packDtcStatus(value: t.DtcStatusValue): bigint {
+function packDtcStatus(value: t.DtcStatusValue): number {
   const raw = typeof value === "number" ? value : value.unknown;
-  if (!Number.isSafeInteger(raw)) {
-    throw new RuleError("variant", `value ${raw} of open.demo.DtcStatus is not a safe integer`);
+  if (!Number.isInteger(raw) || raw < -2147483648 || raw > 2147483647) {
+    throw new RuleError("variant", `value ${raw} of open.demo.DtcStatus is not an int32`);
   }
-  return BigInt(raw);
+  return raw;
 }
-function unpackDtcStatus(raw: bigint | null): t.DtcStatusValue {
-  const value = raw ?? 0n;
-  if (value > 9007199254740991n || value < -9007199254740991n) {
-    throw new RuleError("variant", `value ${value} of open.demo.DtcStatus is outside the safe integers`);
-  }
-  const n = Number(value);
+function unpackDtcStatus(raw: number | null): t.DtcStatusValue {
+  const n = raw ?? 0;
   return ([0, 1] as readonly number[]).includes(n)
     ? n as t.DtcStatus
     : { unknown: n };
@@ -84,19 +80,15 @@ export function decodeMode(bytes: Uint8Array): t.ModeValue {
   return unpackMode(fb.ModeBox.getRootAsModeBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function packMode(value: t.ModeValue): bigint {
+function packMode(value: t.ModeValue): number {
   const raw = typeof value === "number" ? value : value.unknown;
-  if (!Number.isSafeInteger(raw)) {
-    throw new RuleError("variant", `value ${raw} of open.demo.Mode is not a safe integer`);
+  if (!Number.isInteger(raw) || raw < -2147483648 || raw > 2147483647) {
+    throw new RuleError("variant", `value ${raw} of open.demo.Mode is not an int32`);
   }
-  return BigInt(raw);
+  return raw;
 }
-function unpackMode(raw: bigint | null): t.ModeValue {
-  const value = raw ?? 0n;
-  if (value > 9007199254740991n || value < -9007199254740991n) {
-    throw new RuleError("variant", `value ${value} of open.demo.Mode is outside the safe integers`);
-  }
-  const n = Number(value);
+function unpackMode(raw: number | null): t.ModeValue {
+  const n = raw ?? 0;
   return ([1, 2] as readonly number[]).includes(n)
     ? n as t.Mode
     : { unknown: n };
@@ -113,19 +105,15 @@ export function decodeEmpty(bytes: Uint8Array): t.EmptyValue {
   return unpackEmpty(fb.EmptyBox.getRootAsEmptyBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function packEmpty(value: t.EmptyValue): bigint {
+function packEmpty(value: t.EmptyValue): number {
   const raw = typeof value === "number" ? value : value.unknown;
-  if (!Number.isSafeInteger(raw)) {
-    throw new RuleError("variant", `value ${raw} of open.demo.Empty is not a safe integer`);
+  if (!Number.isInteger(raw) || raw < -2147483648 || raw > 2147483647) {
+    throw new RuleError("variant", `value ${raw} of open.demo.Empty is not an int32`);
   }
-  return BigInt(raw);
+  return raw;
 }
-function unpackEmpty(raw: bigint | null): t.EmptyValue {
-  const value = raw ?? 0n;
-  if (value > 9007199254740991n || value < -9007199254740991n) {
-    throw new RuleError("variant", `value ${value} of open.demo.Empty is outside the safe integers`);
-  }
-  const n = Number(value);
+function unpackEmpty(raw: number | null): t.EmptyValue {
+  const n = raw ?? 0;
   return ([] as readonly number[]).includes(n)
     ? n as t.Empty
     : { unknown: n };

@@ -215,16 +215,16 @@ cases:
   struct, its slot held by a tombstone, is `decl_removed`, breaking under every
   encoding: the type is gone from the source, so its bytes cannot be kept.
 
-- **Breaking under flatbuffers**: an enum value or an enum-set flag appended
-  after which the FlatBuffers integer differs (`flatbuffers_width_change`, once
-  per declaration with the old and the new integer). An enum set uses the
-  unsigned scalar of its width; every enum uses `long`, so an appended enum
-  value keeps its integer. The verdict follows
-  `ridl diff --encoding
-  flatbuffers`: breaking with it, compatible without it,
-  under the heading `breaking under flatbuffers` either way. The rule is stated
-  in [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision
-  10, including a remote integer change through an import pin at a surviving old
+- **Breaking under flatbuffers**: an enum-set flag appended after which the
+  FlatBuffers integer differs (`flatbuffers_width_change`, once per declaration
+  with the old and the new integer). An enum set uses the unsigned scalar of its
+  width; every enum uses fixed `int`, so an appended enum value keeps its
+  integer. The verdict follows `ridl diff --encoding
+  flatbuffers`: breaking
+  with it, compatible without it, under the heading `breaking under flatbuffers`
+  either way. The rule is stated in
+  [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 10,
+  including a remote integer change through an import pin at a surviving old
   consumer path.
 
 - **Breaking under proto3**: an enum-set flag appended after which the proto3

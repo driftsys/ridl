@@ -5,7 +5,7 @@ expression: generated.fbs_source
 namespace veh.cruise;
 
 // strict: a value outside this list is not valid
-enum EngageState : long {
+enum EngageState : int {
   OFF = 0,
   ARMED = 1,
   ACTIVE = 2,

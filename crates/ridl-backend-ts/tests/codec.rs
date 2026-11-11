@@ -958,7 +958,7 @@ fn the_extras_and_pick_conversions() {
         "    blob: Uint8Array.from(object.blob) as Uint8Array,",
         "  object.readings = value.readings.map((element) => packSensorReading(element));",
         "    readings: object.readings.map((element) => unpackSensorReading(element)),",
-        "  object.gears = value.gears.map((element) => BigInt(element));",
+        "  object.gears = [...value.gears];",
         "    gears: object.gears.map((element) => unpackGearPosition(element)),",
         "  object.maybe = value.maybe === undefined ? [] : [...value.maybe];",
         "    maybe: object.maybe.map((element) => t.makeSpeedUnchecked(element)),",
@@ -977,7 +977,7 @@ fn the_extras_and_pick_conversions() {
         "  object.class_ = value.class;",
         "      return new fb.PickT(fb.PickUnion.speed, new fb.PickSpeedBoxT(value.value));",
         "      return { kind: \"speed\", value: t.makeSpeedUnchecked((object.value as fb.PickSpeedBoxT).value) };",
-        "      return new fb.PickT(fb.PickUnion.gear, new fb.PickGearBoxT(BigInt(value.value)));",
+        "      return new fb.PickT(fb.PickUnion.gear, new fb.PickGearBoxT(value.value));",
         "      return { kind: \"gear\", value: unpackGearPosition((object.value as fb.PickGearBoxT).value) };",
     ] {
         assert!(source.contains(line), "no `{line}` in:\n{source}");
@@ -1464,13 +1464,13 @@ fn open_model() -> v1::Model {
 fn the_open_codec_module() {
     let source = module(&open_model(), "open.demo");
     // An open enum is converted by a pair of functions that keep every value
-    // and refuse a value outside the safe-integer range.
+    // and refuse a value outside int32.
     assert!(
-        source.contains("function unpackDtcStatus(raw: bigint | null): t.DtcStatusValue {"),
+        source.contains("function unpackDtcStatus(raw: number | null): t.DtcStatusValue {"),
         "an open enum must unpack to its value type, got:\n{source}"
     );
     assert!(
-        source.contains("function packDtcStatus(value: t.DtcStatusValue): bigint {"),
+        source.contains("function packDtcStatus(value: t.DtcStatusValue): number {"),
         "an open enum must pack from its value type, got:\n{source}"
     );
     assert!(
@@ -1557,7 +1557,7 @@ fn strict_model() -> v1::Model {
 fn the_strict_codec_module() {
     let source = module(&strict_model(), "strict.demo");
     assert!(
-        source.contains("function unpackDtcStatus(raw: number | bigint): t.DtcStatus {"),
+        source.contains("function unpackDtcStatus(raw: number): t.DtcStatus {"),
         "a strict enum must unpack through a checking function, got:\n{source}"
     );
     assert!(
@@ -1730,15 +1730,15 @@ fn an_interface_named_as_the_unpack_of_a_strict_enum_is_refused() {
 fn a_strict_enum_with_no_zero_member_reports_an_absent_value() {
     let source = module(&strict_model(), "strict.demo");
     assert!(
-        source.contains("function unpackMode(raw: number | bigint | null): t.Mode {"),
+        source.contains("function unpackMode(raw: number | null): t.Mode {"),
         "{source}"
     );
     assert!(
-        source.contains("raw === null ? absent(\"strict.demo.Mode\", \"value\") : Number(raw)"),
+        source.contains("raw === null ? absent(\"strict.demo.Mode\", \"value\") : raw"),
         "{source}"
     );
     assert!(
-        source.contains("function unpackDtcStatus(raw: number | bigint): t.DtcStatus {"),
+        source.contains("function unpackDtcStatus(raw: number): t.DtcStatus {"),
         "{source}"
     );
 }

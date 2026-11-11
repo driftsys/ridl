@@ -1670,13 +1670,13 @@ pub fn explain(category: Category) -> &'static str {
             "  breaking    always"
         ),
         Category::FlatbuffersWidthChange => concat!(
-            "An enum value or an enum-set flag appended, compatible under the\n",
-            "generic rule, after which the FlatBuffers integer of the enum or the\n",
+            "An enum-set flag appended, compatible under the\n",
+            "generic rule, after which the FlatBuffers integer of the\n",
             "enum set is a different integer. FlatBuffers stores an enum set as the\n",
             "unsigned scalar of its width, the narrowest that holds its highest\n",
             "bit: a flag at bit 8 widens a `u8` (`ubyte`) to a `u16` (`ushort`),\n",
             "a flag at bit 16 a `u16` to a `u32` (`uint`), and a flag at bit 32 a\n",
-            "`u32` to a `u64` (`ulong`). Every enum is stored as `long` whatever\n",
+            "`u32` to a `u64` (`ulong`). Every enum is stored as fixed `int` whatever\n",
             "its values, so an appended enum value keeps the integer; a union's\n",
             "type field is always `ubyte`. The line is reported once per\n",
             "declaration and carries the old and the new integer. An append that\n",
