@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
 ---
 // ===== package lint.shapes =====
-import { ConstraintError, codePointLength, isWellFormedString, offFloatStep } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * A bounded integer.
@@ -22,13 +22,13 @@ export type Count = number & { readonly __ridl: 'lint.shapes.Count' };
 /** Builds a `Count`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeCount(value: number): Count {
   if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'lint.shapes.Count', value, 'a safe integer');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Count', value, 'a safe integer');
   }
   if (value < 0) {
-    throw new ConstraintError('range', 'lint.shapes.Count', value, '[0..200]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Count', value, '[0..200]');
   }
   if (value > 200) {
-    throw new ConstraintError('range', 'lint.shapes.Count', value, '[0..200]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Count', value, '[0..200]');
   }
   return value as Count;
 }
@@ -58,13 +58,13 @@ export type Level = number & { readonly __ridl: 'lint.shapes.Level' };
 /** Builds a `Level`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeLevel(value: number): Level {
   if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'lint.shapes.Level', value, 'a safe integer');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Level', value, 'a safe integer');
   }
   if (value < -5) {
-    throw new ConstraintError('range', 'lint.shapes.Level', value, '[-5..10]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Level', value, '[-5..10]');
   }
   if (value > 10) {
-    throw new ConstraintError('range', 'lint.shapes.Level', value, '[-5..10]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Level', value, '[-5..10]');
   }
   return value as Level;
 }
@@ -97,16 +97,16 @@ export type Heat = number & { readonly __ridl: 'lint.shapes.Heat' };
 /** Builds a `Heat`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeHeat(value: number): Heat {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
   }
   if (value < -40) {
-    throw new ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
   }
   if (value > 125) {
-    throw new ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Heat', value, '[-40..125]');
   }
-  if (offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'lint.shapes.Heat', value, 'step 0.5 from -40');
+  if ($rt.offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'lint.shapes.Heat', value, 'step 0.5 from -40');
   }
   return value as Heat;
 }
@@ -137,13 +137,13 @@ export type Floor = number & { readonly __ridl: 'lint.shapes.Floor' };
 /** Builds a `Floor`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeFloor(value: number): Floor {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'lint.shapes.Floor', value, '[0..]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Floor', value, '[0..]');
   }
   if (value < 0) {
-    throw new ConstraintError('range', 'lint.shapes.Floor', value, '[0..]');
+    throw new $rt.ConstraintError('range', 'lint.shapes.Floor', value, '[0..]');
   }
-  if (offFloatStep(value, false, [1.0, 0.25, 0.25, 0.0, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'lint.shapes.Floor', value, 'step 0.25 from 0');
+  if ($rt.offFloatStep(value, false, [1.0, 0.25, 0.25, 0.0, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'lint.shapes.Floor', value, 'step 0.25 from 0');
   }
   return value as Floor;
 }
@@ -173,17 +173,17 @@ const __ridlPatternTag = new globalThis.RegExp('^[a-z][a-z0-9-]*$');
 
 /** Builds a `Tag`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeTag(value: string): Tag {
-  if (!isWellFormedString(value)) {
-    throw new ConstraintError('utf8', 'lint.shapes.Tag', value, 'well-formed text');
+  if (!$rt.isWellFormedString(value)) {
+    throw new $rt.ConstraintError('utf8', 'lint.shapes.Tag', value, 'well-formed text');
   }
-  if (codePointLength(value) < 1) {
-    throw new ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
+  if ($rt.codePointLength(value) < 1) {
+    throw new $rt.ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
   }
-  if (codePointLength(value) > 16) {
-    throw new ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
+  if ($rt.codePointLength(value) > 16) {
+    throw new $rt.ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
   }
   if (!__ridlPatternTag.test(value)) {
-    throw new ConstraintError('pattern', 'lint.shapes.Tag', value, '/^[a-z][a-z0-9-]*$/');
+    throw new $rt.ConstraintError('pattern', 'lint.shapes.Tag', value, '/^[a-z][a-z0-9-]*$/');
   }
   return value as Tag;
 }
@@ -210,11 +210,11 @@ export type Label = string & { readonly __ridl: 'lint.shapes.Label' };
 
 /** Builds a `Label`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeLabel(value: string): Label {
-  if (!isWellFormedString(value)) {
-    throw new ConstraintError('utf8', 'lint.shapes.Label', value, 'well-formed text');
+  if (!$rt.isWellFormedString(value)) {
+    throw new $rt.ConstraintError('utf8', 'lint.shapes.Label', value, 'well-formed text');
   }
-  if (codePointLength(value) > 32) {
-    throw new ConstraintError('length', 'lint.shapes.Label', value, '[0..32]');
+  if ($rt.codePointLength(value) > 32) {
+    throw new $rt.ConstraintError('length', 'lint.shapes.Label', value, '[0..32]');
   }
   return value as Label;
 }
@@ -242,10 +242,10 @@ export type Frame = Uint8Array & { readonly __ridl: 'lint.shapes.Frame' };
 /** Builds a `Frame`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeFrame(value: Uint8Array): Frame {
   if (value.length < 8) {
-    throw new ConstraintError('length', 'lint.shapes.Frame', value, '[8..8]');
+    throw new $rt.ConstraintError('length', 'lint.shapes.Frame', value, '[8..8]');
   }
   if (value.length > 8) {
-    throw new ConstraintError('length', 'lint.shapes.Frame', value, '[8..8]');
+    throw new $rt.ConstraintError('length', 'lint.shapes.Frame', value, '[8..8]');
   }
   return value as Frame;
 }
@@ -269,7 +269,7 @@ export type Blob = Uint8Array & { readonly __ridl: 'lint.shapes.Blob' };
 /** Builds a `Blob`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeBlob(value: Uint8Array): Blob {
   if (value.length > 64) {
-    throw new ConstraintError('length', 'lint.shapes.Blob', value, '[0..64]');
+    throw new $rt.ConstraintError('length', 'lint.shapes.Blob', value, '[0..64]');
   }
   return value as Blob;
 }

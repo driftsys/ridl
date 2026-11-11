@@ -1,0 +1,45 @@
+package names
+
+/// A name that the runtime package exports as a function.
+type codePointLength : string [1..8] = "x"
+
+/// A name that the runtime package exports as a class.
+type ConstraintError : integer [0..100] = 1
+
+/// A measured value.
+struct Reading {
+  /// The label of the value.
+  label: codePointLength
+  /// The value, in percent.
+  value: ConstraintError
+}
+
+/// An interface named like a type of the runtime package.
+interface Codec {
+  /// Reports a reading.
+  signal level : Reading @1s
+}
+
+/// An interface named like a class of the runtime package.
+interface CodecError {
+  /// Reports a change.
+  event changed : Reading @[100ms..1s]
+}
+
+/// An interface named like a type of the runtime package.
+interface SignalCheckEntry {
+  /// Accepts a reading.
+  command report(reading: Reading) @[..50ms]
+}
+
+/// An interface named like the payload codec type of the runtime package.
+interface PayloadCodec {
+  /// Asks for a reading.
+  query read(): Reading @[..50ms]
+}
+
+/// An interface named like a function of the runtime package.
+interface checkWellFormed {
+  /// Reports a reading.
+  signal level : Reading @1s
+}

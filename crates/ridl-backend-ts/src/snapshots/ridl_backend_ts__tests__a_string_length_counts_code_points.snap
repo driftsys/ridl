@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
-import { ConstraintError, codePointLength, isWellFormedString } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * Build a value with `makeWord`.
@@ -15,14 +15,14 @@ export type Word = string & { readonly __ridl: 'veh.common.Word' };
 
 /** Builds a `Word`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeWord(value: string): Word {
-  if (!isWellFormedString(value)) {
-    throw new ConstraintError('utf8', 'veh.common.Word', value, 'well-formed text');
+  if (!$rt.isWellFormedString(value)) {
+    throw new $rt.ConstraintError('utf8', 'veh.common.Word', value, 'well-formed text');
   }
-  if (codePointLength(value) < 1) {
-    throw new ConstraintError('length', 'veh.common.Word', value, '[1..4]');
+  if ($rt.codePointLength(value) < 1) {
+    throw new $rt.ConstraintError('length', 'veh.common.Word', value, '[1..4]');
   }
-  if (codePointLength(value) > 4) {
-    throw new ConstraintError('length', 'veh.common.Word', value, '[1..4]');
+  if ($rt.codePointLength(value) > 4) {
+    throw new $rt.ConstraintError('length', 'veh.common.Word', value, '[1..4]');
   }
   return value as Word;
 }

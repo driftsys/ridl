@@ -2,11 +2,8 @@
 source: crates/ridl-backend-ts/tests/codec.rs
 expression: "module(&cabin_model(), \"veh.cabin\")"
 ---
-import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
-import { CodecError } from "@driftsys/ridl-runtime";
-import { checkWellFormed } from "@driftsys/ridl-runtime";
+import * as $rt from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
-import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import * as t from "./veh.cabin.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
@@ -203,7 +200,7 @@ export function decodeTenth(bytes: Uint8Array): t.Tenth {
 /** Encodes a `veh.cabin.Tag` payload. */
 export function encodeTag(value: t.Tag): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.TagBoxT(checkWellFormed(value, "veh.cabin.Tag")).pack(builder));
+  builder.finish(new fb.TagBoxT($rt.checkWellFormed(value, "veh.cabin.Tag")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Tag` payload the codec has verified. */
@@ -214,7 +211,7 @@ export function decodeTag(bytes: Uint8Array): t.Tag {
 /** Encodes a `veh.cabin.Code` payload. */
 export function encodeCode(value: t.Code): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.CodeBoxT(checkWellFormed(value, "veh.cabin.Code")).pack(builder));
+  builder.finish(new fb.CodeBoxT($rt.checkWellFormed(value, "veh.cabin.Code")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Code` payload the codec has verified. */
@@ -225,7 +222,7 @@ export function decodeCode(bytes: Uint8Array): t.Code {
 /** Encodes a `veh.cabin.Glyph` payload. */
 export function encodeGlyph(value: t.Glyph): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.GlyphBoxT(checkWellFormed(value, "veh.cabin.Glyph")).pack(builder));
+  builder.finish(new fb.GlyphBoxT($rt.checkWellFormed(value, "veh.cabin.Glyph")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Glyph` payload the codec has verified. */
@@ -236,7 +233,7 @@ export function decodeGlyph(bytes: Uint8Array): t.Glyph {
 /** Encodes a `veh.cabin.Digited` payload. */
 export function encodeDigited(value: t.Digited): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.DigitedBoxT(checkWellFormed(value, "veh.cabin.Digited")).pack(builder));
+  builder.finish(new fb.DigitedBoxT($rt.checkWellFormed(value, "veh.cabin.Digited")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `veh.cabin.Digited` payload the codec has verified. */
@@ -255,12 +252,12 @@ export function decodeBlock(bytes: Uint8Array): t.Block {
   return t.makeBlockUnchecked(Uint8Array.from(fb.BlockBox.getRootAsBlockBox(new flatbuffers.ByteBuffer(bytes)).unpack().value));
 }
 
-const codecTemperature: PayloadCodec<t.Temperature> = { type: "veh.cabin.Temperature", encode: encodeTemperature, decode: decodeTemperature };
-const codecLevel: PayloadCodec<t.Level> = { type: "veh.cabin.Level", encode: encodeLevel, decode: decodeLevel };
-const codecWindow: PayloadCodec<t.Window> = { type: "veh.cabin.Window", encode: encodeWindow, decode: decodeWindow };
-const codecAverage: PayloadCodec<t.Average> = { type: "veh.cabin.Average", encode: encodeAverage, decode: decodeAverage };
-const codecHealth: PayloadCodec<t.Health> = { type: "veh.cabin.Health", encode: encodeHealth, decode: decodeHealth };
-const codecWarning: PayloadCodec<t.Warning> = { type: "veh.cabin.Warning", encode: encodeWarning, decode: decodeWarning };
+const codecTemperature: $rt.PayloadCodec<t.Temperature> = { type: "veh.cabin.Temperature", encode: encodeTemperature, decode: decodeTemperature };
+const codecLevel: $rt.PayloadCodec<t.Level> = { type: "veh.cabin.Level", encode: encodeLevel, decode: decodeLevel };
+const codecWindow: $rt.PayloadCodec<t.Window> = { type: "veh.cabin.Window", encode: encodeWindow, decode: decodeWindow };
+const codecAverage: $rt.PayloadCodec<t.Average> = { type: "veh.cabin.Average", encode: encodeAverage, decode: decodeAverage };
+const codecHealth: $rt.PayloadCodec<t.Health> = { type: "veh.cabin.Health", encode: encodeHealth, decode: decodeHealth };
+const codecWarning: $rt.PayloadCodec<t.Warning> = { type: "veh.cabin.Warning", encode: encodeWarning, decode: decodeWarning };
 
 /** The members of interface `Cabin`, interface number `1`. */
 export const Cabin = {
@@ -277,7 +274,7 @@ export const Horn = {
   active: { iface: 2, ord: 1, kind: "signal", payload: codecHealth },
 } as const;
 
-function signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): SignalCheckEntry {
+function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): $rt.SignalCheckEntry {
   const typeId = codec.typeId(entry.payload.type);
   return {
     iface: entry.iface,
@@ -287,14 +284,14 @@ function signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord
       if (result.ok) return undefined;
       if (result.kind !== "rule") return "corrupt";
       const rule = (RULES as readonly string[]).find((known) => known === result.rule);
-      if (rule === undefined) throw new CodecError("unknown rule during signal verification");
+      if (rule === undefined) throw new $rt.CodecError("unknown rule during signal verification");
       return { rule: rule as (typeof RULES)[number] };
     },
   };
 }
 
 /** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */
-export function signalChecks(codec: Codec): readonly SignalCheckEntry[] {
+export function signalChecks(codec: $rt.Codec): readonly $rt.SignalCheckEntry[] {
   return [
     signalCheck(codec, Cabin.temperature),
     signalCheck(codec, Horn.active),

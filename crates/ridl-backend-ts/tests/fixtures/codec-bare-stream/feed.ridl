@@ -1,0 +1,22 @@
+package bare.feed
+
+/// A level in percent.
+type Percent : integer [0..100] = 1
+
+/// A measured level. No field is a string.
+struct Level {
+  /// The level.
+  value: Percent
+}
+
+/// An interface named like a class of the runtime package.
+interface StreamError {
+  /// Streams levels.
+  query levels(): <Level> @[..50ms]
+}
+
+/// An interface named like a type of the runtime package.
+interface StreamSession {
+  /// Streams levels.
+  query levels(): <Level> @[..50ms]
+}

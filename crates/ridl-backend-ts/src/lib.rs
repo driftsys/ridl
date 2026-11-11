@@ -107,17 +107,6 @@ pub(crate) fn generate_with(
     package: &v2::Package,
     model: &v1::Model,
 ) -> Result<GeneratedTs, GenerateError> {
-    if let Some(decl) = package
-        .decls
-        .iter()
-        .find(|decl| RESERVED_NAMES.contains(&decl.name.as_str()))
-    {
-        return Err(GenerateError::Unrepresentable(format!(
-            "`{}.{}` collides with `{}` from `@driftsys/ridl-runtime`, \
-             which the domain module reserves",
-            package.name, decl.name, decl.name
-        )));
-    }
     check_constructor_names(package)?;
     // A doc link resolves only to an item this module emits or imports, and
     // both sets are known only once every declaration is emitted. A first
@@ -133,24 +122,13 @@ pub(crate) fn generate_with(
 
     let mut source = String::new();
     let imports = ctx.imports.borrow();
-    let mut helpers = BTreeSet::new();
-    let mut has_checks = false;
-    for decl in &package.decls {
-        if decl.visibility == v2::Visibility::Internal as i32 {
-            continue;
-        }
-        if let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind {
-            for check in scalar_checks(td, &decl.name) {
-                has_checks = true;
-                helpers.extend(check.helper);
-            }
-        }
-    }
+    let has_checks = package.decls.iter().any(|decl| {
+        decl.visibility != v2::Visibility::Internal as i32
+            && matches!(&decl.kind, Some(v2::decl::Kind::TypeDef(td)) if !scalar_checks(td, &decl.name).is_empty())
+    });
     if has_checks {
-        let names: Vec<&str> = std::iter::once("ConstraintError").chain(helpers).collect();
         source.push_str(&format!(
-            "import {{ {} }} from '@driftsys/ridl-runtime';\n",
-            names.join(", ")
+            "import * as {RUNTIME} from '@driftsys/ridl-runtime';\n"
         ));
     }
     for import in imports.iter() {
@@ -391,13 +369,11 @@ fn emit_type_def(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> String {
 }
 
 /// One check of a constructor: the condition that refuses a value,
-/// the rule it breaks, the constraint text of the message, and the runtime
-/// helper the condition calls, if any.
+/// the rule it breaks, and the constraint text of the message.
 struct Check {
     rule: &'static str,
     condition: String,
     constraint: String,
-    helper: Option<&'static str>,
 }
 
 impl Check {
@@ -406,20 +382,14 @@ impl Check {
             rule: "range",
             condition,
             constraint,
-            helper: None,
         }
     }
 }
 
-/// Names that a domain module imports from `@driftsys/ridl-runtime`. A
-/// declaration with one of these names is refused.
-const RESERVED_NAMES: [&str; 5] = [
-    "ConstraintError",
-    "codePointLength",
-    "isWellFormedString",
-    "offFloatPoints",
-    "offFloatStep",
-];
+/// The binding of the namespace import of `@driftsys/ridl-runtime` in a
+/// generated module. `$` cannot occur in a RIDL name or in a package alias, so
+/// no declaration can take the binding.
+pub(crate) const RUNTIME: &str = "$rt";
 
 /// The checks of a scalar in contract order. A string or bytes scalar checks
 /// its length, then a string checks its pattern. A number checks its range,
@@ -529,18 +499,17 @@ fn text_checks(td: &v2::TypeDef, name: &str, string: bool) -> Vec<Check> {
     if string {
         checks.push(Check {
             rule: "utf8",
-            condition: "!isWellFormedString(value)".to_string(),
+            condition: format!("!{RUNTIME}.isWellFormedString(value)"),
             constraint: "well-formed text".to_string(),
-            helper: Some("isWellFormedString"),
         });
     }
     let Some(c) = &td.constraint else {
         return checks;
     };
-    let (length, helper) = if string {
-        ("codePointLength(value)", Some("codePointLength"))
+    let length = if string {
+        format!("{RUNTIME}.codePointLength(value)")
     } else {
-        ("value.length", None)
+        "value.length".to_string()
     };
     let bounds = format!(
         "[{}..{}]",
@@ -552,7 +521,6 @@ fn text_checks(td: &v2::TypeDef, name: &str, string: bool) -> Vec<Check> {
             rule: "length",
             condition,
             constraint: bounds.clone(),
-            helper,
         });
     };
     if let Some(min) = c.len_min.filter(|min| *min > 0) {
@@ -566,7 +534,6 @@ fn text_checks(td: &v2::TypeDef, name: &str, string: bool) -> Vec<Check> {
             rule: "pattern",
             condition: format!("!{}.test(value)", pattern_constant(name)),
             constraint: format!("/{pattern}/"),
-            helper: None,
         });
     }
     checks
@@ -625,7 +592,6 @@ fn step_check(td: &v2::TypeDef) -> Option<Check> {
             rule,
             condition,
             constraint,
-            helper: None,
         });
     }
     let wire32 = td.width == Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F32 as i32));
@@ -636,11 +602,8 @@ fn step_check(td: &v2::TypeDef) -> Option<Check> {
             .collect::<Vec<_>>()
             .join(", ")
     };
-    let (condition, helper) = match prepare_float_step(origin_text, step, wire32) {
-        FloatStepPlan::Never => (
-            format!("offFloatPoints(value, {wire32}, [])"),
-            "offFloatPoints",
-        ),
+    let condition = match prepare_float_step(origin_text, step, wire32) {
+        FloatStepPlan::Never => format!("{RUNTIME}.offFloatPoints(value, {wire32}, [])"),
         FloatStepPlan::Finite => {
             let checked = if wire32 {
                 "globalThis.Math.fround(value)"
@@ -651,33 +614,30 @@ fn step_check(td: &v2::TypeDef) -> Option<Check> {
                 rule,
                 condition: format!("!globalThis.Number.isFinite({checked})"),
                 constraint,
-                helper: None,
             });
         }
-        FloatStepPlan::Points(points) => (
-            format!("offFloatPoints(value, {wire32}, [{}])", list(&points)),
-            "offFloatPoints",
-        ),
-        FloatStepPlan::Lattice(l) => (
+        FloatStepPlan::Points(points) => {
             format!(
-                "offFloatStep(value, {wire32}, [{}])",
-                list(&[
-                    l.factor,
-                    l.original_step,
-                    l.step_high,
-                    l.step_low,
-                    l.phase_high,
-                    l.phase_low
-                ])
-            ),
-            "offFloatStep",
+                "{RUNTIME}.offFloatPoints(value, {wire32}, [{}])",
+                list(&points)
+            )
+        }
+        FloatStepPlan::Lattice(l) => format!(
+            "{RUNTIME}.offFloatStep(value, {wire32}, [{}])",
+            list(&[
+                l.factor,
+                l.original_step,
+                l.step_high,
+                l.step_low,
+                l.phase_high,
+                l.phase_low
+            ])
         ),
     };
     Some(Check {
         rule,
         condition,
         constraint,
-        helper: Some(helper),
     })
 }
 
@@ -740,7 +700,7 @@ fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<St
     let qualified = ts_string(&format!("{}.{name}", ctx.package));
     for check in &checks {
         source.push_str(&format!(
-            "  if ({}) {{\n    throw new ConstraintError('{}', {qualified}, value, {});\n  }}\n",
+            "  if ({}) {{\n    throw new {RUNTIME}.ConstraintError('{}', {qualified}, value, {});\n  }}\n",
             check.condition,
             check.rule,
             ts_string(&check.constraint)

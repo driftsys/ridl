@@ -877,9 +877,10 @@ known to satisfy the constraints. It exists only for a scalar whose `make<Name>`
 checks something: every integer-backed scalar, a float with a bound or a step,
 every string scalar, and a bytes scalar with a length bound that can be broken
 (a minimum of 0 and a maximum beyond 2^53 − 1 cannot be broken). The module
-refuses a declaration named `ConstraintError`, `codePointLength`,
-`isWellFormedString`, `offFloatPoints` or `offFloatStep`, which it imports from
-`@driftsys/ridl-runtime` when a check needs them:
+imports `@driftsys/ridl-runtime` as the namespace `$rt` when a check needs it,
+and `$` cannot occur in a RIDL name, so a declaration may take a name that the
+runtime exports, such as `ConstraintError`. The example below is a consumer of
+the module:
 
 ```typescript
 import { ConstraintError } from "@driftsys/ridl-runtime";

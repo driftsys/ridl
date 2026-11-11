@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
 // ===== package fleet.contracts =====
-import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * Build a value with `makeDoorId`.
@@ -20,13 +20,13 @@ export type DoorId = number & { readonly __ridl: 'fleet.contracts.DoorId' };
 /** Builds a `DoorId`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeDoorId(value: number): DoorId {
   if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'fleet.contracts.DoorId', value, 'a safe integer');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.DoorId', value, 'a safe integer');
   }
   if (value < 0) {
-    throw new ConstraintError('range', 'fleet.contracts.DoorId', value, '[0..7]');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.DoorId', value, '[0..7]');
   }
   if (value > 7) {
-    throw new ConstraintError('range', 'fleet.contracts.DoorId', value, '[0..7]');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.DoorId', value, '[0..7]');
   }
   return value as DoorId;
 }
@@ -57,16 +57,16 @@ export type Percent = number & { readonly __ridl: 'fleet.contracts.Percent' };
 /** Builds a `Percent`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makePercent(value: number): Percent {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'fleet.contracts.Percent', value, '[0..100]');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.Percent', value, '[0..100]');
   }
   if (value < 0) {
-    throw new ConstraintError('range', 'fleet.contracts.Percent', value, '[0..100]');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.Percent', value, '[0..100]');
   }
   if (value > 100) {
-    throw new ConstraintError('range', 'fleet.contracts.Percent', value, '[0..100]');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.Percent', value, '[0..100]');
   }
-  if (offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'fleet.contracts.Percent', value, 'step 0.5 from 0');
+  if ($rt.offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'fleet.contracts.Percent', value, 'step 0.5 from 0');
   }
   return value as Percent;
 }
@@ -94,13 +94,13 @@ export type Odometer = number & { readonly __ridl: 'fleet.contracts.Odometer' };
 /** Builds a `Odometer`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeOdometer(value: number): Odometer {
   if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'fleet.contracts.Odometer', value, 'a safe integer');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.Odometer', value, 'a safe integer');
   }
   if (value < 0) {
-    throw new ConstraintError('range', 'fleet.contracts.Odometer', value, '[0..4294967295]');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.Odometer', value, '[0..4294967295]');
   }
   if (value > 4294967295) {
-    throw new ConstraintError('range', 'fleet.contracts.Odometer', value, '[0..4294967295]');
+    throw new $rt.ConstraintError('range', 'fleet.contracts.Odometer', value, '[0..4294967295]');
   }
   return value as Odometer;
 }

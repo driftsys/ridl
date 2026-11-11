@@ -48,8 +48,8 @@ The codec file is written from the request's model only (`model.interfaces`,
 `model.tuples`, `model.flatbuffers`, `model.catalog`), never from the raw IR
 (D-1), so it follows the direction
 [the codegen plugins record](codegen-plugins.md) sets for the port of this
-backend. The option adds nothing to `<base>.ts`; its named scalars import
-`ConstraintError` and the check helpers from `@driftsys/ridl-runtime` with or
+backend. The option adds nothing to `<base>.ts`; its named scalars use
+`$rt.ConstraintError` and the check helpers of `@driftsys/ridl-runtime` with or
 without it. The public `generate(package)` of the crate does not write the file:
 only the request's model carries the catalog hash of the unit that the wasm
 module is built from.
@@ -77,9 +77,9 @@ Its exports:
   when verification succeeds. A `malformed` or `unknown-type` result is
   `"corrupt"`; a `rule` result whose text is in `RULES` is `{ rule }`; any other
   `rule` result throws `CodecError`, which the session counts as `"corrupt"` and
-  reports as a `check-failed` note. The module imports only the types `Codec`
-  and `SignalCheckEntry` and the value `CodecError` of `@driftsys/ridl-runtime`
-  for it, and nothing from the WebSocket package.
+  reports as a `check-failed` note. The module uses only `$rt.Codec`,
+  `$rt.SignalCheckEntry` and `$rt.CodecError` of `@driftsys/ridl-runtime` for
+  it, and nothing from the WebSocket package.
 - `export interface <InducedName.rust>` for every induced tuple that is a
   payload type — the parameter list of a call that is not exactly one named
   type, and a tuple reply of a query (D-9). An induced tuple with no field is
@@ -128,26 +128,29 @@ doc comment; the type's rules stay on the type in `<base>.ts` (D-13). Stream
 functions carry model-derived interaction and parameter TSDoc (D-18). The
 imports are namespaced (`flatbuffers`, `t` for `<base>.ts`, `fb` for `flatc`'s
 output, one alias per foreign package), and every relative import carries the
-`.js` suffix (D-15). Ordinary entries import only the runtime's `PayloadCodec`
-type when needed, plus the value `checkWellFormed` when the module writes a
-string (D-11), and satisfy `MemberRef` structurally. Stream functions also
-import the runtime types, errors and adapters described in D-17; they import
-nothing from the WebSocket package. A module with a signal also imports the
-runtime's types `Codec` and `SignalCheckEntry` and its value `CodecError` for
-`signalChecks`. The names the file declares are checked before anything is
-written, and a second declaration of one is refused with an error that names
-both: an interface or an induced tuple named after a reserved name of the file
-(`CATALOG_NAME`, `CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `PayloadCodec`,
-`checkWellFormed`, `RuleError` when the module reaches an enum or an enum set,
-`signalChecks`, `signalCheck`, `Codec`, `SignalCheckEntry` and `CodecError` when
-the package has a signal, an import alias `flatbuffers`, `t`, `fb`, `<package>`
-or `<package>_codec`), two enum sets of other packages whose
-`pack_<alias>_<Name>` or `unpack_<alias>_<Name>` functions spell the same (`a.b`
-/ `c_d` and `a.b.c` / `d`), two foreign payload types whose
-`codec<Package><Name>` constants spell the same (`a.b` / `C` and `a` / `BC`),
-and a local payload type whose `codec<Name>` spells a foreign one. An
-interaction named `iface` is refused because it collides with the interface
-table metadata key of that name; the error names both sources.
+`.js` suffix (D-15). The module reaches `@driftsys/ridl-runtime` only through
+one namespace import, `$rt`, which is a type-only import when the module uses no
+runtime value. `$` cannot occur in a RIDL name or a package alias, so no
+declaration can take the binding, and a declaration may take any name that the
+runtime exports. Ordinary entries use only the runtime's `$rt.PayloadCodec` type
+when needed, plus the value `$rt.checkWellFormed` when the module writes a
+string (D-11), and satisfy `MemberRef` structurally. Stream functions also use
+the runtime types, errors and adapters described in D-17; they import nothing
+from the WebSocket package. A module with a signal also uses the runtime's
+`$rt.Codec`, `$rt.SignalCheckEntry` and `$rt.CodecError` for `signalChecks`. The
+names the file declares are checked before anything is written, and a second
+declaration of one is refused with an error that names both: an interface or an
+induced tuple named after a reserved name of the file (`CATALOG_NAME`,
+`CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `RuleError` when the module reaches an
+enum or an enum set, `signalChecks` and `signalCheck` when the package has a
+signal, an import alias `flatbuffers`, `t`, `fb`, `<package>` or
+`<package>_codec`), two enum sets of other packages whose `pack_<alias>_<Name>`
+or `unpack_<alias>_<Name>` functions spell the same (`a.b` / `c_d` and `a.b.c` /
+`d`), two foreign payload types whose `codec<Package><Name>` constants spell the
+same (`a.b` / `C` and `a` / `BC`), and a local payload type whose `codec<Name>`
+spells a foreign one. An interaction named `iface` is refused because it
+collides with the interface table metadata key of that name; the error names
+both sources.
 
 ## Stream functions
 
@@ -163,10 +166,11 @@ takes `session: StreamSession` first: `{ transport, codec }`, with a loaded
 `Codec` and a structural `StreamTransport`. The application connects its
 transport and loads wasm explicitly; there is no global codec or hidden load.
 The generator calls transport methods with their receiver retained. Generated
-imports come only from `@driftsys/ridl-runtime`: `StreamSession`,
-`StreamOptions`, `PayloadCodec`, the setup and stream errors, and the needed
-`decodeStream`, `decodeTextStream`, `encodeUpload`, `byteUpload` or `textUpload`
-adapters. The runtime has no dependency on the WebSocket package.
+code uses only these runtime names, through the `$rt` namespace import:
+`StreamSession`, `StreamOptions`, `PayloadCodec`, the setup and stream errors,
+and the needed `decodeStream`, `decodeTextStream`, `encodeUpload`, `byteUpload`
+or `textUpload` adapters. The runtime has no dependency on the WebSocket
+package.
 
 Discovery resolves the non-stream request, named stream elements and any plain
 reply through the same finite FlatBuffers payload roots used by ordinary
@@ -369,19 +373,18 @@ replace with U+FFFD without an error and the wasm codec could not see; the check
 is the runtime's `isWellFormedString`, and the `ConstraintError` has rule
 `utf8`. A string length counts code points with the runtime's `codePointLength`,
 and a bytes length counts bytes (`.length`). A domain module with a check
-imports `ConstraintError` and the helpers it uses from `@driftsys/ridl-runtime`,
-and refuses a declaration named `ConstraintError`, `codePointLength`,
-`isWellFormedString`, `offFloatPoints` or `offFloatStep`. `make<Name>Unchecked`
-exists only for a scalar whose `make<Name>` checks something, which is every
-string scalar, and the decoder keeps a type assertion for the others. An
-`internal` scalar has neither constructor, because nothing in the module calls
-it and the codec module cannot import it. The pattern check uses the checker's
-ECMA-262 semantics without the `u` flag, so it can disagree with the Rust
-`regex` crate that the wasm codec uses (driftsys/ridl#597). The test
-`examples/cabin/web/check_test.ts` compares `make<Name>` with the wasm codec's
-`verify` over the values of the constrained types of
-`examples/cabin/cabin.ridl`, and pins each known disagreement of the pattern
-rule, which [Generated code](../book/generated-code.md) lists.
+imports `@driftsys/ridl-runtime` as the namespace `$rt` and calls
+`$rt.ConstraintError` and the helpers it uses through it, so a declaration may
+take any of those names. `make<Name>Unchecked` exists only for a scalar whose
+`make<Name>` checks something, which is every string scalar, and the decoder
+keeps a type assertion for the others. An `internal` scalar has neither
+constructor, because nothing in the module calls it and the codec module cannot
+import it. The pattern check uses the checker's ECMA-262 semantics without the
+`u` flag, so it can disagree with the Rust `regex` crate that the wasm codec
+uses (driftsys/ridl#597). The test `examples/cabin/web/check_test.ts` compares
+`make<Name>` with the wasm codec's `verify` over the values of the constrained
+types of `examples/cabin/cabin.ridl`, and pins each known disagreement of the
+pattern rule, which [Generated code](../book/generated-code.md) lists.
 
 ## Foreign declarations (D-14)
 

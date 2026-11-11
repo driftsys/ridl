@@ -2742,7 +2742,7 @@ fn numeric_constructors() {
         );
         let checked = prim == v2::PrimitiveType::Integer || min.is_some() || max.is_some();
         assert_eq!(
-            source.contains("import { ConstraintError }"),
+            source.contains("import * as $rt from '@driftsys/ridl-runtime';"),
             checked && !internal
         );
         assert_eq!(
@@ -2756,16 +2756,73 @@ fn numeric_constructors() {
     }
 }
 
+/// A declaration may spell any name the runtime package exports, because the
+/// module reaches the runtime only through the `$rt` namespace import, and `$`
+/// cannot occur in a RIDL name.
 #[test]
-fn constraint_error_name_is_refused() {
-    let decl = public_decl(
+fn a_declaration_may_take_a_runtime_name() {
+    let names = [
         "ConstraintError",
-        primitive_type(v2::PrimitiveType::Float, init_value(false, None), None),
+        "codePointLength",
+        "isWellFormedString",
+        "offFloatPoints",
+        "offFloatStep",
+    ];
+    let mut decls: Vec<v2::Decl> = names
+        .iter()
+        .map(|name| {
+            public_decl(
+                name,
+                primitive_type(v2::PrimitiveType::Float, init_value(false, None), None),
+            )
+        })
+        .collect();
+    // The declarations above have no check. These three emit every runtime
+    // helper that a check calls.
+    decls.push(text_decl(
+        "Word",
+        v2::PrimitiveType::String,
+        (Some(1), Some(4)),
+        None,
+    ));
+    for (name, min, max, step) in [
+        ("Never", None, None, "0"),
+        ("Lattice", Some("-1.0"), Some("2.0"), "0.1"),
+    ] {
+        let mut kind = primitive_type(v2::PrimitiveType::Float, init_value(false, None), None);
+        if let v2::decl::Kind::TypeDef(td) = &mut kind {
+            td.constraint = Some(constraint(min, max, Some(step)));
+        }
+        decls.push(public_decl(name, kind));
+    }
+    let source = ts_for(decls);
+    assert!(
+        source.contains("import * as $rt from '@driftsys/ridl-runtime';"),
+        "{source}"
     );
-    let error = generate(&package("test.ctor", vec![decl])).unwrap_err();
-    let GenerateError::Unrepresentable(message) = error;
-    assert!(message.contains("test.ctor.ConstraintError"), "{message}");
-    assert!(message.contains("@driftsys/ridl-runtime"), "{message}");
+    for name in names {
+        assert!(source.contains(&format!("export type {name} ")), "{source}");
+        assert!(
+            source.contains(&format!("function make{name}(")),
+            "{source}"
+        );
+    }
+    assert!(source.contains("new $rt.ConstraintError('"), "{source}");
+    // Every call of a runtime helper goes through the namespace.
+    for helper in [
+        "codePointLength",
+        "isWellFormedString",
+        "offFloatStep",
+        "offFloatPoints",
+    ] {
+        for (at, _) in source.match_indices(&format!("{helper}(")) {
+            assert!(
+                source[..at].ends_with("$rt.") || source[..at].ends_with("function make"),
+                "{helper} at {at}: {source}"
+            );
+        }
+    }
+    insta::assert_snapshot!(source);
 }
 
 /// A string or bytes declaration with a length bound and an optional pattern.
@@ -2790,8 +2847,14 @@ fn text_decl(
 fn a_string_length_counts_code_points() {
     let decl = text_decl("Word", v2::PrimitiveType::String, (Some(1), Some(4)), None);
     let source = ts_for(vec![decl]);
-    assert!(source.contains("codePointLength(value) < 1"), "{source}");
-    assert!(source.contains("codePointLength(value) > 4"), "{source}");
+    assert!(
+        source.contains("$rt.codePointLength(value) < 1"),
+        "{source}"
+    );
+    assert!(
+        source.contains("$rt.codePointLength(value) > 4"),
+        "{source}"
+    );
     assert!(!source.contains("value.length"), "{source}");
     insta::assert_snapshot!(source);
 }
@@ -2819,7 +2882,7 @@ fn a_zero_minimum_and_an_unreachable_maximum_emit_no_length_comparison() {
     assert!(source.contains("function makeOpen("), "{source}");
     assert!(source.contains("function makeOpenUnchecked("), "{source}");
     assert!(
-        source.contains("import { ConstraintError, isWellFormedString }"),
+        source.contains("import * as $rt from '@driftsys/ridl-runtime';"),
         "{source}"
     );
     insta::assert_snapshot!(source);
@@ -2835,13 +2898,13 @@ fn a_string_scalar_checks_well_formedness_before_length_and_pattern() {
     );
     let source = ts_for(vec![decl]);
     let utf8 = source
-        .find("if (!isWellFormedString(value)) {")
+        .find("if (!$rt.isWellFormedString(value)) {")
         .unwrap_or_else(|| panic!("the well-formedness check:\n{source}"));
     assert!(
-        source.contains("new ConstraintError('utf8', 'veh.common.Code', value, "),
+        source.contains("new $rt.ConstraintError('utf8', 'veh.common.Code', value, "),
         "{source}"
     );
-    let min = source.find("codePointLength(value) < 1").expect("min");
+    let min = source.find("$rt.codePointLength(value) < 1").expect("min");
     let pattern = source.find("test(value)").expect("pattern");
     assert!(utf8 < min && min < pattern, "{source}");
     insta::assert_snapshot!(source);
@@ -2861,19 +2924,8 @@ fn an_unconstrained_string_scalar_checks_well_formedness() {
         primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
     );
     let source = ts_for(vec![decl]);
-    assert!(source.contains("isWellFormedString(value)"), "{source}");
+    assert!(source.contains("$rt.isWellFormedString(value)"), "{source}");
     assert!(source.contains("function makeFreeUnchecked("), "{source}");
-}
-
-#[test]
-fn well_formed_string_name_is_refused() {
-    let decl = public_decl(
-        "isWellFormedString",
-        primitive_type(v2::PrimitiveType::Float, init_value(false, None), None),
-    );
-    let error = generate(&package("test.ctor", vec![decl])).unwrap_err();
-    let GenerateError::Unrepresentable(message) = error;
-    assert!(message.contains("isWellFormedString"), "{message}");
 }
 
 #[test]
@@ -2890,7 +2942,7 @@ fn a_pattern_is_checked_after_the_length_with_a_module_level_regexp() {
         .unwrap_or_else(|| panic!("the pattern is built once at module level:\n{source}"));
     let function = source.find("function makeCode(").expect("the constructor");
     assert!(regexp < function, "{source}");
-    let max = source.find("codePointLength(value) > 8").expect("max");
+    let max = source.find("$rt.codePointLength(value) > 8").expect("max");
     let pattern = source
         .find("!__ridlPatternCode.test(value)")
         .expect("pattern");
@@ -2929,20 +2981,6 @@ fn an_internal_string_constructor_is_not_exported() {
     assert!(!source.contains("make"), "{source}");
     assert!(!source.contains("ridl-runtime"), "{source}");
     insta::assert_snapshot!(source);
-}
-
-#[test]
-fn the_runtime_helper_names_are_refused() {
-    for name in ["offFloatStep", "offFloatPoints", "codePointLength"] {
-        let decl = public_decl(
-            name,
-            primitive_type(v2::PrimitiveType::Float, init_value(false, None), None),
-        );
-        let error = generate(&package("test.ctor", vec![decl])).unwrap_err();
-        let GenerateError::Unrepresentable(message) = error;
-        assert!(message.contains(&format!("test.ctor.{name}")), "{message}");
-        assert!(message.contains("@driftsys/ridl-runtime"), "{message}");
-    }
 }
 
 #[test]
@@ -3055,26 +3093,22 @@ fn a_step_is_checked_after_the_range() {
             .unwrap()
             .source;
         assert!(
-            source.contains("throw new ConstraintError('step'"),
+            source.contains("throw new $rt.ConstraintError('step'"),
             "{source}"
         );
         assert!(source.contains("function makeValueUnchecked"), "{source}");
-        let range_at = source.find("ConstraintError('range'");
-        let step_at = source.find("ConstraintError('step'").unwrap();
+        let range_at = source.find("$rt.ConstraintError('range'");
+        let step_at = source.find("$rt.ConstraintError('step'").unwrap();
         assert!(
             range_at.is_none_or(|range_at| range_at < step_at),
             "{source}"
         );
-        let imports = source.lines().next().unwrap();
-        match helper {
-            Some(helper) => assert_eq!(
-                imports,
-                format!("import {{ ConstraintError, {helper} }} from '@driftsys/ridl-runtime';")
-            ),
-            None => assert_eq!(
-                imports,
-                "import { ConstraintError } from '@driftsys/ridl-runtime';"
-            ),
+        assert_eq!(
+            source.lines().next().unwrap(),
+            "import * as $rt from '@driftsys/ridl-runtime';"
+        );
+        if let Some(helper) = helper {
+            assert!(source.contains(&format!("$rt.{helper}(")), "{source}");
         }
         insta::assert_snapshot!(snapshot, source);
     }
@@ -3090,7 +3124,7 @@ fn an_unusable_float_step_refuses_every_value() {
         .unwrap()
         .source;
     assert!(
-        source.contains("offFloatPoints(value, false, [])"),
+        source.contains("$rt.offFloatPoints(value, false, [])"),
         "{source}"
     );
 }
@@ -3110,7 +3144,7 @@ fn an_integer_step_that_is_not_a_positive_integer_has_no_check() {
             .unwrap()
             .source;
         assert!(
-            !source.contains("ConstraintError('step'"),
+            !source.contains("$rt.ConstraintError('step'"),
             "{step}: {source}"
         );
     }

@@ -44,7 +44,7 @@ use std::fmt::Write as _;
 
 use ridl_ir::codegen::v1;
 
-use crate::{GenerateError, GeneratedTs};
+use crate::{GenerateError, GeneratedTs, RUNTIME};
 
 /// The text of the rule codes the wasm module reports, rule code `n` at
 /// index `n - 2`: the order of `WASM_RULES` in the generated crate.
@@ -191,17 +191,6 @@ struct StreamElement {
     form: &'static str,
     element: Option<String>,
     element_type: String,
-}
-
-impl StreamCall<'_> {
-    fn uses_adapter(&self, upload: bool, form: &str) -> bool {
-        (self.upload == upload && self.form == form)
-            || (!upload
-                && self
-                    .duplex_reply
-                    .as_ref()
-                    .is_some_and(|reply| reply.form == form))
-    }
 }
 
 struct Codec<'a> {
@@ -469,27 +458,17 @@ impl<'a> Codec<'a> {
         };
         for reserved in [
             "flatbuffers",
-            "PayloadCodec",
             "t",
             "fb",
             "CATALOG_NAME",
             "CATALOG_HASH",
             "PAYLOAD_TYPES",
             "RULES",
-            "checkWellFormed",
         ] {
             register(reserved.to_string(), reserved.to_string())?;
         }
         if !self.stream_calls.is_empty() {
-            for helper in [
-                "StreamSession",
-                "StreamOptions",
-                "CatalogMismatch",
-                "CodecError",
-                "StreamError",
-                "checkStreamSession",
-                "encodeStreamRequest",
-            ] {
+            for helper in ["checkStreamSession", "encodeStreamRequest"] {
                 register(
                     helper.to_string(),
                     format!("runtime stream helper {helper}"),
@@ -501,38 +480,9 @@ impl<'a> Codec<'a> {
                     "stream reply helper".to_string(),
                 )?;
             }
-            for (upload, form, helper) in [
-                (false, "elements", "decodeStream"),
-                (false, "text", "decodeTextStream"),
-                (true, "elements", "encodeUpload"),
-                (true, "bytes", "byteUpload"),
-                (true, "text", "textUpload"),
-            ] {
-                if self
-                    .stream_calls
-                    .values()
-                    .any(|stream| stream.uses_adapter(upload, form))
-                {
-                    register(
-                        helper.to_string(),
-                        format!("runtime stream helper {helper}"),
-                    )?;
-                }
-            }
         }
         if self.has_signals() {
-            let mut helpers = vec![
-                "signalChecks",
-                "signalCheck",
-                "Codec",
-                "SignalCheckEntry",
-                "CodecError",
-            ];
-            if !self.stream_calls.is_empty() {
-                // The stream helpers already registered `CodecError`.
-                helpers.pop();
-            }
-            for helper in helpers {
+            for helper in ["signalChecks", "signalCheck"] {
                 register(
                     helper.to_string(),
                     format!("runtime signal helper {helper}"),
@@ -1373,7 +1323,7 @@ impl<'a> Codec<'a> {
             };
             let _ = writeln!(
                 body,
-                "const codec{name}: PayloadCodec<{spelled}> = {{ type: \"{qualified}\", encode: \
+                "const codec{name}: $rt.PayloadCodec<{spelled}> = {{ type: \"{qualified}\", encode: \
                  encode{name}, decode: decode{name} }};",
                 name = payload.name,
                 qualified = self.qualified(payload.name),
@@ -1383,7 +1333,7 @@ impl<'a> Codec<'a> {
             let alias = package_alias(&foreign.package);
             let _ = writeln!(
                 body,
-                "const {constant}: PayloadCodec<{alias}.{name}> = {{ type: \"{package}.{name}\", \
+                "const {constant}: $rt.PayloadCodec<{alias}.{name}> = {{ type: \"{package}.{name}\", \
                  encode: {alias}_codec.encode{name}, decode: {alias}_codec.decode{name} }};",
                 name = foreign.name,
                 package = foreign.package,
@@ -1409,50 +1359,26 @@ impl<'a> Codec<'a> {
         // payload roots are all foreign has no table, so `flatc` writes no
         // barrel for it to import.
         let local = self.has_local_payload();
-        if !self.signal_entries.is_empty() {
-            out.push_str(
-                "import type { Codec, SignalCheckEntry } from \"@driftsys/ridl-runtime\";\n",
-            );
-        }
-        if self.stream_calls.is_empty() && !self.signal_entries.is_empty() {
-            out.push_str("import { CodecError } from \"@driftsys/ridl-runtime\";\n");
-        }
-        if !self.stream_calls.is_empty() {
-            out.push_str(
-                "import type { StreamSession, StreamOptions } from \"@driftsys/ridl-runtime\";\n",
-            );
-            let mut helpers = vec!["CatalogMismatch", "CodecError", "StreamError"];
-            for (upload, form, helper) in [
-                (false, "elements", "decodeStream"),
-                (false, "text", "decodeTextStream"),
-                (true, "elements", "encodeUpload"),
-                (true, "bytes", "byteUpload"),
-                (true, "text", "textUpload"),
-            ] {
-                if self
-                    .stream_calls
-                    .values()
-                    .any(|s| s.uses_adapter(upload, form))
-                {
-                    helpers.push(helper);
-                }
-            }
+        // One namespace import carries every runtime name, so no declaration
+        // of the package can collide with one. A module that uses only types
+        // of the runtime imports it as a type.
+        let uses_runtime_values = !self.signal_entries.is_empty()
+            || !self.stream_calls.is_empty()
+            || body.contains("$rt.checkWellFormed(");
+        let uses_payload_codec = !self.used_locals.is_empty() || !self.foreign_payloads.is_empty();
+        if uses_runtime_values {
             let _ = writeln!(
                 out,
-                "import {{ {} }} from \"@driftsys/ridl-runtime\";",
-                helpers.join(", ")
+                "import * as {RUNTIME} from \"@driftsys/ridl-runtime\";"
             );
-        }
-        if body.contains("checkWellFormed(") {
-            out.push_str("import { checkWellFormed } from \"@driftsys/ridl-runtime\";\n");
+        } else if uses_payload_codec {
+            let _ = writeln!(
+                out,
+                "import type * as {RUNTIME} from \"@driftsys/ridl-runtime\";"
+            );
         }
         if local {
             out.push_str("import * as flatbuffers from \"flatbuffers\";\n");
-        }
-        // Import the payload codec type only when a `codec<Name>` constant
-        // uses it, so that modules without one have no unused type import.
-        if !self.used_locals.is_empty() || !self.foreign_payloads.is_empty() {
-            out.push_str("import type { PayloadCodec } from \"@driftsys/ridl-runtime\";\n");
         }
         if self.has_domain_types() {
             let kind = if self.needs_domain_values {
@@ -1653,7 +1579,7 @@ impl<'a> Codec<'a> {
             ),
             Some(Kind::Scalar(scalar)) => (
                 if scalar.class() == v1::ScalarClass::String {
-                    format!("new fb.{name}BoxT(checkWellFormed(value, \"{qualified}\"))")
+                    format!("new fb.{name}BoxT($rt.checkWellFormed(value, \"{qualified}\"))")
                 } else {
                     format!("new fb.{name}BoxT(value)")
                 },
@@ -2361,12 +2287,12 @@ impl<'a> Codec<'a> {
     }
 
     fn emit_stream_helpers(&self, out: &mut String) {
-        out.push_str("\nfunction checkStreamSession(session: StreamSession, limit: number | undefined): void {\n  const hash = session.codec.catalogHash;\n  if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {\n    throw new CatalogMismatch(\n      Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n      Array.from(hash, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n    );\n  }\n  if (limit === 0) throw new StreamError({ category: \"corrupt\" });\n}\n");
-        out.push_str("\nfunction encodeStreamRequest<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {\n  let bytes: Uint8Array;\n  try {\n    bytes = payload.encode(value);\n  } catch (error) {\n");
-        out.push_str("    if (typeof error === \"object\" && error !== null && \"name\" in error && (error.name === \"RuleError\" || error.name === \"ConstraintError\") && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n");
-        out.push_str("    throw new StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n  if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: \"corrupt\" });\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during request verification\");\n  }\n  return bytes;\n}\n");
+        out.push_str("\nfunction checkStreamSession(session: $rt.StreamSession, limit: number | undefined): void {\n  const hash = session.codec.catalogHash;\n  if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {\n    throw new $rt.CatalogMismatch(\n      Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n      Array.from(hash, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n    );\n  }\n  if (limit === 0) throw new $rt.StreamError({ category: \"corrupt\" });\n}\n");
+        out.push_str("\nfunction encodeStreamRequest<T>(session: $rt.StreamSession, payload: $rt.PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {\n  let bytes: Uint8Array;\n  try {\n    bytes = payload.encode(value);\n  } catch (error) {\n");
+        out.push_str("    if (typeof error === \"object\" && error !== null && \"name\" in error && (error.name === \"RuleError\" || error.name === \"ConstraintError\") && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new $rt.StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n");
+        out.push_str("    throw new $rt.StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n  if (limit !== undefined && bytes.length > limit) throw new $rt.StreamError({ category: \"corrupt\" });\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new $rt.StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new $rt.StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new $rt.CodecError(\"unknown payload type or rule during request verification\");\n  }\n  return bytes;\n}\n");
         if self.stream_calls.values().any(|s| s.reply.is_some()) {
-            out.push_str("\nfunction decodeStreamReply<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new CodecError(\"unknown payload type or rule during reply verification\");\n  }\n  try {\n    return payload.decode(bytes);\n  } catch (error) {\n    if (typeof error === \"object\" && error !== null && \"name\" in error && error.name === \"RuleError\" && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n    throw new StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n}\n");
+            out.push_str("\nfunction decodeStreamReply<T>(session: $rt.StreamSession, payload: $rt.PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new $rt.StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new $rt.StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new $rt.CodecError(\"unknown payload type or rule during reply verification\");\n  }\n  try {\n    return payload.decode(bytes);\n  } catch (error) {\n    if (typeof error === \"object\" && error !== null && \"name\" in error && error.name === \"RuleError\" && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new $rt.StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n    throw new $rt.StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n}\n");
         }
     }
 
@@ -2382,9 +2308,9 @@ impl<'a> Codec<'a> {
             .iter()
             .zip(&stream.param_types)
             .map(|(binding, ty)| format!("{binding}: {ty}"));
-        let mut signature = vec!["session: StreamSession".to_string()];
+        let mut signature = vec!["session: $rt.StreamSession".to_string()];
         signature.extend(params);
-        signature.push("opts: StreamOptions".to_string());
+        signature.push("opts: $rt.StreamOptions".to_string());
         out.push('\n');
         let entry_binding = &stream.entry_binding;
         let _ = writeln!(out, "const {entry_binding} = {name}.{member};\n");
@@ -2474,17 +2400,17 @@ impl<'a> Codec<'a> {
             };
             let adapter = match stream.form {
                 "elements" => format!(
-                    "encodeUpload(raw.upload, (value: {}) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), {upload_limit})",
+                    "$rt.encodeUpload(raw.upload, (value: {}) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), {upload_limit})",
                     stream.element_type
                 ),
-                "text" => format!("textUpload(raw.upload, {upload_limit})"),
-                _ => format!("byteUpload(raw.upload, {upload_limit})"),
+                "text" => format!("$rt.textUpload(raw.upload, {upload_limit})"),
+                _ => format!("$rt.byteUpload(raw.upload, {upload_limit})"),
             };
             let _ = writeln!(out, "  const upload = {adapter};");
             if let Some(reply) = &stream.duplex_reply {
                 match reply.form {
-                    "elements" => out.push_str("  const stream = raw.stream.pipeThrough(decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));\n"),
-                    "text" => out.push_str("  const stream = raw.stream.pipeThrough(decodeTextStream());\n"),
+                    "elements" => out.push_str("  const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));\n"),
+                    "text" => out.push_str("  const stream = raw.stream.pipeThrough($rt.decodeTextStream());\n"),
                     _ => out.push_str("  const stream = raw.stream;\n"),
                 }
                 out.push_str("  return { upload, stream };\n}\n");
@@ -2499,8 +2425,8 @@ impl<'a> Codec<'a> {
             "  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);\n",
         );
         match stream.form {
-            "elements" => out.push_str("  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));\n"),
-            "text" => out.push_str("  return raw.pipeThrough(decodeTextStream());\n"),
+            "elements" => out.push_str("  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));\n"),
+            "text" => out.push_str("  return raw.pipeThrough($rt.decodeTextStream());\n"),
             _ => out.push_str("  return raw;\n"),
         }
         out.push_str("}\n");
@@ -2677,10 +2603,10 @@ impl<'a> Codec<'a> {
     /// has a member table entry.
     fn emit_signal_checks(&self, out: &mut String) {
         out.push_str(
-            "\nfunction signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): SignalCheckEntry {\n  const typeId = codec.typeId(entry.payload.type);\n  return {\n    iface: entry.iface,\n    ord: entry.ord,\n    check: (bytes) => {\n      const result = codec.verify(typeId, bytes);\n      if (result.ok) return undefined;\n      if (result.kind !== \"rule\") return \"corrupt\";\n      const rule = (RULES as readonly string[]).find((known) => known === result.rule);\n      if (rule === undefined) throw new CodecError(\"unknown rule during signal verification\");\n      return { rule: rule as (typeof RULES)[number] };\n    },\n  };\n}\n",
+            "\nfunction signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): $rt.SignalCheckEntry {\n  const typeId = codec.typeId(entry.payload.type);\n  return {\n    iface: entry.iface,\n    ord: entry.ord,\n    check: (bytes) => {\n      const result = codec.verify(typeId, bytes);\n      if (result.ok) return undefined;\n      if (result.kind !== \"rule\") return \"corrupt\";\n      const rule = (RULES as readonly string[]).find((known) => known === result.rule);\n      if (rule === undefined) throw new $rt.CodecError(\"unknown rule during signal verification\");\n      return { rule: rule as (typeof RULES)[number] };\n    },\n  };\n}\n",
         );
         out.push_str(
-            "\n/** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */\nexport function signalChecks(codec: Codec): readonly SignalCheckEntry[] {\n  return [\n",
+            "\n/** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */\nexport function signalChecks(codec: $rt.Codec): readonly $rt.SignalCheckEntry[] {\n  return [\n",
         );
         for entry in &self.signal_entries {
             let _ = writeln!(out, "    signalCheck(codec, {entry}),");
@@ -2845,7 +2771,7 @@ impl<'a> Codec<'a> {
     }
 }
 
-/// Allocates local bindings without shadowing generated locals or helper imports.
+/// Allocates local bindings without shadowing generated locals or helper functions.
 fn stream_bindings(params: &[&v1::Param], entry_binding: &str) -> Vec<String> {
     let reserved = [
         "session",
@@ -2860,17 +2786,12 @@ fn stream_bindings(params: &[&v1::Param], entry_binding: &str) -> Vec<String> {
         "stream",
         "upload",
         "reply",
-        "encodeUpload",
-        "byteUpload",
-        "textUpload",
         "decodeStreamReply",
         "args",
         "raw",
         "bytes",
         "checkStreamSession",
         "encodeStreamRequest",
-        "decodeStream",
-        "decodeTextStream",
         "undefined",
         "t",
         "await",
@@ -3128,7 +3049,7 @@ fn string_rule(qualified: &str) -> Rule {
 /// error, so the converter checks well-formedness first. `{path}` stands for the
 /// path of the field inside the payload type `qualified`; see [`fill_pack`].
 fn text_pack(qualified: &str) -> String {
-    format!("checkWellFormed({{}}, \"{qualified}.{{path}}\")")
+    format!("$rt.checkWellFormed({{}}, \"{qualified}.{{path}}\")")
 }
 
 /// Fills a pack template with the value read and the path of the position. An

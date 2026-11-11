@@ -1,0 +1,16 @@
+package bare.gauge
+
+/// A level in percent.
+type Percent : integer [0..100] = 1
+
+/// A measured level. No field is a string.
+struct Level {
+  /// The level.
+  value: Percent
+}
+
+/// A package whose only runtime value is the error of a signal check.
+interface Gauge {
+  /// Reports the level.
+  signal level : Level @1s
+}

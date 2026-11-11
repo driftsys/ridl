@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
-import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * Vehicle speed over ground
@@ -23,16 +23,16 @@ export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 /** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeSpeed(value: number): Speed {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
   if (value < 0.0) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
   if (value > 250.0) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
-  if (offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0.0');
+  if ($rt.offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0.0');
   }
   return value as Speed;
 }
@@ -54,7 +54,7 @@ export type Counter = number & { readonly __ridl: 'veh.common.Counter' };
 /** Builds a `Counter`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeCounter(value: number): Counter {
   if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'veh.common.Counter', value, 'a safe integer');
+    throw new $rt.ConstraintError('range', 'veh.common.Counter', value, 'a safe integer');
   }
   return value as Counter;
 }

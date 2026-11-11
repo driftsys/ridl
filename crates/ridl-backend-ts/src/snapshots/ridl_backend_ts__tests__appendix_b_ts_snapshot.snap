@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: generated.source
 ---
-import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 import * as ridl_std from './ridl.std.js';
 
 /**
@@ -24,16 +24,16 @@ export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 /** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeSpeed(value: number): Speed {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
   if (value < 0.0) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
   if (value > 250.0) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
-  if (offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0.0');
+  if ($rt.offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0.0');
   }
   return value as Speed;
 }
@@ -66,16 +66,16 @@ export type Temperature = number & { readonly __ridl: 'veh.common.Temperature' }
 /** Builds a `Temperature`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeTemperature(value: number): Temperature {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40.0..125.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Temperature', value, '[-40.0..125.0]');
   }
   if (value < -40.0) {
-    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40.0..125.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Temperature', value, '[-40.0..125.0]');
   }
   if (value > 125.0) {
-    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40.0..125.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Temperature', value, '[-40.0..125.0]');
   }
-  if (offFloatStep(value, true, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.Temperature', value, 'step 0.1 from -40.0');
+  if ($rt.offFloatStep(value, true, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Temperature', value, 'step 0.1 from -40.0');
   }
   return value as Temperature;
 }
@@ -108,16 +108,16 @@ export type RPM = number & { readonly __ridl: 'veh.common.RPM' };
 /** Builds a `RPM`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeRPM(value: number): RPM {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.RPM', value, '[0.0..8000.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.RPM', value, '[0.0..8000.0]');
   }
   if (value < 0.0) {
-    throw new ConstraintError('range', 'veh.common.RPM', value, '[0.0..8000.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.RPM', value, '[0.0..8000.0]');
   }
   if (value > 8000.0) {
-    throw new ConstraintError('range', 'veh.common.RPM', value, '[0.0..8000.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.RPM', value, '[0.0..8000.0]');
   }
-  if (offFloatStep(value, true, [1.0, 10.0, 10.0, 0.0, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.RPM', value, 'step 10.0 from 0.0');
+  if ($rt.offFloatStep(value, true, [1.0, 10.0, 10.0, 0.0, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.RPM', value, 'step 10.0 from 0.0');
   }
   return value as RPM;
 }
@@ -150,16 +150,16 @@ export type Ratio = number & { readonly __ridl: 'veh.common.Ratio' };
 /** Builds a `Ratio`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeRatio(value: number): Ratio {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.Ratio', value, '[0.0..100.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Ratio', value, '[0.0..100.0]');
   }
   if (value < 0.0) {
-    throw new ConstraintError('range', 'veh.common.Ratio', value, '[0.0..100.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Ratio', value, '[0.0..100.0]');
   }
   if (value > 100.0) {
-    throw new ConstraintError('range', 'veh.common.Ratio', value, '[0.0..100.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Ratio', value, '[0.0..100.0]');
   }
-  if (offFloatStep(value, true, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.Ratio', value, 'step 0.1 from 0.0');
+  if ($rt.offFloatStep(value, true, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Ratio', value, 'step 0.1 from 0.0');
   }
   return value as Ratio;
 }
@@ -181,7 +181,7 @@ export type Counter = number & { readonly __ridl: 'veh.common.Counter' };
 /** Builds a `Counter`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeCounter(value: number): Counter {
   if (!globalThis.Number.isSafeInteger(value)) {
-    throw new ConstraintError('range', 'veh.common.Counter', value, 'a safe integer');
+    throw new $rt.ConstraintError('range', 'veh.common.Counter', value, 'a safe integer');
   }
   return value as Counter;
 }
@@ -210,16 +210,16 @@ export type Gain = number & { readonly __ridl: 'veh.common.Gain' };
 /** Builds a `Gain`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeGain(value: number): Gain {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.Gain', value, '[0.0..1.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Gain', value, '[0.0..1.0]');
   }
   if (value < 0.0) {
-    throw new ConstraintError('range', 'veh.common.Gain', value, '[0.0..1.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Gain', value, '[0.0..1.0]');
   }
   if (value > 1.0) {
-    throw new ConstraintError('range', 'veh.common.Gain', value, '[0.0..1.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Gain', value, '[0.0..1.0]');
   }
-  if (offFloatStep(value, true, [1.0, 0.01, 0.01, -2.0816681711721684e-19, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.Gain', value, 'step 0.01 from 0.0');
+  if ($rt.offFloatStep(value, true, [1.0, 0.01, 0.01, -2.0816681711721684e-19, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Gain', value, 'step 0.01 from 0.0');
   }
   return value as Gain;
 }

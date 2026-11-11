@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
-import { ConstraintError } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * Build a value with `makeBlob`.
@@ -16,10 +16,10 @@ export type Blob = Uint8Array & { readonly __ridl: 'veh.common.Blob' };
 /** Builds a `Blob`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeBlob(value: Uint8Array): Blob {
   if (value.length < 2) {
-    throw new ConstraintError('length', 'veh.common.Blob', value, '[2..4]');
+    throw new $rt.ConstraintError('length', 'veh.common.Blob', value, '[2..4]');
   }
   if (value.length > 4) {
-    throw new ConstraintError('length', 'veh.common.Blob', value, '[2..4]');
+    throw new $rt.ConstraintError('length', 'veh.common.Blob', value, '[2..4]');
   }
   return value as Blob;
 }

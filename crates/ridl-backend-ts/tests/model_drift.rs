@@ -84,6 +84,11 @@ fn read_back(source: &str) -> Module {
             let (alias, rest) = rest
                 .split_once(" from ")
                 .expect("an import names its module");
+            // The namespace import of the runtime package is not a package of
+            // the model.
+            if alias == "$rt" {
+                continue;
+            }
             let specifier = rest
                 .trim_matches(|c| c == '\'' || c == ';')
                 .trim_start_matches("./");

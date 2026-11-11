@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: ts_for(documented_decls())
 ---
-import { ConstraintError, codePointLength, isWellFormedString, offFloatStep } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * Vehicle speed over ground
@@ -23,16 +23,16 @@ export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 /** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeSpeed(value: number): Speed {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
   if (value < 0.0) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
   if (value > 250.0) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0.0..250.0]');
   }
-  if (offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0.0');
+  if ($rt.offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0.0');
   }
   return value as Speed;
 }
@@ -60,17 +60,17 @@ const __ridlPatternVin = new globalThis.RegExp('[A-HJ-NPR-Z0-9]{17}');
 
 /** Builds a `Vin`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeVin(value: string): Vin {
-  if (!isWellFormedString(value)) {
-    throw new ConstraintError('utf8', 'veh.common.Vin', value, 'well-formed text');
+  if (!$rt.isWellFormedString(value)) {
+    throw new $rt.ConstraintError('utf8', 'veh.common.Vin', value, 'well-formed text');
   }
-  if (codePointLength(value) < 17) {
-    throw new ConstraintError('length', 'veh.common.Vin', value, '[17..17]');
+  if ($rt.codePointLength(value) < 17) {
+    throw new $rt.ConstraintError('length', 'veh.common.Vin', value, '[17..17]');
   }
-  if (codePointLength(value) > 17) {
-    throw new ConstraintError('length', 'veh.common.Vin', value, '[17..17]');
+  if ($rt.codePointLength(value) > 17) {
+    throw new $rt.ConstraintError('length', 'veh.common.Vin', value, '[17..17]');
   }
   if (!__ridlPatternVin.test(value)) {
-    throw new ConstraintError('pattern', 'veh.common.Vin', value, '/[A-HJ-NPR-Z0-9]{17}/');
+    throw new $rt.ConstraintError('pattern', 'veh.common.Vin', value, '/[A-HJ-NPR-Z0-9]{17}/');
   }
   return value as Vin;
 }

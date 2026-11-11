@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
-import { ConstraintError, isWellFormedString } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * Build a value with `makeOpen`.
@@ -15,8 +15,8 @@ export type Open = string & { readonly __ridl: 'veh.common.Open' };
 
 /** Builds a `Open`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeOpen(value: string): Open {
-  if (!isWellFormedString(value)) {
-    throw new ConstraintError('utf8', 'veh.common.Open', value, 'well-formed text');
+  if (!$rt.isWellFormedString(value)) {
+    throw new $rt.ConstraintError('utf8', 'veh.common.Open', value, 'well-formed text');
   }
   return value as Open;
 }

@@ -3,6 +3,7 @@ import { ConstraintError } from "@driftsys/ridl-runtime";
 import {
   makeBlob,
   makeCapitals,
+  makeConstraintError,
   makeContains,
   makeDot,
   makeFree,
@@ -29,6 +30,10 @@ import {
   makeWide,
   makeWord,
   makeWordUnchecked,
+  makecodePointLength,
+  makeisWellFormedString,
+  makeoffFloatPoints,
+  makeoffFloatStep,
 } from "./ctor.ts";
 import {
   makeEndless,
@@ -409,4 +414,18 @@ Deno.test("a length maximum beyond the safe numbers is never exceeded", () => {
 Deno.test("a pattern on bytes is ignored", () => {
   assert.equal(makePatterned(new Uint8Array(2)).length, 2);
   refuses("Patterned", () => makePatterned(new Uint8Array(3)), "length");
+});
+
+Deno.test("a declaration may take a name that the runtime package exports", () => {
+  assert.equal(makeConstraintError(100), 100);
+  refuses("ConstraintError", () => makeConstraintError(101));
+  assert.equal(makecodePointLength("abcd"), "abcd");
+  refuses("codePointLength", () => makecodePointLength("abcde"), "length");
+  assert.equal(makeisWellFormedString("abc"), "abc");
+  refuses("isWellFormedString", () => makeisWellFormedString("\ud800"), "utf8");
+  refuses("isWellFormedString", () => makeisWellFormedString("A"), "pattern");
+  assert.equal(makeoffFloatPoints(0.25), 0.25);
+  refuses("offFloatPoints", () => makeoffFloatPoints(0.3), "step");
+  assert.equal(makeoffFloatStep(0.1), 0.1);
+  refuses("offFloatStep", () => makeoffFloatStep(0.15), "step");
 });
