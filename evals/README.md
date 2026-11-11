@@ -74,12 +74,16 @@ byte for byte, and compares the selected thresholds and levels with the
 constants and catalogue levels in the compiler sources): the precision at every
 candidate threshold and the level each one gives. `calibration/notes.md` is
 written by hand and records the labelling method, the adjudication, the outcome
-applied to the compiler, and the recall mapping with its judgement calls. Each
-review task's `expect.lints` names the shipped lints whose accepted findings
-fall in that task's workspace and match a rubric item.
-`calibration/expected-counts.toml` pins the per-workspace counts of the shipped
-lints; the test `design_lint_counts_on_the_corpus_are_pinned` compares them with
-`ridl check` and prints the actual table on a mismatch.
+applied to the compiler, and the recall mapping with its judgement calls. A
+task's `expect.lints` is the set of shipped lints that `ridl check` reports on
+the task's whole starting workspace, and the scorer compares the two sets for
+equality; the test `a_corpus_task_expects_the_pinned_lint_set_of_its_workspace`
+checks each corpus task against `calibration/expected-counts.toml`. Whether a
+finding matches a rubric item is a recall question, which
+`calibration/recall.toml` records. `calibration/expected-counts.toml` pins the
+per-workspace counts of the shipped lints; the test
+`design_lint_counts_on_the_corpus_are_pinned` compares them with `ridl check`
+and prints the actual table on a mismatch.
 
 ## Running the eval tasks
 

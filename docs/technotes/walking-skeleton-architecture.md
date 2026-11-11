@@ -449,9 +449,10 @@ crate the workspace holds — see `AGENTS.md` for that.
   `cargo xtask calibrate` dumps the design lints' findings over `evals/` and
   derives the calibration summary ([`xtask/README.md`](../../xtask/README.md)).
 
-  `cargo xtask eval` runs the eval tasks under `evals/tasks/` on Claude Code and
-  on Codex, with and without the skill under `skills/`, scores and judges each
-  run, and writes the results under `evals/results/`
+  `cargo xtask eval` runs the eval tasks under `evals/tasks/` on Claude Code, on
+  Codex and, with `--host copilot`, on Copilot CLI, with and without the skill
+  under `skills/`, scores and judges each run, and writes the results under
+  `evals/results/`
   ([`evals/README.md`](../../evals/README.md#running-the-eval-tasks)).
 
   `cargo xtask freeze update` writes the dumps of the frozen surfaces under

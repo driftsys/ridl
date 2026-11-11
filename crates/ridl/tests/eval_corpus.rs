@@ -557,6 +557,53 @@ fn every_eval_task_is_well_formed() {
     validate_task_set(&tasks).expect("the evaluation task set must preserve the approved seed");
 }
 
+#[test]
+fn a_corpus_task_expects_the_pinned_lint_set_of_its_workspace() {
+    let counts_path = corpus_root()
+        .parent()
+        .expect("the evals directory")
+        .join("calibration/expected-counts.toml");
+    let counts: toml::Table = std::fs::read_to_string(&counts_path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", counts_path.display()))
+        .parse()
+        .expect("expected-counts.toml parses");
+    let root = task_root();
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&root).expect("read the task directory") {
+        let dir = entry.expect("read a task entry").path();
+        if !dir.is_dir() {
+            continue;
+        }
+        let task = validate_task(&dir).unwrap_or_else(|error| panic!("{}: {error}", dir.display()));
+        let Some(corpus) = task["corpus"].as_str() else {
+            continue;
+        };
+        let mut expected: Vec<String> = counts[corpus]
+            .as_table()
+            .unwrap_or_else(|| panic!("no pinned counts for corpus {corpus}"))
+            .iter()
+            .filter(|(_, count)| count.as_integer().is_some_and(|count| count > 0))
+            .map(|(name, _)| name.clone())
+            .collect();
+        expected.sort();
+        let mut actual: Vec<String> = task["expect"]["lints"]
+            .as_array()
+            .expect("expect.lints is an array")
+            .iter()
+            .map(|lint| lint.as_str().expect("a lint name").to_string())
+            .collect();
+        actual.sort();
+        assert_eq!(
+            actual,
+            expected,
+            "{}: expect.lints must equal the lints that the {corpus} workspace reports",
+            dir.display()
+        );
+        checked += 1;
+    }
+    assert!(checked > 0, "no corpus task was checked");
+}
+
 fn validate_task_set(tasks: &[serde_json::Value]) -> Result<(), String> {
     if tasks.len() < 10 {
         return Err("at least ten evaluation tasks are required".to_owned());

@@ -16,8 +16,8 @@ pub enum Host {
 }
 
 /// The vendor whose model a host pins. Claude and Copilot both pin an
-/// Anthropic model, so a run on either is judged by Codex, the only Vendor::OpenAi
-/// host; a Codex run is judged by Claude.
+/// Anthropic model, so a run on either is judged by Codex, the only host of the
+/// OpenAI vendor; a Codex run is judged by Claude.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Vendor {
     Anthropic,

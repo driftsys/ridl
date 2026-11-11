@@ -32,9 +32,10 @@ table, and ADR-0029 is the policy.
 
 ## Run the eval tasks
 
-`cargo xtask eval` runs the tasks under `evals/tasks/` on Claude Code and on
-Codex, with and without the `ridl-authoring` skill, scores and judges each run,
-and writes the results and the release gate under `evals/results/<date>/`.
+`cargo xtask eval` runs the tasks under `evals/tasks/` on Claude Code, on Codex
+and (with `--host copilot`) on Copilot CLI, with and without the
+`ridl-authoring` skill, scores and judges each run, and writes the results and
+the release gate under `evals/results/<date>/`.
 [`evals/README.md`](../evals/README.md#running-the-eval-tasks) describes its
 options, the host logins it needs, `--claude-handoff`, and where the results go.
 

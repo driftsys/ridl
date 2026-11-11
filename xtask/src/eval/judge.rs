@@ -1,4 +1,4 @@
-//! The rubric judge. A run on one host is judged by the other host's model,
+//! The rubric judge. A run is judged by a host of the other vendor,
 //! which sees the prompt, the rubric, the final workspace and the agent's
 //! final message, and nothing that says whether the skill was loaded.
 
