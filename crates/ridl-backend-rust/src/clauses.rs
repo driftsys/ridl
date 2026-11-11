@@ -17,7 +17,8 @@
 //! and `<` use the smallest at or above it. Exactly representable literals
 //! are printed in the shortest form that reads back as the same binary64, so
 //! the output is always a Rust literal (`+0.5` becomes `0.5`, `100` becomes
-//! `100.0`). Inexact `==` and `!=`, unreadable
+//! `100.0`; an exact zero prints as `0.0` with no sign, which every comparison
+//! treats like `-0.0`). Inexact `==` and `!=`, unreadable
 //! decimals, exponents that cannot be read or have magnitude above 10000,
 //! and bounds that require infinity are refused. The newtype's field
 //! is private, and the read is still legal: the subject is always a
@@ -758,6 +759,8 @@ mod tests {
             ("100", "100.0"),
             ("100e0", "100.0"),
             ("1e2", "100.0"),
+            ("1e22", "1e22"),
+            ("0.0000152587890625", "1.52587890625e-5"),
             ("1E+2", "100.0"),
             ("-0.0", "0.0"),
             ("-0.5", "-0.5"),
