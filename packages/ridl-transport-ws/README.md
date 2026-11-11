@@ -17,8 +17,10 @@ version 3 is frame version 2 plus the forms `chunk`, `stream_end` and
 stream of a command or a query (binding version 3). On a session of frame
 version 1, a `block` is a protocol violation.
 
-The package runs on Deno and in a browser. It uses only the platform
-`WebSocket`, so it needs no other runtime. The npm release workflow
+The package runs on Deno and in a browser. It uses only the platform `WebSocket`
+and depends on `@driftsys/ridl-runtime` for the shared types (`Envelope`,
+`Contract`, `CallFailure`, the raw `Sample` and `Occurrence`) and for
+`CallError`, which `SessionError` extends. The npm release workflow
 (`.github/workflows/npm-release.yml`) publishes it as
 `@driftsys/ridl-transport-ws` on a `v*` tag.
 

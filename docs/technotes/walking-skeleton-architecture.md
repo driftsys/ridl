@@ -405,13 +405,13 @@ crate the workspace holds — see `AGENTS.md` for that.
   streamed reply, and applies the consumer's rules that need no catalog. Its
   `provide` function is the reversed role: it offers only `ridl-ws-v2-provider`
   and publishes signals, raises events and answers requests for an instance of a
-  machine. It has no dependency, and `.github/workflows/npm-release.yml`
-  publishes it to npm on a `v*` tag. It carries a payload as bytes and does not
-  decode it. `packages/` is not a Cargo workspace member and holds TypeScript
-  only; Deno builds and tests it (`just ts-check`, `just ts-e2e`, and
-  `just ts-browser-e2e` in CI), at the version `.deno-version` pins. The version
-  in its `deno.json` follows the workspace version. See
-  [its design record](../design/ridl-transport-ws-ts.md).
+  machine. Its one dependency is `@driftsys/ridl-runtime`, and
+  `.github/workflows/npm-release.yml` publishes it to npm on a `v*` tag. It
+  carries a payload as bytes and does not decode it. `packages/` is not a Cargo
+  workspace member and holds TypeScript only; Deno builds and tests it
+  (`just ts-check`, `just ts-e2e`, and `just ts-browser-e2e` in CI), at the
+  version `.deno-version` pins. The version in its `deno.json` follows the
+  workspace version. See [its design record](../design/ridl-transport-ws-ts.md).
 
 - **`packages/ridl-runtime`** — `@driftsys/ridl-runtime`, for Deno, Bun, Node
   and the browser: the loader of the wasm codec module, and the runtime that
