@@ -4,7 +4,7 @@ expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 ---
 // ===== package veh.common =====
-import { ConstraintError, offFloatStep } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * Vehicle speed over ground
@@ -25,16 +25,16 @@ export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
 /** Builds a `Speed`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeSpeed(value: number): Speed {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
   }
   if (value < 0) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
   }
   if (value > 250) {
-    throw new ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
+    throw new $rt.ConstraintError('range', 'veh.common.Speed', value, '[0..250]');
   }
-  if (offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0');
+  if ($rt.offFloatStep(value, true, [1.0, 0.5, 0.5, 0.0, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Speed', value, 'step 0.5 from 0');
   }
   return value as Speed;
 }
@@ -67,16 +67,16 @@ export type Temperature = number & { readonly __ridl: 'veh.common.Temperature' }
 /** Builds a `Temperature`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeTemperature(value: number): Temperature {
   if (!globalThis.Number.isFinite(value)) {
-    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+    throw new $rt.ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
   }
   if (value < -40) {
-    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+    throw new $rt.ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
   }
   if (value > 125) {
-    throw new ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
+    throw new $rt.ConstraintError('range', 'veh.common.Temperature', value, '[-40..125]');
   }
-  if (offFloatStep(value, true, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
-    throw new ConstraintError('step', 'veh.common.Temperature', value, 'step 0.1 from -40');
+  if ($rt.offFloatStep(value, true, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Temperature', value, 'step 0.1 from -40');
   }
   return value as Temperature;
 }

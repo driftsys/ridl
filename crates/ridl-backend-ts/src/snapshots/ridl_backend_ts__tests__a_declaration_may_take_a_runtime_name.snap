@@ -1,0 +1,141 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+import * as $rt from '@driftsys/ridl-runtime';
+
+/**
+ * Build a value with `makeConstraintError`.
+ */
+export type ConstraintError = number & { readonly __ridl: 'veh.common.ConstraintError' };
+
+/** Builds a `ConstraintError`. */
+export function makeConstraintError(value: number): ConstraintError {
+  return value as ConstraintError;
+}
+
+/**
+ * Build a value with `makecodePointLength`.
+ */
+export type codePointLength = number & { readonly __ridl: 'veh.common.codePointLength' };
+
+/** Builds a `codePointLength`. */
+export function makecodePointLength(value: number): codePointLength {
+  return value as codePointLength;
+}
+
+/**
+ * Build a value with `makeisWellFormedString`.
+ */
+export type isWellFormedString = number & { readonly __ridl: 'veh.common.isWellFormedString' };
+
+/** Builds a `isWellFormedString`. */
+export function makeisWellFormedString(value: number): isWellFormedString {
+  return value as isWellFormedString;
+}
+
+/**
+ * Build a value with `makeoffFloatPoints`.
+ */
+export type offFloatPoints = number & { readonly __ridl: 'veh.common.offFloatPoints' };
+
+/** Builds a `offFloatPoints`. */
+export function makeoffFloatPoints(value: number): offFloatPoints {
+  return value as offFloatPoints;
+}
+
+/**
+ * Build a value with `makeoffFloatStep`.
+ */
+export type offFloatStep = number & { readonly __ridl: 'veh.common.offFloatStep' };
+
+/** Builds a `offFloatStep`. */
+export function makeoffFloatStep(value: number): offFloatStep {
+  return value as offFloatStep;
+}
+
+/**
+ * Build a value with `makeWord`.
+ *
+ * @remarks
+ * Rules:
+ * - length 1 ..= 4
+ */
+export type Word = string & { readonly __ridl: 'veh.common.Word' };
+
+/** Builds a `Word`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeWord(value: string): Word {
+  if (!$rt.isWellFormedString(value)) {
+    throw new $rt.ConstraintError('utf8', 'veh.common.Word', value, 'well-formed text');
+  }
+  if ($rt.codePointLength(value) < 1) {
+    throw new $rt.ConstraintError('length', 'veh.common.Word', value, '[1..4]');
+  }
+  if ($rt.codePointLength(value) > 4) {
+    throw new $rt.ConstraintError('length', 'veh.common.Word', value, '[1..4]');
+  }
+  return value as Word;
+}
+
+/** Builds a `Word` without checking a value already known to satisfy its constraints. */
+export function makeWordUnchecked(value: string): Word {
+  return value as Word;
+}
+
+/**
+ * Build a value with `makeNever`.
+ *
+ * @remarks
+ * Rules:
+ * - step 0
+ *
+ * @range [.. step 0]
+ */
+export type Never = number & { readonly __ridl: 'veh.common.Never' };
+
+/** Builds a `Never`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeNever(value: number): Never {
+  if ($rt.offFloatPoints(value, false, [])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Never', value, 'step 0 from 0');
+  }
+  return value as Never;
+}
+
+/** Builds a `Never` without checking a value already known to satisfy its constraints. */
+export function makeNeverUnchecked(value: number): Never {
+  return value as Never;
+}
+
+/**
+ * Build a value with `makeLattice`.
+ *
+ * @remarks
+ * Rules:
+ * - range -1.0 ..= 2.0
+ * - step 0.1
+ *
+ * @range [-1.0..2.0 step 0.1]
+ */
+export type Lattice = number & { readonly __ridl: 'veh.common.Lattice' };
+
+/** Builds a `Lattice`. Throws a `ConstraintError` when a checked constraint is broken. */
+export function makeLattice(value: number): Lattice {
+  if (!globalThis.Number.isFinite(value)) {
+    throw new $rt.ConstraintError('range', 'veh.common.Lattice', value, '[-1.0..2.0]');
+  }
+  if (value < -1.0) {
+    throw new $rt.ConstraintError('range', 'veh.common.Lattice', value, '[-1.0..2.0]');
+  }
+  if (value > 2.0) {
+    throw new $rt.ConstraintError('range', 'veh.common.Lattice', value, '[-1.0..2.0]');
+  }
+  if ($rt.offFloatStep(value, false, [1.0, 0.1, 0.1, -5.551115123125783e-18, 0.0, 0.0])) {
+    throw new $rt.ConstraintError('step', 'veh.common.Lattice', value, 'step 0.1 from -1.0');
+  }
+  return value as Lattice;
+}
+
+/** Builds a `Lattice` without checking a value already known to satisfy its constraints. */
+export function makeLatticeUnchecked(value: number): Lattice {
+  return value as Lattice;
+}

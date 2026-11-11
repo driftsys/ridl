@@ -2,7 +2,7 @@
 source: crates/ridl-backend-ts/src/tests.rs
 expression: source
 ---
-import { ConstraintError } from '@driftsys/ridl-runtime';
+import * as $rt from '@driftsys/ridl-runtime';
 
 /**
  * Build a value with `makeValue`.
@@ -18,10 +18,10 @@ export type Value = bigint & { readonly __ridl: 'test.ctor.Value' };
 /** Builds a `Value`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeValue(value: bigint): Value {
   if (value < 0n) {
-    throw new ConstraintError('range', 'test.ctor.Value', value, '[0..9223372036854775807]');
+    throw new $rt.ConstraintError('range', 'test.ctor.Value', value, '[0..9223372036854775807]');
   }
   if (value > 9223372036854775807n) {
-    throw new ConstraintError('range', 'test.ctor.Value', value, '[0..9223372036854775807]');
+    throw new $rt.ConstraintError('range', 'test.ctor.Value', value, '[0..9223372036854775807]');
   }
   return value as Value;
 }

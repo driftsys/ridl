@@ -74,3 +74,18 @@ type Blob : bytes [2..4]
 
 /// A byte string that may be empty.
 type Raw : bytes [0..8]
+
+/// A name that the runtime package exports as a class.
+type ConstraintError : integer [0..100]
+
+/// A name that the runtime package exports as a function.
+type codePointLength : string [1..4]
+
+/// A name that the runtime package exports as a function.
+type isWellFormedString : string [0..8 match /^[a-z]*$/]
+
+/// A name that the runtime package exports as a function.
+type offFloatPoints : float [0.0..1.0 step 0.25]
+
+/// A name that the runtime package exports as a function.
+type offFloatStep : float [0.0..1.0 step 0.1]

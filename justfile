@@ -3160,8 +3160,10 @@ _cabin-web-generate name:
 # `typeId` call per signal at registration, and the mapping of each verify
 # result to a detection. `cabin-ws-demo` runs the same function against the real
 # wasm codec in examples/cabin/web/check_test.ts.
-# The codec-single fixture keeps flatc output under flatc_out/ so its barrel does
-# not overwrite the domain module of a single-component package.
+# The codec-single and codec-names fixtures keep flatc output under flatc_out/
+# so its barrel does not overwrite the domain module of a single-component
+# package. The codec-names fixture declares names that the runtime package
+# exports.
 [private]
 _codec-ts-check:
     #!/usr/bin/env bash
@@ -3258,6 +3260,18 @@ _codec-ts-check:
     deno lint --config "$single/deno.json" "$single/single.codec.ts"
     deno check --config "$single/deno.json" "$single/single.codec.ts" "$single/single.ts"
     deno test --config "$single/deno.json" "$single/single_test.ts"
+
+    # A package whose declarations take the names the runtime package exports.
+    names="$tmp/names"
+    mkdir -p "$names"
+    "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-names --emit typescript --emit flatbuffers --out-dir "$names"
+    mkdir -p "$names/flatc_out"
+    flatc --ts --gen-object-api -I "$names" -o "$names/flatc_out" "$names/names.fbs"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-names/deno.json > "$names/deno.json"
+    cp crates/ridl-backend-ts/tests/fixtures/codec-names/names_test.ts "$names/names_test.ts"
+    deno lint --config "$names/deno.json" "$names/names.codec.ts" "$names/names.ts" "$names/names_test.ts"
+    deno check --config "$names/deno.json" "$names/names.codec.ts" "$names/names.ts" "$names/names_test.ts"
+    deno test --config "$names/deno.json" "$names/names_test.ts"
 
     # Numeric constructors run without a loaded wasm codec.
     ctor="$tmp/ctor"

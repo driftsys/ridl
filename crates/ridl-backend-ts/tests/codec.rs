@@ -587,7 +587,7 @@ fn the_common_codec_module() {
             .contains("readings: object.readings.map((element) => t.makeSpeedUnchecked(element)),"),
         "{source}"
     );
-    assert!(source.contains("object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = checkWellFormed(key, \"veh.common.SensorBounds.meta.key\"); entry.value = checkWellFormed(value, \"veh.common.SensorBounds.meta.value\"); return entry; });"), "{source}");
+    assert!(source.contains("object.meta = value.meta.map(([key, value]) => { const entry = new fb.SensorBoundsMetaEntryT(); entry.key = $rt.checkWellFormed(key, \"veh.common.SensorBounds.meta.key\"); entry.value = $rt.checkWellFormed(value, \"veh.common.SensorBounds.meta.value\"); return entry; });"), "{source}");
     assert!(source.contains("meta: object.meta.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),"), "{source}");
     assert!(
         source.contains("object.override = value.override === undefined ? null : value.override;"),
@@ -672,7 +672,7 @@ fn a_foreign_scalar_payload_uses_the_foreign_codec_module() {
         source.contains("import * as ridl_std_codec from \"./ridl.std.codec.js\";"),
         "{source}"
     );
-    assert!(source.contains("const codecRidlStdName: PayloadCodec<ridl_std.Name> = { type: \"ridl.std.Name\", encode: ridl_std_codec.encodeName, decode: ridl_std_codec.decodeName };"), "{source}");
+    assert!(source.contains("const codecRidlStdName: $rt.PayloadCodec<ridl_std.Name> = { type: \"ridl.std.Name\", encode: ridl_std_codec.encodeName, decode: ridl_std_codec.decodeName };"), "{source}");
 }
 
 /// Adds a foreign declaration `veh.other.Thing` of `kind` to `model` and
@@ -818,13 +818,7 @@ fn an_internal_interaction_payload_is_refused() {
 /// names.
 #[test]
 fn an_interface_named_as_a_reserved_name_is_refused() {
-    for reserved in [
-        "RULES",
-        "PayloadCodec",
-        "fb",
-        "ridl_std_codec",
-        "checkWellFormed",
-    ] {
+    for reserved in ["RULES", "fb", "ridl_std_codec"] {
         let mut model = common_model();
         let interface = model
             .interfaces
@@ -970,7 +964,7 @@ fn the_extras_and_pick_conversions() {
         "    maybe: object.maybe.map((element) => t.makeSpeedUnchecked(element)),",
         "  object.tag = value.tag === undefined ? [] : Array.from(value.tag);",
         "    tag: Uint8Array.from(object.tag) as Uint8Array,",
-        "  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = checkWellFormed(key, \"veh.common.Extras.notes.key\"); entry.value = checkWellFormed(value, \"veh.common.Extras.notes.value\"); return entry; });",
+        "  object.notes = value.notes === undefined ? [] : value.notes.map(([key, value]) => { const entry = new fb.ExtrasNotesEntryT(); entry.key = $rt.checkWellFormed(key, \"veh.common.Extras.notes.key\"); entry.value = $rt.checkWellFormed(value, \"veh.common.Extras.notes.value\"); return entry; });",
         "    notes: object.notes.map((entry) => [ridl_std.makeLabelUnchecked(entry.key as string), ridl_std.makeNameUnchecked(entry.value as string)] as const),",
         "  object.pair = packPairsPair(value.pair, \"veh.common.Pairs.pair\");",
         "  object.list = value.list.map((element) => packPairsListElement(element, \"veh.common.Pairs.list[]\"));",
@@ -1012,7 +1006,7 @@ fn only_the_constants_an_entry_names_are_declared() {
         );
     }
     assert!(
-        source.contains("const codecSetting: PayloadCodec<t.Setting>"),
+        source.contains("const codecSetting: $rt.PayloadCodec<t.Setting>"),
         "{source}"
     );
 }
@@ -1086,11 +1080,11 @@ fn a_package_whose_only_payload_root_is_foreign_gets_a_module_without_a_barrel()
     let model = names_model();
     let source = module(&model, "veh.names");
     for line in [
-        "import type { PayloadCodec } from \"@driftsys/ridl-runtime\";",
+        "import type * as $rt from \"@driftsys/ridl-runtime\";",
         "import type * as ridl_std from \"./ridl.std.js\";",
         "import * as ridl_std_codec from \"./ridl.std.codec.js\";",
         "export const PAYLOAD_TYPES = [\n] as const;",
-        "const codecRidlStdName: PayloadCodec<ridl_std.Name> = { type: \"ridl.std.Name\", encode: ridl_std_codec.encodeName, decode: ridl_std_codec.decodeName };",
+        "const codecRidlStdName: $rt.PayloadCodec<ridl_std.Name> = { type: \"ridl.std.Name\", encode: ridl_std_codec.encodeName, decode: ridl_std_codec.decodeName };",
         "  rename: { iface: 1, ord: 1, kind: \"command\", request: codecRidlStdName },",
     ] {
         assert!(source.contains(line), "no `{line}` in:\n{source}");
@@ -1144,7 +1138,6 @@ fn rename_sensors(model: &mut v1::Model, name: &str) {
 fn every_reserved_name_is_refused() {
     for reserved in [
         "flatbuffers",
-        "PayloadCodec",
         "t",
         "fb",
         "CATALOG_NAME",
@@ -1163,17 +1156,11 @@ fn every_reserved_name_is_refused() {
     }
 }
 
-/// Every helper name of `signalChecks`, taken by an interface of a package
-/// with a signal, is refused.
+/// Both functions that the module writes for `signalChecks`, taken by an
+/// interface of a package with a signal, are refused.
 #[test]
 fn every_signal_helper_name_is_refused() {
-    for reserved in [
-        "signalChecks",
-        "signalCheck",
-        "Codec",
-        "SignalCheckEntry",
-        "CodecError",
-    ] {
+    for reserved in ["signalChecks", "signalCheck"] {
         let mut model = common_model();
         rename_sensors(&mut model, reserved);
         assert_eq!(
@@ -1182,6 +1169,45 @@ fn every_signal_helper_name_is_refused() {
                 "`{reserved}` in package `veh.common` collides with `runtime signal helper {reserved}`, which the codec module also declares"
             )
         );
+    }
+}
+
+/// A name that the runtime package exports is free for an interface: the
+/// module reaches the runtime only through the `$rt` namespace import, and `$`
+/// cannot occur in a RIDL name.
+#[test]
+fn an_interface_may_take_a_runtime_name() {
+    for name in [
+        "Codec",
+        "SignalCheckEntry",
+        "CodecError",
+        "PayloadCodec",
+        "checkWellFormed",
+    ] {
+        let mut model = common_model();
+        rename_sensors(&mut model, name);
+        let source = module(&model, "veh.common");
+        assert!(
+            source.contains("import * as $rt from \"@driftsys/ridl-runtime\";"),
+            "{source}"
+        );
+        assert!(
+            source.contains(&format!("export const {name} = {{")),
+            "{source}"
+        );
+        assert!(source.contains("$rt.Codec"), "{source}");
+        assert!(source.contains("$rt.CodecError"), "{source}");
+        assert!(source.contains("$rt.PayloadCodec<"), "{source}");
+        assert!(source.contains("$rt.checkWellFormed("), "{source}");
+        for bare in [
+            ": Codec",
+            concat!(": Payload", "Codec<"),
+            "new CodecError",
+            ": SignalCheckEntry",
+            concat!(" = check", "WellFormed("),
+        ] {
+            assert!(!source.contains(bare), "{bare}: {source}");
+        }
     }
 }
 
@@ -1241,7 +1267,7 @@ fn an_unused_constant_does_not_collide() {
         "{source}"
     );
     assert!(
-        source.contains("const codecRidlStdName: PayloadCodec<ridl_std.Name>"),
+        source.contains("const codecRidlStdName: $rt.PayloadCodec<ridl_std.Name>"),
         "{source}"
     );
     assert_eq!(source.matches("const codecRidlStdName").count(), 1);
@@ -1999,7 +2025,7 @@ fn stream_names_and_unsupported_shapes_are_explicit() {
     }
     assert!(
         source.contains(
-            "session2: t.Count, session1: t.Count, opts1: t.Count | undefined, opts: StreamOptions"
+            "session2: t.Count, session1: t.Count, opts1: t.Count | undefined, opts: $rt.StreamOptions"
         ),
         "{source}"
     );
@@ -2032,11 +2058,9 @@ fn stream_names_and_unsupported_shapes_are_explicit() {
         declared: "decodeStream".into(),
         ..Default::default()
     }));
-    let error = refusal(&model);
-    assert!(
-        error.contains("decodeStream") && error.contains("runtime"),
-        "{error}"
-    );
+    let source = module(&model, "streams.demo");
+    assert!(source.contains("$rt.decodeStream("), "{source}");
+    assert!(source.contains("export const decodeStream = {"), "{source}");
 }
 
 #[test]
@@ -2426,7 +2450,7 @@ fn generated_upload_encodes_only_plain_arguments() {
         .find(|line| line.starts_with("export function Feed_uploadNamed("))
         .unwrap();
     assert!(
-        signature.contains("seed: t.Count, tail: t.Count, opts: StreamOptions"),
+        signature.contains("seed: t.Count, tail: t.Count, opts: $rt.StreamOptions"),
         "{signature}"
     );
     let start = source.find("export function Feed_uploadNamed(").unwrap();
@@ -2449,12 +2473,8 @@ fn generated_upload_encodes_only_plain_arguments() {
 
 #[test]
 fn upload_helper_and_function_names_are_checked() {
-    for helper in [
-        "encodeUpload",
-        "byteUpload",
-        "textUpload",
-        "decodeStreamReply",
-    ] {
+    {
+        let helper = "decodeStreamReply";
         let mut model = streams_model();
         model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
             declared: helper.into(),
@@ -2504,7 +2524,7 @@ fn generated_duplex_functions() {
         if member == "duplexNamed" {
             assert!(body.contains("{ seed: seed, tail: tail }"), "{body}");
             assert!(body.contains("encodeUpload(raw.upload"), "{body}");
-            assert!(body.contains("decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes))"), "{body}");
+            assert!(body.contains("$rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes))"), "{body}");
         }
     }
     assert!(!source.contains("duplex streams are not generated yet"));
@@ -2530,7 +2550,7 @@ fn generated_duplex_functions() {
     });
     let source = module(&model, "streams.demo");
     assert!(
-        source.contains("StreamError, decodeStream, encodeUpload }"),
+        source.contains("import * as $rt from \"@driftsys/ridl-runtime\";"),
         "{source}"
     );
     let v1::interaction::Shape::Query(q) = stream_member_mut(&mut model, "duplexNamed")
@@ -2558,11 +2578,8 @@ fn generated_duplex_functions() {
         ..Default::default()
     }));
     model.interfaces.push(collision);
-    let error = refusal(&model);
-    assert!(
-        error.contains("decodeStream") && error.contains("runtime"),
-        "{error}"
-    );
+    // The runtime helper is reached through `$rt`, so the name is free.
+    module(&model, "streams.demo");
     model.interfaces.last_mut().unwrap().identity =
         Some(v1::interface::Identity::Declared(v1::Spellings {
             declared: "Feed_duplexNamed".into(),

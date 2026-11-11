@@ -2,8 +2,8 @@
 source: crates/ridl-backend-ts/tests/codec.rs
 expression: source
 ---
+import type * as $rt from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
-import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import type * as t from "./open.demo.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
@@ -273,7 +273,7 @@ function unpackControlSelectParams(object: fb.ControlSelectParamsT): ControlSele
   return { status: unpackDtcStatus(object.field1), mode: unpackMode(object.field2) };
 }
 
-const codecControlSelectParams: PayloadCodec<ControlSelectParams> = { type: "open.demo.ControlSelectParams", encode: encodeControlSelectParams, decode: decodeControlSelectParams };
+const codecControlSelectParams: $rt.PayloadCodec<ControlSelectParams> = { type: "open.demo.ControlSelectParams", encode: encodeControlSelectParams, decode: decodeControlSelectParams };
 
 /** The members of interface `Control`, interface number `1`. */
 export const Control = {
