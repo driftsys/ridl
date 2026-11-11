@@ -656,8 +656,8 @@ pub fn diff_refs_with_contexts(
 }
 
 /// Compares complete scopes while retaining independent missing-evidence issues.
-/// Each issue names its consumer declaration; callers decide what an issue
-/// means for the units that own or reach it (ADR-0031 decision 13).
+/// Each issue names its consumer path and the remote declaration; callers decide
+/// what an issue means for the units that own or reach it (ADR-0031 decision 13).
 /// Remote FlatBuffers and proto3 widths are reported once per consumer path
 /// and remote declaration reached by a surviving old consumer use, at the
 /// consumer path, with `<remote declaration>: <integer>` values. Only the
