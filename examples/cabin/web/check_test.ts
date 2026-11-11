@@ -594,8 +594,8 @@ Deno.test("the differential values reach both outcomes of every rule they cover"
 Deno.test("an absent field at an illegal default is malformed", () => {
   // `encodeSetpoint(0)` omits the field, because 0 is the schema default. The
   // codec reads an absent scalar as 0 and 0 is outside [10..30], so the
-  // payload is refused as malformed (the rule in docs/design/flatbuffers-codec.md),
-  // while `makeSetpoint(0)` names the range rule. `Tenth` allows 0, so its
+  // payload is refused as malformed (the rule in
+  // docs/design/flatbuffers-codec.md), while `makeSetpoint(0)` names the range rule. `Tenth` allows 0, so its
   // absent field is a valid value.
   const setpoint = codec.typeId("veh.cabin.Setpoint");
   assert.deepEqual(codec.verify(setpoint, encodeSetpoint(0 as Setpoint)), {
