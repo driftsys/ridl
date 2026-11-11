@@ -2439,8 +2439,11 @@ fn an_open_enum_has_an_unknown_variant_and_is_non_exhaustive() {
         !source.contains("TryFrom<::core::primitive::i64> for DtcStatus"),
         "{source}"
     );
-    // The codec converts through `From`, with no value check in `verify`.
-    assert!(!source.contains("try_from"), "{source}");
+    // Decode converts through `From`; encode refuses integers outside int32.
+    assert!(
+        source.contains("::core::primitive::i32::try_from"),
+        "{source}"
+    );
     insta::assert_snapshot!(source);
 }
 

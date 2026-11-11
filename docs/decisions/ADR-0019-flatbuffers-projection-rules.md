@@ -115,12 +115,12 @@ what it costs if wrong:
     names, which is a decision about the face, not about this mapping — when it
     comes, the generated name it chooses may refuse a package that declares the
     same name.
-15. The FlatBuffers mapping is frozen as decisions 1 to 9 state, including
-    `long` as the underlying type of every enum and the refusal of a vector
-    whose element is itself a vector (the ros2 corpus's `UInt64MultiArray.data`)
-    — the proto3 codec needs no FlatBuffers change, and changing an emitted line
-    now breaks the shipped FlatBuffers codec's data — an enum field costs 8
-    bytes whatever its range.
+15. The FlatBuffers mapping is frozen as decisions 1 to 9 state, including fixed
+    `int` as the underlying type of every enum and the refusal of a vector whose
+    element is itself a vector (the ros2 corpus's `UInt64MultiArray.data`) — the
+    proto3 codec needs no FlatBuffers change, and changing an emitted line now
+    breaks the shipped FlatBuffers codec's data — an enum field costs 4 bytes
+    whatever its range (amended 2026-11-11).
 16. The proto3 rules are recorded in ADR-0017, the projection record decision 8
     of this record names for them, and the review in this record; ADR-0016 is
     not amended, because no change touches the name transform — a reader follows
@@ -156,9 +156,9 @@ rulings above did not change: the `wire` dump is byte-identical.
   codec encodes it.
 
 **Amended 2026-11-03 — decision 10, from driftsys/ridl#1120.** An append that
-changes the FlatBuffers integer of an enum or an enum set is breaking under
-FlatBuffers. The projection facts name that integer, and `ridl diff` reports the
-change as `flatbuffers_width_change`. Decisions 1 to 9 are unchanged.
+changes the FlatBuffers integer of an enum set is breaking under FlatBuffers.
+The projection facts name that integer, and `ridl diff` reports the change as
+`flatbuffers_width_change`. Decisions 1 to 9 are unchanged.
 
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
@@ -194,6 +194,13 @@ below.
 import pin, from driftsys/ridl#1211.** A remote declaration reached by a
 surviving old consumer use is compared at both pins; a changed FlatBuffers
 integer is reported at the consumer path.
+
+**Amended 2026-11-11 — fixed int32 enums, owner decision B on
+driftsys/ridl#1020.** Every enum uses `int`, not a value-derived width. TYPL-225
+limits declared values to int32 even though the IR stores them as int64.
+Decision 8, the mapping summary and decision 10 are amended in place. Enum sets
+retain their current projection. This changes the shipped wire mapping; the
+stability chapter records the required minor release and migration.
 
 ## Context
 
@@ -399,6 +406,12 @@ refused.
    before. `<Name>Box` joins the generated names decision 5 checks against
    declared ones.
 
+   _Amended 2026-11-11._ Every enum uses fixed `int` (int32), including this box
+   and every field or vector element. The IR stores int64 values, but TYPL-225
+   limits declared values to int32. A value-derived width is rejected because
+   appending a value could then break the wire layout. Enum sets keep their
+   existing unsigned width.
+
    _On the numbering._ The disposition on driftsys/ridl#470 said the box joins
    the names "decision 7 checks against declared ones". Decision 7 checks
    nothing — it is the rule that a name reaching a `planus` reserved word is
@@ -484,16 +497,16 @@ refused.
    present 0 lost by every foreign round trip, with nothing a consumer could do
    about it.
 
-10. **An append that changes the FlatBuffers integer of an enum or an enum set
-    is breaking under FlatBuffers** — added 2026-11-03, from driftsys/ridl#1120.
-    An enum set is stored as the unsigned scalar of its declared width, the
-    narrowest that holds its highest bit: bits 0 to 7 use `u8` (`ubyte`), bits 8
-    to 15 use `u16` (`ushort`), bits 16 to 31 use `u32` (`uint`), and bits 32 to
-    63 use `u64` (`ulong`). Appending a flag at bit 8, 16 or 32 above a highest
-    bit of 7, 15 or 31 changes the scalar. A scalar field is read at its
-    declared width, and a vector element has that width as its stride: a reader
-    of the new schema rejects or misreads an old buffer, and a reader of the old
-    schema drops the new flag.
+10. **An append that changes the FlatBuffers integer of an enum set is breaking
+    under FlatBuffers** — added 2026-11-03, from driftsys/ridl#1120. An enum set
+    is stored as the unsigned scalar of its declared width, the narrowest that
+    holds its highest bit: bits 0 to 7 use `u8` (`ubyte`), bits 8 to 15 use
+    `u16` (`ushort`), bits 16 to 31 use `u32` (`uint`), and bits 32 to 63 use
+    `u64` (`ulong`). Appending a flag at bit 8, 16 or 32 above a highest bit of
+    7, 15 or 31 changes the scalar. A scalar field is read at its declared
+    width, and a vector element has that width as its stride: a reader of the
+    new schema rejects or misreads an old buffer, and a reader of the old schema
+    drops the new flag.
 
     `ridl diff` reports `flatbuffers_width_change` once per declaration, at
     `<package>/<decl>`, with the old and the new integer, under the heading
@@ -505,12 +518,11 @@ refused.
     `ridl build` and `ridl baseline` judge it with the root manifest's encodings
     when maintaining catalog history.
 
-    The integer is read through `ridl_ir::projection::flatbuffers::enum_integer`
-    for an enum and `enum_set_integer` for an enum set. Every enum is `long`
-    today, whatever its values, so an enum value appended past 255 draws no
-    FlatBuffers width line. Reading the projection fact means a narrower enum
-    (driftsys/ridl#1020) is covered by the same rule when that fact changes.
-    Unions are not read: a FlatBuffers union's type field is always `ubyte`.
+    The integer is read through
+    `ridl_ir::projection::flatbuffers::enum_set_integer` for an enum set. Every
+    enum is fixed `int`, whatever its values (amended 2026-11-11), so appending
+    an enum value never changes its FlatBuffers width. Unions are not read: a
+    FlatBuffers union's type field is always `ubyte`.
 
     The per-side context comparison also reads a remote declaration reached by a
     surviving old consumer use when an import pin changes, at every position

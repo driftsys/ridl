@@ -2206,18 +2206,16 @@ pub(crate) fn podbuf_width_changes(
 }
 
 /// The [`Category::FlatbuffersWidthChange`] changes of one walked and
-/// classified package pair: one per enum or enum set with a compatible member
-/// append whose FlatBuffers integer differs. Enums are read through the
-/// projection fact because it describes what the backend emits, so a narrower
-/// enum (driftsys/ridl#1020) needs no change to this rule. Unions are skipped:
-/// their FlatBuffers type field is always `ubyte`. The classifier settles the
-/// verdict from the encodings.
+/// classified package pair: one per enum set with a compatible member
+/// append whose FlatBuffers integer differs. Enums use fixed int32 and unions
+/// use a fixed `ubyte` type field, so neither can change width on append.
+/// The classifier settles the verdict from the encodings.
 pub(crate) fn flatbuffers_width_changes(
     pair: &[Change],
     old: &v2::Package,
     new: &v2::Package,
 ) -> Vec<Change> {
-    use ridl_ir::projection::flatbuffers::{enum_integer, enum_set_integer};
+    use ridl_ir::projection::flatbuffers::enum_set_integer;
 
     let mut seen: BTreeSet<&str> = BTreeSet::new();
     let mut changes = Vec::new();
@@ -2232,9 +2230,6 @@ pub(crate) fn flatbuffers_width_changes(
             continue;
         };
         let widths = match (&old_decl.kind, &new_decl.kind) {
-            (Some(v2::decl::Kind::EnumDef(old_def)), Some(v2::decl::Kind::EnumDef(new_def))) => {
-                (enum_integer(old_def), enum_integer(new_def))
-            }
             // An enum set's integer is its declared width, unsigned, as the
             // layout law reads it.
             (

@@ -342,17 +342,22 @@ impl Scalar {
     }
 
     /// The `encode` statement that refuses the domain value `__s` of an open
-    /// enum set whose integer does not fit the field's primitive, with the
-    /// contract error for an out-of-range value, naming the set. The
-    /// primitive is the width the highest declared bit infers, and
+    /// enum or enum set whose integer does not fit the field's primitive, with the
+    /// contract error for an out-of-range value, naming the type. The
+    /// primitive is fixed int32 for enums and the width inferred from the
+    /// highest declared bit for enum sets.
     /// [`Scalar::raw`] narrows to it with `as`, which would drop the bits
     /// above it in silence; an open enum set keeps every bit, so a value
     /// outside the width can reach the encoder through `From<i64>` or from an
     /// encoding of a wider scalar. Empty for every other scalar, and for a
     /// 64-bit primitive, which holds every `i64`.
     fn encode_check(&self) -> TokenStream {
-        let Repr::EnumSet { name, open: true } = &self.repr else {
-            return quote! {};
+        let name = match &self.repr {
+            Repr::Enum {
+                name, open: true, ..
+            }
+            | Repr::EnumSet { name, open: true } => name,
+            _ => return quote! {},
         };
         if matches!(self.prim, Prim::I64 | Prim::U64) {
             return quote! {};
@@ -1335,8 +1340,8 @@ impl<'a> Codec<'a> {
                 Ok(Wire::Scalar(Scalar {
                     constraint: None,
                     // Every typl enum is emitted at one underlying width,
-                    // `long`, which is what the projection charges it.
-                    prim: Prim::I64,
+                    // `int`, which is what the projection charges it.
+                    prim: Prim::I32,
                     // An open enum admits every integer, 0 included.
                     zero_legal: zero.is_some() || def.open,
                     repr: Repr::Enum {

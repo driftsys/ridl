@@ -13,7 +13,9 @@ import * as t from "./strict.demo.ts";
 const variantError = (error: unknown) =>
   error instanceof codec.RuleError && error.rule === "variant";
 
-const pack = (object: { pack(builder: flatbuffers.Builder): flatbuffers.Offset }) => {
+const pack = (
+  object: { pack(builder: flatbuffers.Builder): flatbuffers.Offset },
+) => {
   const builder = new flatbuffers.Builder();
   builder.finish(object.pack(builder));
   return builder.asUint8Array();
@@ -22,8 +24,8 @@ const pack = (object: { pack(builder: flatbuffers.Builder): flatbuffers.Offset }
 /** A report the buffer holds, with the fields of the test replaced. */
 const reportBytes = (overrides: Partial<fb.ReportT> = {}) => {
   const object = new fb.ReportT();
-  object.status = 1n;
-  object.mode = 2n;
+  object.status = 1;
+  object.mode = 2;
   object.flags = 1;
   object.wide = 1n;
   Object.assign(object, overrides);
@@ -44,55 +46,70 @@ const report = (overrides: Partial<t.Report> = {}): t.Report => ({
 Deno.test("a declared value decodes to the member and encodes back", () => {
   const bytes = codec.encodeDtcStatus(t.DtcStatus.ACTIVE);
   assert.equal(codec.decodeDtcStatus(bytes), t.DtcStatus.ACTIVE);
-  assert.equal(codec.decodeDtcStatus(codec.encodeDtcStatus(t.DtcStatus.INACTIVE)), 0);
+  assert.equal(
+    codec.decodeDtcStatus(codec.encodeDtcStatus(t.DtcStatus.INACTIVE)),
+    0,
+  );
 });
 
 Deno.test("an undeclared enum value is refused on decode with the variant rule", () => {
-  for (const raw of [2n, -1n, 7n, 2n ** 53n, 2n ** 63n - 1n, -(2n ** 63n)]) {
-    assert.throws(() => codec.decodeDtcStatus(pack(new fb.DtcStatusBoxT(raw))), variantError);
+  for (const raw of [2, -1, 7, 2147483647, -2147483648]) {
+    assert.throws(
+      () => codec.decodeDtcStatus(pack(new fb.DtcStatusBoxT(raw))),
+      variantError,
+    );
   }
 });
 
 Deno.test("a struct field of a strict enum refuses an undeclared value", () => {
   assert.deepEqual(codec.decodeReport(reportBytes()), report());
   assert.throws(
-    () => codec.decodeReport(reportBytes({ status: 5n })),
+    () => codec.decodeReport(reportBytes({ status: 5 as fb.DtcStatus })),
     variantError,
   );
   assert.throws(
-    () => codec.decodeReport(reportBytes({ mode: 0n })),
+    () => codec.decodeReport(reportBytes({ mode: 0 as fb.Mode })),
     variantError,
   );
 });
 
 Deno.test("an element of a collection of a strict enum refuses an undeclared value", () => {
-  const ok = reportBytes({ list: [0n, 1n] });
+  const ok = reportBytes({ list: [0, 1] });
   assert.deepEqual(codec.decodeReport(ok).list, [0, 1]);
   assert.throws(
-    () => codec.decodeReport(reportBytes({ list: [1n, 9n] })),
+    () => codec.decodeReport(reportBytes({ list: [1, 9 as fb.DtcStatus] })),
     variantError,
   );
 });
 
 Deno.test("an optional strict enum refuses an undeclared value and reads absent as undefined", () => {
   assert.equal(codec.decodeReport(reportBytes()).maybe, undefined);
-  assert.equal(codec.decodeReport(reportBytes({ maybe: 1n })).maybe, 1);
+  assert.equal(codec.decodeReport(reportBytes({ maybe: 1 })).maybe, 1);
   assert.throws(
-    () => codec.decodeReport(reportBytes({ maybe: 4n })),
+    () => codec.decodeReport(reportBytes({ maybe: 4 as fb.DtcStatus })),
     variantError,
   );
 });
 
 Deno.test("a tuple position of a strict enum refuses an undeclared value", () => {
-  const declared: codec.ControlSelectParams = { status: t.DtcStatus.ACTIVE, mode: t.Mode.HIGH };
+  const declared: codec.ControlSelectParams = {
+    status: t.DtcStatus.ACTIVE,
+    mode: t.Mode.HIGH,
+  };
   assert.deepEqual(
     codec.decodeControlSelectParams(codec.encodeControlSelectParams(declared)),
     declared,
   );
-  const tuple = new fb.ControlSelectParamsT(1n, 3n);
-  assert.throws(() => codec.decodeControlSelectParams(pack(tuple)), variantError);
+  const tuple = new fb.ControlSelectParamsT(1, 3 as fb.Mode);
   assert.throws(
-    () => codec.decodeControlSelectParams(pack(new fb.ControlSelectParamsT(8n, 1n))),
+    () => codec.decodeControlSelectParams(pack(tuple)),
+    variantError,
+  );
+  assert.throws(
+    () =>
+      codec.decodeControlSelectParams(
+        pack(new fb.ControlSelectParamsT(8 as fb.DtcStatus, 1)),
+      ),
     variantError,
   );
 });
@@ -105,7 +122,12 @@ Deno.test("a union arm of a strict enum or a strict enum set refuses an undeclar
   assert.throws(
     () =>
       codec.decodePick(
-        pack(new fb.PickT(fb.PickUnion.status, new fb.PickStatusBoxT(6n))),
+        pack(
+          new fb.PickT(
+            fb.PickUnion.status,
+            new fb.PickStatusBoxT(6 as fb.DtcStatus),
+          ),
+        ),
       ),
     variantError,
   );
@@ -133,7 +155,10 @@ Deno.test("a strict enum set refuses a bit it does not declare", () => {
 
 Deno.test("a wide strict enum set refuses a bit it does not declare", () => {
   const declared = ((1n << 40n) | 1n) as t.WideFlags;
-  assert.equal(codec.decodeWideFlags(codec.encodeWideFlags(declared)), declared);
+  assert.equal(
+    codec.decodeWideFlags(codec.encodeWideFlags(declared)),
+    declared,
+  );
   for (const undeclared of [1n << 41n, 1n << 63n, (1n << 40n) | 2n, -1n]) {
     assert.throws(
       () => codec.decodeWideFlags(pack(new fb.WideFlagsBoxT(undeclared))),
@@ -146,9 +171,18 @@ Deno.test("a struct field and a collection of strict enum sets refuse an undecla
   const ok = reportBytes({ sets: [0b1, 0b1011], maybeFlags: 0b10 });
   assert.deepEqual(codec.decodeReport(ok).sets, [1, 11]);
   assert.equal(codec.decodeReport(ok).maybeFlags, 2);
-  assert.throws(() => codec.decodeReport(reportBytes({ flags: 0b100 })), variantError);
-  assert.throws(() => codec.decodeReport(reportBytes({ wide: 1n << 41n })), variantError);
-  assert.throws(() => codec.decodeReport(reportBytes({ sets: [1, 0b100] })), variantError);
+  assert.throws(
+    () => codec.decodeReport(reportBytes({ flags: 0b100 })),
+    variantError,
+  );
+  assert.throws(
+    () => codec.decodeReport(reportBytes({ wide: 1n << 41n })),
+    variantError,
+  );
+  assert.throws(
+    () => codec.decodeReport(reportBytes({ sets: [1, 0b100] })),
+    variantError,
+  );
   assert.throws(
     () => codec.decodeReport(reportBytes({ maybeFlags: 0b10000 })),
     variantError,
@@ -159,22 +193,23 @@ Deno.test("an absent strict enum with no zero member is still reported as absent
   const bytes = pack(new fb.ReportT());
   assert.throws(
     () => codec.decodeReport(bytes),
-    (error: unknown) => error instanceof RangeError && !(error instanceof codec.RuleError),
+    (error: unknown) =>
+      error instanceof RangeError && !(error instanceof codec.RuleError),
   );
 });
 
 Deno.test("a map value of a strict enum refuses an undeclared value", () => {
   // A map key is a string or a primitive (TYPL-209), so only a value is an enum.
-  const entry = (key: string, value: bigint) => {
+  const entry = (key: string, value: number) => {
     const object = new fb.ReportTableEntryT();
     object.key = key;
     object.value = value;
     return object;
   };
-  const ok = reportBytes({ table: [entry("a", 1n), entry("b", 2n)] });
+  const ok = reportBytes({ table: [entry("a", 1), entry("b", 2)] });
   assert.deepEqual(codec.decodeReport(ok).table, [["a", 1], ["b", 2]]);
   assert.throws(
-    () => codec.decodeReport(reportBytes({ table: [entry("a", 5n)] })),
+    () => codec.decodeReport(reportBytes({ table: [entry("a", 5)] })),
     variantError,
   );
 });
@@ -186,18 +221,24 @@ Deno.test("an absent strict enum value with no zero member is reported as absent
   const box = new fb.ModeBoxT();
   assert.equal(box.value, null);
   assert.throws(() => codec.decodeMode(pack(box)), absentError);
-  assert.equal(codec.decodeMode(pack(new fb.ModeBoxT(1n))), t.Mode.LOW);
-  assert.throws(() => codec.decodeMode(pack(new fb.ModeBoxT(0n))), variantError);
+  assert.equal(codec.decodeMode(pack(new fb.ModeBoxT(1))), t.Mode.LOW);
+  assert.throws(
+    () => codec.decodeMode(pack(new fb.ModeBoxT(0 as fb.Mode))),
+    variantError,
+  );
   // A union arm of the same enum is reported the same way, and 0 is refused.
-  const arm = (value: bigint | null) =>
+  const arm = (value: number | null) =>
     pack(new fb.PickT(fb.PickUnion.mode, new fb.PickModeBoxT(value)));
-  assert.equal(codec.decodePick(arm(2n)).value, t.Mode.HIGH);
+  assert.equal(codec.decodePick(arm(2)).value, t.Mode.HIGH);
   assert.throws(() => codec.decodePick(arm(null)), absentError);
-  assert.throws(() => codec.decodePick(arm(0n)), variantError);
-  assert.throws(() => codec.decodePick(arm(3n)), variantError);
+  assert.throws(() => codec.decodePick(arm(0)), variantError);
+  assert.throws(() => codec.decodePick(arm(3)), variantError);
   // A map value of the same enum is reported the same way.
   const entry = new fb.ReportTableEntryT();
   entry.key = "a";
   assert.equal(entry.value, null);
-  assert.throws(() => codec.decodeReport(reportBytes({ table: [entry] })), absentError);
+  assert.throws(
+    () => codec.decodeReport(reportBytes({ table: [entry] })),
+    absentError,
+  );
 });

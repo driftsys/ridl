@@ -709,7 +709,7 @@ impl Filler<'_, '_> {
         match &decl.kind {
             Some(v2::decl::Kind::TypeDef(td)) => (Some(scalar_def_wire(td)), false),
             // A FlatBuffers enum field names the enum, and every typl enum is
-            // emitted at one underlying width, `long`. `foreign` and `index`
+            // emitted at one underlying width, `int`. `foreign` and `index`
             // follow the one rule `Lowering::type_ref` states: the declaring
             // package against the package being lowered.
             Some(v2::decl::Kind::EnumDef(def)) => (
@@ -723,7 +723,7 @@ impl Filler<'_, '_> {
                             index: self.declaration_index(declaring, &decl.name, local),
                             kind: v1::DeclKind::Enum as i32,
                         }),
-                        width_bytes: 8,
+                        width_bytes: 4,
                     })),
                 }),
                 fb::enum_field_needs_null_default(def),

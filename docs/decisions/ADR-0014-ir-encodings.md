@@ -729,10 +729,10 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     encoding. A retired (`reserved`) value outside int32 remains legal in
     source; the proto schema and proto3 codec backends refuse it. Proto3 carries
     an enum as `int32`. Podbuf derives the narrowest integer that holds the
-    declared values, now at most 32 bits. The FlatBuffers backend currently
-    emits `long`; changing that projection requires a separate follow-up
-    decision. `enumset` is unchanged: its width comes from its highest flag, up
-    to 64 bits. Decisions 1 to 15 are unchanged.
+    declared values, now at most 32 bits. The FlatBuffers backend emits fixed
+    `int` (int32), as amended in ADR-0019 on 2026-11-11. `enumset` is unchanged:
+    its width comes from its highest flag, up to 64 bits. Decisions 1 to 15 are
+    unchanged.
 
 ## Alternatives considered
 
