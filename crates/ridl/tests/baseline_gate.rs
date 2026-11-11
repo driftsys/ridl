@@ -2455,6 +2455,211 @@ fn baseline_files(root: &Path) -> Vec<(std::ffi::OsString, Vec<u8>)> {
     files
 }
 
+/// A current baseline keeps its context and all published bytes when a unit
+/// removal is refused, and directs an intentional removal to history reset.
+#[test]
+fn a_current_baseline_refuses_a_gone_unit_and_names_history_reset() {
+    let dir = TempDir::new("gate-current-unit-gone");
+    let root = two_unit_workspace(&dir);
+    assert!(root.join(".ridl/baseline/context.json").is_file());
+    let before = baseline_files(&root);
+
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the lost unit is refused:\n{stderr}");
+    assert!(stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    assert_eq!(before, baseline_files(&root), "refusal preserves all bytes");
+    assert!(
+        stderr.contains("ridl baseline CURRENT_SOURCE --reset-history --out BASELINE")
+            && stderr.contains("claims no earlier compatibility for the whole baseline")
+            && !stderr.contains("delete the snapshots"),
+        "the message names history reset rather than snapshot deletion:\n{stderr}"
+    );
+}
+
+/// Resetting a current baseline after intentional unit removal must publish
+/// the remaining unit and preserve the complete prior baseline.
+#[test]
+fn resetting_a_current_baseline_publishes_after_a_unit_is_removed() {
+    let dir = TempDir::new("gate-current-unit-reset");
+    let root = two_unit_workspace(&dir);
+    let baseline = root.join(".ridl/baseline");
+    assert!(baseline.join("context.json").is_file());
+    let before = baseline_files(&root);
+
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the lost unit is first refused:\n{stderr}");
+    assert!(stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    assert_eq!(before, baseline_files(&root), "refusal preserves all bytes");
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+        "--out".as_ref(),
+        baseline.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "reset publishes the remaining unit:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    let notes: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.starts_with("note:") && line.contains("drops unit"))
+        .collect();
+    assert_eq!(notes.len(), 1, "one note for the dropped unit:\n{stderr}");
+    for text in [
+        "unit `veh.cluster`",
+        "`VehicleStatus` (number 2)",
+        "`Extra` (number 1)",
+        "`sub.Speed` (number 3)",
+        "prior baseline is preserved",
+        "no earlier compatibility is claimed for the whole baseline",
+    ] {
+        assert!(notes[0].contains(text), "the note names {text}:\n{stderr}");
+    }
+
+    let backup = root.join(".ridl/baseline.previous.1");
+    let mut preserved: Vec<_> = std::fs::read_dir(&backup)
+        .expect("reset preserves the prior baseline")
+        .map(|entry| {
+            let entry = entry.expect("a preserved directory entry");
+            (
+                entry.file_name(),
+                std::fs::read(entry.path()).expect("preserved bytes"),
+            )
+        })
+        .collect();
+    preserved.sort();
+    assert_eq!(
+        before, preserved,
+        "reset preserves every prior file and byte"
+    );
+    assert!(baseline.join("context.json").is_file());
+    assert!(baseline.join("veh.hmi.ir.json").is_file());
+    assert!(
+        baseline_files(&root).iter().all(|(name, _)| {
+            let name = name.to_string_lossy();
+            !name.starts_with("veh.cluster") || !name.ends_with(".ir.json")
+        }),
+        "the new baseline holds no snapshot from the removed unit"
+    );
+}
+
+/// Reset must not bypass RIDL-412 for a number lost in a unit that remains.
+#[test]
+fn reset_still_refuses_a_number_lost_in_a_remaining_unit() {
+    let dir = TempDir::new("gate-reset-dropped-number");
+    let root = package_workspace(&dir, THREE_AND_LIGHTS);
+    publish(&root);
+    let before = baseline_files(&root);
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}{LOCK_WITHOUT_LIGHTS}"),
+    );
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "allocate the replacement number: {stderr}");
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(code, 1, "reset refuses the lost number:\n{stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("`Lights` holds interface number 1"),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("note:"),
+        "a refused reset prints no note: {stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves every byte"
+    );
+}
+
+/// Reset must not bypass RIDL-412 for a package lost from a remaining unit.
+#[test]
+fn reset_still_refuses_a_package_removed_from_a_remaining_unit() {
+    let dir = TempDir::new("gate-reset-package-gone");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi.ridl", SESSION);
+    dir.write("cluster/speed.ridl", "package veh.hmi.cluster\nimport veh.hmi.Level\ninterface Speed { signal v : Level @[100ms..1s] }\n");
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "allocate the fixture's numbers: {stderr}");
+    publish(&root);
+    let before = baseline_files(&root);
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the package");
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\nSession 1\n"),
+    );
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(code, 1, "reset refuses the lost package:\n{stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("`cluster.Speed` holds interface number 2"),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("note:"),
+        "a refused reset prints no note: {stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves every byte"
+    );
+}
+
+/// A gone unit must not bypass RIDL-411 or produce a note if reset is refused.
+#[test]
+fn reset_with_a_gone_unit_still_refuses_a_provisional_number_without_a_note() {
+    let dir = TempDir::new("gate-reset-gone-and-provisional");
+    let root = two_unit_workspace(&dir);
+    let before = baseline_files(&root);
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+    dir.write(
+        "hmi/hmi.ridl",
+        &format!("{SESSION}\ninterface Extra {{ signal e : Level @[100ms..1s] }}\n"),
+    );
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(code, 1, "reset refuses the provisional number:\n{stderr}");
+    assert!(stderr.contains("RIDL-411"), "{stderr}");
+    assert!(
+        !stderr.contains("RIDL-412"),
+        "the gone unit is skipped: {stderr}"
+    );
+    assert!(
+        !stderr.contains("note:"),
+        "a refused reset prints no note: {stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves every byte"
+    );
+}
+
 /// Removing a whole unit from the workspace, with its lock, loses every
 /// number the baseline holds for it. One refusal lists the lost keys and
 /// numbers and names the deliberate override.
@@ -2483,7 +2688,7 @@ fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
     );
     assert!(
         stderr.contains(&format!(
-            "delete the snapshots of unit `veh.cluster` from `{}`",
+            "BASELINE set to `{}`",
             root.join(".ridl/baseline").display()
         )),
         "the message names the deliberate override:\n{stderr}",
@@ -2496,7 +2701,7 @@ fn a_whole_unit_gone_from_the_fresh_set_is_refused() {
         "`VehicleStatus` (number 2)",
         "`Extra` (number 1)",
         "`sub.Speed` (number 3)",
-        "delete the snapshots of unit",
+        "--reset-history",
     ] {
         assert_eq!(
             stderr.matches(key).count(),
@@ -2573,6 +2778,67 @@ fn two_units_removed_together_have_separate_refusals() {
     );
 }
 
+/// Reset reports every removed unit separately, without mixing their keys.
+#[test]
+fn resetting_after_two_units_are_removed_prints_separate_notes() {
+    let dir = TempDir::new("gate-two-units-reset");
+    let root = two_unit_workspace(&dir);
+    dir.write(
+        "spare/ridl.toml",
+        "[package]\nname = \"veh.spare\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "spare/spare.typl",
+        "package veh.spare\ntype Count: integer [0..9]\n",
+    );
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\", \"spare\"]\n",
+    );
+    publish(&root);
+
+    for unit in ["cluster", "hmi"] {
+        std::fs::remove_dir_all(root.join(unit)).expect("remove the unit");
+    }
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"spare\"]\n");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+
+    assert_eq!(code, 0, "reset publishes the remaining unit:\n{stderr}");
+    let notes: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.starts_with("note:") && line.contains("drops unit"))
+        .collect();
+    assert_eq!(notes.len(), 2, "one note per dropped unit:\n{stderr}");
+    let cluster = notes
+        .iter()
+        .find(|line| line.contains("unit `veh.cluster`"))
+        .expect("a note for veh.cluster");
+    assert!(
+        cluster.contains("`Extra` (number 1)")
+            && cluster.contains("`VehicleStatus` (number 2)")
+            && cluster.contains("`sub.Speed` (number 3)")
+            && !cluster.contains("`Session`")
+            && !cluster.contains("`veh.hmi`"),
+        "the cluster note contains only its own keys and numbers:\n{cluster}"
+    );
+    let hmi = notes
+        .iter()
+        .find(|line| line.contains("unit `veh.hmi`"))
+        .expect("a note for veh.hmi");
+    assert!(
+        hmi.contains("`Session` (number 1)")
+            && !hmi.contains("`Extra`")
+            && !hmi.contains("`VehicleStatus`")
+            && !hmi.contains("`sub.Speed`")
+            && !hmi.contains("`veh.cluster`"),
+        "the hmi note contains only its own keys and numbers:\n{hmi}"
+    );
+}
+
 #[test]
 fn a_gone_unit_message_names_the_custom_baseline_directory() {
     let dir = TempDir::new("gate-unit-custom-out");
@@ -2595,8 +2861,8 @@ fn a_gone_unit_message_names_the_custom_baseline_directory() {
     ]);
     assert_eq!(code, 1, "the gone unit is refused: {stderr}");
     assert!(
-        stderr.contains(&format!("from `{}`", out.display()))
-            && !stderr.contains("from `.ridl/baseline/`"),
+        stderr.contains("--reset-history --out BASELINE")
+            && stderr.contains(&format!("BASELINE set to `{}`", out.display())),
         "the override names the publication directory: {stderr}",
     );
 }
@@ -2765,7 +3031,7 @@ fn a_renamed_unit_is_refused_as_a_unit_gone() {
             && stderr.contains("`VehicleStatus` (number 2)")
             && stderr.contains("`Extra` (number 1)")
             && stderr.contains("`sub.Speed` (number 3)")
-            && stderr.contains("delete the snapshots of unit `veh.cluster`")
+            && stderr.contains("--reset-history")
             && !stderr.contains("Restore the line"),
         "stderr:\n{stderr}",
     );
@@ -2776,8 +3042,8 @@ fn a_renamed_unit_is_refused_as_a_unit_gone() {
     );
 }
 
-/// The deliberate override: with the unit's snapshots deleted, the
-/// publication has nothing to hold the unit's numbers to.
+/// Deleting snapshots works only on a baseline without `context.json`.
+/// It is not the documented procedure for intentional unit removal.
 #[test]
 fn deleting_the_snapshots_of_a_gone_unit_lets_the_publication_through() {
     let dir = TempDir::new("gate-unit-gone-override");
@@ -2904,7 +3170,8 @@ fn a_legacy_interface_removed_with_its_number_retired_in_the_unit_is_not_refused
 /// A legacy subpackage snapshot (no `unit`) whose package is deleted whole is
 /// compared in the unit named after the package, which the fresh set does not
 /// have, so the gate refuses even though the real unit's lock retires the
-/// number. The override is to delete the unit's snapshots.
+/// number. History reset is the documented procedure; deleting snapshots works
+/// only on a baseline without `context.json`.
 #[test]
 fn a_legacy_package_deleted_whole_is_refused_as_a_unit_gone() {
     let dir = TempDir::new("gate-legacy-gone");
@@ -2924,12 +3191,64 @@ fn a_legacy_package_deleted_whole_is_refused_as_a_unit_gone() {
     assert_eq!(code, 1, "the legacy snapshot is refused:\n{stderr}");
     assert!(
         stderr.contains("RIDL-412")
-            && stderr.contains("delete the snapshots of unit `veh.hmi.cluster`")
+            && stderr.contains("--reset-history")
             && !stderr.contains("Restore the line"),
         "the unit-gone message stands:\n{stderr}",
     );
 }
 
+/// Without a recorded unit, a removed package is treated as a removed unit
+/// even when its original unit remains; plain publication still refuses it.
+#[test]
+fn resetting_a_legacy_package_removed_from_a_remaining_unit_prints_a_unit_note() {
+    let dir = TempDir::new("gate-legacy-package-reset");
+    let root = legacy_per_package_baseline(
+        &dir,
+        SESSION,
+        "next 2\nSession 1\n",
+        &[("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 7")],
+    );
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the package");
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 8\nSession 1\ncluster.Speed 7 retired\n"),
+    );
+    let before = baseline_files(&root);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        code, 1,
+        "plain publication refuses the legacy package:\n{stderr}"
+    );
+    assert!(stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    assert_eq!(before, baseline_files(&root), "refusal preserves all bytes");
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "reset treats the legacy package as a removed unit:\n{stderr}"
+    );
+    assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
+    let notes: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.starts_with("note:") && line.contains("drops unit"))
+        .collect();
+    assert_eq!(notes.len(), 1, "one note for the legacy package:\n{stderr}");
+    assert!(
+        notes[0].contains("Reset drops unit `veh.hmi.cluster`")
+            && notes[0].contains("`Speed` (number 7)")
+            && !notes[0].contains("`Session`"),
+        "the note uses the legacy package as its unit:\n{stderr}"
+    );
+    assert!(root.join(".ridl/baseline/veh.hmi.ir.json").is_file());
+    assert!(!root.join(".ridl/baseline/veh.hmi.cluster.ir.json").exists());
+}
+
+/// Deleting snapshots works only on a baseline without `context.json`.
+/// It is not the documented procedure for intentional unit removal.
 #[test]
 fn deleting_the_snapshots_of_a_legacy_gone_package_allows_publication() {
     let dir = TempDir::new("gate-legacy-gone-override");
