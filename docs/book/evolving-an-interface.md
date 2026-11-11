@@ -330,8 +330,8 @@ The list is empty in these cases:
 - the unit has no `<unit>.catalogs` file;
 - the file's first hash does not match its own snapshots and context;
 - a proved podbuf break affects the unit, even at an unchanged hash;
-- remote evidence for an affected unit does not meet the
-  [build requirements](cli-reference.md#ridl-build);
+- remote evidence for an affected unit does not meet [ADR-0031][adr-0031]
+  decision 13;
 - the unit's verdict from the baseline to the working tree is breaking and the
   current hash differs from the first hash of the file.
 
