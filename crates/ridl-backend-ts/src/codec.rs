@@ -17,9 +17,9 @@
 //! and hash, the qualified names of the payload types, the text of the rule
 //! codes of the wasm module, and one member table per declared interface,
 //! whose entry carries the member's payload limit when the model records one.
-//! A package with a signal also gets `signalChecks(codec)`, which returns one
-//! `SignalCheckEntry` of the runtime package per signal, for the `checks` option
-//! of a session. The entry's check refuses a payload that the wasm codec rejects.
+//! A package with a signal that has a member table entry also gets
+//! `signalChecks(codec)`, which returns one `SignalCheckEntry` of the runtime
+//! package per such signal, for the `checks` option of a session. The entry's check refuses a payload that the wasm codec rejects.
 //! Stream queries and commands get typed functions over a runtime `StreamSession`:
 //! they verify requests before sending, verify named elements before decoding,
 //! decode raw text as UTF-8, and preserve raw byte streams. Uploads encode and

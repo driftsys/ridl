@@ -279,7 +279,8 @@ member; rsdl is the apex.
                          type-check and test the generated TypeScript
                          codec modules of the fixtures under
                          crates/ridl-backend-ts/tests/fixtures/ against
-                         flatc's output (_codec-ts-check), run the
+                         flatc's output (_codec-ts-check; its ctor fixture
+                         builds no codec module and runs no flatc), run the
                          unit tests of the check (check_test.ts),
                          then run the Deno program of examples/cabin/web,
                          which reads the catalog, the interaction table and
