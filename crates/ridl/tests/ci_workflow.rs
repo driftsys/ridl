@@ -339,7 +339,13 @@ fn a_workflow_dispatch_event_runs_both() {
 #[test]
 fn gate_jobs_depend_on_changes_and_gate_on_its_outputs() {
     let workflow = workflow_text();
-    for (job, output) in [("rust", "rust"), ("wasm", "rust"), ("markdown", "markdown")] {
+    for (job, output) in [
+        ("rust", "rust"),
+        ("freeze", "rust"),
+        ("demo", "rust"),
+        ("wasm", "rust"),
+        ("markdown", "markdown"),
+    ] {
         let block = job_block(&workflow, job);
         assert_eq!(
             job_key(&block, "needs").as_deref(),
@@ -357,13 +363,36 @@ fn gate_jobs_depend_on_changes_and_gate_on_its_outputs() {
     assert_eq!(job_key(&book, "if"), None, "book has no if:");
 
     let ci = job_block(&workflow, "ci");
-    let needs = job_key(&ci, "needs").expect("ci has needs");
-    let listed: Vec<&str> = needs
+    // The flow sequence may span several lines when the formatter wraps it:
+    // join the lines from `needs:` to the closing `]`.
+    let start = ci
+        .iter()
+        .position(|l| l.starts_with("    needs:"))
+        .expect("ci has needs");
+    let mut needs = String::new();
+    for line in &ci[start..] {
+        needs.push_str(line.trim());
+        if line.contains(']') {
+            break;
+        }
+    }
+    let listed: Vec<&str> = needs["needs:".len()..]
+        .trim()
         .trim_matches(|c| c == '[' || c == ']')
         .split(',')
         .map(str::trim)
+        .filter(|s| !s.is_empty())
         .collect();
-    for job in ["changes", "rust", "wasm", "markdown", "book", "commit-lint"] {
+    for job in [
+        "changes",
+        "rust",
+        "freeze",
+        "demo",
+        "wasm",
+        "markdown",
+        "book",
+        "commit-lint",
+    ] {
         assert!(listed.contains(&job), "ci needs {job}: {listed:?}");
     }
     assert_eq!(

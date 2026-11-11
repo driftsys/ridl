@@ -212,6 +212,11 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           "$HOME/.local/bin/just" --version
+      # `just test` runs the semver tests of xtask/tests/freeze.rs, which
+      # call cargo-semver-checks. It is built with `cargo install` at the
+      # version `bootstrap` names, not installed with a third-party action.
+      - name: install cargo-semver-checks
+        run: cargo install cargo-semver-checks --locked --version 0.51.0
       - run: just toolchain-check
       # Needs no toolchain of its own, and has no other job to sit in.
       - run: just gate-parity
@@ -255,10 +260,6 @@ jobs:
       - name: install the pinned toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@v2
-        with:
-          # A key of its own: cargo-semver-checks builds rustdoc JSON, which
-          # the `rust` job's cache does not hold.
-          key: freeze
       - name: install just
         run: |
           set -o pipefail
@@ -287,8 +288,6 @@ jobs:
       - name: install the pinned toolchain
         run: rustup show
       - uses: Swatinem/rust-cache@v2
-        with:
-          key: demo
       - name: install just
         run: |
           set -o pipefail
