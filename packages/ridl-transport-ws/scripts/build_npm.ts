@@ -35,6 +35,8 @@ await build({
       version: `^${runtimeJson.version}`,
     },
   },
+  // The runtime of this checkout may not be on the registry yet.
+  skipNpmInstall: true,
   typeCheck: false,
   test: false,
   scriptModule: false,

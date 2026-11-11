@@ -37,12 +37,12 @@ choices, see [`../decisions/`](../decisions/).
   contracts.
 - **ridl-transport-ws-ts.md** — the same binding in TypeScript as built: the
   package `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, the
-  consuming side of a session for Deno and the browser with no dependency, the
-  codec, the consumer's rules it applies without a catalog, the two limits the
-  platform sets (no close code on a violation, no client liveness timer), the
-  end-to-end tests against the crate's example server, the gates, and the
-  design's decisions D-1 to D-23 with what is not built. The decisions behind
-  its choices are
+  consuming side of a session for Deno and the browser with one dependency,
+  `@driftsys/ridl-runtime`, the codec, the consumer's rules it applies without a
+  catalog, the two limits the platform sets (no close code on a violation, no
+  client liveness timer), the end-to-end tests against the crate's example
+  server, the gates, and the design's decisions D-1 to D-23 with what is not
+  built. The decisions behind its choices are
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decisions 6 and 7, with decision 6 as amended 2026-10-20, and
   [ADR-0009](../decisions/ADR-0009-toolchain-and-gate-parity.md) for the gates.

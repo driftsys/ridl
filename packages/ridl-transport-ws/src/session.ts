@@ -420,18 +420,26 @@ function recordedKinds(
  * removes it.
  */
 function addListener<K, L>(
-  listeners: Map<K, Set<L>>,
+  listeners: Map<K, Set<Registration<L>>>,
   key: K,
   listener: L,
 ): () => void {
   let set = listeners.get(key);
   if (!set) listeners.set(key, set = new Set());
-  set.add(listener);
+  // Each call makes its own registration, so the same function registered
+  // twice is called twice, and a remover removes only its own registration.
+  const registration = { listener };
+  set.add(registration);
   return () => {
     const current = listeners.get(key);
-    if (!current?.delete(listener)) return;
+    if (!current?.delete(registration)) return;
     if (current.size === 0) listeners.delete(key);
   };
+}
+
+/** One registration of a listener. */
+interface Registration<L> {
+  readonly listener: L;
 }
 
 /**
@@ -447,9 +455,14 @@ function rejectOnAbort<T>(
   return new Promise<T>((resolve, reject) => {
     const abort = () => reject(signal.reason);
     signal.addEventListener("abort", abort, { once: true });
-    call.then(resolve, reject).finally(() =>
-      signal.removeEventListener("abort", abort)
-    );
+    const done = () => signal.removeEventListener("abort", abort);
+    call.then((value) => {
+      done();
+      resolve(value);
+    }, (error) => {
+      done();
+      reject(error);
+    });
   });
 }
 
@@ -517,10 +530,15 @@ export class Session {
   #limits: Map<string, number>;
   /** The kind of each member the generated tables hold, keyed `iface:ord`. */
   #kinds: Map<string, Kind>;
+  /** A copy of the catalog hash, taken when the session was created. */
+  #catalogHash: Uint8Array;
   /** The `watch` listeners of each signal, keyed `iface:ord`. */
-  #watchers = new Map<string, Set<(sample: Sample) => void>>();
+  #watchers = new Map<string, Set<Registration<(sample: Sample) => void>>>();
   /** The `listen` listeners of each interface, keyed by interface number. */
-  #listeners = new Map<number, Set<(occurrence: Occurrence) => void>>();
+  #listeners = new Map<
+    number,
+    Set<Registration<(occurrence: Occurrence) => void>>
+  >();
   /** The `block` payload being collected or skipped. */
   #reassembly = new Reassembly();
   /**
@@ -542,6 +560,7 @@ export class Session {
     this.#options = options;
     this.#limits = recordedLimits(options.interfaces);
     this.#kinds = recordedKinds(options.interfaces);
+    this.#catalogHash = new Uint8Array(options.catalog.hash);
     for (const entry of options.checks ?? []) {
       this.#checks.set(channel(entry.iface, entry.ord), entry.check);
     }
@@ -746,10 +765,11 @@ export class Session {
 
   /**
    * The 32-byte hash of the catalog this session is attached to: the hash
-   * given to {@link connect}. Each read returns a new copy.
+   * given to {@link connect}, as it was when the session was created. Each
+   * read returns a new copy.
    */
   get catalogHash(): Uint8Array {
-    return new Uint8Array(this.#options.catalog.hash);
+    return new Uint8Array(this.#catalogHash);
   }
 
   /**
@@ -1465,7 +1485,9 @@ export class Session {
       const watchers = this.#watchers.get(ch);
       if (watchers) {
         for (const watcher of [...watchers]) {
-          if (watchers.has(watcher)) this.#listen(() => watcher(sample!));
+          if (watchers.has(watcher)) {
+            this.#listen(() => watcher.listener(sample!));
+          }
         }
       }
     }
@@ -1588,7 +1610,7 @@ export class Session {
       if (listeners) {
         for (const listener of [...listeners]) {
           if (listeners.has(listener)) {
-            this.#listen(() => listener(occurrence));
+            this.#listen(() => listener.listener(occurrence));
           }
         }
       }

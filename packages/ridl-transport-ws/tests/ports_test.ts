@@ -395,3 +395,98 @@ test("a call that the session fails rejects with a CallError", async () => {
     (e) => e instanceof CallError && e.failure.category === "down",
   );
 });
+
+test("catalogHash is a copy: neither the connect argument nor a returned value changes it", async () => {
+  const hash = Uint8Array.from(HASH);
+  const { session } = await attached({ catalog: { name: "veh.cabin", hash } });
+  hash[0] = 99;
+  assert.deepEqual(session.catalogHash, HASH);
+  const first = session.catalogHash;
+  first[1] = 99;
+  assert.deepEqual(session.catalogHash, HASH);
+});
+
+test("a listen listener that removes itself or another stops the delivery to it", async () => {
+  const { socket, session } = await attached();
+  const subscribed = session.subscribe(1, 3);
+  socket.deliver(accepted(EVENT));
+  await subscribed;
+  const calls: string[] = [];
+  let removeSecond = () => {};
+  session.listen(1, () => {
+    calls.push("first");
+    removeSecond();
+  });
+  removeSecond = session.listen(1, () => calls.push("second"));
+  socket.deliver(occurrence(1n, [1]));
+  assert.deepEqual(calls, ["first"]);
+});
+
+test("the same function registered twice is called twice, and a stale remover keeps a later registration", async () => {
+  const { socket, session } = await attached();
+  let subscribed = session.subscribe(1, 2);
+  socket.deliver(accepted(SIGNAL));
+  await subscribed;
+  subscribed = session.subscribe(1, 3);
+  socket.deliver(accepted(EVENT));
+  await subscribed;
+  let watched = 0;
+  const watcher = () => watched++;
+  session.watch(1, 2, watcher);
+  const removeWatch = session.watch(1, 2, watcher);
+  socket.deliver(live(1n, [1]));
+  assert.equal(watched, 2);
+  removeWatch();
+  socket.deliver(live(2n, [2]));
+  assert.equal(watched, 3);
+  let heard = 0;
+  const listener = () => heard++;
+  const removeOld = session.listen(1, listener);
+  removeOld();
+  session.listen(1, listener);
+  removeOld();
+  socket.deliver(occurrence(1n, [1]));
+  assert.equal(heard, 1);
+});
+
+test("a bound in the (iface, ord, opts) form of subscribe reaches the call", async () => {
+  const { session } = await attached();
+  await assert.rejects(
+    session.subscribe(1, 2, { bound: 5 }),
+    (e) => e instanceof SessionError && e.failure.category === "timeout",
+  );
+});
+
+test("a signal in the (iface, ord, opts) form of read aborts it", async () => {
+  const { session } = await attached();
+  const reason = new Error("stop");
+  const controller = new AbortController();
+  const pending = session.read(1, 2, { signal: controller.signal });
+  controller.abort(reason);
+  await assert.rejects(pending, (e) => e === reason);
+});
+
+test("the abort listener is removed from the signal once the call settles", async () => {
+  const { socket, session } = await attached();
+  const signal = new AbortController().signal;
+  let added = 0;
+  let removed = 0;
+  const add = signal.addEventListener.bind(signal);
+  const remove = signal.removeEventListener.bind(signal);
+  signal.addEventListener = (...a: Parameters<typeof add>) => {
+    if (a[0] === "abort") added++;
+    return add(...a);
+  };
+  signal.removeEventListener = (...a: Parameters<typeof remove>) => {
+    if (a[0] === "abort") removed++;
+    return remove(...a);
+  };
+  const pending = session.command(1, 6, new Uint8Array(), {
+    bound: 20,
+    signal,
+  });
+  socket.deliver(accept(COMMAND, 1n));
+  await pending;
+  assert.ok(added >= 1);
+  assert.equal(removed, added);
+});

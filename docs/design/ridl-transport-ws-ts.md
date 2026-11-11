@@ -129,8 +129,9 @@ Deno's own APIs, so nothing else is fetched from a registry and there is no
 lockfile. The browser test drives the browser through the Chrome DevTools
 Protocol over Deno's own `WebSocket` client (`e2e/browser.ts`), not through
 Puppeteer, Playwright or Astral. In the source tree `deno.json` maps the runtime
-to the sibling directory; the npm build maps it to the npm package of the same
-version.
+to the sibling directory; the npm build maps it to the npm package, as the
+dependency `^<runtime version>`, and skips `npm install`, so the build does not
+need that version on the registry.
 
 ## The codec (`src/frame.ts`)
 
