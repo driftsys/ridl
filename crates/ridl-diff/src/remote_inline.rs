@@ -420,12 +420,6 @@ impl Pass<'_> {
                     self.proto3,
                 ),
             ],
-            (Some(Kind::EnumDef(old)), Some(Kind::EnumDef(new))) => vec![(
-                Category::FlatbuffersWidthChange,
-                int_width_name(flatbuffers::enum_integer(old) as i32),
-                int_width_name(flatbuffers::enum_integer(new) as i32),
-                self.flatbuffers,
-            )],
             _ => return,
         };
         for (category, before, after, breaking) in facts {

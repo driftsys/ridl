@@ -51,7 +51,7 @@ export interface ControlSelectParams {
 /** Encodes a `strict.demo.DtcStatus` payload. */
 export function encodeDtcStatus(value: t.DtcStatus): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.DtcStatusBoxT(BigInt(value)).pack(builder));
+  builder.finish(new fb.DtcStatusBoxT(value).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `strict.demo.DtcStatus` payload the codec has verified. */
@@ -59,8 +59,8 @@ export function decodeDtcStatus(bytes: Uint8Array): t.DtcStatus {
   return unpackDtcStatus(fb.DtcStatusBox.getRootAsDtcStatusBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function unpackDtcStatus(raw: number | bigint): t.DtcStatus {
-  const n = Number(raw);
+function unpackDtcStatus(raw: number): t.DtcStatus {
+  const n = raw;
   if (!([0, 1] as readonly number[]).includes(n)) {
     throw new RuleError("variant", `value ${raw} is not a value of strict.demo.DtcStatus`);
   }
@@ -70,7 +70,7 @@ function unpackDtcStatus(raw: number | bigint): t.DtcStatus {
 /** Encodes a `strict.demo.Mode` payload. */
 export function encodeMode(value: t.Mode): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.ModeBoxT(BigInt(value)).pack(builder));
+  builder.finish(new fb.ModeBoxT(value).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `strict.demo.Mode` payload the codec has verified. */
@@ -78,8 +78,8 @@ export function decodeMode(bytes: Uint8Array): t.Mode {
   return unpackMode(fb.ModeBox.getRootAsModeBox(new flatbuffers.ByteBuffer(bytes)).unpack().value);
 }
 
-function unpackMode(raw: number | bigint | null): t.Mode {
-  const n = raw === null ? absent("strict.demo.Mode", "value") : Number(raw);
+function unpackMode(raw: number | null): t.Mode {
+  const n = raw === null ? absent("strict.demo.Mode", "value") : raw;
   if (!([1, 2] as readonly number[]).includes(n)) {
     throw new RuleError("variant", `value ${raw} is not a value of strict.demo.Mode`);
   }
@@ -146,15 +146,15 @@ export function decodeReport(bytes: Uint8Array): t.Report {
 
 function packReport(value: t.Report): fb.ReportT {
   const object = new fb.ReportT();
-  object.status = BigInt(value.status);
-  object.mode = BigInt(value.mode);
+  object.status = value.status;
+  object.mode = value.mode;
   object.flags = value.flags;
   object.wide = value.wide;
-  object.list = value.list.map((element) => BigInt(element));
+  object.list = [...value.list];
   object.sets = [...value.sets];
-  object.maybe = value.maybe === undefined ? null : BigInt(value.maybe);
+  object.maybe = value.maybe === undefined ? null : value.maybe;
   object.maybeFlags = value.maybeFlags === undefined ? null : value.maybeFlags;
-  object.table = value.table.map(([key, value]) => { const entry = new fb.ReportTableEntryT(); entry.key = $rt.checkWellFormed(key, "strict.demo.Report.table.key"); entry.value = BigInt(value); return entry; });
+  object.table = value.table.map(([key, value]) => { const entry = new fb.ReportTableEntryT(); entry.key = $rt.checkWellFormed(key, "strict.demo.Report.table.key"); entry.value = value; return entry; });
   return object;
 }
 function unpackReport(object: fb.ReportT): t.Report {
@@ -186,11 +186,11 @@ export function decodePick(bytes: Uint8Array): t.Pick {
 function packPick(value: t.Pick): fb.PickT {
   switch (value.kind) {
     case "status":
-      return new fb.PickT(fb.PickUnion.status, new fb.PickStatusBoxT(BigInt(value.value)));
+      return new fb.PickT(fb.PickUnion.status, new fb.PickStatusBoxT(value.value));
     case "flags":
       return new fb.PickT(fb.PickUnion.flags, new fb.PickFlagsBoxT(value.value));
     case "mode":
-      return new fb.PickT(fb.PickUnion.mode, new fb.PickModeBoxT(BigInt(value.value)));
+      return new fb.PickT(fb.PickUnion.mode, new fb.PickModeBoxT(value.value));
   }
 }
 function unpackPick(object: fb.PickT): t.Pick {
@@ -219,8 +219,8 @@ export function decodeControlSelectParams(bytes: Uint8Array): ControlSelectParam
 
 function packControlSelectParams(value: ControlSelectParams, _at: string): fb.ControlSelectParamsT {
   const tuple = new fb.ControlSelectParamsT();
-  tuple.field1 = BigInt(value.status);
-  tuple.field2 = BigInt(value.mode);
+  tuple.field1 = value.status;
+  tuple.field2 = value.mode;
   return tuple;
 }
 function unpackControlSelectParams(object: fb.ControlSelectParamsT): ControlSelectParams {

@@ -35,7 +35,7 @@ mod root {
                 ::serde::Serialize,
                 ::serde::Deserialize,
             )]
-            #[repr(i64)]
+            #[repr(i32)]
             pub enum Health {
                 /// The variant `OK` in the enum `Health`
                 Ok = 0,
@@ -45,18 +45,30 @@ mod root {
 
                 /// The variant `FAIL` in the enum `Health`
                 Fail = 2,
+
+                /// The variant `NEGATIVE` in the enum `Health`
+                Negative = -1,
+
+                /// The variant `MAXIMUM` in the enum `Health`
+                Maximum = 2147483647,
             }
 
             impl Health {
                 /// Array containing all valid variants of Health
-                pub const ENUM_VALUES: [Self; 3] = [Self::Ok, Self::Warn, Self::Fail];
+                pub const ENUM_VALUES: [Self; 5] = [
+                    Self::Ok,
+                    Self::Warn,
+                    Self::Fail,
+                    Self::Negative,
+                    Self::Maximum,
+                ];
             }
 
-            impl ::core::convert::TryFrom<i64> for Health {
+            impl ::core::convert::TryFrom<i32> for Health {
                 type Error = ::planus::errors::UnknownEnumTagKind;
                 #[inline]
                 fn try_from(
-                    value: i64,
+                    value: i32,
                 ) -> ::core::result::Result<Self, ::planus::errors::UnknownEnumTagKind>
                 {
                     #[allow(clippy::match_single_binding)]
@@ -64,6 +76,8 @@ mod root {
                         0 => ::core::result::Result::Ok(Health::Ok),
                         1 => ::core::result::Result::Ok(Health::Warn),
                         2 => ::core::result::Result::Ok(Health::Fail),
+                        -1 => ::core::result::Result::Ok(Health::Negative),
+                        2147483647 => ::core::result::Result::Ok(Health::Maximum),
 
                         _ => ::core::result::Result::Err(::planus::errors::UnknownEnumTagKind {
                             tag: value as i128,
@@ -72,18 +86,18 @@ mod root {
                 }
             }
 
-            impl ::core::convert::From<Health> for i64 {
+            impl ::core::convert::From<Health> for i32 {
                 #[inline]
                 fn from(value: Health) -> Self {
-                    value as i64
+                    value as i32
                 }
             }
 
             /// # Safety
             /// The Planus compiler correctly calculates `ALIGNMENT` and `SIZE`.
             unsafe impl ::planus::Primitive for Health {
-                const ALIGNMENT: usize = 8;
-                const SIZE: usize = 8;
+                const ALIGNMENT: usize = 4;
+                const SIZE: usize = 4;
             }
 
             impl ::planus::WriteAsPrimitive<Health> for Health {
@@ -93,7 +107,7 @@ mod root {
                     cursor: ::planus::Cursor<'_, N>,
                     buffer_position: u32,
                 ) {
-                    (*self as i64).write(cursor, buffer_position);
+                    (*self as i32).write(cursor, buffer_position);
                 }
             }
 
@@ -141,14 +155,14 @@ mod root {
                     buffer: ::planus::SliceWithStartOffset<'buf>,
                     offset: usize,
                 ) -> ::core::result::Result<Self, ::planus::errors::ErrorKind> {
-                    let n: i64 = ::planus::TableRead::from_buffer(buffer, offset)?;
+                    let n: i32 = ::planus::TableRead::from_buffer(buffer, offset)?;
                     ::core::result::Result::Ok(::core::convert::TryInto::try_into(n)?)
                 }
             }
 
             impl<'buf> ::planus::VectorReadInner<'buf> for Health {
                 type Error = ::planus::errors::UnknownEnumTag;
-                const STRIDE: usize = 8;
+                const STRIDE: usize = 4;
                 #[inline]
                 unsafe fn from_buffer(
                     buffer: ::planus::SliceWithStartOffset<'buf>,
@@ -156,7 +170,7 @@ mod root {
                 ) -> ::core::result::Result<Self, ::planus::errors::UnknownEnumTag>
                 {
                     let value =
-                        unsafe { <i64 as ::planus::VectorRead>::from_buffer(buffer, offset) };
+                        unsafe { <i32 as ::planus::VectorRead>::from_buffer(buffer, offset) };
                     let value: ::core::result::Result<Self, _> =
                         ::core::convert::TryInto::try_into(value);
                     value.map_err(|error_kind| {
@@ -173,7 +187,7 @@ mod root {
             /// The planus compiler generates implementations that initialize
             /// the bytes in `write_values`.
             unsafe impl ::planus::VectorWrite<Health> for Health {
-                const STRIDE: usize = 8;
+                const STRIDE: usize = 4;
 
                 type Value = Self;
 
@@ -188,12 +202,12 @@ mod root {
                     bytes: *mut ::core::mem::MaybeUninit<u8>,
                     buffer_position: u32,
                 ) {
-                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 8];
+                    let bytes = bytes as *mut [::core::mem::MaybeUninit<u8>; 4];
                     for (i, v) in ::core::iter::Iterator::enumerate(values.iter()) {
                         ::planus::WriteAsPrimitive::write(
                             v,
                             ::planus::Cursor::new(unsafe { &mut *bytes.add(i) }),
-                            buffer_position - (8 * i) as u32,
+                            buffer_position - (4 * i) as u32,
                         );
                     }
                 }
@@ -202,7 +216,7 @@ mod root {
             /// The table `Inner` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `Inner` in the file `fb_demo.fbs:10`
+            /// * Table `Inner` in the file `fb_demo.fbs:12`
             #[derive(
                 Clone,
                 Debug,
@@ -518,7 +532,7 @@ mod root {
             /// The union `OutcomeUnion` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Union `OutcomeUnion` in the file `fb_demo.fbs:17`
+            /// * Union `OutcomeUnion` in the file `fb_demo.fbs:19`
             #[derive(
                 Clone,
                 Debug,
@@ -726,7 +740,7 @@ mod root {
             /// The table `Outcome` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `Outcome` in the file `fb_demo.fbs:19`
+            /// * Table `Outcome` in the file `fb_demo.fbs:21`
             #[derive(
                 Clone,
                 Debug,
@@ -1005,7 +1019,7 @@ mod root {
             /// The table `Report` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `Report` in the file `fb_demo.fbs:23`
+            /// * Table `Report` in the file `fb_demo.fbs:25`
             #[derive(
                 Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize,
             )]
@@ -1147,9 +1161,6 @@ mod root {
 
                     let mut table_writer: ::planus::table_writer::TableWriter<46> =
                         ::core::default::Default::default();
-                    if prepared_health.is_some() {
-                        table_writer.write_entry::<self::Health>(5);
-                    }
                     if prepared_name.is_some() {
                         table_writer.write_entry::<::planus::Offset<str>>(1);
                     }
@@ -1158,6 +1169,9 @@ mod root {
                     }
                     if prepared_ratio.is_some() {
                         table_writer.write_entry::<f32>(3);
+                    }
+                    if prepared_health.is_some() {
+                        table_writer.write_entry::<self::Health>(5);
                     }
                     if prepared_inner.is_some() {
                         table_writer.write_entry::<::planus::Offset<self::Inner>>(7);
@@ -1212,9 +1226,6 @@ mod root {
 
                     unsafe {
                         table_writer.finish(builder, |object_writer| {
-                            if let ::core::option::Option::Some(prepared_health) = prepared_health {
-                                object_writer.write::<_, _, 8>(&prepared_health);
-                            }
                             if let ::core::option::Option::Some(prepared_name) = prepared_name {
                                 object_writer.write::<_, _, 4>(&prepared_name);
                             }
@@ -1223,6 +1234,9 @@ mod root {
                             }
                             if let ::core::option::Option::Some(prepared_ratio) = prepared_ratio {
                                 object_writer.write::<_, _, 4>(&prepared_ratio);
+                            }
+                            if let ::core::option::Option::Some(prepared_health) = prepared_health {
+                                object_writer.write::<_, _, 4>(&prepared_health);
                             }
                             if let ::core::option::Option::Some(prepared_inner) = prepared_inner {
                                 object_writer.write::<_, _, 4>(&prepared_inner);
@@ -2918,7 +2932,7 @@ mod root {
             /// The table `SpeedBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `SpeedBox` in the file `fb_demo.fbs:58`
+            /// * Table `SpeedBox` in the file `fb_demo.fbs:60`
             #[derive(
                 Clone,
                 Debug,
@@ -3180,7 +3194,7 @@ mod root {
             /// The table `CountBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `CountBox` in the file `fb_demo.fbs:63`
+            /// * Table `CountBox` in the file `fb_demo.fbs:65`
             #[derive(
                 Clone,
                 Debug,
@@ -3442,7 +3456,7 @@ mod root {
             /// The table `RatioBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `RatioBox` in the file `fb_demo.fbs:68`
+            /// * Table `RatioBox` in the file `fb_demo.fbs:70`
             #[derive(
                 Clone, Debug, PartialEq, PartialOrd, ::serde::Serialize, ::serde::Deserialize,
             )]
@@ -3698,7 +3712,7 @@ mod root {
             /// The table `LabelBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `LabelBox` in the file `fb_demo.fbs:73`
+            /// * Table `LabelBox` in the file `fb_demo.fbs:75`
             #[derive(
                 Clone,
                 Debug,
@@ -3969,7 +3983,7 @@ mod root {
             /// The table `BlobBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `BlobBox` in the file `fb_demo.fbs:78`
+            /// * Table `BlobBox` in the file `fb_demo.fbs:80`
             #[derive(
                 Clone,
                 Debug,
@@ -4235,7 +4249,7 @@ mod root {
             /// The table `EngagedBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `EngagedBox` in the file `fb_demo.fbs:83`
+            /// * Table `EngagedBox` in the file `fb_demo.fbs:85`
             #[derive(
                 Clone,
                 Debug,
@@ -4500,7 +4514,7 @@ mod root {
             /// The table `HealthBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `HealthBox` in the file `fb_demo.fbs:88`
+            /// * Table `HealthBox` in the file `fb_demo.fbs:90`
             #[derive(
                 Clone,
                 Debug,
@@ -4549,7 +4563,7 @@ mod root {
                     unsafe {
                         table_writer.finish(builder, |object_writer| {
                             if let ::core::option::Option::Some(prepared_value) = prepared_value {
-                                object_writer.write::<_, _, 8>(&prepared_value);
+                                object_writer.write::<_, _, 4>(&prepared_value);
                             }
                         });
                     }
@@ -4768,7 +4782,7 @@ mod root {
             /// The table `WarningFlagsBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `WarningFlagsBox` in the file `fb_demo.fbs:92`
+            /// * Table `WarningFlagsBox` in the file `fb_demo.fbs:94`
             #[derive(
                 Clone,
                 Debug,
@@ -5051,7 +5065,7 @@ mod root {
             /// The table `OutcomeBadBox` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `OutcomeBadBox` in the file `fb_demo.fbs:98`
+            /// * Table `OutcomeBadBox` in the file `fb_demo.fbs:100`
             #[derive(
                 Clone,
                 Debug,
@@ -5100,7 +5114,7 @@ mod root {
                     unsafe {
                         table_writer.finish(builder, |object_writer| {
                             if let ::core::option::Option::Some(prepared_value) = prepared_value {
-                                object_writer.write::<_, _, 8>(&prepared_value);
+                                object_writer.write::<_, _, 4>(&prepared_value);
                             }
                         });
                     }
@@ -5335,7 +5349,7 @@ mod root {
             /// The table `ReportRange` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportRange` in the file `fb_demo.fbs:102`
+            /// * Table `ReportRange` in the file `fb_demo.fbs:104`
             #[derive(
                 Clone,
                 Debug,
@@ -5669,7 +5683,7 @@ mod root {
             /// The table `ReportMetaEntry` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportMetaEntry` in the file `fb_demo.fbs:109`
+            /// * Table `ReportMetaEntry` in the file `fb_demo.fbs:111`
             #[derive(
                 Clone,
                 Debug,
@@ -6006,7 +6020,7 @@ mod root {
             /// The table `ReportPointsElement` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportPointsElement` in the file `fb_demo.fbs:116`
+            /// * Table `ReportPointsElement` in the file `fb_demo.fbs:118`
             #[derive(
                 Clone,
                 Debug,
@@ -6353,7 +6367,7 @@ mod root {
             /// The table `ReportPair` in the namespace `fb.demo`
             ///
             /// Generated from these locations:
-            /// * Table `ReportPair` in the file `fb_demo.fbs:123`
+            /// * Table `ReportPair` in the file `fb_demo.fbs:125`
             #[derive(
                 Clone,
                 Debug,

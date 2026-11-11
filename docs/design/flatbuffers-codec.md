@@ -267,9 +267,10 @@ because the slack the projection charges is not expressible in Rust's type
 system. It is **pinned, not proven tight**: the round-trip suite fails on a
 bound one lower and on one higher, so the number cannot drift unnoticed, but
 nothing demonstrates a legal value reaches it. The measured gap is real — the
-largest `Report` a probe could build is 1688 bytes against a bound of 2388 — and
-it is the alignment and vtable slack that keeps the bound sound under any write
-order.
+maximum-length `Report` measured by
+`a_maximum_length_report_has_a_measured_encoded_size` is 1656 bytes against a
+bound of 2368 — and it is the alignment and vtable slack that keeps the bound
+sound under any write order.
 
 **`Buffer` and `BUFFER` come from the same literal.** The implementation also
 writes `type Buffer = [u8; <literal>]` and the zeroed constant
@@ -653,3 +654,7 @@ above records. Its one remainder, driftsys/ridl#598, was decided on 2026-09-30:
   [`../archive/2026-09-20-flatbuffers-codec-design.md`](../archive/2026-09-20-flatbuffers-codec-design.md)
   and
   [`../archive/2026-09-20-flatbuffers-codec-plan.md`](../archive/2026-09-20-flatbuffers-codec-plan.md)
+
+Every enum is a fixed FlatBuffers `int` (int32), box payloads included; enum
+sets keep their unsigned width. The decision is
+[ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 8.

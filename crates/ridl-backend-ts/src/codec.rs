@@ -52,9 +52,6 @@ const RULES: [&str; 7] = [
     "length", "pattern", "range", "step", "unique", "utf8", "variant",
 ];
 
-/// The largest integer a TypeScript number holds exactly.
-const MAX_SAFE: u64 = 9_007_199_254_740_991;
-
 /// The length of `Catalog.hash`.
 const HASH_LEN: usize = 32;
 
@@ -998,7 +995,7 @@ impl<'a> Codec<'a> {
                         vector: false,
                     },
                     Some(Kind::Enum(_)) => Rule {
-                        pack: "BigInt({})".to_string(),
+                        pack: "{}".to_string(),
                         unpack: format!("unpack{name}({{}})"),
                         plain: false,
                         nullable: false,
@@ -1568,7 +1565,7 @@ impl<'a> Codec<'a> {
                 format!("new fb.{name}BoxT(pack{name}(value))"),
                 Read::Assertion,
             ),
-            Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(BigInt(value))"), Read::Strict),
+            Some(Kind::Enum(_)) => (format!("new fb.{name}BoxT(value)"), Read::Strict),
             Some(Kind::EnumSet(_)) => (format!("new fb.{name}BoxT(value)"), Read::Strict),
             Some(Kind::Scalar(scalar)) if scalar.class() == v1::ScalarClass::Bytes => (
                 format!("new fb.{name}BoxT(Array.from(value))"),
@@ -1663,11 +1660,11 @@ impl<'a> Codec<'a> {
                 let (parameter, read) = if nullable {
                     self.needs_absent = true;
                     (
-                        "number | bigint | null",
-                        format!("raw === null ? absent(\"{qualified}\", \"value\") : Number(raw)"),
+                        "number | null",
+                        format!("raw === null ? absent(\"{qualified}\", \"value\") : raw"),
                     )
                 } else {
-                    ("number | bigint", "Number(raw)".to_string())
+                    ("number", "raw".to_string())
                 };
                 let _ = writeln!(
                     out,
@@ -1695,7 +1692,7 @@ impl<'a> Codec<'a> {
 
     /// The converter pair of an open enum or an open enum set. The enum pair
     /// keeps every value: an undeclared one is `{ unknown: n }`, and a value
-    /// beyond the safe integers is refused. The enum set pair refuses a value
+    /// outside int32 is refused. The enum set pair refuses a value
     /// that does not fit the width of the set.
     fn emit_open_converters(&self, out: &mut String, declaration: &v1::Declaration) {
         use v1::declaration::Kind;
@@ -1711,21 +1708,17 @@ impl<'a> Codec<'a> {
                     .collect();
                 let _ = writeln!(
                     out,
-                    "function pack{name}(value: t.{name}Value): bigint {{\n  \
+                    "function pack{name}(value: t.{name}Value): number {{\n  \
                      const raw = typeof value === \"number\" ? value : value.unknown;\n  \
-                     if (!Number.isSafeInteger(raw)) {{\n    \
-                     throw new RuleError(\"variant\", `value ${{raw}} of {qualified} is not a \
-                     safe integer`);\n  }}\n  \
-                     return BigInt(raw);\n}}"
+                     if (!Number.isInteger(raw) || raw < -2147483648 || raw > 2147483647) {{\n    \
+                     throw new RuleError(\"variant\", `value ${{raw}} of {qualified} is not an \
+                     int32`);\n  }}\n  \
+                     return raw;\n}}"
                 );
                 let _ = writeln!(
                     out,
-                    "function unpack{name}(raw: bigint | null): t.{name}Value {{\n  \
-                     const value = raw ?? 0n;\n  \
-                     if (value > {MAX_SAFE}n || value < -{MAX_SAFE}n) {{\n    \
-                     throw new RuleError(\"variant\", `value ${{value}} of {qualified} is outside \
-                     the safe integers`);\n  }}\n  \
-                     const n = Number(value);\n  \
+                    "function unpack{name}(raw: number | null): t.{name}Value {{\n  \
+                     const n = raw ?? 0;\n  \
                      return ([{declared}] as readonly number[]).includes(n)\n    \
                      ? n as t.{name}\n    : {{ unknown: n }};\n}}",
                     declared = declared.join(", ")

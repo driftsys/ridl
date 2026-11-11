@@ -826,14 +826,16 @@ pub(crate) fn __ridl_fb_encode_LockState(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -845,13 +847,15 @@ pub(crate) fn __ridl_fb_verify_LockState(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <LockState as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <LockState as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -861,11 +865,15 @@ pub(crate) fn __ridl_fb_decode_LockState(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> LockState {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <LockState as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(LockState::Unlocked)
         }
         _ => LockState::Unlocked,
@@ -873,10 +881,10 @@ pub(crate) fn __ridl_fb_decode_LockState(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for LockState {
-    /// The largest FlatBuffers buffer any legal `LockState` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `LockState` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = LockStateFbView<'a>;
     fn encode<'o>(
         &self,
@@ -947,12 +955,15 @@ impl<'a> DoorReportFbView<'a> {
     }
     /// Reads `DoorReport`'s `locked` field in place.
     pub fn locked(&self) -> LockState {
-        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 8usize) {
+        match ::ridl_rt::flatbuffers::field(self.buf, self.table, 1u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <LockState as ::core::convert::TryFrom<
                     ::core::primitive::i64,
                 >>::try_from(
-                        ::ridl_rt::flatbuffers::read_i64(self.buf, __p).unwrap_or(0i64),
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::flatbuffers::read_i32(self.buf, __p)
+                                .unwrap_or(0i32),
+                        ),
                     )
                     .unwrap_or(LockState::Unlocked)
             }
@@ -988,11 +999,13 @@ pub(crate) fn __ridl_fb_encode_DoorReport(
         offset: 8u16,
         value: {
             let __s = value.locked;
-            ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+            ::ridl_rt::flatbuffers::Field::I32(
+                ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+            )
         },
     };
     __n += 1;
-    builder.push_table(16usize, 8usize, 2u16, &__fields[..__n])
+    builder.push_table(12usize, 4usize, 2u16, &__fields[..__n])
 }
 #[allow(deprecated, non_snake_case)]
 pub(crate) fn __ridl_fb_verify_DoorReport(
@@ -1016,13 +1029,15 @@ pub(crate) fn __ridl_fb_verify_DoorReport(
             buf,
             table,
             1u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <LockState as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <LockState as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -1043,11 +1058,15 @@ pub(crate) fn __ridl_fb_decode_DoorReport(
             }
             _ => DoorId::new_unchecked(0i64),
         },
-        locked: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 8usize) {
+        locked: match ::ridl_rt::flatbuffers::field(buf, table, 1u16, 4usize) {
             ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
                 <LockState as ::core::convert::TryFrom<
                     ::core::primitive::i64,
-                >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+                >>::try_from(
+                        ::core::primitive::i64::from(
+                            ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                        ),
+                    )
                     .unwrap_or(LockState::Unlocked)
             }
             _ => LockState::Unlocked,
@@ -1056,10 +1075,10 @@ pub(crate) fn __ridl_fb_decode_DoorReport(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorReport {
-    /// The largest FlatBuffers buffer any legal `DoorReport` encodes to: 60 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 60usize;
-    type Buffer = [::core::primitive::u8; 60usize];
-    const BUFFER: Self::Buffer = [0u8; 60usize];
+    /// The largest FlatBuffers buffer any legal `DoorReport` encodes to: 56 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 56usize;
+    type Buffer = [::core::primitive::u8; 56usize];
+    const BUFFER: Self::Buffer = [0u8; 56usize];
     type View<'a> = DoorReportFbView<'a>;
     fn encode<'o>(
         &self,
@@ -1127,14 +1146,16 @@ pub(crate) fn __ridl_fb_encode_DoorFault(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -1146,13 +1167,15 @@ pub(crate) fn __ridl_fb_verify_DoorFault(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <DoorFault as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <DoorFault as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -1162,11 +1185,15 @@ pub(crate) fn __ridl_fb_decode_DoorFault(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> DoorFault {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <DoorFault as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(DoorFault::Jammed)
         }
         _ => DoorFault::Jammed,
@@ -1174,10 +1201,10 @@ pub(crate) fn __ridl_fb_decode_DoorFault(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault {
-    /// The largest FlatBuffers buffer any legal `DoorFault` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `DoorFault` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = DoorFaultFbView<'a>;
     fn encode<'o>(
         &self,
@@ -2552,14 +2579,16 @@ pub(crate) fn __ridl_fb_encode_DoorFault(
         let __box = [
             ::ridl_rt::flatbuffers::TableField {
                 slot: 0u16,
-                offset: 8u16,
+                offset: 4u16,
                 value: {
                     let __s = *value;
-                    ::ridl_rt::flatbuffers::Field::I64(::core::primitive::i64::from(__s))
+                    ::ridl_rt::flatbuffers::Field::I32(
+                        ::core::primitive::i64::from(__s) as ::core::primitive::i32,
+                    )
                 },
             },
         ];
-        builder.push_table(16usize, 8usize, 1u16, &__box)?
+        builder.push_table(8usize, 4usize, 1u16, &__box)?
     })
 }
 #[allow(deprecated, non_snake_case)]
@@ -2571,13 +2600,15 @@ pub(crate) fn __ridl_fb_verify_DoorFault(
             buf,
             table,
             0u16,
-            8usize,
+            4usize,
         )
         .map_err(::ridl_rt::payload::VerifyError::Structure)?
     {
-        let __raw = ::ridl_rt::flatbuffers::read_i64(buf, __p)
+        let __raw = ::ridl_rt::flatbuffers::read_i32(buf, __p)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        <DoorFault as ::core::convert::TryFrom<::core::primitive::i64>>::try_from(__raw)
+        <DoorFault as ::core::convert::TryFrom<
+            ::core::primitive::i64,
+        >>::try_from(::core::primitive::i64::from(__raw))
             .map_err(::ridl_rt::payload::VerifyError::Contract)?;
     }
     ::core::result::Result::Ok(())
@@ -2587,11 +2618,15 @@ pub(crate) fn __ridl_fb_decode_DoorFault(
     buf: &[::core::primitive::u8],
     table: ::core::primitive::usize,
 ) -> DoorFault {
-    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 8usize) {
+    match ::ridl_rt::flatbuffers::field(buf, table, 0u16, 4usize) {
         ::core::result::Result::Ok(::core::option::Option::Some(__p)) => {
             <DoorFault as ::core::convert::TryFrom<
                 ::core::primitive::i64,
-            >>::try_from(::ridl_rt::flatbuffers::read_i64(buf, __p).unwrap_or(0i64))
+            >>::try_from(
+                    ::core::primitive::i64::from(
+                        ::ridl_rt::flatbuffers::read_i32(buf, __p).unwrap_or(0i32),
+                    ),
+                )
                 .unwrap_or(DoorFault::Stuck)
         }
         _ => DoorFault::Stuck,
@@ -2599,10 +2634,10 @@ pub(crate) fn __ridl_fb_decode_DoorFault(
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers> for DoorFault {
-    /// The largest FlatBuffers buffer any legal `DoorFault` encodes to: 50 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 50usize;
-    type Buffer = [::core::primitive::u8; 50usize];
-    const BUFFER: Self::Buffer = [0u8; 50usize];
+    /// The largest FlatBuffers buffer any legal `DoorFault` encodes to: 46 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 46usize;
+    type Buffer = [::core::primitive::u8; 46usize];
+    const BUFFER: Self::Buffer = [0u8; 46usize];
     type View<'a> = DoorFaultFbView<'a>;
     fn encode<'o>(
         &self,

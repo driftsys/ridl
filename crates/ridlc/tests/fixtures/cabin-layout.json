@@ -8,8 +8,8 @@
 // - FlatBuffers bounds, `projection::flatbuffers::max_size` over the scope, as
 //   the model prints them in each payload's `sizes.flatbuffers.bounded`
 //   (`layout.rs` also checks each one against `max_size` directly):
-//   `Temperature` 43, `Warning` 60, `Level` 43, `Window` 46, `Average` 44,
-//   `Health` 50.
+//   `Temperature` 43, `Warning` 56, `Level` 43, `Window` 46, `Average` 44,
+//   `Health` 46.
 // - Reservations, the sum of a call's payload bounds:
 //   `setLevel` = `Level` = 43; `average` = `Window` + `Average` = 46 + 44 = 90.
 // - Ring depth of `Cabin.warning`: `@[100ms..1s]` gives
@@ -26,17 +26,17 @@
       "slots": [
         // signal: round8(43) = 48. Offset 0.
         { "member": "Cabin.temperature", "offset": 0, "size": 48 },
-        // event: round8(60) = 64; 64 * depth 10 = 640. Offset 0 + 48 = 48.
-        { "member": "Cabin.warning", "offset": 48, "size": 640 },
-        // command: round8(43) = 48; 48 * 16 slots = 768. Offset 48 + 640 = 688.
-        { "member": "Cabin.setLevel", "offset": 688, "size": 768 },
-        // query: round8(90) = 96; 96 * 16 slots = 1536. Offset 688 + 768 = 1456.
-        { "member": "Cabin.average", "offset": 1456, "size": 1536 },
-        // signal: round8(50) = 56. Offset 1456 + 1536 = 2992.
-        { "member": "Horn.active", "offset": 2992, "size": 56 }
+        // event: round8(56) = 56; 56 * depth 10 = 560. Offset 0 + 48 = 48.
+        { "member": "Cabin.warning", "offset": 48, "size": 560 },
+        // command: round8(43) = 48; 48 * 16 slots = 768. Offset 48 + 560 = 608.
+        { "member": "Cabin.setLevel", "offset": 608, "size": 768 },
+        // query: round8(90) = 96; 96 * 16 slots = 1536. Offset 608 + 768 = 1376.
+        { "member": "Cabin.average", "offset": 1376, "size": 1536 },
+        // signal: round8(46) = 48. Offset 1376 + 1536 = 2912.
+        { "member": "Horn.active", "offset": 2912, "size": 48 }
       ],
-      // 48 + 640 + 768 + 1536 + 56 = 3048 = 2992 + 56.
-      "bytes": 3048
+      // 48 + 560 + 768 + 1536 + 48 = 2960 = 2912 + 48.
+      "bytes": 2960
     }
   ],
   // The proto3 links: `Telemetry.Unit` on `Gateway` consumes `Cabin` from

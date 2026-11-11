@@ -145,3 +145,18 @@ breaking `width_changed` for a remote scalar's width or backing change at the
 consumer interaction path, including on send-only paths. A widening reached only
 by command or query parameters remains compatible; a narrowing remains breaking.
 See [Evolving an interface](evolving-an-interface.md).
+
+## FlatBuffers enum width adoption
+
+The owner decision of 2026-11-11 on driftsys/ridl#1020 changes every emitted
+FlatBuffers enum from `long` to fixed `int` (int32), including fields, vectors
+and box payloads. This wire mapping change must ship in a declared pre-1.0 minor
+release, never a patch. Release notes must state that old and new FlatBuffers
+enum payloads are incompatible. Regenerate schemas and codecs and upgrade
+communicating peers together, or use a separately versioned interface during
+migration. TypeScript enum wrappers now use numbers without bigint conversion.
+Enum sets keep their existing mapping.
+
+The plugin-visible `FbEnum.width_bytes` changes from 8 to 4. The `wire` and
+`generated-crate` freeze rows are removed until the follow-up restores them
+after this change merges.

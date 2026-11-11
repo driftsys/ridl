@@ -3785,7 +3785,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 "bytes": "1091"
               },
               "flatbuffers": {
-                "bytes": "1722"
+                "bytes": "1718"
               },
               "podbuf": {
                 "bytes": "1143"
@@ -3816,13 +3816,13 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "index": 19,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 1722,
+                "flatbuffersMaxSize": 1718,
                 "sizes": {
                   "proto3": {
                     "bounded": 1091
                   },
                   "flatbuffers": {
-                    "bounded": 1722
+                    "bounded": 1718
                   },
                   "podbuf": {
                     "bounded": 1143
@@ -4140,7 +4140,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 "bytes": "1157"
               },
               "flatbuffers": {
-                "bytes": "1844"
+                "bytes": "1840"
               },
               "podbuf": {
                 "bytes": "1224"
@@ -4243,13 +4243,13 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "index": 19,
                   "kind": "DECL_KIND_STRUCT"
                 },
-                "flatbuffersMaxSize": 1722,
+                "flatbuffersMaxSize": 1718,
                 "sizes": {
                   "proto3": {
                     "bounded": 1091
                   },
                   "flatbuffers": {
-                    "bounded": 1722
+                    "bounded": 1718
                   },
                   "podbuf": {
                     "bounded": 1143
@@ -4273,7 +4273,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "bounded": 1091
                 },
                 "flatbuffers": {
-                  "bounded": 1722
+                  "bounded": 1718
                 },
                 "podbuf": {
                   "bounded": 1143
@@ -4306,7 +4306,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                 "bytes": "1094"
               },
               "flatbuffers": {
-                "bytes": "1800"
+                "bytes": "1796"
               },
               "podbuf": {
                 "bytes": "1167"
@@ -4349,13 +4349,13 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "index": 21,
                   "kind": "DECL_KIND_UNION"
                 },
-                "flatbuffersMaxSize": 1767,
+                "flatbuffersMaxSize": 1763,
                 "sizes": {
                   "proto3": {
                     "bounded": 1094
                   },
                   "flatbuffers": {
-                    "bounded": 1767
+                    "bounded": 1763
                   },
                   "podbuf": {
                     "bounded": 1159
@@ -4379,7 +4379,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "bounded": 1094
                 },
                 "flatbuffers": {
-                  "bounded": 1767
+                  "bounded": 1763
                 },
                 "podbuf": {
                   "bounded": 1159
@@ -5272,7 +5272,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           "bytes": "3672"
         },
         "flatbuffers": {
-          "bytes": "6358"
+          "bytes": "6346"
         },
         "podbuf": {
           "bytes": "4024"
@@ -6330,7 +6330,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
       {
         "declaration": 11,
         "root": "FB_ROOT_KIND_BOX",
-        "maxSize": 50
+        "maxSize": 46
       },
       {
         "declaration": 12,
@@ -6340,12 +6340,12 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
       {
         "declaration": 13,
         "root": "FB_ROOT_KIND_BOX",
-        "maxSize": 50
+        "maxSize": 46
       },
       {
         "declaration": 14,
         "root": "FB_ROOT_KIND_BOX",
-        "maxSize": 50
+        "maxSize": 46
       },
       {
         "declaration": 15,
@@ -6370,17 +6370,17 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
       {
         "declaration": 19,
         "root": "FB_ROOT_KIND_OWN",
-        "maxSize": 1722
+        "maxSize": 1718
       },
       {
         "declaration": 20,
         "root": "FB_ROOT_KIND_OWN",
-        "maxSize": 161
+        "maxSize": 141
       },
       {
         "declaration": 21,
         "root": "FB_ROOT_KIND_UNION_WRAPPER",
-        "maxSize": 1767
+        "maxSize": 1763
       },
       {
         "declaration": 22,
@@ -6632,7 +6632,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "index": 11,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,
@@ -6769,7 +6769,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "index": 14,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,
@@ -6800,7 +6800,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                       "index": 14,
                       "kind": "DECL_KIND_ENUM"
                     },
-                    "widthBytes": 8
+                    "widthBytes": 4
                   }
                 },
                 "min": "0",
@@ -7039,7 +7039,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "index": 11,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,
@@ -7082,7 +7082,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "index": 13,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,
@@ -7107,7 +7107,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   "index": 14,
                   "kind": "DECL_KIND_ENUM"
                 },
-                "widthBytes": 8
+                "widthBytes": 4
               }
             },
             "needsNullDefault": false,

@@ -1785,13 +1785,13 @@ certify all dependency changes for other encodings.
 A fourth category is breaking with `--encoding flatbuffers`, compatible without
 it, and listed under `breaking under flatbuffers` either way:
 
-- `flatbuffers_width_change`: an otherwise compatible enum value or enum-set
-  flag append changes the FlatBuffers integer, reported once per declaration
-  with the old and the new integer. An enum set uses the unsigned scalar of its
-  width; every enum uses `long`, so an enum value appended past 255 keeps its
-  integer and draws no such line. A remote declaration reached by a surviving
-  old consumer use is reported once per consumer path and remote declaration, at
-  the consumer path, with `<remote declaration>: <integer>` values.
+- `flatbuffers_width_change`: an otherwise compatible enum-set flag append
+  changes the FlatBuffers integer, reported once per declaration with the old
+  and the new integer. An enum set uses the unsigned scalar of its width; every
+  enum uses fixed `int`, so an enum value appended past 255 keeps its integer
+  and draws no such line. A remote declaration reached by a surviving old
+  consumer use is reported once per consumer path and remote declaration, at the
+  consumer path, with `<remote declaration>: <integer>` values.
 
 A fifth category is breaking with `--encoding proto3`, compatible without it,
 and listed under `breaking under proto3` either way:

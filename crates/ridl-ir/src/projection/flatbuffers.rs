@@ -285,10 +285,11 @@ pub fn enum_field_needs_null_default(def: &v2::EnumDef) -> bool {
 }
 
 /// The integer of every enum in the FlatBuffers projection.
-/// The IR holds `int64` values; a fixed width avoids widening on a later append.
+/// The fixed width is int32. The IR holds `int64` values, but TYPL-225 limits
+/// declared values to int32. A fixed width avoids widening on a later append.
 #[must_use]
 pub fn enum_integer(_def: &v2::EnumDef) -> v2::IntWidth {
-    v2::IntWidth::I64
+    v2::IntWidth::I32
 }
 
 /// The unsigned integer of an enum set: its declared width.
@@ -788,10 +789,10 @@ impl<'a> Sizer<'a> {
                 inline: OFFSET,
                 out_of_line: self.struct_table_bound(declaring, &decl.name, def)?,
             }),
-            // Every typl enum is emitted at one underlying width, `long`, so
+            // Every typl enum is emitted at one underlying width, `int`, so
             // that a later value can never widen it under an otherwise
             // compatible edit.
-            Some(v2::decl::Kind::EnumDef(_)) => Some(Charge::inline_only(8)),
+            Some(v2::decl::Kind::EnumDef(_)) => Some(Charge::inline_only(4)),
             Some(v2::decl::Kind::EnumSetDef(esd)) => {
                 Some(Charge::inline_only(int_width_bytes(esd.width)?))
             }

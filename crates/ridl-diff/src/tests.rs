@@ -3368,6 +3368,29 @@ mod podbuf {
     }
 
     #[test]
+    fn remote_enum_value_append_draws_no_flatbuffers_width_change() {
+        let enum_package = |values: &[(&str, i64)]| {
+            let mut package = remote_enums(values, true);
+            package.decls.retain(|decl| decl.name == "Mode");
+            package
+        };
+        let report = checked_remote(
+            &remote_holder(named("dep.types.Mode")),
+            &enum_package(&[("A", 0)]),
+            &enum_package(&[("A", 0), ("B", i64::from(i32::MAX))]),
+            &["flatbuffers"],
+        );
+        assert_eq!(report.verdict, Verdict::Compatible, "{report:?}");
+        assert!(
+            !report
+                .changes
+                .iter()
+                .any(|change| change.category == Category::FlatbuffersWidthChange),
+            "{report:?}"
+        );
+    }
+
+    #[test]
     fn remote_scalar_width_growth_is_reported() {
         let local = remote_holder(named("dep.types.Level"));
         let old = package("dep.types", vec![int_type("Level", "0", "255")]);
@@ -6384,7 +6407,7 @@ mod flatbuffers_width {
     }
 
     #[test]
-    fn an_open_enum_value_past_255_keeps_the_flatbuffers_long() {
+    fn an_open_enum_value_past_255_keeps_the_flatbuffers_int() {
         let (old, new) = (enum_of(256, true), enum_of(257, true));
         let report = diff_refs_with(&[&old], &[&new], &[], &["flatbuffers"]);
         assert!(

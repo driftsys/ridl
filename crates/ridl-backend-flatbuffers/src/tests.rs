@@ -331,7 +331,7 @@ fn an_enum_keeps_its_values_unprefixed_with_an_explicit_underlying_type() {
     assert!(
         generated
             .fbs_source
-            .contains("enum GearPosition : long {\n  PARK = 1,\n  DRIVE = 2,\n}"),
+            .contains("enum GearPosition : int {\n  PARK = 1,\n  DRIVE = 2,\n}"),
         "got:\n{}",
         generated.fbs_source
     );
@@ -2379,11 +2379,11 @@ fn an_enum_states_whether_it_is_strict_or_open() {
     for (open, comment) in [
         (
             false,
-            "// strict: a value outside this list is not valid\nenum Gear : long {",
+            "// strict: a value outside this list is not valid\nenum Gear : int {",
         ),
         (
             true,
-            "// open: a value outside this list is valid and is kept\nenum Gear : long {",
+            "// open: a value outside this list is valid and is kept\nenum Gear : int {",
         ),
     ] {
         let mut package = enum_package("Gear", vec![("PARK", 0)]);
@@ -2449,5 +2449,30 @@ fn the_projection_enum_integers_are_what_the_schema_emits() {
             "{width:?}: {}",
             generated.fbs_source
         );
+    }
+}
+
+#[test]
+fn enum_int32_boundaries_are_accepted() {
+    let package = enum_package(
+        "Mode",
+        vec![
+            ("Minimum", i64::from(i32::MIN)),
+            ("Maximum", i64::from(i32::MAX)),
+        ],
+    );
+    let generated = generate(&package).expect("int32 boundaries are valid");
+    assert!(generated.fbs_source.contains("Minimum = -2147483648"));
+    assert!(generated.fbs_source.contains("Maximum = 2147483647"));
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn enum_values_outside_int32_are_refused() {
+    for value in [i64::from(i32::MIN) - 1, i64::from(i32::MAX) + 1] {
+        let package = enum_package("Mode", vec![("Outside", value)]);
+        let error = generate(&package).expect_err("a live value must fit int32");
+        assert!(error.message.contains("int32"), "{error:?}");
+        assert!(error.message.contains(&value.to_string()), "{error:?}");
     }
 }

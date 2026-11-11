@@ -9,7 +9,7 @@ table Wheel {
 }
 
 // strict: a value outside this list is not valid
-enum Grade : long {
+enum Grade : int {
   A = 0,
   B = 1,
 }

@@ -1077,36 +1077,44 @@ Deno.test("duplex_adapters_propagate_failure", async () => {
   }
 });
 
-// Mutation: let a verified generated open-enum decoder throw past decodeStream.
-Deno.test("open_enum_2_pow_53_decode_is_a_stream_contract_failure", async () => {
+Deno.test("open_enum_int32_max_survives_stream_decode", async () => {
   const builder = new flatbuffers.Builder();
-  builder.finish(new StatusBoxT(9007199254740992n).pack(builder));
+  builder.finish(new StatusBoxT(2147483647 as number).pack(builder));
   const bytes = builder.asUint8Array();
-  // Bypass the safe-integer encoder to reproduce a valid wire i64 that the
-  // wasm verifier accepts but the TypeScript domain cannot represent.
   const h = harness([bytes]);
-  const original = entry("statuses").streams[0].element!.decode;
-  let cause: unknown;
-  try {
-    original(bytes);
-  } catch (error) {
-    cause = error;
-  }
-  assert.ok(cause instanceof codec.RuleError);
-  assert.equal(cause.rule, "variant");
-  await assert.rejects(
-    () => collect(generated("Feed_statuses")(h.session, { bound: 50 })),
-    (error: unknown) => {
-      assert.ok(error instanceof StreamError);
-      assert.deepEqual(error.failure, {
-        category: "contract",
-        contract: { category: "invalid-value", rule: "variant" },
-      });
-      assert.ok(error.cause instanceof codec.RuleError);
-      assert.equal(error.cause.rule, "variant");
-      return true;
-    },
+  assert.deepEqual(
+    await collect(generated("Feed_statuses")(h.session, { bound: 50 })),
+    [{ unknown: 2147483647 }],
   );
+});
+
+// Mutation: let a decoder exception escape decodeStream.
+Deno.test("open_enum_decoder_failure_is_a_stream_contract_failure", async () => {
+  const builder = new flatbuffers.Builder();
+  builder.finish(new StatusBoxT(2147483647 as number).pack(builder));
+  const h = harness([builder.asUint8Array()]);
+  const payload = entry("statuses").streams[0].element!;
+  const original = payload.decode;
+  const cause = new codec.RuleError("variant", "invalid enum");
+  payload.decode = () => {
+    throw cause;
+  };
+  try {
+    await assert.rejects(
+      () => collect(generated("Feed_statuses")(h.session, { bound: 50 })),
+      (error: unknown) => {
+        assert.ok(error instanceof StreamError);
+        assert.deepEqual(error.failure, {
+          category: "contract",
+          contract: { category: "invalid-value", rule: "variant" },
+        });
+        assert.strictEqual(error.cause, cause);
+        return true;
+      },
+    );
+  } finally {
+    payload.decode = original;
+  }
 });
 
 // Mutations: drop request cause or let a plain reply decoder exception escape.

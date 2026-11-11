@@ -2134,3 +2134,74 @@ fn main() {
         ),
     );
 }
+
+/// Enum boxes carry signed int32 values in both implementations.
+#[test]
+fn enum_int32_boundaries_round_trip_through_planus_both_ways() {
+    for (variant, foreign) in [
+        ("Negative", fb::Health::Negative),
+        ("Maximum", fb::Health::Maximum),
+    ] {
+        let main = format!(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Payload;
+fn main() {{
+    let value = Health::{variant};
+    let mut out = vec![0u8; <Health as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = value.encode(&mut out).unwrap().bytes;
+    for byte in bytes {{ print!("{{byte:02x}}"); }}
+}}
+"#
+        );
+        let transcript =
+            rustc::run_program_capturing_stdout("fb_enum_int32_encode", &program(&main));
+        let ours = from_hex(&transcript);
+        let read = <fb::HealthBoxRef<'_> as planus::ReadAsRoot>::read_as_root(&ours).unwrap();
+        assert_eq!(fb::HealthBox::try_from(read).unwrap().value, foreign);
+        let mut builder = planus::Builder::new();
+        let theirs = builder
+            .finish(fb::HealthBox { value: foreign }, None)
+            .to_vec();
+        let table = u32::from_le_bytes(ours[..4].try_into().unwrap()) as usize;
+        let distance = i32::from_le_bytes(ours[table..table + 4].try_into().unwrap());
+        let vtable = table.checked_add_signed(-(distance as isize)).unwrap();
+        let inline_size = u16::from_le_bytes(ours[vtable + 2..vtable + 4].try_into().unwrap());
+        assert_eq!(inline_size, 8, "a soffset and one int32 field");
+        let hex = to_hex(&theirs);
+        let main = format!(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::Ref;
+fn main() {{
+    let hex = "{hex}";
+    let bytes: Vec<u8> = (0..hex.len()).step_by(2)
+        .map(|at| u8::from_str_radix(&hex[at..at + 2], 16).unwrap()).collect();
+    assert_eq!(Ref::<Health, FlatBuffers>::verify(&bytes).unwrap().decode(), Health::{variant});
+}}
+"#
+        );
+        rustc::run_program("fb_enum_int32_decode", &program(&main));
+    }
+}
+
+#[test]
+fn an_open_enum_outside_int32_is_refused_on_encode() {
+    rustc::run_program(
+        "fb_open_enum_int32_range",
+        &open_program(
+            r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Ref, EncodeError, Rule};
+fn main() {
+    for raw in [i64::from(i32::MIN) - 1, i64::from(i32::MAX) + 1] {
+        let value = DtcStatus::from(raw);
+        let mut out = [0u8; 64];
+        assert!(matches!(Ref::<DtcStatus, FlatBuffers>::encode(&value, &mut out),
+            Err(EncodeError::Contract(v)) if v.rule == Rule::Range));
+    }
+}
+"#,
+        ),
+    );
+}

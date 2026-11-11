@@ -359,9 +359,9 @@ fn a_named_scalar_root_is_bounded_by_its_box() {
 }
 
 #[test]
-fn an_enum_root_is_charged_its_long_and_an_enum_set_root_its_width() {
-    // An enum is emitted at one underlying width, `long`, so its box holds
-    // eight bytes; an enum set holds its declared width.
+fn an_enum_root_is_charged_its_int_and_an_enum_set_root_its_width() {
+    // An enum is emitted at one underlying width, `int`, so its box holds
+    // four bytes; an enum set holds its declared width.
     let pkg = package(
         "veh.cruise",
         vec![
@@ -388,7 +388,7 @@ fn an_enum_root_is_charged_its_long_and_an_enum_set_root_its_width() {
 
     let box_overhead =
         ROOT + OFFSET + ALIGN_SLACK * 2 + (VTABLE_HEADER + VTABLE_SLOT + ALIGN_SLACK);
-    assert_eq!(bound(&[&pkg], "EngageState"), Some(box_overhead + 8));
+    assert_eq!(bound(&[&pkg], "EngageState"), Some(box_overhead + 4));
     assert_eq!(bound(&[&pkg], "Faults"), Some(box_overhead + 2));
 }
 
@@ -880,4 +880,12 @@ fn a_bare_name_resolves_in_the_home_package_not_the_root() {
     assert!(packages.resolve(&imported, "RootOnly").is_none());
     assert!(packages.resolve(&root, "RootOnly").is_some());
     assert!(packages.resolve(&imported, "OtherOnly").is_some());
+}
+
+#[test]
+fn enums_have_fixed_int32_wire_width() {
+    assert_eq!(
+        super::enum_integer(&crate::v2::EnumDef::default()),
+        crate::v2::IntWidth::I32
+    );
 }

@@ -65,7 +65,7 @@ fn assigned_numbers(schema: &str) -> std::collections::BTreeMap<String, i64> {
             continue;
         }
         if let Some(rest) = line.strip_prefix("enum ") {
-            // `enum Mode : long {` — the name stops at the underlying type.
+            // `enum Mode : int {` — the name stops at the underlying type.
             scope = rest.split(':').next().unwrap_or("").trim().to_string();
             in_enum = true;
             continue;

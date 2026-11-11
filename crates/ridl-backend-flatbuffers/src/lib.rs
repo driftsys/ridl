@@ -393,8 +393,9 @@ fn strictness_comment(open: bool) -> &'static str {
 /// contributes nothing: FlatBuffers has no `reserved` construct for an enum
 /// declaration.
 ///
-/// The underlying type is always `long`. `EnumValue.value` is `int64` in the
-/// IR, and narrowing to the smallest type that fits the declared values would
+/// The underlying type is fixed `int` (int32). `EnumValue.value` is `int64` in
+/// the IR, but TYPL-225 limits declared values to int32. Narrowing to the
+/// smallest type that fits the declared values would
 /// make the underlying type a function of those values — a later value could
 /// then widen it, which is a wire change under an otherwise compatible edit.
 ///
@@ -404,10 +405,16 @@ fn strictness_comment(open: bool) -> &'static str {
 fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), GenerateError> {
     let mut values = Namespace::values(name);
     out.push_str(&format!(
-        "\n{}\nenum {name} : long {{\n",
+        "\n{}\nenum {name} : int {{\n",
         strictness_comment(def.open)
     ));
     for value in &def.values {
+        i32::try_from(value.value).map_err(|_| GenerateError {
+            message: format!(
+                "value `{}` of enum `{name}` is outside int32: {}",
+                value.name, value.value
+            ),
+        })?;
         values.claim(
             &value.name,
             &format!("value `{}` of enum `{name}`", value.name),
@@ -918,7 +925,8 @@ fn resolve_type_position(
 /// [`named_field_type`], [`union_arm_type`] and the `Named` arm of
 /// [`resolve_field_type`], which resolves first and then calls
 /// [`named_decl_type`]: a field position and a union arm each name a
-/// declaration the same way, and only what they do with the result differs. A foreign lookup walks `packages.others` for a package
+/// declaration the same way, and only what they do with the result differs.
+/// A foreign lookup walks `packages.others` for a package
 /// named `referenced_package` holding a declaration named `member`; a
 /// same-package lookup walks `packages.package` directly. Either miss is
 /// refused with a `GenerateError` naming `owner`, `member_name` and the
