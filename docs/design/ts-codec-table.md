@@ -137,20 +137,24 @@ when needed, plus the value `$rt.checkWellFormed` when the module writes a
 string (D-11), and satisfy `MemberRef` structurally. Stream functions also use
 the runtime types, errors and adapters described in D-17; they import nothing
 from the WebSocket package. A module with a signal also uses the runtime's
-`$rt.Codec`, `$rt.SignalCheckEntry` and `$rt.CodecError` for `signalChecks`. The
-names the file declares are checked before anything is written, and a second
-declaration of one is refused with an error that names both: an interface or an
-induced tuple named after a reserved name of the file (`CATALOG_NAME`,
-`CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `RuleError` when the module reaches an
-enum or an enum set, `signalChecks` and `signalCheck` when the package has a
-signal, an import alias `flatbuffers`, `t`, `fb`, `<package>` or
-`<package>_codec`), two enum sets of other packages whose `pack_<alias>_<Name>`
-or `unpack_<alias>_<Name>` functions spell the same (`a.b` / `c_d` and `a.b.c` /
-`d`), two foreign payload types whose `codec<Package><Name>` constants spell the
-same (`a.b` / `C` and `a` / `BC`), and a local payload type whose `codec<Name>`
-spells a foreign one. An interaction named `iface` is refused because it
-collides with the interface table metadata key of that name; the error names
-both sources.
+`$rt.Codec`, `$rt.SignalCheckEntry` and `$rt.CodecError` for `signalChecks`. A
+module writes `<Interface>Client` for an interface that has at least one call
+method with a codec and a finite bound, and the class uses `$rt.Caller`,
+`$rt.CallOptions`, `$rt.Codec` and the values `$rt.checkCatalog`,
+`$rt.encodeRequest` and `$rt.decodeReply`; a client class name that another
+declaration of the file takes is refused like any other collision. The names the
+file declares are checked before anything is written, and a second declaration
+of one is refused with an error that names both: an interface or an induced
+tuple named after a reserved name of the file (`CATALOG_NAME`, `CATALOG_HASH`,
+`PAYLOAD_TYPES`, `RULES`, `RuleError` when the module reaches an enum or an enum
+set, `signalChecks` and `signalCheck` when the package has a signal, an import
+alias `flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two enum sets
+of other packages whose `pack_<alias>_<Name>` or `unpack_<alias>_<Name>`
+functions spell the same (`a.b` / `c_d` and `a.b.c` / `d`), two foreign payload
+types whose `codec<Package><Name>` constants spell the same (`a.b` / `C` and `a`
+/ `BC`), and a local payload type whose `codec<Name>` spells a foreign one. An
+interaction named `iface` is refused because it collides with the interface
+table metadata key of that name; the error names both sources.
 
 ## Stream functions
 

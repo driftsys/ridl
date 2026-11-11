@@ -3206,11 +3206,12 @@ _codec-ts-check:
     deno test --no-config "$instances/instances_test.ts"
     "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec --emit typescript --emit flatbuffers --out-dir "$tmp"
     flatc --ts --gen-object-api -I "$tmp" -o "$tmp" "$tmp/veh.common.fbs" "$tmp/ridl.std.fbs"
-    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec/deno.json > "$tmp/deno.json"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/#$PWD/packages/ridl-runtime/#" crates/ridl-backend-ts/tests/fixtures/codec/deno.json > "$tmp/deno.json"
     cp crates/ridl-backend-ts/tests/fixtures/codec/roundtrip_test.ts "$tmp/roundtrip_test.ts"
-    deno lint --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
+    cp crates/ridl-backend-ts/tests/fixtures/codec/client_test.ts "$tmp/client_test.ts"
+    deno lint --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts" "$tmp/client_test.ts"
     deno check --config "$tmp/deno.json" "$tmp/veh.common.codec.ts" "$tmp/ridl.std.codec.ts"
-    deno test --config "$tmp/deno.json" "$tmp/roundtrip_test.ts"
+    deno test --config "$tmp/deno.json" "$tmp/roundtrip_test.ts" "$tmp/client_test.ts"
     # The second fixture: a package whose only payload root is a `ridl.std`
     # scalar, so its module imports `ridl.std.codec.ts` and no barrel of its
     # own (`flatc` runs on `ridl.std.fbs` alone: the package has no table).
@@ -3278,9 +3279,12 @@ _codec-ts-check:
     "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-single --emit typescript --emit flatbuffers --out-dir "$single"
     mkdir -p "$single/flatc_out"
     flatc --ts --gen-object-api -I "$single" -o "$single/flatc_out" "$single/single.fbs"
-    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-single/deno.json > "$single/deno.json"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/#$PWD/packages/ridl-runtime/#" crates/ridl-backend-ts/tests/fixtures/codec-single/deno.json > "$single/deno.json"
+    # The same module with no response bound on its members, for the type test
+    # that a call without a declared maximum requires `opts.bound`.
+    cargo run --locked -p ridl-backend-ts --example untimed_fixture -- "$single/single_untimed.codec.ts"
     cp crates/ridl-backend-ts/tests/fixtures/codec-single/single_test.ts "$single/single_test.ts"
-    deno lint --config "$single/deno.json" "$single/single.codec.ts"
+    deno lint --config "$single/deno.json" "$single/single.codec.ts" "$single/single_untimed.codec.ts" "$single/single_test.ts"
     deno check --config "$single/deno.json" "$single/single.codec.ts" "$single/single.ts"
     deno test --config "$single/deno.json" "$single/single_test.ts"
 
@@ -3290,7 +3294,7 @@ _codec-ts-check:
     "$target/debug/ridl" build crates/ridl-backend-ts/tests/fixtures/codec-names --emit typescript --emit flatbuffers --out-dir "$names"
     mkdir -p "$names/flatc_out"
     flatc --ts --gen-object-api -I "$names" -o "$names/flatc_out" "$names/names.fbs"
-    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" crates/ridl-backend-ts/tests/fixtures/codec-names/deno.json > "$names/deno.json"
+    sed "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/#$PWD/packages/ridl-runtime/#" crates/ridl-backend-ts/tests/fixtures/codec-names/deno.json > "$names/deno.json"
     cp crates/ridl-backend-ts/tests/fixtures/codec-names/names_test.ts "$names/names_test.ts"
     deno lint --config "$names/deno.json" "$names/names.codec.ts" "$names/names.ts" "$names/names_test.ts"
     deno check --config "$names/deno.json" "$names/names.codec.ts" "$names/names.ts" "$names/names_test.ts"
