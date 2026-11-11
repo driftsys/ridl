@@ -126,7 +126,8 @@ enum Command {
         #[arg(long, conflicts_with = "reset_history")]
         repair_context: bool,
         /// Preserve the prior baseline and start fresh catalog histories from
-        /// current source, retaining the normal publication refusal checks.
+        /// current source, retaining the normal publication refusal checks except
+        /// for a whole unit removed on purpose.
         #[arg(long, conflicts_with = "repair_context")]
         reset_history: bool,
     },
@@ -670,7 +671,7 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncodin
             eprintln!(
                 "error: cannot establish podbuf compatibility: {error}\n\
 Repair context only from the exact historical local snapshots and verified historical remote pins: ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE.\n\
-To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility. BASELINE is the affected snapshot input named by the old or new context issue."
+To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility for the whole baseline. It retains the normal publication refusal checks except for a whole unit removed on purpose. BASELINE is the affected snapshot input named by the old or new context issue."
             );
             if error
                 .issues
@@ -1033,16 +1034,18 @@ fn run_baseline(
         let _ = std::fs::remove_dir_all(&staging);
         return code;
     }
-    let mut refused = false;
-    for gate in [untombstoned_removals, interface_refusals] {
-        match gate(path, &sets, &mut run) {
-            Ok(hit) => refused |= hit,
-            Err(code) => {
-                let _ = std::fs::remove_dir_all(&staging);
-                return code;
-            }
+    let mut reset_notes = Vec::new();
+    let refused = untombstoned_removals(path, &sets, &mut run).and_then(|refused| {
+        interface_refusals(path, &sets, &mut run, reset_history, &mut reset_notes)
+            .map(|hit| refused || hit)
+    });
+    let refused = match refused {
+        Ok(refused) => refused,
+        Err(code) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return code;
         }
-    }
+    };
     if refused {
         let _ = std::fs::remove_dir_all(&staging);
         return finish(Ok(run));
@@ -1079,6 +1082,9 @@ fn run_baseline(
         return ExitCode::from(2);
     }
 
+    for note in reset_notes {
+        eprintln!("note: {note}");
+    }
     finish(Ok(run))
 }
 
@@ -1331,7 +1337,9 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
 /// and does not list as retired, and the package-level `DeclRemoved` of a
 /// package whose whole unit is gone from the fresh set, which loses every
 /// allocated shape the package held ([`dropped_numbers`]). A gone unit gets
-/// one refusal listing its lost keys and numbers. A unit that remains gets
+/// one refusal listing its lost keys and numbers, unless history reset skips
+/// that refusal and collects a note to print after successful publication.
+/// A unit that remains gets
 /// one refusal per lost number and package, since a declared interface and an
 /// inline-form service of one name are reported at one path. A published
 /// provisional number carries no identity and is not refused on removal.
@@ -1347,6 +1355,8 @@ fn interface_refusals(
     entry: &Path,
     sets: &PublicationSets,
     run: &mut CliRun,
+    reset_history: bool,
+    reset_notes: &mut Vec<String>,
 ) -> Result<bool, ExitCode> {
     let fresh = &sets.fresh;
     let mut index: Option<DeclIndex> = None;
@@ -1388,7 +1398,15 @@ fn interface_refusals(
             }
         }
         for lost in gone_units.values() {
-            messages.push(dropped_number_message(lost, &sets.out_dir));
+            if reset_history {
+                reset_notes.push(format!(
+                    "Reset drops unit `{}` and its interface numbers: {}; the prior baseline is preserved and no earlier compatibility is claimed for the whole baseline.",
+                    lost[0].unit,
+                    dropped_number_keys(lost)
+                ));
+            } else {
+                messages.push(dropped_number_message(lost, &sets.out_dir));
+            }
         }
         for message in messages {
             refusals.push(Diagnostic {
@@ -1541,30 +1559,35 @@ fn dropped_number_key(lost: &DroppedNumber<'_>) -> LockKey {
     }
 }
 
+/// Render allocated keys and numbers consistently in refusals and reset notes.
+fn dropped_number_keys(lost: &[DroppedNumber<'_>]) -> String {
+    lost.iter()
+        .map(|lost| {
+            format!(
+                "`{}` (number {})",
+                dropped_number_key(lost),
+                lost.shape.interface.number
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 /// The RIDL-412 message for one lost number in a unit that remains, or all
 /// lost numbers of a gone unit, with the applicable recovery instruction.
 fn dropped_number_message(lost: &[DroppedNumber<'_>], out_dir: &Path) -> String {
     let first = &lost[0];
     let unit = first.unit;
     if first.unit_gone {
-        let keys = lost
-            .iter()
-            .map(|lost| {
-                format!(
-                    "`{}` (number {})",
-                    dropped_number_key(lost),
-                    lost.shape.interface.number
-                )
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
+        let keys = dropped_number_keys(lost);
         return format!(
             "The baseline being replaced holds interface numbers in unit `{unit}`: {keys}, \
              but the workspace no longer has that unit. Publishing would lose the only \
-             record that these numbers were allocated. When the unit is removed on purpose, delete \
-             the snapshots of unit `{unit}` from `{}`: a first publication holds no \
-             number to lose. Otherwise restore the unit and its `interfaces.lock` from version \
-             control.",
+             record that these numbers were allocated. When the unit is removed on purpose, run \
+             `ridl baseline CURRENT_SOURCE --reset-history --out BASELINE` with BASELINE set to \
+             `{}`. A reset preserves the prior \
+             baseline and claims no earlier compatibility for the whole baseline. Otherwise restore \
+             the unit and its `interfaces.lock` from version control.",
             out_dir.display()
         );
     }
