@@ -2,12 +2,8 @@
 source: crates/ridl-backend-ts/tests/codec.rs
 expression: source
 ---
-import type { Codec, SignalCheckEntry } from "@driftsys/ridl-runtime";
-import type { StreamSession, StreamOptions } from "@driftsys/ridl-runtime";
-import { CatalogMismatch, CodecError, StreamError, decodeStream, decodeTextStream, encodeUpload, byteUpload, textUpload } from "@driftsys/ridl-runtime";
-import { checkWellFormed } from "@driftsys/ridl-runtime";
+import * as $rt from "@driftsys/ridl-runtime";
 import * as flatbuffers from "flatbuffers";
-import type { PayloadCodec } from "@driftsys/ridl-runtime";
 import * as t from "./streams.demo.js";
 // `flatc --ts --gen-object-api` writes this module when its `-o` is the directory
 // of this file.
@@ -243,7 +239,7 @@ export function decodeData(bytes: Uint8Array): t.Data {
 /** Encodes a `streams.demo.Text` payload. */
 export function encodeText(value: t.Text): Uint8Array {
   const builder = new flatbuffers.Builder();
-  builder.finish(new fb.TextBoxT(checkWellFormed(value, "streams.demo.Text")).pack(builder));
+  builder.finish(new fb.TextBoxT($rt.checkWellFormed(value, "streams.demo.Text")).pack(builder));
   return builder.asUint8Array();
 }
 /** Decodes a `streams.demo.Text` payload the codec has verified. */
@@ -1083,93 +1079,93 @@ function unpackStreamEntry1FetchParams(object: fb.StreamEntry1FetchParamsT): Str
   return { streamEntry13: t.makeCountUnchecked(object.field1), streamEntry14: t.makeCountUnchecked(object.field2) };
 }
 
-const codecCount: PayloadCodec<t.Count> = { type: "streams.demo.Count", encode: encodeCount, decode: decodeCount };
-const codecData: PayloadCodec<t.Data> = { type: "streams.demo.Data", encode: encodeData, decode: decodeData };
-const codecText: PayloadCodec<t.Text> = { type: "streams.demo.Text", encode: encodeText, decode: decodeText };
-const codecChunk: PayloadCodec<t.Chunk> = { type: "streams.demo.Chunk", encode: encodeChunk, decode: decodeChunk };
-const codecChoice: PayloadCodec<t.Choice> = { type: "streams.demo.Choice", encode: encodeChoice, decode: decodeChoice };
-const codecStatus: PayloadCodec<t.StatusValue> = { type: "streams.demo.Status", encode: encodeStatus, decode: decodeStatus };
-const codecUploadResult: PayloadCodec<t.UploadResult> = { type: "streams.demo.UploadResult", encode: encodeUploadResult, decode: decodeUploadResult };
-const codecFeedScalarsParams: PayloadCodec<FeedScalarsParams> = { type: "streams.demo.FeedScalarsParams", encode: encodeFeedScalarsParams, decode: decodeFeedScalarsParams };
-const codecFeedUnionsParams: PayloadCodec<FeedUnionsParams> = { type: "streams.demo.FeedUnionsParams", encode: encodeFeedUnionsParams, decode: decodeFeedUnionsParams };
-const codecFeedStatusesParams: PayloadCodec<FeedStatusesParams> = { type: "streams.demo.FeedStatusesParams", encode: encodeFeedStatusesParams, decode: decodeFeedStatusesParams };
-const codecFeedDataParams: PayloadCodec<FeedDataParams> = { type: "streams.demo.FeedDataParams", encode: encodeFeedDataParams, decode: decodeFeedDataParams };
-const codecFeedLabelsParams: PayloadCodec<FeedLabelsParams> = { type: "streams.demo.FeedLabelsParams", encode: encodeFeedLabelsParams, decode: decodeFeedLabelsParams };
-const codecFeedTextParams: PayloadCodec<FeedTextParams> = { type: "streams.demo.FeedTextParams", encode: encodeFeedTextParams, decode: decodeFeedTextParams };
-const codecFeedZeroParams: PayloadCodec<FeedZeroParams> = { type: "streams.demo.FeedZeroParams", encode: encodeFeedZeroParams, decode: decodeFeedZeroParams };
-const codecFeedLatestParams: PayloadCodec<FeedLatestParams> = { type: "streams.demo.FeedLatestParams", encode: encodeFeedLatestParams, decode: decodeFeedLatestParams };
-const codecFeedUploadParams: PayloadCodec<FeedUploadParams> = { type: "streams.demo.FeedUploadParams", encode: encodeFeedUploadParams, decode: decodeFeedUploadParams };
-const codecFeedDuplexParams: PayloadCodec<FeedDuplexParams> = { type: "streams.demo.FeedDuplexParams", encode: encodeFeedDuplexParams, decode: decodeFeedDuplexParams };
-const codecFeedDuplexNamedParams: PayloadCodec<FeedDuplexNamedParams> = { type: "streams.demo.FeedDuplexNamedParams", encode: encodeFeedDuplexNamedParams, decode: decodeFeedDuplexNamedParams };
-const codecFeedDuplexTextParams: PayloadCodec<FeedDuplexTextParams> = { type: "streams.demo.FeedDuplexTextParams", encode: encodeFeedDuplexTextParams, decode: decodeFeedDuplexTextParams };
-const codecFeedDuplexBytesParams: PayloadCodec<FeedDuplexBytesParams> = { type: "streams.demo.FeedDuplexBytesParams", encode: encodeFeedDuplexBytesParams, decode: decodeFeedDuplexBytesParams };
-const codecFeedFetchParams: PayloadCodec<FeedFetchParams> = { type: "streams.demo.FeedFetchParams", encode: encodeFeedFetchParams, decode: decodeFeedFetchParams };
-const codecFeedUploadNamedParams: PayloadCodec<FeedUploadNamedParams> = { type: "streams.demo.FeedUploadNamedParams", encode: encodeFeedUploadNamedParams, decode: decodeFeedUploadNamedParams };
-const codecFeedUploadDataParams: PayloadCodec<FeedUploadDataParams> = { type: "streams.demo.FeedUploadDataParams", encode: encodeFeedUploadDataParams, decode: decodeFeedUploadDataParams };
-const codecFeedUploadChoiceParams: PayloadCodec<FeedUploadChoiceParams> = { type: "streams.demo.FeedUploadChoiceParams", encode: encodeFeedUploadChoiceParams, decode: decodeFeedUploadChoiceParams };
-const codecFeedUploadTupleParams: PayloadCodec<FeedUploadTupleParams> = { type: "streams.demo.FeedUploadTupleParams", encode: encodeFeedUploadTupleParams, decode: decodeFeedUploadTupleParams };
-const codecFeedUploadTupleReply: PayloadCodec<FeedUploadTupleReply> = { type: "streams.demo.FeedUploadTupleReply", encode: encodeFeedUploadTupleReply, decode: decodeFeedUploadTupleReply };
-const codecOtherFetchParams: PayloadCodec<OtherFetchParams> = { type: "streams.demo.OtherFetchParams", encode: encodeOtherFetchParams, decode: decodeOtherFetchParams };
-const codecSessionFetchParams: PayloadCodec<SessionFetchParams> = { type: "streams.demo.SessionFetchParams", encode: encodeSessionFetchParams, decode: decodeSessionFetchParams };
-const codecOptsFetchParams: PayloadCodec<OptsFetchParams> = { type: "streams.demo.OptsFetchParams", encode: encodeOptsFetchParams, decode: decodeOptsFetchParams };
-const codecEntryFetchParams: PayloadCodec<EntryFetchParams> = { type: "streams.demo.EntryFetchParams", encode: encodeEntryFetchParams, decode: decodeEntryFetchParams };
-const codecArgsFetchParams: PayloadCodec<ArgsFetchParams> = { type: "streams.demo.ArgsFetchParams", encode: encodeArgsFetchParams, decode: decodeArgsFetchParams };
-const codecRawFetchParams: PayloadCodec<RawFetchParams> = { type: "streams.demo.RawFetchParams", encode: encodeRawFetchParams, decode: decodeRawFetchParams };
-const codecElementFetchParams: PayloadCodec<ElementFetchParams> = { type: "streams.demo.ElementFetchParams", encode: encodeElementFetchParams, decode: decodeElementFetchParams };
-const codecRequestTypeFetchParams: PayloadCodec<RequestTypeFetchParams> = { type: "streams.demo.RequestTypeFetchParams", encode: encodeRequestTypeFetchParams, decode: decodeRequestTypeFetchParams };
-const codecElementTypeFetchParams: PayloadCodec<ElementTypeFetchParams> = { type: "streams.demo.ElementTypeFetchParams", encode: encodeElementTypeFetchParams, decode: decodeElementTypeFetchParams };
-const codecStreamEntryFetchParams: PayloadCodec<StreamEntryFetchParams> = { type: "streams.demo.StreamEntryFetchParams", encode: encodeStreamEntryFetchParams, decode: decodeStreamEntryFetchParams };
-const codecStreamEntry1FetchParams: PayloadCodec<StreamEntry1FetchParams> = { type: "streams.demo.StreamEntry1FetchParams", encode: encodeStreamEntry1FetchParams, decode: decodeStreamEntry1FetchParams };
+const codecCount: $rt.PayloadCodec<t.Count> = { type: "streams.demo.Count", encode: encodeCount, decode: decodeCount };
+const codecData: $rt.PayloadCodec<t.Data> = { type: "streams.demo.Data", encode: encodeData, decode: decodeData };
+const codecText: $rt.PayloadCodec<t.Text> = { type: "streams.demo.Text", encode: encodeText, decode: decodeText };
+const codecChunk: $rt.PayloadCodec<t.Chunk> = { type: "streams.demo.Chunk", encode: encodeChunk, decode: decodeChunk };
+const codecChoice: $rt.PayloadCodec<t.Choice> = { type: "streams.demo.Choice", encode: encodeChoice, decode: decodeChoice };
+const codecStatus: $rt.PayloadCodec<t.StatusValue> = { type: "streams.demo.Status", encode: encodeStatus, decode: decodeStatus };
+const codecUploadResult: $rt.PayloadCodec<t.UploadResult> = { type: "streams.demo.UploadResult", encode: encodeUploadResult, decode: decodeUploadResult };
+const codecFeedScalarsParams: $rt.PayloadCodec<FeedScalarsParams> = { type: "streams.demo.FeedScalarsParams", encode: encodeFeedScalarsParams, decode: decodeFeedScalarsParams };
+const codecFeedUnionsParams: $rt.PayloadCodec<FeedUnionsParams> = { type: "streams.demo.FeedUnionsParams", encode: encodeFeedUnionsParams, decode: decodeFeedUnionsParams };
+const codecFeedStatusesParams: $rt.PayloadCodec<FeedStatusesParams> = { type: "streams.demo.FeedStatusesParams", encode: encodeFeedStatusesParams, decode: decodeFeedStatusesParams };
+const codecFeedDataParams: $rt.PayloadCodec<FeedDataParams> = { type: "streams.demo.FeedDataParams", encode: encodeFeedDataParams, decode: decodeFeedDataParams };
+const codecFeedLabelsParams: $rt.PayloadCodec<FeedLabelsParams> = { type: "streams.demo.FeedLabelsParams", encode: encodeFeedLabelsParams, decode: decodeFeedLabelsParams };
+const codecFeedTextParams: $rt.PayloadCodec<FeedTextParams> = { type: "streams.demo.FeedTextParams", encode: encodeFeedTextParams, decode: decodeFeedTextParams };
+const codecFeedZeroParams: $rt.PayloadCodec<FeedZeroParams> = { type: "streams.demo.FeedZeroParams", encode: encodeFeedZeroParams, decode: decodeFeedZeroParams };
+const codecFeedLatestParams: $rt.PayloadCodec<FeedLatestParams> = { type: "streams.demo.FeedLatestParams", encode: encodeFeedLatestParams, decode: decodeFeedLatestParams };
+const codecFeedUploadParams: $rt.PayloadCodec<FeedUploadParams> = { type: "streams.demo.FeedUploadParams", encode: encodeFeedUploadParams, decode: decodeFeedUploadParams };
+const codecFeedDuplexParams: $rt.PayloadCodec<FeedDuplexParams> = { type: "streams.demo.FeedDuplexParams", encode: encodeFeedDuplexParams, decode: decodeFeedDuplexParams };
+const codecFeedDuplexNamedParams: $rt.PayloadCodec<FeedDuplexNamedParams> = { type: "streams.demo.FeedDuplexNamedParams", encode: encodeFeedDuplexNamedParams, decode: decodeFeedDuplexNamedParams };
+const codecFeedDuplexTextParams: $rt.PayloadCodec<FeedDuplexTextParams> = { type: "streams.demo.FeedDuplexTextParams", encode: encodeFeedDuplexTextParams, decode: decodeFeedDuplexTextParams };
+const codecFeedDuplexBytesParams: $rt.PayloadCodec<FeedDuplexBytesParams> = { type: "streams.demo.FeedDuplexBytesParams", encode: encodeFeedDuplexBytesParams, decode: decodeFeedDuplexBytesParams };
+const codecFeedFetchParams: $rt.PayloadCodec<FeedFetchParams> = { type: "streams.demo.FeedFetchParams", encode: encodeFeedFetchParams, decode: decodeFeedFetchParams };
+const codecFeedUploadNamedParams: $rt.PayloadCodec<FeedUploadNamedParams> = { type: "streams.demo.FeedUploadNamedParams", encode: encodeFeedUploadNamedParams, decode: decodeFeedUploadNamedParams };
+const codecFeedUploadDataParams: $rt.PayloadCodec<FeedUploadDataParams> = { type: "streams.demo.FeedUploadDataParams", encode: encodeFeedUploadDataParams, decode: decodeFeedUploadDataParams };
+const codecFeedUploadChoiceParams: $rt.PayloadCodec<FeedUploadChoiceParams> = { type: "streams.demo.FeedUploadChoiceParams", encode: encodeFeedUploadChoiceParams, decode: decodeFeedUploadChoiceParams };
+const codecFeedUploadTupleParams: $rt.PayloadCodec<FeedUploadTupleParams> = { type: "streams.demo.FeedUploadTupleParams", encode: encodeFeedUploadTupleParams, decode: decodeFeedUploadTupleParams };
+const codecFeedUploadTupleReply: $rt.PayloadCodec<FeedUploadTupleReply> = { type: "streams.demo.FeedUploadTupleReply", encode: encodeFeedUploadTupleReply, decode: decodeFeedUploadTupleReply };
+const codecOtherFetchParams: $rt.PayloadCodec<OtherFetchParams> = { type: "streams.demo.OtherFetchParams", encode: encodeOtherFetchParams, decode: decodeOtherFetchParams };
+const codecSessionFetchParams: $rt.PayloadCodec<SessionFetchParams> = { type: "streams.demo.SessionFetchParams", encode: encodeSessionFetchParams, decode: decodeSessionFetchParams };
+const codecOptsFetchParams: $rt.PayloadCodec<OptsFetchParams> = { type: "streams.demo.OptsFetchParams", encode: encodeOptsFetchParams, decode: decodeOptsFetchParams };
+const codecEntryFetchParams: $rt.PayloadCodec<EntryFetchParams> = { type: "streams.demo.EntryFetchParams", encode: encodeEntryFetchParams, decode: decodeEntryFetchParams };
+const codecArgsFetchParams: $rt.PayloadCodec<ArgsFetchParams> = { type: "streams.demo.ArgsFetchParams", encode: encodeArgsFetchParams, decode: decodeArgsFetchParams };
+const codecRawFetchParams: $rt.PayloadCodec<RawFetchParams> = { type: "streams.demo.RawFetchParams", encode: encodeRawFetchParams, decode: decodeRawFetchParams };
+const codecElementFetchParams: $rt.PayloadCodec<ElementFetchParams> = { type: "streams.demo.ElementFetchParams", encode: encodeElementFetchParams, decode: decodeElementFetchParams };
+const codecRequestTypeFetchParams: $rt.PayloadCodec<RequestTypeFetchParams> = { type: "streams.demo.RequestTypeFetchParams", encode: encodeRequestTypeFetchParams, decode: decodeRequestTypeFetchParams };
+const codecElementTypeFetchParams: $rt.PayloadCodec<ElementTypeFetchParams> = { type: "streams.demo.ElementTypeFetchParams", encode: encodeElementTypeFetchParams, decode: decodeElementTypeFetchParams };
+const codecStreamEntryFetchParams: $rt.PayloadCodec<StreamEntryFetchParams> = { type: "streams.demo.StreamEntryFetchParams", encode: encodeStreamEntryFetchParams, decode: decodeStreamEntryFetchParams };
+const codecStreamEntry1FetchParams: $rt.PayloadCodec<StreamEntry1FetchParams> = { type: "streams.demo.StreamEntry1FetchParams", encode: encodeStreamEntry1FetchParams, decode: decodeStreamEntry1FetchParams };
 
-function checkStreamSession(session: StreamSession, limit: number | undefined): void {
+function checkStreamSession(session: $rt.StreamSession, limit: number | undefined): void {
   const hash = session.codec.catalogHash;
   if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {
-    throw new CatalogMismatch(
+    throw new $rt.CatalogMismatch(
       Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, "0")).join(""),
       Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join(""),
     );
   }
-  if (limit === 0) throw new StreamError({ category: "corrupt" });
+  if (limit === 0) throw new $rt.StreamError({ category: "corrupt" });
 }
 
-function encodeStreamRequest<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {
+function encodeStreamRequest<T>(session: $rt.StreamSession, payload: $rt.PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {
   let bytes: Uint8Array;
   try {
     bytes = payload.encode(value);
   } catch (error) {
     if (typeof error === "object" && error !== null && "name" in error && (error.name === "RuleError" || error.name === "ConstraintError") && "rule" in error && (RULES as readonly unknown[]).includes(error.rule)) {
-      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
+      throw new $rt.StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
     }
-    throw new StreamError({ category: "corrupt" }, { cause: error });
+    throw new $rt.StreamError({ category: "corrupt" }, { cause: error });
   }
-  if (limit !== undefined && bytes.length > limit) throw new StreamError({ category: "corrupt" });
+  if (limit !== undefined && bytes.length > limit) throw new $rt.StreamError({ category: "corrupt" });
   const result = session.codec.verify(typeId, bytes);
   if (!result.ok) {
-    if (result.kind === "malformed") throw new StreamError({ category: "corrupt" });
+    if (result.kind === "malformed") throw new $rt.StreamError({ category: "corrupt" });
     if (result.kind === "rule" && (RULES as readonly string[]).includes(result.rule ?? "")) {
-      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: result.rule as typeof RULES[number] } });
+      throw new $rt.StreamError({ category: "contract", contract: { category: "invalid-value", rule: result.rule as typeof RULES[number] } });
     }
-    throw new CodecError("unknown payload type or rule during request verification");
+    throw new $rt.CodecError("unknown payload type or rule during request verification");
   }
   return bytes;
 }
 
-function decodeStreamReply<T>(session: StreamSession, payload: PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {
+function decodeStreamReply<T>(session: $rt.StreamSession, payload: $rt.PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {
   const result = session.codec.verify(typeId, bytes);
   if (!result.ok) {
-    if (result.kind === "malformed") throw new StreamError({ category: "corrupt" });
+    if (result.kind === "malformed") throw new $rt.StreamError({ category: "corrupt" });
     if (result.kind === "rule" && (RULES as readonly string[]).includes(result.rule ?? "")) {
-      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: result.rule as typeof RULES[number] } });
+      throw new $rt.StreamError({ category: "contract", contract: { category: "invalid-value", rule: result.rule as typeof RULES[number] } });
     }
-    throw new CodecError("unknown payload type or rule during reply verification");
+    throw new $rt.CodecError("unknown payload type or rule during reply verification");
   }
   try {
     return payload.decode(bytes);
   } catch (error) {
     if (typeof error === "object" && error !== null && "name" in error && error.name === "RuleError" && "rule" in error && (RULES as readonly unknown[]).includes(error.rule)) {
-      throw new StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
+      throw new $rt.StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
     }
-    throw new StreamError({ category: "corrupt" }, { cause: error });
+    throw new $rt.StreamError({ category: "corrupt" }, { cause: error });
   }
 }
 
@@ -1211,7 +1207,7 @@ const streamEntry2 = Feed.scalars;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_scalars(session: StreamSession, opts: StreamOptions): ReadableStream<t.Count> {
+export function Feed_scalars(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<t.Count> {
   const entry = streamEntry2;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1219,7 +1215,7 @@ export function Feed_scalars(session: StreamSession, opts: StreamOptions): Reada
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
 const streamEntry3 = Feed.structs;
@@ -1235,7 +1231,7 @@ const streamEntry3 = Feed.structs;
  * @since 1.0.0
  * @deprecated Use scalars.
  */
-export function Feed_structs(session: StreamSession, seed: t.Count, opts: StreamOptions): ReadableStream<t.Chunk> {
+export function Feed_structs(session: $rt.StreamSession, seed: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Chunk> {
   const entry = streamEntry3;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1243,7 +1239,7 @@ export function Feed_structs(session: StreamSession, seed: t.Count, opts: Stream
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, seed, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
 const streamEntry4 = Feed.unions;
@@ -1259,7 +1255,7 @@ const streamEntry4 = Feed.unions;
  * @param session1 - A second number.
  * @param opts1 - A selection.
  */
-export function Feed_unions(session: StreamSession, session2: t.Count, session1: t.Count, opts1: t.Count, opts: StreamOptions): ReadableStream<t.Choice> {
+export function Feed_unions(session: $rt.StreamSession, session2: t.Count, session1: t.Count, opts1: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Choice> {
   const entry = streamEntry4;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1267,7 +1263,7 @@ export function Feed_unions(session: StreamSession, session2: t.Count, session1:
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { session: session2, session1: session1, opts: opts1 }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
 const streamEntry5 = Feed.statuses;
@@ -1279,7 +1275,7 @@ const streamEntry5 = Feed.statuses;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_statuses(session: StreamSession, opts: StreamOptions): ReadableStream<t.StatusValue> {
+export function Feed_statuses(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<t.StatusValue> {
   const entry = streamEntry5;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1287,7 +1283,7 @@ export function Feed_statuses(session: StreamSession, opts: StreamOptions): Read
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
 const streamEntry6 = Feed.data;
@@ -1299,7 +1295,7 @@ const streamEntry6 = Feed.data;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_data(session: StreamSession, opts: StreamOptions): ReadableStream<t.Data> {
+export function Feed_data(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<t.Data> {
   const entry = streamEntry6;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1307,7 +1303,7 @@ export function Feed_data(session: StreamSession, opts: StreamOptions): Readable
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
 const streamEntry7 = Feed.labels;
@@ -1319,7 +1315,7 @@ const streamEntry7 = Feed.labels;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_labels(session: StreamSession, opts: StreamOptions): ReadableStream<t.Text> {
+export function Feed_labels(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<t.Text> {
   const entry = streamEntry7;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1327,7 +1323,7 @@ export function Feed_labels(session: StreamSession, opts: StreamOptions): Readab
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
 const streamEntry8 = Feed.readBytes;
@@ -1339,7 +1335,7 @@ const streamEntry8 = Feed.readBytes;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_readBytes(session: StreamSession, seed: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function Feed_readBytes(session: $rt.StreamSession, seed: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry8;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1357,13 +1353,13 @@ const streamEntry9 = Feed.text;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_text(session: StreamSession, opts: StreamOptions): ReadableStream<string> {
+export function Feed_text(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<string> {
   const entry = streamEntry9;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeTextStream());
+  return raw.pipeThrough($rt.decodeTextStream());
 }
 
 const streamEntry10 = Feed.zero;
@@ -1375,7 +1371,7 @@ const streamEntry10 = Feed.zero;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_zero(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function Feed_zero(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry10;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1393,13 +1389,13 @@ const streamEntry11 = Feed.upload;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_upload(session: StreamSession, opts: StreamOptions): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
+export function Feed_upload(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
   const entry = streamEntry11;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, entry.limit);
   const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = byteUpload(raw.upload, entry.limit);
+  const upload = $rt.byteUpload(raw.upload, entry.limit);
   return { upload, accepted: raw.accepted };
 }
 
@@ -1412,7 +1408,7 @@ const streamEntry12 = Feed.duplex;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_duplex(session: StreamSession, opts: StreamOptions): { upload: WritableStream<Uint8Array>; stream: ReadableStream<t.Chunk> } {
+export function Feed_duplex(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<Uint8Array>; stream: ReadableStream<t.Chunk> } {
   const entry = streamEntry12;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1420,8 +1416,8 @@ export function Feed_duplex(session: StreamSession, opts: StreamOptions): { uplo
   const replyElementType = session.codec.typeId(replyElement.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryDuplex(entry.iface, entry.ord, args, opts);
-  const upload = byteUpload(raw.upload, 16128);
-  const stream = raw.stream.pipeThrough(decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));
+  const upload = $rt.byteUpload(raw.upload, 16128);
+  const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));
   return { upload, stream };
 }
 
@@ -1437,7 +1433,7 @@ const streamEntry13 = Feed.duplexNamed;
  * @param seed - The first {@link t.Count}.
  * @param tail - The last {@link t.Count}.
  */
-export function Feed_duplexNamed(session: StreamSession, seed: t.Count, tail: t.Count, opts: StreamOptions): { upload: WritableStream<t.Chunk>; stream: ReadableStream<t.Chunk> } {
+export function Feed_duplexNamed(session: $rt.StreamSession, seed: t.Count, tail: t.Count, opts: $rt.StreamOptions): { upload: WritableStream<t.Chunk>; stream: ReadableStream<t.Chunk> } {
   const entry = streamEntry13;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1447,8 +1443,8 @@ export function Feed_duplexNamed(session: StreamSession, seed: t.Count, tail: t.
   const replyElementType = session.codec.typeId(replyElement.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { seed: seed, tail: tail }, undefined);
   const raw = session.transport.queryDuplex(entry.iface, entry.ord, args, opts);
-  const upload = encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), 16128);
-  const stream = raw.stream.pipeThrough(decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));
+  const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), 16128);
+  const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));
   return { upload, stream };
 }
 
@@ -1461,14 +1457,14 @@ const streamEntry14 = Feed.duplexText;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_duplexText(session: StreamSession, opts: StreamOptions): { upload: WritableStream<string>; stream: ReadableStream<string> } {
+export function Feed_duplexText(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<string>; stream: ReadableStream<string> } {
   const entry = streamEntry14;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryDuplex(entry.iface, entry.ord, args, opts);
-  const upload = textUpload(raw.upload, 16128);
-  const stream = raw.stream.pipeThrough(decodeTextStream());
+  const upload = $rt.textUpload(raw.upload, 16128);
+  const stream = raw.stream.pipeThrough($rt.decodeTextStream());
   return { upload, stream };
 }
 
@@ -1481,7 +1477,7 @@ const streamEntry15 = Feed.duplexBytes;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_duplexBytes(session: StreamSession, opts: StreamOptions): { upload: WritableStream<t.Chunk>; stream: ReadableStream<Uint8Array> } {
+export function Feed_duplexBytes(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<t.Chunk>; stream: ReadableStream<Uint8Array> } {
   const entry = streamEntry15;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1489,7 +1485,7 @@ export function Feed_duplexBytes(session: StreamSession, opts: StreamOptions): {
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryDuplex(entry.iface, entry.ord, args, opts);
-  const upload = encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), 16128);
+  const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), 16128);
   const stream = raw.stream;
   return { upload, stream };
 }
@@ -1503,7 +1499,7 @@ const streamEntry16 = Feed.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_fetch(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function Feed_fetch(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry16;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1525,7 +1521,7 @@ const streamEntry17 = Feed.uploadNamed;
  * @param tail - The last {@link t.Count}.
  * @see {@link t.Count}
  */
-export function Feed_uploadNamed(session: StreamSession, seed: t.Count, tail: t.Count, opts: StreamOptions): { upload: WritableStream<t.Chunk>; accepted: Promise<void> } {
+export function Feed_uploadNamed(session: $rt.StreamSession, seed: t.Count, tail: t.Count, opts: $rt.StreamOptions): { upload: WritableStream<t.Chunk>; accepted: Promise<void> } {
   const entry = streamEntry17;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1533,7 +1529,7 @@ export function Feed_uploadNamed(session: StreamSession, seed: t.Count, tail: t.
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { seed: seed, tail: tail }, entry.limit);
   const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
+  const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
   return { upload, accepted: raw.accepted };
 }
 
@@ -1546,7 +1542,7 @@ const streamEntry18 = Feed.uploadData;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_uploadData(session: StreamSession, opts: StreamOptions): { upload: WritableStream<t.Data>; accepted: Promise<void> } {
+export function Feed_uploadData(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<t.Data>; accepted: Promise<void> } {
   const entry = streamEntry18;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1554,7 +1550,7 @@ export function Feed_uploadData(session: StreamSession, opts: StreamOptions): { 
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, entry.limit);
   const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = encodeUpload(raw.upload, (value: t.Data) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
+  const upload = $rt.encodeUpload(raw.upload, (value: t.Data) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
   return { upload, accepted: raw.accepted };
 }
 
@@ -1567,13 +1563,13 @@ const streamEntry19 = Feed.uploadText;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_uploadText(session: StreamSession, seed: t.Count, opts: StreamOptions): { upload: WritableStream<string>; accepted: Promise<void> } {
+export function Feed_uploadText(session: $rt.StreamSession, seed: t.Count, opts: $rt.StreamOptions): { upload: WritableStream<string>; accepted: Promise<void> } {
   const entry = streamEntry19;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
   const args = encodeStreamRequest(session, entry.request, requestType, seed, entry.limit);
   const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = textUpload(raw.upload, entry.limit);
+  const upload = $rt.textUpload(raw.upload, entry.limit);
   return { upload, accepted: raw.accepted };
 }
 
@@ -1586,7 +1582,7 @@ const streamEntry20 = Feed.uploadChoice;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_uploadChoice(session: StreamSession, seed: t.Count, tail: t.Count, opts: StreamOptions): { upload: WritableStream<t.Chunk>; reply: Promise<t.UploadResult> } {
+export function Feed_uploadChoice(session: $rt.StreamSession, seed: t.Count, tail: t.Count, opts: $rt.StreamOptions): { upload: WritableStream<t.Chunk>; reply: Promise<t.UploadResult> } {
   const entry = streamEntry20;
   checkStreamSession(session, entry.limit);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1595,7 +1591,7 @@ export function Feed_uploadChoice(session: StreamSession, seed: t.Count, tail: t
   const replyType = session.codec.typeId(entry.reply.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { seed: seed, tail: tail }, entry.limit);
   const raw = session.transport.queryWithUpload(entry.iface, entry.ord, args, opts);
-  const upload = encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
+  const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
   const reply = raw.reply.then((bytes) => decodeStreamReply(session, entry.reply, replyType, bytes));
   return { upload, reply };
 }
@@ -1609,14 +1605,14 @@ const streamEntry21 = Feed.uploadTuple;
  * Rules:
  * - response within 50000 us
  */
-export function Feed_uploadTuple(session: StreamSession, opts: StreamOptions): { upload: WritableStream<Uint8Array>; reply: Promise<FeedUploadTupleReply> } {
+export function Feed_uploadTuple(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<Uint8Array>; reply: Promise<FeedUploadTupleReply> } {
   const entry = streamEntry21;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
   const replyType = session.codec.typeId(entry.reply.type);
   const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
   const raw = session.transport.queryWithUpload(entry.iface, entry.ord, args, opts);
-  const upload = byteUpload(raw.upload, 16128);
+  const upload = $rt.byteUpload(raw.upload, 16128);
   const reply = raw.reply.then((bytes) => decodeStreamReply(session, entry.reply, replyType, bytes));
   return { upload, reply };
 }
@@ -1636,7 +1632,7 @@ const streamEntry22 = Other.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function Other_fetch(session: StreamSession, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function Other_fetch(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry22;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1660,7 +1656,7 @@ const streamEntry30 = session.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function session_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function session_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry30;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1684,7 +1680,7 @@ const streamEntry27 = opts.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function opts_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function opts_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry27;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1708,7 +1704,7 @@ const streamEntry26 = entry.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function entry_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function entry_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry26;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1732,7 +1728,7 @@ const streamEntry23 = args.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function args_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function args_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry23;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1756,7 +1752,7 @@ const streamEntry28 = raw.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function raw_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function raw_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry28;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1780,7 +1776,7 @@ const streamEntry24 = element.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function element_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<t.Chunk> {
+export function element_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Chunk> {
   const entry = streamEntry24;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1788,7 +1784,7 @@ export function element_fetch(session: StreamSession, streamEntry13: t.Count, st
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
 /** The members of interface `requestType`, interface number `9`. */
@@ -1806,7 +1802,7 @@ const streamEntry29 = requestType.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function requestType_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function requestType_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry29;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1830,7 +1826,7 @@ const streamEntry25 = elementType.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function elementType_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<t.Chunk> {
+export function elementType_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Chunk> {
   const entry = streamEntry25;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1838,7 +1834,7 @@ export function elementType_fetch(session: StreamSession, streamEntry13: t.Count
   const elementType = session.codec.typeId(element.type);
   const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
   const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough(decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
 }
 
 /** The members of interface `streamEntry`, interface number `11`. */
@@ -1856,7 +1852,7 @@ const streamEntry31 = streamEntry.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function streamEntry_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function streamEntry_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry31;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1880,7 +1876,7 @@ const streamEntry32 = streamEntry1.fetch;
  * Rules:
  * - response within 50000 us
  */
-export function streamEntry1_fetch(session: StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: StreamOptions): ReadableStream<Uint8Array> {
+export function streamEntry1_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
   const entry = streamEntry32;
   checkStreamSession(session, undefined);
   const requestType = session.codec.typeId(entry.request.type);
@@ -1889,7 +1885,7 @@ export function streamEntry1_fetch(session: StreamSession, streamEntry13: t.Coun
   return raw;
 }
 
-function signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): SignalCheckEntry {
+function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }): $rt.SignalCheckEntry {
   const typeId = codec.typeId(entry.payload.type);
   return {
     iface: entry.iface,
@@ -1899,14 +1895,14 @@ function signalCheck(codec: Codec, entry: { readonly iface: number; readonly ord
       if (result.ok) return undefined;
       if (result.kind !== "rule") return "corrupt";
       const rule = (RULES as readonly string[]).find((known) => known === result.rule);
-      if (rule === undefined) throw new CodecError("unknown rule during signal verification");
+      if (rule === undefined) throw new $rt.CodecError("unknown rule during signal verification");
       return { rule: rule as (typeof RULES)[number] };
     },
   };
 }
 
 /** Returns the check of each signal of this package, for the `checks` option of `connect`. The checks resolve the type ids of `codec` once, here. */
-export function signalChecks(codec: Codec): readonly SignalCheckEntry[] {
+export function signalChecks(codec: $rt.Codec): readonly $rt.SignalCheckEntry[] {
   return [
     signalCheck(codec, Feed.newest),
   ];

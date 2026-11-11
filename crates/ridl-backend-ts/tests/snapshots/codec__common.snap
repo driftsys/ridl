@@ -672,7 +672,7 @@ function unpackExtrasWide(object: fb.ExtrasWideT): { big: bigint; sparse: readon
 
 function packPairsPair(value: { text: string; count: t.Speed }, at: string): fb.PairsPairT {
   const tuple = new fb.PairsPairT();
-  tuple.field1 = checkWellFormed(value.text, at + ".text");
+  tuple.field1 = $rt.checkWellFormed(value.text, at + ".text");
   tuple.field2 = value.count;
   return tuple;
 }
@@ -682,7 +682,7 @@ function unpackPairsPair(object: fb.PairsPairT): { text: string; count: t.Speed 
 
 function packPairsListElement(value: { text: string; deep: { word: string } }, at: string): fb.PairsListElementT {
   const tuple = new fb.PairsListElementT();
-  tuple.field1 = checkWellFormed(value.text, at + ".text");
+  tuple.field1 = $rt.checkWellFormed(value.text, at + ".text");
   tuple.field2 = packPairsListElementDeep(value.deep, at + ".deep");
   return tuple;
 }
@@ -692,7 +692,7 @@ function unpackPairsListElement(object: fb.PairsListElementT): { text: string; d
 
 function packPairsListElementDeep(value: { word: string }, at: string): fb.PairsListElementField2T {
   const tuple = new fb.PairsListElementField2T();
-  tuple.field1 = checkWellFormed(value.word, at + ".word");
+  tuple.field1 = $rt.checkWellFormed(value.word, at + ".word");
   return tuple;
 }
 function unpackPairsListElementDeep(object: fb.PairsListElementField2T): { word: string } {
