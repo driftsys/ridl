@@ -576,3 +576,41 @@ fn the_merge_driver_merges_two_instance_allocations() {
         format!("{HEADER}next 4\nveh.C/a 1\nveh.C/b 2\nveh.C/c 3\n")
     );
 }
+
+#[test]
+fn instance_only_edit_preserves_interface_lock_bytes() {
+    let dir = workspace(
+        "instance-only-edit",
+        Some(&format!("{HEADER}next 2\nveh.Cruise/old 1\n")),
+    );
+    let before = b"# preserve interface formatting\r\nnext 1\r\n";
+    let path = dir.path().join("interfaces.lock");
+    std::fs::write(&path, before).unwrap();
+
+    let (code, stdout, stderr) = run_lock(&dir, &["--retire", "veh.Cruise/old"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("retired veh.Cruise/old 1"), "{stdout}");
+    assert!(lock_text(&dir).contains("veh.Cruise/old 1 retired\n"));
+    assert_eq!(std::fs::read(path).unwrap(), before);
+}
+
+#[test]
+fn interface_only_edit_preserves_instance_lock_bytes() {
+    let before = b"# preserve instance formatting\r\nnext 1\r\n";
+    let dir = workspace("interface-only-edit", None);
+    std::fs::write(dir.path().join("instances.lock"), before).unwrap();
+    let path = dir.write("interfaces.lock", "next 2\nOld 1\n");
+
+    let (code, stdout, stderr) = run_lock(&dir, &["--retire", "Old"]);
+    assert_eq!(code, 0, "{stderr}");
+    assert!(stdout.contains("retired Old 1"), "{stdout}");
+    assert!(
+        std::fs::read_to_string(path)
+            .unwrap()
+            .contains("Old 1 retired\n")
+    );
+    assert_eq!(
+        std::fs::read(dir.path().join("instances.lock")).unwrap(),
+        before
+    );
+}

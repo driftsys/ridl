@@ -3,7 +3,9 @@
 //!
 //! Unix only: the fixtures use `chmod 000`, which does not bind the root user,
 //! so every test that uses it returns early when it runs as root. The test of
-//! a manifest that links to itself needs no permission change and always runs.
+//! a manifest that links to itself and
+//! `an_entry_below_a_regular_file_does_not_exist` need no permission change
+//! and always run.
 
 #![cfg(unix)]
 
@@ -161,7 +163,8 @@ fn an_unreadable_subdirectory_is_named_with_the_os_error() {
 }
 
 /// Runs every command over `entry`, expecting exit code 2 with `path` and the
-/// operating system's cause on stderr.
+/// operating system's cause on stderr. It also rejects messages claiming
+/// that the member manifest or the entry is missing.
 fn assert_names_path_and_cause(entry: &Path, path: &Path) {
     let path = path.display().to_string();
     for args in COMMANDS {
