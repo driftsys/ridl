@@ -53,8 +53,10 @@ Amended 2026-11-11: driftsys/ridl#196 is closed. Decision 6, the Context
 paragraph and the Positive and Negative consequences that cite it record the
 state on 2026-07-27. `crates/ridl/tests/unreadable_paths.rs` now verifies that
 `ridl check`, `ridl build`, `ridl baseline` and `ridl test` name the unreadable
-path and its cause, except for the `ridl baseline` unreadable-root case that
-driftsys/ridl#1320 tracks.
+path and its cause, except that `ridl baseline` over an unreadable directory
+(the root, or an ancestor of the entry) reports an unreadable
+baseline-publication marker instead of the directory; driftsys/ridl#1320 tracks
+this.
 
 ## Context
 
@@ -228,9 +230,7 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
 
    **`ridl lock` earned its row on 2026-09-15, when it was added and checked**
    by `crates/ridl/tests/lock_cli.rs`, one test per clause of its three cells
-   (the instance-lock clauses added later are tested in
-   `crates/ridl/tests/instance_lock_cli.rs`) against the built `ridl` binary:
-   the two exit-0 outcomes
+   against the built `ridl` binary: the two exit-0 outcomes
    (`plain_lock_allocates_every_provisional_interface_and_exits_zero`,
    `plain_lock_with_nothing_to_change_exits_zero_and_writes_nothing`), the two
    exit-1 diagnostics

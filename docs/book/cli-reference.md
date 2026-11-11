@@ -1709,8 +1709,9 @@ error: cannot read ./sub: Permission denied (os error 13)
 
 For `ridl check`, `ridl build` and `ridl test`, an unreadable workspace root or
 subdirectory also reports the path and operating system cause. `ridl baseline`
-does for a subdirectory; for an unreadable root it reports the transaction
-marker as unreadable instead (driftsys/ridl#1320).
+over an unreadable directory (the root, or an ancestor of the entry) reports an
+unreadable baseline-publication marker instead of the directory
+(driftsys/ridl#1320).
 
 ### `ridl diff`
 
