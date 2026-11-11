@@ -1197,6 +1197,19 @@ fn init_function(ctx: &Ctx, decl: &v2::Decl) -> Option<String> {
     ))
 }
 
+/// The names of the declarations of `package` for which `<base>.ts` exports an
+/// `init<Name>` function: the ones [`init_function`] writes.
+pub(crate) fn init_function_names(package: &v2::Package, model: &v1::Model) -> BTreeSet<String> {
+    let ctx = Ctx::new(package, model, Output::default());
+    package
+        .decls
+        .iter()
+        .filter(|decl| decl.visibility != v2::Visibility::Internal as i32)
+        .filter(|decl| init_function(&ctx, decl).is_some())
+        .map(|decl| decl.name.clone())
+        .collect()
+}
+
 /// The expression behind `return` for a top-level declaration's init
 /// function, or `None` when the declaration is not init-constructible.
 fn decl_init_expr(ctx: &Ctx, decl: &v2::Decl) -> Option<String> {
@@ -2026,7 +2039,7 @@ mod codec;
 mod contract;
 mod instances;
 
-pub use codec::{codec_imports, generate_codec};
+pub use codec::{codec_imports, generate_codec, generate_codec_with};
 pub use contract::Backend;
 pub use instances::generate_instances_module;
 

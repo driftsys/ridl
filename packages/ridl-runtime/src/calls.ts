@@ -5,7 +5,14 @@ import {
   CodecError,
   type PayloadRule,
 } from "./errors.ts";
-import type { Attached } from "./ports.ts";
+import type { Detection } from "./checks.ts";
+import type {
+  Attached,
+  Occurrence,
+  RawOccurrence,
+  RawSample,
+  Sample,
+} from "./ports.ts";
 
 const RULES: readonly string[] = [
   "length",
@@ -122,4 +129,116 @@ export function decodeReply<T>(
     }
     throw new CallError({ category: "corrupt" }, { cause: error });
   }
+}
+
+/** Decodes one payload of a sample, or says what the check detected. */
+function tryDecode<T>(
+  codec: Codec,
+  payload: PayloadCodec<T>,
+  typeId: number,
+  bytes: Uint8Array,
+): { value: T } | { detected: Detection } {
+  try {
+    return { value: decodeReply(codec, payload, typeId, bytes) };
+  } catch (error) {
+    if (error instanceof CallError) {
+      const failure = error.failure;
+      if (failure.category === "contract") {
+        const contract = failure.contract;
+        if (contract.category === "invalid-value") {
+          return { detected: { rule: contract.rule } };
+        }
+      }
+      if (failure.category === "corrupt") return { detected: "corrupt" };
+    }
+    throw error;
+  }
+}
+
+/**
+ * The sample of a signal that has not been published: `init` provenance, a
+ * zero envelope and the init value of the type.
+ */
+export function initSample<T>(init: () => T): Sample<T> {
+  return {
+    provenance: "init",
+    envelope: { stamp: 0n, seq: 0n },
+    value: init(),
+  };
+}
+
+/**
+ * Verifies and decodes the payload of a raw sample. The value of a live sample
+ * is its payload. Under `init` and `invalid`, and for a live payload that
+ * fails verification (the sample then becomes `invalid` with `detected` set),
+ * the value is the last good payload when it still verifies, and `init()`
+ * otherwise, so the value is never absent. A rule text the generated module
+ * does not know throws a `CodecError`.
+ */
+export function decodeSample<T>(
+  codec: Codec,
+  payload: PayloadCodec<T>,
+  typeId: number,
+  raw: RawSample,
+  init: () => T,
+): Sample<T> {
+  const fallback = (): T => {
+    if (raw.lastGood === null) return init();
+    const last = tryDecode(codec, payload, typeId, raw.lastGood);
+    return "value" in last ? last.value : init();
+  };
+  if (raw.payload !== null) {
+    const live = tryDecode(codec, payload, typeId, raw.payload);
+    if ("value" in live) {
+      // A port sets `detected` only on a sample without a payload.
+      return {
+        provenance: raw.provenance,
+        envelope: raw.envelope,
+        value: live.value,
+      };
+    }
+    return {
+      provenance: "invalid",
+      envelope: raw.envelope,
+      value: fallback(),
+      detected: live.detected,
+    };
+  }
+  return raw.detected === undefined
+    ? { provenance: raw.provenance, envelope: raw.envelope, value: fallback() }
+    : {
+      provenance: raw.provenance,
+      envelope: raw.envelope,
+      value: fallback(),
+      detected: raw.detected,
+    };
+}
+
+/**
+ * Verifies and decodes the payload of a raw occurrence. An occurrence that the
+ * port refused, and one whose payload fails verification, is returned with
+ * `detected` set to `corrupt` and no value. A rule text the generated module
+ * does not know throws a `CodecError`.
+ */
+export function decodeOccurrence<T>(
+  codec: Codec,
+  payload: PayloadCodec<T>,
+  typeId: number,
+  raw: RawOccurrence,
+): Occurrence<T> {
+  const refused = (): Occurrence<T> => ({
+    iface: raw.iface,
+    ord: raw.ord,
+    envelope: raw.envelope,
+    detected: "corrupt",
+  });
+  if (raw.detected !== undefined) return refused();
+  const decoded = tryDecode(codec, payload, typeId, raw.payload);
+  if (!("value" in decoded)) return refused();
+  return {
+    iface: raw.iface,
+    ord: raw.ord,
+    envelope: raw.envelope,
+    value: decoded.value,
+  };
 }
