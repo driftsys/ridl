@@ -9,6 +9,7 @@ import {
   CallError,
   type RawOccurrence,
   type RawSample,
+  type SignalCheck,
   type SignalReader,
 } from "../mod.ts";
 import { FakePort } from "./fake_port.ts";
@@ -140,4 +141,41 @@ Deno.test("abort_rejects_with_the_signal_reason", async () => {
     signal: AbortSignal.abort(reason),
   });
   assertStrictEquals(await assertRejects(() => command), reason);
+});
+
+Deno.test("listen_routes_an_occurrence_to_its_own_interface", () => {
+  const port = new FakePort();
+  const seen: number[] = [];
+  port.listen(3, (o) => seen.push(o.iface));
+  port.listen(4, (o) => seen.push(o.iface * 10));
+  port.occur({
+    iface: 4,
+    ord: 0,
+    envelope: { stamp: 0n, seq: 1n },
+    payload: new Uint8Array(),
+  });
+  assertEquals(seen, [40]);
+});
+
+Deno.test("fake_records_subscribe_unsubscribe_and_check_registration", async () => {
+  const port = new FakePort();
+  const check = (() => undefined) as unknown as SignalCheck;
+  port.checkWith(2, 5, check);
+  await port.subscribe(2, 5, { bound: 100 });
+  port.unsubscribe(2, 5);
+  assertEquals(port.calls.map((c) => c.method), [
+    "checkWith",
+    "subscribe",
+    "unsubscribe",
+  ]);
+  assertEquals(port.calls[1].opts, { bound: 100 });
+  assertEquals(port.checks.get("2/5"), check);
+});
+
+Deno.test("fake_records_the_arguments_of_a_command", async () => {
+  const port = new FakePort();
+  const args = new Uint8Array([1, 2, 3]);
+  await port.command(1, 2, args, { bound: 50 });
+  assertEquals(port.calls[0].args, args);
+  assertEquals(port.calls[0].opts, { bound: 50 });
 });
