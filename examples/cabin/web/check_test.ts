@@ -427,10 +427,12 @@ function verified<T>(subject: Subject<T>, value: T): Outcome {
 // A value in a list below is one the wire can carry: an integer is inside the
 // width of its backing (`Temperature` is an `i8`, `Level` a `u8`, `Average` a
 // `u16`, `Window` a `u32`), so the encoded bytes hold the value itself, and
-// `verify` judges the same number that `make<Name>` judges. A float list has
-// no 0 for `Setpoint`: the `flatc` writer omits a field equal to the schema
-// default 0.0, and the wasm codec reports that payload as malformed, which is
-// not a constraint verdict (`Tenth` takes 0 and answers as expected).
+// `verify` judges the same number that `make<Name>` judges. The `Setpoint` list
+// has no 0: the `flatc` writer omits a field equal to the schema default 0.0,
+// and the codec reads an absent scalar as 0, which `Setpoint` does not allow
+// (its range starts at 10), so `verify` answers malformed where `make` answers
+// range. The test "an absent field at an illegal default is malformed" pins
+// that answer. `Tenth` allows 0 and takes it below.
 const subjects = [
   subject<number>({
     name: "Temperature",
@@ -587,6 +589,23 @@ Deno.test("the differential values reach both outcomes of every rule they cover"
   covered("Block", "ok", "length");
   covered("Digited", "ok", "pattern");
   covered("Glyph", "ok", "pattern");
+});
+
+Deno.test("an absent field at an illegal default is malformed", () => {
+  // `encodeSetpoint(0)` omits the field, because 0 is the schema default. The
+  // codec reads an absent scalar as 0 and 0 is outside [10..30], so the
+  // payload is refused as malformed (the rule in
+  // docs/design/flatbuffers-codec.md), while `makeSetpoint(0)` names the range
+  // rule. `Tenth` allows 0, so its absent field is a valid value.
+  const setpoint = codec.typeId("veh.cabin.Setpoint");
+  assert.deepEqual(codec.verify(setpoint, encodeSetpoint(0 as Setpoint)), {
+    ok: false,
+    kind: "malformed",
+    code: 1,
+  });
+  assert.throws(() => makeSetpoint(0), ConstraintError);
+  const tenth = codec.typeId("veh.cabin.Tenth");
+  assert.deepEqual(codec.verify(tenth, encodeTenth(0 as Tenth)), { ok: true });
 });
 
 // Known divergences of the pattern rule (driftsys/ridl#597). `make<Name>` runs
