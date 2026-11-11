@@ -348,6 +348,31 @@ Deno.test("encode refuses a lone surrogate in an array element, a map key and a 
   );
 });
 
+Deno.test("encode names the field path of a string inside a tuple", () => {
+  const ok = { text: "ok", deep: { word: "ok" } };
+  refusesText(
+    "veh.common.Pairs.pair.text",
+    () =>
+      codec.encodePairs({ pair: { text: "\ud83d", count: 1 as t.Speed }, list: [] }),
+  );
+  refusesText(
+    "veh.common.Pairs.list[].text",
+    () =>
+      codec.encodePairs({
+        pair: { text: "ok", count: 1 as t.Speed },
+        list: [ok, { text: "\ud83d", deep: { word: "ok" } }],
+      }),
+  );
+  refusesText(
+    "veh.common.Pairs.list[].deep.word",
+    () =>
+      codec.encodePairs({
+        pair: { text: "ok", count: 1 as t.Speed },
+        list: [{ text: "ok", deep: { word: "\ud83d" } }],
+      }),
+  );
+});
+
 Deno.test("encode refuses a lone surrogate in a union arm", () => {
   refusesText(
     "veh.common.SensorFault.message",

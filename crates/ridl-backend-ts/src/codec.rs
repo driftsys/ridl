@@ -1128,8 +1128,11 @@ impl<'a> Codec<'a> {
                     ));
                 };
                 let name = tuple_name(induced);
+                // The converter of a tuple takes the path of the position that
+                // holds it, so that a string inside it reports the payload type
+                // and the field path instead of the name of the induced tuple.
                 Ok(Rule {
-                    pack: format!("pack{name}({{}})"),
+                    pack: format!("pack{name}({{}}, \"{qualified}.{{path}}\")"),
                     unpack: format!("unpack{name}({{}})"),
                     plain: false,
                     nullable: true,
@@ -1568,7 +1571,15 @@ impl<'a> Codec<'a> {
     ) -> Result<(), GenerateError> {
         let name = tuple_name(tuple);
         let table = &self.tuple_table(index)?.name;
-        self.emit_encode_decode(out, name, name, table, &self.qualified(name));
+        let qualified = self.qualified(name);
+        self.emit_encode_decode(
+            out,
+            name,
+            name,
+            table,
+            &qualified,
+            &format!(", \"{qualified}\""),
+        );
         Ok(())
     }
 
@@ -1581,6 +1592,7 @@ impl<'a> Codec<'a> {
         spelled: &str,
         table: &str,
         qualified: &str,
+        pack_arguments: &str,
     ) {
         out.push('\n');
         let _ = writeln!(out, "/** Encodes a `{qualified}` payload. */");
@@ -1589,7 +1601,10 @@ impl<'a> Codec<'a> {
             "export function encode{name}(value: {spelled}): Uint8Array {{"
         );
         out.push_str("  const builder = new flatbuffers.Builder();\n");
-        let _ = writeln!(out, "  builder.finish(pack{name}(value).pack(builder));");
+        let _ = writeln!(
+            out,
+            "  builder.finish(pack{name}(value{pack_arguments}).pack(builder));"
+        );
         out.push_str("  return builder.asUint8Array();\n}\n");
         let _ = writeln!(
             out,
@@ -1617,7 +1632,7 @@ impl<'a> Codec<'a> {
         let qualified = self.qualified(name);
         let boxed = match &declaration.kind {
             Some(Kind::Struct(_) | Kind::Union(_)) => {
-                self.emit_encode_decode(out, name, &format!("t.{name}"), name, &qualified);
+                self.emit_encode_decode(out, name, &format!("t.{name}"), name, &qualified, "");
                 return Ok(());
             }
             Some(Kind::Enum(shape)) if shape.open => {
@@ -1931,17 +1946,34 @@ impl<'a> Codec<'a> {
         // A record with no field reads nothing from its parameter, which
         // `deno lint` accepts under a `_` prefix.
         let unused = if fields.is_empty() { "_" } else { "" };
+        // A tuple converter also takes the path of the position that holds the
+        // tuple. The pack templates of its fields name the tuple itself, so the
+        // prefix of each is replaced by that path.
+        let tuple = object == "tuple";
+        let at_unused = if fields.iter().any(|f| f.rule.pack.contains("{path}")) {
+            ""
+        } else {
+            "_"
+        };
+        let at_parameter = if tuple {
+            format!(", {at_unused}at: string")
+        } else {
+            String::new()
+        };
         let _ = writeln!(
             out,
-            "function pack{name}({unused}value: {spelled}): fb.{table}T {{"
+            "function pack{name}({unused}value: {spelled}{at_parameter}): fb.{table}T {{"
         );
         let _ = writeln!(out, "  const {object} = new fb.{table}T();");
         for field in fields {
-            let packed = fill_pack(
+            let mut packed = fill_pack(
                 &field.rule.pack,
                 &format!("value.{}", field.declared),
                 &field.declared,
             );
+            if tuple {
+                packed = packed.replace(&format!("\"{qualified}."), "at + \".");
+            }
             if field.optional {
                 // The object API holds a vector as `T[]`, never `null`, and
                 // `pack` always writes it, so an absent optional vector
