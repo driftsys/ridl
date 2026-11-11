@@ -140,3 +140,86 @@ fn generated_float_clauses_match_exact_rational_comparisons() {
         &format!("#![allow(dead_code)]\n{generated}\n{main}"),
     );
 }
+
+#[test]
+fn generated_exact_literal_clauses_match_exact_rational_comparisons() {
+    // Source spellings that are exactly representable: a fraction, a trailing
+    // zero in the fraction, a negative value and an integer.
+    let cases = [
+        ("Half", "0.5", BigRational::new(1.into(), 2.into())),
+        ("Padded", "1.50", BigRational::new(3.into(), 2.into())),
+        ("NegFive", "-5", BigRational::from_integer((-5).into())),
+        ("Zero", "0", BigRational::from_integer(0.into())),
+    ];
+    let ops = [
+        ("le", "Le", "<="),
+        ("gt", "Gt", ">"),
+        ("ge", "Ge", ">="),
+        ("lt", "Lt", "<"),
+        ("eq", "Eq", "=="),
+        ("ne", "Ne", "!="),
+    ];
+    let mut source = String::from("package clause_test\ntype Rate: float\ninterface Bounds {\n");
+    for (suffix, literal, _) in &cases {
+        for (name, _, op) in ops {
+            source.push_str(&format!(
+                "query {name}{suffix}(rate: Rate): Rate @[..1s] [require rate {op} {literal}\nensure result {op} {literal}]\n"
+            ));
+        }
+    }
+    source.push_str("}\n");
+    let compiled = ridlc::compile("exact_float_clauses.ridl", &source);
+    let errors: Vec<_> = compiled
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == ridl_core::diag::Severity::Error)
+        .collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    let generated = ridl_backend_rust::generate_face_with(
+        &compiled.package,
+        &[ridl_backend_rust::WireEncoding::FlatBuffers],
+    )
+    .expect("exact float comparisons generate")
+    .rust_source;
+    let mut main = String::from("fn main() {\n");
+    for value in [
+        0.0,
+        -0.0,
+        0.25,
+        -0.25,
+        0.5,
+        f64::from_bits(0.5f64.to_bits() - 1),
+        f64::from_bits(0.5f64.to_bits() + 1),
+        1.5,
+        -5.0,
+        f64::from_bits(1.5f64.to_bits() + 1),
+        f64::from_bits((-5.0f64).to_bits() + 1),
+        f64::MAX,
+        -f64::MAX,
+    ] {
+        let exact = BigRational::from_float(value).expect("finite");
+        for (suffix, _, literal) in &cases {
+            for (_, prefix, op) in ops {
+                let expected = match op {
+                    "<=" => &exact <= literal,
+                    ">" => &exact > literal,
+                    ">=" => &exact >= literal,
+                    "<" => &exact < literal,
+                    "==" => &exact == literal,
+                    _ => &exact != literal,
+                };
+                let descriptor = format!("Bounds{prefix}{suffix}");
+                main.push_str(&format!(r#"
+                let value = Rate::new({value:?});
+                assert_eq!(<{descriptor} as ridl_rt::contract::Query>::require(&value).is_ok(), {expected}, "require {descriptor} at {value:?}");
+                assert_eq!(<{descriptor} as ridl_rt::contract::Query>::ensure(&value, &value).is_ok(), {expected}, "ensure {descriptor} at {value:?}");
+            "#));
+            }
+        }
+    }
+    main.push_str("}\n");
+    rustc::run_program(
+        "exact_float_clause_predicates",
+        &format!("#![allow(dead_code)]\n{generated}\n{main}"),
+    );
+}
