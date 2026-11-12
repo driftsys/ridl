@@ -219,6 +219,9 @@ struct StreamCall<'a> {
     entry_binding: String,
     bindings: Vec<String>,
     param_types: Vec<String>,
+    /// The response bound in milliseconds, as a decimal number, when the
+    /// member records one in the range a port accepts.
+    bound_ms: Option<String>,
 }
 
 /// A command or query that the client class of its interface carries as a
@@ -2555,6 +2558,11 @@ impl<'a> Codec<'a> {
                 entry_binding: String::new(),
                 bindings: Vec::new(),
                 param_types,
+                bound_ms: interaction
+                    .timing
+                    .as_ref()
+                    .and_then(|timing| timing.max_us.as_deref())
+                    .and_then(milliseconds),
             },
         );
         Ok(())
@@ -2604,9 +2612,10 @@ impl<'a> Codec<'a> {
     /// stream, verifies each named element and plain reply before it decodes
     /// it, decodes raw text as UTF-8 and passes raw bytes through. An upload
     /// encodes and verifies whole named elements, and splits raw bytes or text
-    /// at the member limit. The bound is always the caller's: a stream has no
-    /// default, because the declared maximum response time does not describe
-    /// the whole stream.
+    /// at the member limit. The bound defaults as it does for a call: to
+    /// the declared maximum response time when the member has a usable one,
+    /// and the caller must pass it otherwise. It ends at the first element or
+    /// at the end of the stream, not at the end of the transfer.
     fn emit_stream_method(&self, out: &mut String, member: &str, stream: &StreamCall<'a>) {
         let params = stream
             .bindings
@@ -2614,11 +2623,23 @@ impl<'a> Codec<'a> {
             .zip(&stream.param_types)
             .map(|(binding, ty)| format!("{binding}: {ty}"));
         let mut signature: Vec<String> = params.collect();
-        signature.push("opts: Omit<$rt.CallOptions, \"signal\">".to_string());
-        let extra = vec![
-            "@param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call."
-                .to_string(),
-        ];
+        let (opts_param, bound_value, note) = match &stream.bound_ms {
+            Some(ms) => (
+                "opts?: Partial<Omit<$rt.CallOptions, \"signal\">>",
+                format!("{{ bound: opts?.bound ?? {ms} }}"),
+                format!("The bound defaults to the declared maximum response time, {ms} ms."),
+            ),
+            None => (
+                "opts: Omit<$rt.CallOptions, \"signal\">",
+                "opts".to_string(),
+                "The member has no maximum response time inside the range of a port bound, so `opts.bound` is required."
+                    .to_string(),
+            ),
+        };
+        signature.push(opts_param.to_string());
+        let extra = vec![format!(
+            "@param opts - {note} The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call."
+        )];
         out.push('\n');
         out.push_str(&self.call_docs(
             stream.interaction,
@@ -2703,7 +2724,7 @@ impl<'a> Codec<'a> {
             };
             let _ = writeln!(
                 out,
-                "    const raw = this.#port.{method}(entry.iface, entry.ord, args, opts);"
+                "    const raw = this.#port.{method}(entry.iface, entry.ord, args, {bound_value});"
             );
             let upload_limit = if stream.interaction.limit.is_some() {
                 "entry.limit"
@@ -2736,8 +2757,9 @@ impl<'a> Codec<'a> {
             }
             return;
         }
-        out.push_str(
-            "    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);\n",
+        let _ = writeln!(
+            out,
+            "    const raw = this.#port.queryStream(entry.iface, entry.ord, args, {bound_value});"
         );
         match stream.form {
             "elements" => out.push_str("    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));\n"),
@@ -3519,13 +3541,10 @@ fn milliseconds(max_us: &str) -> Option<String> {
 /// Allocates local bindings without shadowing generated locals or helper functions.
 fn stream_bindings(params: &[&v1::Param], entry_binding: &str) -> Vec<String> {
     let reserved = [
-        "session",
         "opts",
         "entry",
         "element",
-        "requestType",
         "elementType",
-        "replyType",
         "replyElement",
         "replyElementType",
         "stream",

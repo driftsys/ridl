@@ -574,12 +574,15 @@ that names both. An internal payload type has no `encode`/`decode`, because
 
 A stream member is a method of the interface's client class,
 `<Interface>Client`, named as the member is declared. The method takes the
-non-stream parameters in declaration order and required `{ bound: number }`
-options, in milliseconds; a stream method does not read an abort signal, and a
-stream ends when its reader is cancelled or its upload is aborted. Load the
-matching wasm codec and connect the byte transport, then bind the client to the
-transport and the codec with `<Interface>Client.bind(port, codec)`. The port is
-a `StreamCaller` of `@driftsys/ridl-runtime`. Generated code and the runtime do
+non-stream parameters in declaration order and `{ bound: number }` options, in
+milliseconds. As for a call, the bound defaults to the maximum response time
+that the member declares, and `opts` is optional then; a member with no usable
+maximum requires `opts.bound`. The bound ends at the first element or at the end
+of the stream. A stream method does not read an abort signal, and a stream ends
+when its reader is cancelled or its upload is aborted. Load the matching wasm
+codec and connect the byte transport, then bind the client to the transport and
+the codec with `<Interface>Client.bind(port, codec)`. The port is a
+`StreamCaller` of `@driftsys/ridl-runtime`. Generated code and the runtime do
 not depend on the WebSocket package; its `Session` is a `StreamCaller`.
 
 For the document example, `docs.fetch` returns `ReadableStream<Uint8Array>`,

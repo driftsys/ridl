@@ -99,9 +99,9 @@ Its exports:
   ([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)). A tombstone has no
   entry. A query with a fallible `T | E` reply has no `reply`. An interaction
   whose payload has no finite bound has no entry, and a comment stands at its
-  place. Supported stream interactions have a table entry and an exported
-  function, as [D-17 and D-18](#stream-functions) describe. Unsupported forms
-  have no entry or function, and a comment states the specific reason.
+  place. Supported stream interactions have a table entry and a method of the
+  client class, as [D-17 and D-18](#stream-functions) describe. Unsupported
+  forms have no entry or method, and a comment states the specific reason.
 
 An `internal` payload type is listed in `PAYLOAD_TYPES`, so that the list equals
 the package's part of `WASM_PAYLOAD_TYPES`, but gets no `encode` or `decode`,
@@ -125,18 +125,18 @@ entry names, so that `deno lint` reports nothing unused in the file.
 The file starts with the generated marker and header that `<base>.ts` carries,
 then `/* eslint-disable */`. Payload functions and tables carry a one-sentence
 doc comment; the type's rules stay on the type in `<base>.ts` (D-13). Stream
-functions carry model-derived interaction and parameter TSDoc (D-18). The
-imports are namespaced (`flatbuffers`, `t` for `<base>.ts`, `fb` for `flatc`'s
-output, one alias per foreign package), and every relative import carries the
-`.js` suffix (D-15). The module reaches `@driftsys/ridl-runtime` only through
-one namespace import, `$rt`, which is a type-only import when the module uses no
+methods carry model-derived interaction and parameter TSDoc (D-18). The imports
+are namespaced (`flatbuffers`, `t` for `<base>.ts`, `fb` for `flatc`'s output,
+one alias per foreign package), and every relative import carries the `.js`
+suffix (D-15). The module reaches `@driftsys/ridl-runtime` only through one
+namespace import, `$rt`, which is a type-only import when the module uses no
 runtime value. `$` cannot occur in a RIDL name or a package alias, so no
 declaration can take the binding, and a declaration may take any name that the
 runtime exports. Ordinary entries use only the runtime's `$rt.PayloadCodec` type
 when needed, plus the value `$rt.checkWellFormed` when the module writes a
-string (D-11), and satisfy `MemberRef` structurally. Stream functions also use
-the runtime types, errors and adapters described in D-17; they import nothing
-from the WebSocket package. A module with a signal also uses the runtime's
+string (D-11), and satisfy `MemberRef` structurally. Stream methods also use the
+runtime types, helpers and adapters described in D-17; they import nothing from
+the WebSocket package. A module with a signal also uses the runtime's
 `$rt.Codec`, `$rt.SignalCheckEntry` and `$rt.CodecError` for `signalChecks`. A
 module writes `<Interface>Client` for an interface that has at least one call,
 signal or event method with a codec and a finite bound, and the class uses the
@@ -170,6 +170,10 @@ both sources.
 
 ## Stream functions
 
+The heading keeps its name for the links that point to it. The decisions below
+describe the stream members, which are methods of the client class of their
+interface (`<Interface>Client`), not free functions.
+
 **D-16. The payload rule table changes together with wasm.** The sorted table is
 `length, pattern, range, step, unique, utf8, variant`. Codes are 2 plus the
 index: `utf8` is 7 and `variant` is 8. Widening the TypeScript rule union and
@@ -183,11 +187,11 @@ member is a method of the interface's `<Interface>Client`, which is built with
 loaded `Codec`. The application connects its transport and loads wasm
 explicitly; there is no global codec or hidden load. The generator calls the
 port's methods with their receiver retained. Generated code uses only runtime
-names, through the `$rt` namespace import: `StreamCaller`, `CallOptions`,
-`PayloadCodec`, `CallError`, `CatalogMismatch`, `encodeRequest`, `decodeReply`
-and the needed `decodeStream`, `decodeTextStream`, `encodeUpload`, `byteUpload`
-or `textUpload` adapters. The runtime has no dependency on the WebSocket
-package.
+names, through the `$rt` namespace import: the types `StreamCaller`,
+`CallOptions`, `Codec` and `PayloadCodec`, the helpers `checkCatalog`,
+`encodeRequest` and `decodeReply`, and the needed `decodeStream`,
+`decodeTextStream`, `encodeUpload`, `byteUpload` or `textUpload` adapters. The
+runtime has no dependency on the WebSocket package.
 
 Discovery resolves the non-stream request, named stream elements and any plain
 reply through the same finite FlatBuffers payload roots used by ordinary
@@ -202,9 +206,15 @@ decoding per chunk; raw bytes pass through.
 **D-18. Methods and tables describe the supported stream forms.** The method
 name is the declared member name, for example `docs.fetch(id, opts)` on a
 `DocStoreClient`. Non-stream parameters come in declaration order; the final
-`opts` is required and carries `bound` in milliseconds, as `CallOptions` does
-without `signal`: a stream method does not read a signal, and a stream ends by
-cancelling the reader or aborting the upload. The methods return:
+`opts` carries `bound` in milliseconds, as `CallOptions` does without `signal`.
+The bound defaults as it does for a call: when the member declares a maximum
+response time inside the range of a port bound, `opts` is optional and `bound`
+defaults to that maximum; otherwise `opts` with `bound` is required, and a
+missing one is a type error. The bound ends at the first element or at the end
+of the stream, not at the end of the transfer
+([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)). A stream method does not
+read a signal: a stream ends by cancelling the reader or aborting the upload.
+The methods return:
 
 - Reply only: `ReadableStream<T>`.
 - Command with one upload:
@@ -252,16 +262,17 @@ throws, or
 "invalid-value", rule } }` for a
 constraint or UTF-8 violation, including a `RuleError` a generated `encode` or
 `decode` throws and the `ConstraintError` with rule `utf8` that a generated
-`encode` throws for a string that is not well-formed. The original exception is
-kept as the `cause`. Remote errors retain their original object identity.
-`CatalogMismatch` and `UnknownPayloadType` are setup errors of `bind`, before
-any request. `CodecError` also reports invalid codec ABI or verifier metadata.
-Normal pipe cancellation interrupts the raw call when decoding fails; it does
-not invent an outbound contract frame. An upload adapter failure errors the
-local writer with `CallError` and aborts the transport. A duplex reply then
-fails with the transport's interruption, rather than that local `CallError`.
-Explicit upload abort preserves the supplied reason on the native writer; the
-other direction reports transport interruption.
+`encode` or `decode` throws for a string that is not well-formed. A `RuleError`
+or `ConstraintError` whose rule is not one of the seven payload rules is
+`corrupt`. The original exception is kept as the `cause`. Remote errors retain
+their original object identity. `CatalogMismatch` and `UnknownPayloadType` are
+setup errors of `bind`, before any request. `CodecError` also reports invalid
+codec ABI or verifier metadata. Normal pipe cancellation interrupts the raw call
+when decoding fails; it does not invent an outbound contract frame. An upload
+adapter failure errors the local writer with `CallError` and aborts the
+transport. A duplex reply then fails with the transport's interruption, rather
+than that local `CallError`. Explicit upload abort preserves the supplied reason
+on the native writer; the other direction reports transport interruption.
 
 **D-21. Generated interoperability uses the document example.**
 `examples/docstore/web` loads the generated wasm and tables, calls byte
@@ -326,12 +337,12 @@ or wire layout.
 
 The stream fixture `crates/ridl-backend-ts/tests/fixtures/codec-streams` is
 checked by `_codec-ts-check`. Rust generator tests cover discovery, metadata,
-function names and collisions, all supported return shapes, exact omissions,
-TSDoc and deterministic output. Deno tests cover request verification, named and
-text decoding, sender splitting, rule failures, remote error identity,
-backpressure, cancellation and duplex direction coupling. Compiler integration
-tests pin TypeScript/wasm type names and rule codes, including literal payload
-codes 7 and 8.
+method names and collisions, all supported return shapes, exact omissions, TSDoc
+and deterministic output. Deno tests cover request verification, named and text
+decoding, sender splitting, rule failures, remote error identity, backpressure,
+cancellation and duplex direction coupling. Compiler integration tests pin
+TypeScript/wasm type names and rule codes, including literal payload codes 7
+and 8.
 
 ## The conversion rules
 
@@ -526,7 +537,7 @@ key. The TypeScript emit and `@driftsys/ridl-runtime` are not frozen surfaces.
   reason. Existing refusals for internal payloads and foreign composite roots
   remain. Unsupported stream members are never emitted as ordinary calls.
 - The domain type generator still refuses stream types as ordinary typl values;
-  only interaction-position streams have generated functions.
+  only interaction-position streams have generated methods.
 - An absent optional array, bytes or map field and an empty one encode the same,
   and both decode as the present empty value (`[]` or an empty `Uint8Array`):
   `flatc`'s object API types a vector as `T[]` and its `pack` always writes it,

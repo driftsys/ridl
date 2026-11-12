@@ -2538,7 +2538,7 @@ fn stream_names_and_unsupported_shapes_are_explicit() {
     }
     assert!(
         source.contains(
-            "session2: t.Count, session1: t.Count, opts1: t.Count | undefined, opts: Omit<$rt.CallOptions, \"signal\">"
+            "session: t.Count, session1: t.Count, opts1: t.Count | undefined, opts?: Partial<Omit<$rt.CallOptions, \"signal\">>"
         ),
         "{source}"
     );
@@ -2601,7 +2601,7 @@ fn generated_stream_docs_render_model_contract() {
     );
     let sig = source.find("\n  unions(").unwrap();
     let start = source[..sig].rfind("/**").unwrap();
-    assert!(source[start..sig].contains("@param session2 - The session number."));
+    assert!(source[start..sig].contains("@param session - The session number."));
     assert!(source[start..sig].contains("@param opts1 - A selection."));
     // A codec with only an induced request has no imported domain namespace.
     let mut model = streams_model();
@@ -2938,7 +2938,9 @@ fn generated_upload_encodes_only_plain_arguments() {
         .find(|line| line.starts_with("  uploadNamed("))
         .unwrap();
     assert!(
-        signature.contains("seed: t.Count, tail: t.Count, opts: Omit<$rt.CallOptions, \"signal\">"),
+        signature.contains(
+            "seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, \"signal\">>"
+        ),
         "{signature}"
     );
     let start = source.find("\n  uploadNamed(").unwrap();
@@ -3060,7 +3062,9 @@ fn generated_duplex_functions() {
             "{body}"
         );
         assert!(
-            body.contains("this.#port.queryDuplex(entry.iface, entry.ord, args, opts)"),
+            body.contains(
+                "this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 })"
+            ),
             "{body}"
         );
         assert!(!body.lines().nth(1).unwrap().contains("values:"), "{body}");

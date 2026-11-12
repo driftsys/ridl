@@ -1272,14 +1272,14 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  scalars(opts: Omit<$rt.CallOptions, "signal">): ReadableStream<t.Count> {
+  scalars(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Count> {
     const entry = streamEntry2;
     const element = entry.streams[0].element;
     const elementType = this.#ids.scalars.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.scalars.request, {}, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
   }
 
@@ -1291,16 +1291,16 @@ export class FeedClient {
    * - response within 50000 us
    *
    * @param seed - The first sequence number.
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    * @since 1.0.0
    * @deprecated Use scalars.
    */
-  structs(seed: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<t.Chunk> {
+  structs(seed: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Chunk> {
     const entry = streamEntry3;
     const element = entry.streams[0].element;
     const elementType = this.#ids.structs.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.structs.request, seed, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
   }
 
@@ -1311,17 +1311,17 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param session2 - The session number.
+   * @param session - The session number.
    * @param session1 - A second number.
    * @param opts1 - A selection.
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  unions(session2: t.Count, session1: t.Count, opts1: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<t.Choice> {
+  unions(session: t.Count, session1: t.Count, opts1: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Choice> {
     const entry = streamEntry4;
     const element = entry.streams[0].element;
     const elementType = this.#ids.unions.element;
-    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.unions.request, { session: session2, session1: session1, opts: opts1 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.unions.request, { session: session, session1: session1, opts: opts1 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
   }
 
@@ -1332,14 +1332,14 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  statuses(opts: Omit<$rt.CallOptions, "signal">): ReadableStream<t.StatusValue> {
+  statuses(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.StatusValue> {
     const entry = streamEntry5;
     const element = entry.streams[0].element;
     const elementType = this.#ids.statuses.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.statuses.request, {}, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
   }
 
@@ -1350,14 +1350,14 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  data(opts: Omit<$rt.CallOptions, "signal">): ReadableStream<t.Data> {
+  data(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Data> {
     const entry = streamEntry6;
     const element = entry.streams[0].element;
     const elementType = this.#ids.data.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.data.request, {}, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
   }
 
@@ -1368,14 +1368,14 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  labels(opts: Omit<$rt.CallOptions, "signal">): ReadableStream<t.Text> {
+  labels(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Text> {
     const entry = streamEntry7;
     const element = entry.streams[0].element;
     const elementType = this.#ids.labels.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.labels.request, {}, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
   }
 
@@ -1386,12 +1386,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  readBytes(seed: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  readBytes(seed: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry8;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.readBytes.request, seed, entry.limit);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 
@@ -1402,12 +1402,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  text(opts: Omit<$rt.CallOptions, "signal">): ReadableStream<string> {
+  text(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<string> {
     const entry = streamEntry9;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.text.request, {}, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeTextStream());
   }
 
@@ -1418,12 +1418,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  zero(opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  zero(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry10;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.zero.request, {}, entry.limit);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 
@@ -1449,12 +1449,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  upload(opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
+  upload(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
     const entry = streamEntry11;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.upload.request, {}, entry.limit);
-    const raw = this.#port.commandStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.byteUpload(raw.upload, entry.limit);
     return { upload, accepted: raw.accepted };
   }
@@ -1466,14 +1466,14 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  duplex(opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<Uint8Array>; stream: ReadableStream<t.Chunk> } {
+  duplex(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; stream: ReadableStream<t.Chunk> } {
     const entry = streamEntry12;
     const replyElement = entry.streams[0].element;
     const replyElementType = this.#ids.duplex.replyElement;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplex.request, {}, undefined);
-    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.byteUpload(raw.upload, 16128);
     const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => this.#codec.verify(replyElementType, bytes)));
     return { upload, stream };
@@ -1488,16 +1488,16 @@ export class FeedClient {
    *
    * @param seed - The first {@link t.Count}.
    * @param tail - The last {@link t.Count}.
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  duplexNamed(seed: t.Count, tail: t.Count, opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<t.Chunk>; stream: ReadableStream<t.Chunk> } {
+  duplexNamed(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; stream: ReadableStream<t.Chunk> } {
     const entry = streamEntry13;
     const element = entry.streams[1].element;
     const elementType = this.#ids.duplexNamed.element;
     const replyElement = entry.streams[0].element;
     const replyElementType = this.#ids.duplexNamed.replyElement;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplexNamed.request, { seed: seed, tail: tail }, undefined);
-    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), 16128);
     const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => this.#codec.verify(replyElementType, bytes)));
     return { upload, stream };
@@ -1510,12 +1510,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  duplexText(opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<string>; stream: ReadableStream<string> } {
+  duplexText(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<string>; stream: ReadableStream<string> } {
     const entry = streamEntry14;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplexText.request, {}, undefined);
-    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.textUpload(raw.upload, 16128);
     const stream = raw.stream.pipeThrough($rt.decodeTextStream());
     return { upload, stream };
@@ -1528,14 +1528,14 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  duplexBytes(opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<t.Chunk>; stream: ReadableStream<Uint8Array> } {
+  duplexBytes(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; stream: ReadableStream<Uint8Array> } {
     const entry = streamEntry15;
     const element = entry.streams[1].element;
     const elementType = this.#ids.duplexBytes.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplexBytes.request, {}, undefined);
-    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), 16128);
     const stream = raw.stream;
     return { upload, stream };
@@ -1548,12 +1548,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry16;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, {}, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 
@@ -1566,15 +1566,15 @@ export class FeedClient {
    *
    * @param seed - The first {@link t.Count}.
    * @param tail - The last {@link t.Count}.
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    * @see {@link t.Count}
    */
-  uploadNamed(seed: t.Count, tail: t.Count, opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<t.Chunk>; accepted: Promise<void> } {
+  uploadNamed(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; accepted: Promise<void> } {
     const entry = streamEntry17;
     const element = entry.streams[0].element;
     const elementType = this.#ids.uploadNamed.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadNamed.request, { seed: seed, tail: tail }, entry.limit);
-    const raw = this.#port.commandStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), entry.limit);
     return { upload, accepted: raw.accepted };
   }
@@ -1586,14 +1586,14 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  uploadData(opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<t.Data>; accepted: Promise<void> } {
+  uploadData(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Data>; accepted: Promise<void> } {
     const entry = streamEntry18;
     const element = entry.streams[0].element;
     const elementType = this.#ids.uploadData.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadData.request, {}, entry.limit);
-    const raw = this.#port.commandStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.encodeUpload(raw.upload, (value: t.Data) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), entry.limit);
     return { upload, accepted: raw.accepted };
   }
@@ -1605,12 +1605,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  uploadText(seed: t.Count, opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<string>; accepted: Promise<void> } {
+  uploadText(seed: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<string>; accepted: Promise<void> } {
     const entry = streamEntry19;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadText.request, seed, entry.limit);
-    const raw = this.#port.commandStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.textUpload(raw.upload, entry.limit);
     return { upload, accepted: raw.accepted };
   }
@@ -1622,14 +1622,14 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  uploadChoice(seed: t.Count, tail: t.Count, opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<t.Chunk>; reply: Promise<t.UploadResult> } {
+  uploadChoice(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; reply: Promise<t.UploadResult> } {
     const entry = streamEntry20;
     const element = entry.streams[0].element;
     const elementType = this.#ids.uploadChoice.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadChoice.request, { seed: seed, tail: tail }, entry.limit);
-    const raw = this.#port.queryWithUpload(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryWithUpload(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), entry.limit);
     const reply = raw.reply.then((bytes) => $rt.decodeReply(this.#codec, entry.reply, this.#ids.uploadChoice.reply, bytes));
     return { upload, reply };
@@ -1642,12 +1642,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  uploadTuple(opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<Uint8Array>; reply: Promise<FeedUploadTupleReply> } {
+  uploadTuple(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; reply: Promise<FeedUploadTupleReply> } {
     const entry = streamEntry21;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadTuple.request, {}, undefined);
-    const raw = this.#port.queryWithUpload(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryWithUpload(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.byteUpload(raw.upload, 16128);
     const reply = raw.reply.then((bytes) => $rt.decodeReply(this.#codec, entry.reply, this.#ids.uploadTuple.reply, bytes));
     return { upload, reply };
@@ -1660,12 +1660,12 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  uploadLabel(label: t.Text, opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
+  uploadLabel(label: t.Text, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
     const entry = streamEntry22;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadLabel.request, label, undefined);
-    const raw = this.#port.commandStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.byteUpload(raw.upload, 16128);
     return { upload, accepted: raw.accepted };
   }
@@ -1677,16 +1677,16 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  duplexMixed(opts: Omit<$rt.CallOptions, "signal">): { upload: WritableStream<t.Data>; stream: ReadableStream<t.Chunk> } {
+  duplexMixed(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Data>; stream: ReadableStream<t.Chunk> } {
     const entry = streamEntry23;
     const element = entry.streams[1].element;
     const elementType = this.#ids.duplexMixed.element;
     const replyElement = entry.streams[0].element;
     const replyElementType = this.#ids.duplexMixed.replyElement;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplexMixed.request, {}, undefined);
-    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     const upload = $rt.encodeUpload(raw.upload, (value: t.Data) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), 16128);
     const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => this.#codec.verify(replyElementType, bytes)));
     return { upload, stream };
@@ -1768,12 +1768,12 @@ export class OtherClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry24;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, {}, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }
@@ -1819,12 +1819,12 @@ export class sessionClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry32;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }
@@ -1870,12 +1870,12 @@ export class optsClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry29;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }
@@ -1921,12 +1921,12 @@ export class entryClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry28;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }
@@ -1972,12 +1972,12 @@ export class argsClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry25;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }
@@ -2023,12 +2023,12 @@ export class rawClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry30;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }
@@ -2074,14 +2074,14 @@ export class elementClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<t.Chunk> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Chunk> {
     const entry = streamEntry26;
     const element = entry.streams[0].element;
     const elementType = this.#ids.fetch.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
   }
 }
@@ -2127,12 +2127,12 @@ export class requestTypeClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry31;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }
@@ -2178,14 +2178,14 @@ export class elementTypeClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<t.Chunk> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Chunk> {
     const entry = streamEntry27;
     const element = entry.streams[0].element;
     const elementType = this.#ids.fetch.element;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
   }
 }
@@ -2231,12 +2231,12 @@ export class streamEntryClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry33;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }
@@ -2282,12 +2282,12 @@ export class streamEntry1Client {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - `opts.bound` is the response bound in milliseconds. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
-  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts: Omit<$rt.CallOptions, "signal">): ReadableStream<Uint8Array> {
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry34;
     const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-    const raw = this.#port.queryStream(entry.iface, entry.ord, args, opts);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
     return raw;
   }
 }

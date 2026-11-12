@@ -26,6 +26,7 @@ import type {
   VerifyResult,
 } from "@driftsys/ridl-runtime";
 import * as codec from "./streams.demo.codec.ts";
+import { FeedClient as UntimedFeedClient } from "./streams.demo.untimed.codec.ts";
 import type * as t from "./streams.demo.ts";
 
 // The port and the loaded codec that a client is bound to. Each call of a
@@ -175,7 +176,7 @@ Deno.test("generated_reply_uses_codec_and_session", async () => {
     assert.equal(h.calls.length, 1);
     assert.equal(h.calls[0].iface, 1);
     assert.equal(h.calls[0].ord, 3);
-    assert.strictEqual(h.calls[0].opts, opts);
+    assert.deepEqual(h.calls[0].opts, opts);
     assert.equal(codec.decodeCount(h.calls[0].args), 7);
     // `bind` resolves the payload types of every member before any request.
     const firstOther = h.events.findIndex((e) => !e.startsWith("resolve:"));
@@ -434,7 +435,7 @@ Deno.test("generated_upload_encodes_only_plain_arguments", async () => {
     );
     assert.equal(h.calls[0].iface, row.iface);
     assert.equal(h.calls[0].ord, row.ord);
-    assert.strictEqual(h.calls[0].opts, opts);
+    assert.deepEqual(h.calls[0].opts, opts);
     assert.equal(
       h.method,
       name === "uploadChoice" ? "queryWithUpload" : "commandStream",
@@ -947,6 +948,74 @@ Deno.test("cancelling_a_reply_stream_reaches_the_transport", async () => {
     new Promise((resolve) => setTimeout(() => resolve("not cancelled"), 200)),
   ]);
   assert.strictEqual(seen, reason);
+});
+
+// Mutation: default the bound to another value, ignore `opts.bound`, or default
+// it for one of the four forms only.
+Deno.test("a stream method defaults its bound to the declared maximum", () => {
+  const h = harness([]);
+  const transport = h.session.transport;
+  transport.queryStream = (iface, ord, args, opts) => {
+    h.calls.push({ iface, ord, args, opts });
+    return source([]);
+  };
+  transport.queryDuplex = (iface, ord, args, opts) => {
+    h.calls.push({ iface, ord, args, opts });
+    return { upload: new WritableStream(), stream: source([]) };
+  };
+  transport.commandStream = (iface, ord, args, opts) => {
+    h.calls.push({ iface, ord, args, opts });
+    return { upload: new WritableStream(), accepted: Promise.resolve() };
+  };
+  transport.queryWithUpload = (iface, ord, args, opts) => {
+    h.calls.push({ iface, ord, args, opts });
+    return { upload: new WritableStream(), reply: new Promise(() => {}) };
+  };
+  const forms: [string, unknown[]][] = [
+    ["scalars", []], // reply stream
+    ["upload", []], // command with an upload
+    ["uploadChoice", [1, 2]], // query with an upload and a plain reply
+    ["duplexNamed", [1, 2]], // duplex
+  ];
+  for (const [name, args] of forms) {
+    for (const opts of [undefined, { bound: 9 }]) {
+      const before = h.calls.length;
+      const call = generated(name)(
+        h.session,
+        ...args,
+        ...(opts ? [opts] : []),
+      ) as { reply?: Promise<unknown> };
+      call.reply?.catch(() => {});
+      assert.equal(h.calls.length, before + 1, name);
+      assert.equal(
+        h.calls[before].opts.bound,
+        opts?.bound ?? 50,
+        `${name} ${opts?.bound}`,
+      );
+    }
+  }
+});
+
+// Mutation: let the untimed module default the bound too.
+Deno.test("a stream member with no declared maximum requires a bound", async () => {
+  const h = harness([]);
+  const client = UntimedFeedClient.bind(h.session.transport, h.session.codec);
+  // Never called: only the type checker reads these lines.
+  const unused = () => {
+    // @ts-expect-error `opts` is required when no maximum is declared
+    client.structs(1 as t.Count);
+    // @ts-expect-error `opts.bound` is required when no maximum is declared
+    client.structs(1 as t.Count, {});
+    // @ts-expect-error `opts` is required when no maximum is declared
+    client.upload();
+    // @ts-expect-error `opts` is required when no maximum is declared
+    client.uploadChoice(1 as t.Count, 2 as t.Count);
+    // @ts-expect-error `opts` is required when no maximum is declared
+    client.duplexNamed(1 as t.Count, 2 as t.Count);
+  };
+  assert.equal(typeof unused, "function");
+  await collect(client.structs(7 as t.Count, { bound: 5 }));
+  assert.deepEqual(h.calls.map((call) => call.opts.bound), [5]);
 });
 
 Deno.test("duplex_adapters_preserve_credit_and_close", async () => {

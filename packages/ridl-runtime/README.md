@@ -105,8 +105,11 @@ const transport = await connect("ws://localhost:8080", {
 const docs = DocStoreClient.bind(transport, codec);
 ```
 
-Pass the required `{ bound: milliseconds }` last to a generated stream method,
-for example `docs.fetch(id, { bound: 1000 })`. The
+A generated stream method takes `{ bound: milliseconds }` last. The bound
+defaults to the maximum response time that the member declares, so `opts` is
+optional then, as in `docs.fetch(id)`; a member with no usable maximum requires
+it, as in `docs.fetch(id, { bound: 1000 })`. The bound ends at the first element
+or at the end of the stream. The
 [generated-code chapter](../../docs/book/generated-code.md) shows the supported
 signatures and document store calls. The transport import above belongs to the
 application; this runtime package does not import it.
@@ -154,7 +157,7 @@ object. A close requested after the writer has errored rejects with the
 platform's `TypeError`. An already resolved command acceptance stays resolved.
 
 Local payload failures throw `CallError`, the class that a call failure uses;
-`StreamError` is the same class under its earlier name. Its `failure` is
+`StreamError` is a deprecated alias of `CallError`. Its `failure` is
 `{ category: "corrupt" }` for malformed payloads, an oversized named element or
 code point, or any exception a generated `encode` or `decode` throws without a
 rule. Rule failures, including invalid UTF-8, a `RuleError` from a generated
