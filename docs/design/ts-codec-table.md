@@ -268,6 +268,47 @@ the table objects stay plain data that `connect` reads. They hold no method of
 the class and no port; the only functions in an entry are the `encode` and
 `decode` of its payload codec.
 
+### Why a class, and what it replaced
+
+The client class is the TypeScript parallel of `Client<P>` in
+[`interaction-face.md`](interaction-face.md): ports in the runtime, a transport
+that implements them, and a generated type that is bound to a port. The ports
+are Promise-based, not poll-based, but keep the Rust split by interaction kind
+and the byte-only boundary (ADR-0020 decision 7).
+
+Decisions that shaped D-30 to D-35:
+
+- **One class per interface.** `bind` is the one place for the catalog check,
+  the type-id resolution and the signal check registration, as `Bind::new` is in
+  Rust, and the class holds the per-signal listeners.
+- **`require` clauses are left to the provider.** The Rust client evaluates them
+  before it sends; the TypeScript client does not, and a clause translator for
+  TypeScript is tracked by driftsys/ridl#1360.
+- **`StreamError` is merged into `CallError`.** A program catches one class for
+  any call failure. `StreamError` stays exported as a deprecated alias (D-20).
+- **The in-process loopback stays a test fake.** `tests/fake_port.ts` of
+  `packages/ridl-runtime` implements the consumer ports for the tests of the
+  client and is not exported. Whether it becomes a public in-process loopback
+  that connects a client to a provider face is left to the work that adds the
+  provider ports (`Handler`, `SignalWriter`, `EventSink`) and a typed `provide`.
+- **One breaking change.** The client class replaced the free stream functions
+  `<Interface>_<member>`, `StreamSession`, `StreamTransport` and `StreamOptions`
+  in the same release as the command, query, signal and event methods. The
+  tables, `encode<Name>`, `decode<Name>`, `signalChecks`, the `CATALOG_*`
+  constants, `PAYLOAD_TYPES` and `RULES` did not change. No freeze dump covers a
+  TypeScript package or a generated TypeScript module (ADR-0029).
+
+Alternatives considered:
+
+| Alternative                                                                 | Verdict  | Why                                                                                                                                                                                                                         |
+| --------------------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a small structural interface per generated module, as `StreamTransport` was | rejected | it gives a provider emulator nothing to implement and tests no in-process path, and every consumer tool would still bind to `Session`                                                                                       |
+| free functions with a context, `Cabin_setLevel(ctx, level)`                 | rejected | the catalog check, the type-id resolution and the signal check registration would run on every call or need a separate setup step that a program can forget, and the per-signal listeners would have no object to hold them |
+| methods on the table object, `Cabin.setLevel.call(...)`                     | rejected | the table is plain data that `connect` reads; functions in it would change that type and make the table depend on a port                                                                                                    |
+| poll-based ports, a literal port of `Caller::command`, `ack` and `forget`   | rejected | TypeScript has Promises and `AbortSignal`, and `Session` already exposes calls as Promises; a poll API would add a loop to every client for no gain                                                                         |
+| the stream free functions kept as deprecated wrappers                       | rejected | no published consumer exists outside this repository's examples, and two APIs for one call double the fixture tests                                                                                                         |
+| a nullable `value` for `init` and `invalid` samples                         | rejected | it differs from the Rust client, which returns the init value, and every program would write the absent-value branch (D-33)                                                                                                 |
+
 ## Stream functions
 
 The heading keeps its name for the links that point to it. The decisions below
@@ -635,6 +676,9 @@ key. The TypeScript emit and `@driftsys/ridl-runtime` are not frozen surfaces.
 
 ## Known gaps
 
+- The client does not check `require` clauses before it sends; the provider
+  checks them (D-32). A clause translator for TypeScript is tracked by
+  driftsys/ridl#1360.
 - Calls with two or more parameter streams are explicitly omitted
   (driftsys/ridl#1224). Inline fallible upload replies without a codec and
   payload roots without a finite FlatBuffers bound are also omitted with a
