@@ -36,16 +36,18 @@ It amends two records in place, in the same change:
 
 ### Amended 2026-11-05
 
-The optional TypeScript codec module now emits public stream functions. Each
-carries the interaction's model-derived doc, resolved links, canonical rules,
-`@see`, `@since` and `@deprecated`. Non-stream parameters render their model
-documentation as `@param` tags. Stream-parameter documentation and parameter
-rules are not rendered; the codec table record linked below describes this
-limit. This is a narrow extension of decision 6 to those emitted functions.
-Neutral contract wording and the private-helper policy of decisions 3 and 7
-remain unchanged. The domain `.ts` module still emits no interaction face.
+The optional TypeScript codec module now emits stream members. Each is a method
+of its interface's client class since the amendment of 2026-11-12 (it was a free
+function when first recorded), and carries the interaction's model-derived doc,
+resolved links, canonical rules, `@see`, `@since` and `@deprecated`. Non-stream
+parameters render their model documentation as `@param` tags. Stream-parameter
+documentation and parameter rules are not rendered; the codec table record
+linked below describes this limit. This is a narrow extension of decision 6 to
+those emitted methods. Neutral contract wording and the private-helper policy of
+decisions 3 and 7 remain unchanged. The domain `.ts` module still emits no
+interaction face.
 [The codec table record](../design/ts-codec-table.md#stream-functions) owns the
-function surface.
+method surface.
 
 ## Context
 
@@ -91,7 +93,7 @@ because the first consumer that would need it is generated deprecation metadata.
 3. **The docs state the contract, not what a backend enforces** (design D-3).
    Every backend renders every rule that the `Model` declares, in neutral
    wording ("range 0.0 ..= 250.0", never "this function rejects"), except the
-   parameter rules of a TypeScript stream function (amended 2026-11-05 above).
+   parameter rules of a TypeScript stream method (amended 2026-11-05 above).
    Which rules the generated code of a backend checks is recorded once per
    backend in the book, not per item.
 
@@ -189,9 +191,9 @@ because the first consumer that would need it is generated deprecation metadata.
    - In the Rust face, a call's method renders the doc and the rules of each
      parameter under a `# Parameters` section: one bullet with the parameter's
      name and doc text, and its rule lines as nested bullets (S-6). TypeScript
-     codec stream functions render parameter documentation as the dated
-     amendment above specifies; the domain module has no call parameters. The
-     Kotlin plugin uses `@param`.
+     codec stream methods render parameter documentation as the dated amendment
+     above specifies; the domain module has no call parameters. The Kotlin
+     plugin uses `@param`.
    - The TypeScript backend calls `lower` to obtain the `Model`, as the Rust
      backend does, and reads `doc`, `links`, `see`, `since` and `rules` from it
      (S-5). Its `@unit`, `@range` and `@bounds` tags keep their current source.
@@ -208,9 +210,9 @@ because the first consumer that would need it is generated deprecation metadata.
    compiles with it, and `#[doc(hidden)]` where it must stay `pub`. The
    TypeScript domain module emits declaration types, constants, `<Name>Bits`
    objects and `init<Name>` functions; a declaration marked `internal` is not
-   exported. The codec module also emits public stream functions and private
-   helpers. Private helpers carry no facade documentation, and no item carries
-   `@internal`.
+   exported. The codec module also emits the public client classes, whose
+   methods carry the interaction's doc, and private helpers. Private helpers
+   carry no facade documentation, and no item carries `@internal`.
 
    Two kinds of Rust item are notes rather than facade or internals: the private
    constants `__RIDL_NO_FACE_<NAME>`, left where an interface's face was not

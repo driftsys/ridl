@@ -1,21 +1,23 @@
-// Reads cabin's `temperature` signal from the WebSocket server in
-// ../server and decodes each payload with the codec module that
-// `ridl build --emit typescript` wrote, generated/veh.cabin.codec.ts, which
-// calls the code `flatc` generated from the `.fbs` file. The interface number
-// and the ordinal of the signal come from the same module's `Cabin` table.
-// Before it decodes a payload, it verifies the payload through the cabin wasm
-// codec, generated/veh_cabin.wasm, loaded with packages/ridl-runtime.
+// Drives the cabin server in ../server through the generated `CabinClient` of
+// the codec module that `ridl build --emit typescript` wrote,
+// generated/veh.cabin.codec.ts. The client verifies every payload it sends or
+// receives through the cabin wasm codec, generated/veh_cabin.wasm, loaded with
+// packages/ridl-runtime, and encodes and decodes it with the code `flatc`
+// generated from the `.fbs` file. The program does not address a member by
+// interface number or ordinal and does not encode or decode a payload itself.
 //
 // Usage: deno run -A main.ts <server-executable>
 //
 // The program starts the server, reads the `port` and `hash` lines it prints,
 // fails when the announced hash is not the generated `CATALOG_HASH`, loads the
 // wasm codec with the generated hash, payload types and rules, runs the codec
-// self-test (20
-// is accepted, -41 and 86 are rejected with the range rule), attaches with the
-// encoding `flatbuffers` through a session whose `connect` and `subscribe`
-// each have a bound of 10 s and whose `checks` option is `signalChecks(codec)`
-// of the generated module, and subscribes to `Cabin.temperature`. The server steps the value through the whole range of
+// self-test (20 is accepted, -41 and 86 are rejected with the range rule),
+// attaches with the encoding `flatbuffers` through a session whose `connect`
+// and `subscribe` each have a bound of 10 s, and binds `CabinClient` to the
+// session. Through the client it sends `setLevel` with 42, calls `average`
+// and fails unless the reply is 42 (the server answers with the mean of the
+// levels it received), then subscribes to the `temperature` signal and
+// watches it. The server steps the value through the whole range of
 // `Temperature` and starts again at the lowest value. The transport may
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
 // expect every step. It exits with status 0 only if every value is inside
@@ -28,26 +30,26 @@
 // that exits or a connection that closes before the end of the check fails the
 // program at once. It prints the number of samples it received, the number of
 // wraps (a step from 85 to -40 or across it), whether 85 was seen, and whether
-// -40 was seen after 85. A payload the session check refuses, a check that
-// throws, or a payload the codec rejects fails the program with
-// the cause.
+// -40 was seen after 85. A sample that the client marks as invalid, a check
+// that throws, or a call that rejects fails the program with the cause.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
 import { connect } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
+  exerciseCalls,
   hexFromHash,
   HIGHEST,
   isPass,
+  LEVEL,
   LOWEST,
   RANGE_RULE,
   selfTest,
   sessionOptions,
   subscribeTemperature,
   TemperatureCheck,
-  verifyPayload,
 } from "./check.ts";
 import {
-  Cabin,
+  CabinClient,
   CATALOG_HASH,
   PAYLOAD_TYPES,
   RULES,
@@ -141,49 +143,10 @@ const done = new Promise<void>((resolve) => (enough = resolve));
 
 stage = "connecting";
 const session = await connect(`ws://127.0.0.1:${port}`, {
-  ...sessionOptions(codec),
-  // `sessionOptions` registers `signalChecks(codec)`: the session checks each
-  // `temperature` payload with the wasm codec before `onPublish` sees it. A
-  // payload the check refuses arrives as an invalid sample with `detected` set
-  // and no payload; `onPublish` fails the run on it.
+  ...sessionOptions(),
   onNote(note) {
     if (note.note === "check-failed") {
       fail(`the signal check threw: ${String(note.error)}`);
-    }
-  },
-  onPublish(target, sample) {
-    if (
-      sample.detected !== undefined &&
-      target.iface === Cabin.temperature.iface &&
-      target.ord === Cabin.temperature.ord && !failure
-    ) {
-      failure = `the signal check refused a payload: ${
-        JSON.stringify(sample.detected)
-      }`;
-      failureStage = stage;
-      enough();
-      return;
-    }
-    if (!sample.payload || failure) return;
-    if (
-      target.iface !== Cabin.temperature.iface ||
-      target.ord !== Cabin.temperature.ord
-    ) return;
-    let verdict;
-    try {
-      const rejected = verifyPayload(codec, sample.payload);
-      verdict = rejected
-        ? { kind: "fail" as const, cause: rejected }
-        : check.accept(Cabin.temperature.payload.decode(sample.payload));
-    } catch (e) {
-      fail(`verifying the payload: ${(e as Error).message}`);
-    }
-    if (verdict.kind === "fail") {
-      failure = verdict.cause;
-      failureStage = stage;
-      enough();
-    } else if (verdict.kind === "pass") {
-      enough();
     }
   },
 });
@@ -202,8 +165,51 @@ void session.closed.then(async (ended) => {
   }
   fail(`the connection closed (code ${ended.code})`);
 });
+
+// `bind` compares the catalog hashes of the session and of the codec with the
+// generated one and registers the check of the `temperature` signal with the
+// session: the client verifies each payload with the wasm codec before it
+// decodes it.
+stage = "binding the client";
+let cabin: CabinClient;
+try {
+  cabin = CabinClient.bind(session, codec);
+} catch (e) {
+  fail(`binding the client: ${(e as Error).message}`);
+}
+
+stage = "calling setLevel and average";
+try {
+  const cause = await exerciseCalls(cabin);
+  if (cause) fail(cause);
+} catch (e) {
+  fail(`a call failed: ${(e as Error).message}`);
+}
+
 stage = "subscribing";
-await subscribeTemperature(session);
+cabin.watchTemperature((sample) => {
+  if (failure) return;
+  // A payload the client refuses arrives as an invalid sample with `detected`
+  // set; one that is not live carries no new value.
+  if (sample.detected !== undefined) {
+    failure = `the client refused a payload: ${
+      JSON.stringify(sample.detected)
+    }`;
+    failureStage = stage;
+    enough();
+    return;
+  }
+  if (sample.provenance !== "live") return;
+  const verdict = check.accept(sample.value);
+  if (verdict.kind === "fail") {
+    failure = verdict.cause;
+    failureStage = stage;
+    enough();
+  } else if (verdict.kind === "pass") {
+    enough();
+  }
+});
+await subscribeTemperature(cabin);
 
 stage = "waiting for the highest value and the lowest after it";
 await done;
@@ -229,6 +235,6 @@ if (!isPass(check.progress)) {
 }
 console.log(
   `cabin-web: ok, self-test rejected ${LOWEST - 1} and ${HIGHEST + 1} ` +
-    `with rule ${RANGE_RULE}`,
+    `with rule ${RANGE_RULE}, average replied ${LEVEL} after setLevel`,
 );
 Deno.exit(0);

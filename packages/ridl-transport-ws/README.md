@@ -3,9 +3,10 @@
 The client side of the WebSocket binding of the ridl frame. The package opens a
 WebSocket that offers the subprotocols `ridl-ws-v3`, `ridl-ws-v2` and
 `ridl-ws-v1`, in that order, sends and receives frames, and carries each payload
-as bytes without reading them. The caller encodes and decodes payloads.
-`provide` opens the reversed role, in which the program stands in for a
-component and the server consumes (see "A providing session").
+as bytes without reading them. The caller encodes and decodes payloads, or binds
+a generated client class that does (see "Using a generated client"). `provide`
+opens the reversed role, in which the program stands in for a component and the
+server consumes (see "A providing session").
 
 The session speaks the frame version of the subprotocol the server selects: 3 on
 `ridl-ws-v3`, 2 on `ridl-ws-v2` and 1 on `ridl-ws-v1`, so the package also
@@ -27,6 +28,74 @@ and depends on `@driftsys/ridl-runtime` for the shared types (`Envelope`,
 The wire format is in the
 [frame specification](../../docs/specification/frame-specification.md), section
 11.1.
+
+## Using a generated client
+
+A `Session` implements the consumer ports of `@driftsys/ridl-runtime`: `Caller`
+(`command`, `query`), `SignalReader` (`subscribe`, `unsubscribe`, `sample`,
+`read`, `watch`, `checkWith`), `EventSource` (`subscribe`, `unsubscribe`,
+`listen`) and `StreamCaller` (the four stream methods), and each has
+`catalogHash`, the hash the session attached with. The generated client class of
+an interface binds to them with `<Interface>Client.bind(session, codec)`. The
+client takes the signal checks, the catalog comparison, and the encoding,
+verification and decoding of each payload on itself, so the program does not
+pass `signalChecks(codec)` to `connect` and does not address a member by number.
+For the cabin example:
+
+```ts
+import { loadCodec } from "@driftsys/ridl-runtime";
+import { connect } from "@driftsys/ridl-transport-ws";
+import {
+  Cabin,
+  CabinClient,
+  CATALOG_HASH,
+  CATALOG_NAME,
+  PAYLOAD_TYPES,
+  RULES,
+} from "./generated/veh.cabin.codec.ts";
+import { makeLevel, makeWindow } from "./generated/veh.cabin.ts";
+
+const codec = await loadCodec(new URL("./generated/veh_cabin.wasm", import.meta.url), {
+  catalogHash: CATALOG_HASH,
+  payloadTypes: PAYLOAD_TYPES,
+  ruleText: RULES,
+});
+const session = await connect("ws://127.0.0.1:9000", {
+  catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
+  encoding: "flatbuffers",
+  interfaces: [Cabin],
+});
+const cabin = CabinClient.bind(session, codec);
+
+await cabin.setLevel(makeLevel(42)); // the bound defaults to the declared 50 ms
+const average = await cabin.average(makeWindow(10), { bound: 1000 });
+
+await cabin.subscribeTemperature({ bound: 1000 });
+const stop = cabin.watchTemperature((sample) => console.log(sample.value));
+```
+
+The ports address a member by interface number and ordinal. On a `Session`,
+`subscribe`, `unsubscribe` and `read` take either a `Target` or `(iface, ord)`,
+with the kind from the `interfaces` tables of `connect`; a pair that the tables
+do not hold is a `RangeError`.
+
+- `watch(iface, ord, listener)` calls `listener` with the `Sample` of every
+  accepted publish of the signal, after the session updated the held sample and
+  called `onPublish`, and returns the function that removes the listener.
+- `listen(iface, listener)` calls `listener` with every accepted `Occurrence` of
+  any subscribed event of the interface, after `onOccurrence`, and returns the
+  function that removes the listener. `onPublish` and `onOccurrence` stay in the
+  options of `connect` for a tool that wants every publish and occurrence.
+- `command` and `query` take `signal` in their options. An already aborted
+  signal rejects with its reason and sends nothing. An abort after the send
+  rejects with the reason at once, and the session keeps the call pending until
+  its response or its bound and consumes a late answer. A provider that received
+  a command may still run it.
+- A listener that throws is reported to the platform and does not stop the
+  handling of the frame.
+
+`SessionError` extends `CallError` of the runtime, so a program can test
+`instanceof CallError` for any failed call, a client call included.
 
 ## Payload sizes
 

@@ -5,8 +5,9 @@ payloads with it. A payload is checked against the structure and the typl rules
 of its type before the caller uses it. The package also holds the
 `ConstraintError` and the helpers that generated TypeScript calls to check a
 constrained value, and the types of the signal checks of a generated codec
-module. Generated TypeScript needs the release of this package that matches the
-release of `ridl` that generated it.
+module. It also holds the consumer port interfaces that a generated client class
+binds to, and the helpers that the class calls. Generated TypeScript needs the
+release of this package that matches the release of `ridl` that generated it.
 
 The package has no dependency. It uses the platform `WebAssembly`, streams and
 text decoder APIs, so it runs in Deno, Bun, Node 22 or later, and in a browser.
@@ -64,6 +65,44 @@ platform has it and the content type is `application/wasm`. Otherwise the body
 is read with `arrayBuffer()` and compiled with `WebAssembly.instantiate`. A
 `file:` URL is read with `Deno.readFile` when `Deno` exists and is fetched
 otherwise. Any other URL is fetched.
+
+## Ports and generated clients
+
+A generated codec module holds one client class per interface,
+`<Interface>Client`. It is bound to a port and the loaded codec with
+`<Interface>Client.bind(port, codec)`. The port is any object that implements
+the interfaces below; a transport's session is one, and a fake in a test is
+another. They carry bytes and address a member by interface number and ordinal.
+They name no payload type, codec or transport.
+
+- `Caller`: `command(iface, ord, args, opts)` resolves when the provider
+  accepted the command, and `query(...)` resolves with the reply bytes. `opts`
+  is a `CallOptions`: `bound` in milliseconds, and an optional `signal`.
+- `SignalReader`: `checkWith`, `subscribe`, `unsubscribe`, `sample` (the held
+  `RawSample`), `read` (the next publish) and `watch` (every accepted publish).
+- `EventSource`: `subscribe`, `unsubscribe` and `listen` (every accepted
+  `RawOccurrence` of an interface).
+- `StreamCaller`: a `Caller` that also has the four byte-stream methods.
+
+Each also has `catalogHash`, the 32 bytes of the catalog the port is attached
+to. `bind` takes only the ports that the interface's members need, so a client
+of an interface with signals alone binds over a `SignalReader`.
+
+`bind` throws `CatalogMismatch` when the hash of the port or of the codec is not
+the generated one, and registers each signal's check with the port. A method of
+the class encodes and verifies a request before the port sends it, and verifies
+a reply before it decodes it. The failures are `CallError`s (see below). The
+runtime exports the helpers that the class calls: `checkCatalog`,
+`encodeRequest`, `decodeReply`, `decodeSample`, `decodeOccurrence` and
+`initSample`. A program does not call them. A `Sample<T>` has `provenance`,
+`envelope`, `value` and `detected`; `value` is never absent, because under
+`init` and `invalid` it is the last good value or the init value of the type. An
+`Occurrence<T>` has no `value` when the payload was refused. The
+[generated-code chapter](../../docs/book/generated-code.md#calling-generated-clients)
+shows the methods and their options, and the
+[codec table record](../../docs/design/ts-codec-table.md#the-client-class) gives
+the rules. `@driftsys/ridl-transport-ws` implements the ports with its
+`Session`.
 
 ## Streams
 

@@ -5,7 +5,6 @@
 // veh_cabin.wasm.
 
 import assert from "node:assert/strict";
-import { Kind } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   type Codec,
   ConstraintError,
@@ -61,14 +60,16 @@ import type {
   Window,
 } from "./generated/veh.cabin.ts";
 import {
+  exerciseCalls,
   isPass,
+  LEVEL,
   RANGE_RULE,
   selfTest,
   sessionOptions,
   STEP_BOUND_MS,
   subscribeTemperature,
   TemperatureCheck,
-  verifyPayload,
+  WINDOW_MS,
 } from "./check.ts";
 
 /** The generated `encodeTemperature` of a plain number. */
@@ -239,37 +240,74 @@ Deno.test("signalChecks refuses a value outside the range and passes one inside 
   );
 });
 
-Deno.test("sessionOptions gives the bound and the signal checks to the session", () => {
-  const options = sessionOptions(codec);
+Deno.test("sessionOptions gives the bound and the tables to the session", () => {
+  const options = sessionOptions();
   assert.equal(STEP_BOUND_MS, 10_000);
   assert.equal(options.bound, STEP_BOUND_MS);
   assert.equal(options.encoding, "flatbuffers");
   assert.deepEqual(options.catalog, { name: CATALOG_NAME, hash: CATALOG_HASH });
   assert.deepEqual(options.interfaces, [Cabin, Horn]);
-  const temperature = options.checks?.find((entry) =>
-    entry.iface === Cabin.temperature.iface &&
-    entry.ord === Cabin.temperature.ord
-  );
-  assert.ok(temperature !== undefined);
-  assert.deepEqual(temperature.check(encode(86)), { rule: "range" });
+  // `CabinClient.bind` registers the checks, so the options carry none.
+  assert.equal("checks" in options, false);
 });
 
-Deno.test("subscribeTemperature subscribes to Cabin.temperature with the bound of each step", async () => {
-  const calls: { target: unknown; opts: unknown }[] = [];
+Deno.test("subscribeTemperature subscribes the client with the bound of each step", async () => {
+  const calls: unknown[] = [];
   await subscribeTemperature({
-    subscribe: (target, opts) => {
-      calls.push({ target, opts });
+    subscribeTemperature: (opts) => {
+      calls.push(opts);
       return Promise.resolve();
     },
   });
-  assert.deepEqual(calls, [{
-    target: {
-      kind: Kind.Signal,
-      iface: Cabin.temperature.iface,
-      ord: Cabin.temperature.ord,
+  assert.deepEqual(calls, [{ bound: STEP_BOUND_MS }]);
+});
+
+/** A client whose `average` replies `reply`, and that records its calls. */
+function fakeCalls(reply: number) {
+  const calls: unknown[][] = [];
+  return {
+    calls,
+    client: {
+      setLevel: (level: Level, opts?: unknown) => {
+        calls.push(["setLevel", level, opts]);
+        return Promise.resolve();
+      },
+      average: (window: Window, opts?: unknown) => {
+        calls.push(["average", window, opts]);
+        return Promise.resolve(makeAverage(reply));
+      },
     },
-    opts: { bound: STEP_BOUND_MS },
-  }]);
+  };
+}
+
+Deno.test("exerciseCalls sends setLevel and then average, each with the bound of a step", async () => {
+  const { calls, client } = fakeCalls(LEVEL);
+  assert.equal(await exerciseCalls(client), undefined);
+  assert.deepEqual(calls, [
+    ["setLevel", makeLevel(LEVEL), { bound: STEP_BOUND_MS }],
+    ["average", makeWindow(WINDOW_MS), { bound: STEP_BOUND_MS }],
+  ]);
+});
+
+Deno.test("exerciseCalls names a reply that is not the level it sent", async () => {
+  const { client } = fakeCalls(LEVEL + 1);
+  const cause = await exerciseCalls(client);
+  assert.match(cause ?? "", /average replied 43 after setLevel\(42\), not 42/);
+});
+
+Deno.test("exerciseCalls does not call average when setLevel rejects", async () => {
+  const calls: string[] = [];
+  await assert.rejects(
+    exerciseCalls({
+      setLevel: () => Promise.reject(new Error("refused")),
+      average: () => {
+        calls.push("average");
+        return Promise.resolve(makeAverage(LEVEL));
+      },
+    }),
+    /refused/,
+  );
+  assert.deepEqual(calls, []);
 });
 
 Deno.test("the codec rejects a truncated payload as malformed", () => {
@@ -348,47 +386,6 @@ Deno.test("selfTest fails a codec that rejects with another kind or code", () =>
     );
     assert.match(cause ?? "", /-41/);
   }
-});
-
-Deno.test("verifyPayload gives the cause of each rejection", () => {
-  assert.equal(verifyPayload(codec, encode(20)), undefined);
-  assert.equal(
-    verifyPayload(codec, encode(-41)),
-    "the codec rejected the payload with rule code 4 (range)",
-  );
-  assert.equal(
-    verifyPayload(codec, encode(20).slice(0, 4)),
-    "the codec found the payload malformed (code 1)",
-  );
-  // A codec that reports the other kinds, to check the remaining strings,
-  // and that gives the id its `verify` must receive.
-  const fake = (result: VerifyResult) =>
-    ({
-      catalogHash: new Uint8Array(32),
-      typeId: () => FAKE_ID,
-      verify: (typeId: number) => {
-        assert.equal(typeId, FAKE_ID);
-        return result;
-      },
-    }) as Codec;
-  assert.equal(
-    verifyPayload(fake({ ok: false, kind: "rule", code: 3 }), new Uint8Array()),
-    "the codec rejected the payload with rule code 3",
-  );
-  assert.equal(
-    verifyPayload(
-      fake({ ok: false, kind: "unknown-type", code: -1 }),
-      new Uint8Array(),
-    ),
-    `the codec does not know type id ${FAKE_ID}`,
-  );
-});
-
-Deno.test("verifyPayload passes the type id of Cabin.temperature", () => {
-  assert.equal(
-    verifyPayload(fakeCodec(() => ({ ok: true })), encode(20)),
-    undefined,
-  );
 });
 
 /** What a check decided about one value: accepted, or the rule that refused it. */

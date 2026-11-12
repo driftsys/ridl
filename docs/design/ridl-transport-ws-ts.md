@@ -22,16 +22,17 @@ structure. Verifying a payload is the wasm codec's, of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 7, loaded by `@driftsys/ridl-runtime`, and decoding and encoding one is
 the generated codec module's, `<base>.codec.ts`
-([`ts-codec-table.md`](ts-codec-table.md)). The generated stream methods of a
-client class use this package's `Session` (see
-[What is not built](#what-is-not-built)). Generated plain-call and provider
-faces remain unbuilt (driftsys/ridl#287). ADR-0020 decision 6 places the
-package; its dependency row was amended on 2026-10-20 (D-4). The wire rules are
-the frame specification §3 to §9 and §11.1 (binding versions 1, 2 and 3).
+([`ts-codec-table.md`](ts-codec-table.md)). A generated client class binds to
+the consumer ports of `@driftsys/ridl-runtime`, and this package's `Session`
+implements them (D-25); the generated provider face is not built (see
+[What is not built](#what-is-not-built)). ADR-0020 decision 6 places the
+package; its dependency row was amended on 2026-10-20 and on 2026-11-12 (D-4).
+The wire rules are the frame specification §3 to §9 and §11.1 (binding versions
+1, 2 and 3).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
-decisions are numbered D-1 to D-24. D-1 to D-18 retain their numbers from the
+decisions are numbered D-1 to D-25. D-1 to D-18 retain their numbers from the
 original design, archived as
 [`2026-10-20-ts-transport-ws-design.md`](../archive/2026-10-20-ts-transport-ws-design.md),
 with its plan beside it.
@@ -251,6 +252,11 @@ unit tests use to pass a fake one; the default is
   command's bound passed), `timeout` (a query's bound passed; also the category
   when a bound passes on `connect`, `subscribe` or `read`) or `down` (the
   session ended).
+- `command` and `query` take `opts.signal`, an `AbortSignal`. An already aborted
+  signal rejects with its reason and sends nothing. An abort after the send
+  rejects with the signal's reason at once; the call stays pending in the
+  session until its response or its bound, and a late answer is consumed. A
+  provider that received a command may still run it.
 - `close()` sends a close with code 1000 and rejects every waiting operation
   with `down` at once. `closed` resolves once, with an `Ended`: the close code
   and reason the platform reported (1006 when the connection failed), and
@@ -847,6 +853,36 @@ note follows state updates and read resolution, and follows `onPublish` when a
 publication is held, so a listener can close or unsubscribe without a later
 state update restoring the sample.
 
+**D-25. `Session` implements the consumer ports.** The ports are the interfaces
+`Caller`, `SignalReader`, `EventSource` and `StreamCaller` of
+`@driftsys/ridl-runtime`, which a generated client class binds to
+([`ts-codec-table.md`](ts-codec-table.md#the-client-class)). A `Session` is
+assignable to each of them. The ports address a member by interface number and
+ordinal, so each method that takes a `Target` has the overload
+`(iface, ord, ...)`, which takes the kind from the `interfaces` tables of
+`connect`: `subscribe`, `unsubscribe` and `read` have both forms, and an
+interface number and ordinal that the tables do not hold is a `RangeError`, as
+an unknown target is. Four members exist for the ports:
+
+- `catalogHash` is a copy of the 32 bytes the session attached with, which
+  `bind` compares with the generated hash.
+- `watch(iface, ord, listener)` calls `listener` with the `Sample` of every
+  accepted publish of the signal, after the session updated the held sample and
+  called `onPublish`, and returns the function that removes the listener.
+- `listen(iface, listener)` calls `listener` with every accepted `Occurrence` of
+  any subscribed event of the interface, after `onOccurrence`, and returns the
+  function that removes the listener.
+- `opts.signal` on `command` and `query` (D-8).
+
+`onPublish` and `onOccurrence` stay in `ConnectOptions` for a tool that wants
+every publish and every occurrence of a session, such as the observability
+server. A listener that throws is reported to the platform and does not stop the
+handling of the frame. `connect`, `close` and `closed` are not part of a port: a
+transport decides how a port is made and ended. The package re-exports the
+vocabulary types it shares with the runtime under their earlier names (D-4), and
+`SessionError` is a subclass of `CallError`, so a program can test
+`instanceof CallError` without importing this package.
+
 ## The end-to-end tests
 
 **D-13. The test server is a cargo example in the crate.**
@@ -1069,12 +1105,10 @@ on a `v*` tag.
 
 ## What is not built
 
-- Generated plain-call and provider faces over this package (driftsys/ridl#287).
-  Generated stream methods are built and drive `Session` through `StreamCaller`
-  without a transport import; the
-  [codec table record](ts-codec-table.md#stream-functions) owns their supported
-  forms. The cabin signal demo still joins its generated payload codecs to this
-  package by hand.
+- A generated provider face over this package (driftsys/ridl#287). The generated
+  client class is built and drives `Session` through the consumer ports (D-25);
+  the [codec table record](ts-codec-table.md#the-client-class) owns its surface,
+  and the stream forms it supports.
 - The upload method limits are recorded in D-23. The upload methods check no
   named-element payload or UTF-8 text boundary. Rule code 7 decodes as `"utf8"`
   and reaches callers in a refusal.

@@ -304,7 +304,12 @@ other entry below is Accepted.
   `ridl-transport-ws` gains the optional `descriptor` feature, off by default,
   which adds `ridl-descriptor` with its default features off
   (driftsys/ridl#985); amended again the same day: the feature has no minimum
-  Rust version of its own (driftsys/ridl#1047).
+  Rust version of its own (driftsys/ridl#1047). Amended 2026-11-12 on decisions
+  6 and 7: `@driftsys/ridl-runtime` names the consumer port interfaces `Caller`,
+  `SignalReader`, `EventSource` and `StreamCaller`,
+  `@driftsys/ridl-transport-ws` implements them and depends on the runtime, and
+  the generated TypeScript module holds a client class per interface
+  (driftsys/ridl#1262).
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left
@@ -689,7 +694,7 @@ other entry below is Accepted.
   [D-30 records](../design/ridl-transport-ws.md). The TypeScript upload methods
   and their limits are recorded in [D-23](../design/ridl-transport-ws-ts.md).
   The 2026-11-05 amendment records the generated typed reply, upload and duplex
-  functions, whose contracts and codec limits are owned by
+  methods of the client class, whose contracts and codec limits are owned by
   [the codec table record](../design/ts-codec-table.md#stream-functions). Calls
   with two or more parameter streams remain outside the Rust face
   (driftsys/ridl#1224).
