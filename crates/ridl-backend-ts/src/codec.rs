@@ -2381,8 +2381,9 @@ impl<'a> Codec<'a> {
         interaction: &'a v1::Interaction,
         name: &str,
     ) -> Result<(), GenerateError> {
-        // A member of an internal interface has no table entry and no method,
-        // as for `discover_call`.
+        // A member of an internal interface has no method, as for
+        // `discover_call`. Its stream loses its table entry too; a member of
+        // another shape keeps its entry.
         if interface.visibility() == v1::Visibility::Internal {
             return Ok(());
         }
@@ -3346,7 +3347,7 @@ impl<'a> Codec<'a> {
             &[],
             "  ",
             &[
-                "@returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws a `CodecError` only when the codec cannot check the type: an unknown type id or an unknown rule text."
+                "@returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text."
                     .to_string(),
             ],
             false,

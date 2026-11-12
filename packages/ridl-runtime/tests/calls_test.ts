@@ -399,6 +399,24 @@ Deno.test("decode_sample_rejects_an_unknown_rule_text", () => {
   );
 });
 
+Deno.test("decode_sample_rejects_an_unknown_type_id", () => {
+  const unknown: Codec = {
+    ...rejectNine,
+    verify: () => ({ ok: false, kind: "unknown-type", code: -1 }),
+  };
+  assertThrows(
+    () =>
+      decodeSample(
+        unknown,
+        bytesCodec(),
+        0,
+        rawSample({ payload: Uint8Array.of(1) }),
+        () => 0,
+      ),
+    CodecError,
+  );
+});
+
 Deno.test("decode_occurrence_decodes_and_marks_refusals", () => {
   const raw = (overrides: Partial<RawOccurrence>): RawOccurrence => ({
     iface: 1,

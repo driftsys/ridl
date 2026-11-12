@@ -318,7 +318,7 @@ export class CabinClient {
    * Rules:
    * - period 10000 us
    *
-   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws a `CodecError` only when the codec cannot check the type: an unknown type id or an unknown rule text.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   temperature(): $rt.Sample<t.Temperature> {
     const raw = this.#port.sample(Cabin.temperature.iface, Cabin.temperature.ord);
@@ -448,7 +448,7 @@ export class HornClient {
    * Rules:
    * - period 10000 us
    *
-   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws a `CodecError` only when the codec cannot check the type: an unknown type id or an unknown rule text.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   active(): $rt.Sample<t.Health> {
     const raw = this.#port.sample(Horn.active.iface, Horn.active.ord);

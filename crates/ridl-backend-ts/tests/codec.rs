@@ -1558,6 +1558,36 @@ fn an_internal_interface_gets_no_client_class() {
     assert!(!source.contains("class SensorsClient"), "{source}");
 }
 
+/// A parameter with both a doc and rules gets its doc, a line break, then its
+/// rules, in one `@param` tag.
+///
+/// Mutation: drop the line break between the doc and `Rules:` in `call_docs`,
+/// or clear the doc there.
+#[test]
+fn a_param_with_a_doc_and_rules_lists_both() {
+    let mut model = cabin_model();
+    let level = interface(&mut model, "Cabin")
+        .slots
+        .iter_mut()
+        .filter_map(|slot| match &mut slot.occupant {
+            Some(v1::interaction_slot::Occupant::Interaction(i)) => Some(i),
+            _ => None,
+        })
+        .find(|i| i.name.as_ref().is_some_and(|n| n.declared == "setLevel"))
+        .and_then(|i| match &mut i.shape {
+            Some(v1::interaction::Shape::Command(c)) => c.params.first_mut(),
+            _ => None,
+        })
+        .expect("setLevel has a parameter");
+    assert!(!level.rules.is_empty());
+    level.doc = "The level.".to_string();
+    let source = module(&model, "veh.cabin");
+    assert!(
+        source.contains("   * @param level - The level.\n   * Rules:\n   * - range 0 ..= 100\n"),
+        "{source}"
+    );
+}
+
 /// An interface with only events binds over `EventSource` alone.
 ///
 /// Mutation: add `SignalReader` to the port list of an event-only interface in
