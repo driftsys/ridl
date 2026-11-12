@@ -9,9 +9,9 @@ package through the wasm codec of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 7: one `encode<Name>` and one `decode<Name>` per payload type, over
 plain objects; one table per interface that gives each interaction its address,
-its kind and its payload functions; one client class per interface, with methods
-for the interactions that can have them (see
-[What is generated](#what-is-generated)); and the catalog name, the catalog
+its kind and its payload functions; one client class for each interface that has
+a member with a method, with methods for the interactions that can have them
+(see [What is generated](#what-is-generated)); and the catalog name, the catalog
 hash, the payload type names and the rule texts that the wasm module is loaded
 with. `@driftsys/ridl-runtime` resolves the wasm type ids from those names.
 
@@ -45,15 +45,16 @@ description.
 
 ## What is generated
 
-The codec file is written from the request's model only (`model.interfaces`,
-`model.tuples`, `model.flatbuffers`, `model.catalog`), never from the raw IR
-(D-1), so it follows the direction
-[the codegen plugins record](codegen-plugins.md) sets for the port of this
-backend. The option adds nothing to `<base>.ts`; its named scalars use
-`$rt.ConstraintError` and the check helpers of `@driftsys/ridl-runtime` with or
-without it. The public `generate(package)` of the crate does not write the file:
-only the request's model carries the catalog hash of the unit that the wasm
-module is built from.
+The codec file is written from the request's model (`model.interfaces`,
+`model.tuples`, `model.flatbuffers`, `model.catalog`) (D-1). It reads the IR
+package for one fact only: which `init<Name>` functions `<base>.ts` exports,
+which decides whether a signal gets methods. Every other input is the model, so
+the file follows the direction [the codegen plugins record](codegen-plugins.md)
+sets for the port of this backend, except for that one fact. The option adds
+nothing to `<base>.ts`; its named scalars use `$rt.ConstraintError` and the
+check helpers of `@driftsys/ridl-runtime` with or without it. The public
+`generate(package)` of the crate does not write the file: only the request's
+model carries the catalog hash of the unit that the wasm module is built from.
 
 Its exports:
 
@@ -146,36 +147,36 @@ runtime types, helpers and adapters described in D-17; they import nothing from
 the WebSocket package. A module with a signal also uses the runtime's
 `$rt.Codec`, `$rt.SignalCheckEntry` and `$rt.CodecError` for `signalChecks`. A
 module writes `<Interface>Client` for an interface that has at least one call,
-signal or event method with a codec and a finite bound, and the class uses the
-ports its members need (`$rt.Caller`, `$rt.SignalReader`, `$rt.EventSource`),
-`$rt.CallOptions`, `$rt.WaitOptions`, `$rt.Sample`, `$rt.Occurrence`,
-`$rt.Codec` and the values `$rt.checkCatalog`, `$rt.encodeRequest`,
-`$rt.decodeReply`, `$rt.decodeSample`, `$rt.decodeOccurrence` and
-`$rt.initSample`. It also writes `<Interface>Event` for an interface with an
-event. A signal gets methods only when `<base>.ts` exports the `init<Name>`
-function of its payload type, which the domain emitter decides, so the sample of
-a signal with no value yet can hold an init value. A `fixed` member and a member
-of an `internal` interface get no method, and a query with an inline fallible
-`T | E` reply has no reply codec and so no method. Three signal cases get none
-either, and the class says why in a comment: the signal has a `= value` init
-override, its payload type has no init function, or its payload type is declared
-in another package. Such a signal is reachable only through `signalChecks` and
-the raw port (tracked in driftsys/ridl#1371), and `bind` registers the checks
-only of the signals that have methods. A client class name, an event union name
-or a method name that another declaration or member takes is refused like any
-other collision. The names the file declares are checked before anything is
-written, and a second declaration of one is refused with an error that names
-both: an interface or an induced tuple named after a reserved name of the file
-(`CATALOG_NAME`, `CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `RuleError` when the
-module reaches an enum or an enum set, `signalChecks` and `signalCheck` when the
-package has a signal, an import alias `flatbuffers`, `t`, `fb`, `<package>` or
-`<package>_codec`), two enum sets of other packages whose `pack_<alias>_<Name>`
-or `unpack_<alias>_<Name>` functions spell the same (`a.b` / `c_d` and `a.b.c` /
-`d`), two foreign payload types whose `codec<Package><Name>` constants spell the
-same (`a.b` / `C` and `a` / `BC`), and a local payload type whose `codec<Name>`
-spells a foreign one. An interaction named `iface` is refused because it
-collides with the interface table metadata key of that name; the error names
-both sources.
+stream, signal or event method with a codec and a finite bound, and the class
+uses the ports its members need (`$rt.Caller`, `$rt.StreamCaller`,
+`$rt.SignalReader`, `$rt.EventSource`), `$rt.CallOptions`, `$rt.WaitOptions`,
+`$rt.Sample`, `$rt.Occurrence`, `$rt.Codec` and the values `$rt.checkCatalog`,
+`$rt.encodeRequest`, `$rt.decodeReply`, `$rt.decodeSample`,
+`$rt.decodeOccurrence` and `$rt.initSample`. It also writes `<Interface>Event`
+for an interface with an event. A signal gets methods only when `<base>.ts`
+exports the `init<Name>` function of its payload type, which the domain emitter
+decides, so the sample of a signal with no value yet can hold an init value. A
+`fixed` member and a member of an `internal` interface get no method, and a
+query with an inline fallible `T | E` reply has no reply codec and so no method.
+Three signal cases get none either, and the class says why in a comment: the
+signal has a `= value` init override, its payload type has no init function, or
+its payload type is declared in another package. Such a signal is reachable only
+through `signalChecks` and the raw port (tracked in driftsys/ridl#1371), and
+`bind` registers the checks only of the signals that have methods. A client
+class name, an event union name or a method name that another declaration or
+member takes is refused like any other collision. The names the file declares
+are checked before anything is written, and a second declaration of one is
+refused with an error that names both: an interface or an induced tuple named
+after a reserved name of the file (`CATALOG_NAME`, `CATALOG_HASH`,
+`PAYLOAD_TYPES`, `RULES`, `RuleError` when the module reaches an enum or an enum
+set, `signalChecks` and `signalCheck` when the package has a signal, an import
+alias `flatbuffers`, `t`, `fb`, `<package>` or `<package>_codec`), two enum sets
+of other packages whose `pack_<alias>_<Name>` or `unpack_<alias>_<Name>`
+functions spell the same (`a.b` / `c_d` and `a.b.c` / `d`), two foreign payload
+types whose `codec<Package><Name>` constants spell the same (`a.b` / `C` and `a`
+/ `BC`), and a local payload type whose `codec<Name>` spells a foreign one. An
+interaction named `iface` is refused because it collides with the interface
+table metadata key of that name; the error names both sources.
 
 ## The client class
 
@@ -186,17 +187,17 @@ rules. A TypeScript program binds a client to a port and calls its methods; it
 does not address a member by interface number and ordinal, and it does not
 encode or decode a payload.
 
-**D-30. One class per interface, bound to ports.** The class is built with
-`<Interface>Client.bind(port, codec)`. The type parameter of `bind` is the
-intersection of the ports the interface's members need: `Caller` for a command
-or a query, `SignalReader` for a signal, `EventSource` for an event and
-`StreamCaller` for a stream member. An interface with only signals binds over an
-object that implements `SignalReader` alone, as `HornClient` of the cabin
-example does. The ports are the interfaces of `@driftsys/ridl-runtime`; they
-carry bytes and addresses and never name a payload type, a codec or a transport.
-`Session` of `@driftsys/ridl-transport-ws` implements all four
-([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)), and a test fake can
-implement any of them.
+**D-30. One class per interface that has a method, bound to ports.** The class
+is built with `<Interface>Client.bind(port, codec)`. The type parameter of
+`bind` is the intersection of the ports the interface's members need: `Caller`
+for a command or a query, `SignalReader` for a signal, `EventSource` for an
+event and `StreamCaller` for a stream member. An interface with only signals
+binds over an object that implements `SignalReader` alone, as `HornClient` of
+the cabin example does. The ports are the interfaces of
+`@driftsys/ridl-runtime`; they carry bytes and addresses and never name a
+payload type, a codec or a transport. `Session` of `@driftsys/ridl-transport-ws`
+implements all four ([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)), and
+a test fake can implement any of them.
 
 **D-31. `bind` is the one place for the checks that run once.** It throws
 `CatalogMismatch` when the catalog hash of the port or of the codec differs from
@@ -223,9 +224,11 @@ response time inside the range of a port bound, `opts` is an optional
 `Partial<CallOptions>` and `bound` defaults to that maximum, in milliseconds;
 otherwise `opts` is a required `CallOptions` with a required `bound`, and a
 missing one is a type error. `opts.signal` aborts the call. A provider that
-already received a command may still run it, which the TSDoc says. The client
-does not check `require` or `ensure` clauses: the provider checks the request
-and answers `contract` when it refuses it.
+already received a command may still run it, which the TSDoc says. The TSDoc of
+a command or query method also lists, under each `@param`, the rules of its
+parameter, as ADR-0028 decision 3 requires. The client does not check `require`
+or `ensure` clauses: the provider checks the request and answers `contract` when
+it refuses it.
 
 **D-33. A signal has four methods and a sample is never empty.** `subscribeX`
 subscribes with the port's `WaitOptions`; `x()` returns the held sample at once;
@@ -241,6 +244,9 @@ after the session ended it returns the init sample again, because the session
 clears its held samples when it ends; `readX` and `subscribeX` reject with
 `down`. A signal gets methods only when `<base>.ts` exports that init function;
 the cases that get none are listed in [What is generated](#what-is-generated).
+The client has no method that unsubscribes a signal: a program that subscribes
+through the client ends the subscription with `session.unsubscribe(iface, ord)`
+on the session, which also clears the held sample.
 
 **D-34. Events reach one listener per interface.** `subscribeX` subscribes to an
 event. `onEvent` registers a listener for every accepted occurrence of any
@@ -248,7 +254,9 @@ subscribed event of the interface, in arrival order, and returns the function
 that removes it. The listener receives `<Interface>Event`, a union discriminated
 by `event` (the member name) that holds an `Occurrence<T>`. An occurrence that
 the port refused, or whose payload fails verification, has `detected` set and no
-`value`, so no occurrence is lost without a trace.
+`value`, so no occurrence is lost without a trace. The client has no method that
+unsubscribes an event: a program ends the subscription with
+`session.unsubscribe(iface, ord)` on the session.
 
 **D-35. Names and collisions.** The class is `<Interface>Client` and the event
 union is `<Interface>Event`. A member named `bind`, `constructor` or `onEvent`,
@@ -256,7 +264,9 @@ a member whose `subscribeX`, `readX` or `watchX` equals the name of another
 member, and a declaration named like the class or the union are refused at
 generation, with an error that names both sources, as the other collision checks
 of the file do. The class keeps its port, codec and type ids in private fields;
-the table objects stay plain data that `connect` reads, and hold no function.
+the table objects stay plain data that `connect` reads. They hold no method of
+the class and no port; the only functions in an entry are the `encode` and
+`decode` of its payload codec.
 
 ## Stream functions
 
@@ -301,11 +311,14 @@ name is the declared member name, for example `docs.fetch(id, opts)` on a
 The bound defaults as it does for a call: when the member declares a maximum
 response time inside the range of a port bound, `opts` is optional and `bound`
 defaults to that maximum; otherwise `opts` with `bound` is required, and a
-missing one is a type error. The bound ends at the first element or at the end
-of the stream, not at the end of the transfer
-([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)). A stream method does not
-read a signal: a stream ends by cancelling the reader or aborting the upload.
-The methods return:
+missing one is a type error. For a reply stream, with or without an upload, the
+bound starts at the request and ends at the first element or at the end of the
+stream, not at the end of the transfer; for a query with an upload and a plain
+reply it starts when the upload closes and ends at the reply; for a command with
+an upload it starts at the request and ends when the provider accepts the
+command ([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)). A stream method
+does not read `opts.signal`: a stream ends by cancelling the reader or aborting
+the upload. The methods return:
 
 - Reply only: `ReadableStream<T>`.
 - Command with one upload:

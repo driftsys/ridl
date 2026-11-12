@@ -44,14 +44,14 @@ upload and a byte or text reply stream also remains outside the face.
 ### Amended 2026-11-05
 
 This amendment records the implemented TypeScript codec surface. The optional
-TypeScript codec module now emits reply-only functions and commands or queries
-with exactly one parameter stream, including duplex. Bare bytes map to
-`ReadableStream<Uint8Array>` / `WritableStream<Uint8Array>`, bare text to
-platform streams of `string`, and named elements to streams of the generated
-domain type. The runtime context, function signatures, verification, errors and
-chunking are owned by
+TypeScript codec module now emits, as methods of the client class of an
+interface, reply-only streams and commands or queries with exactly one parameter
+stream, including duplex. Bare bytes map to `ReadableStream<Uint8Array>` /
+`WritableStream<Uint8Array>`, bare text to platform streams of `string`, and
+named elements to streams of the generated domain type. The runtime ports,
+method signatures, verification, errors and chunking are owned by
 [the codec table record](../design/ts-codec-table.md#stream-functions). The byte
-transport's `queryDuplex` and the generated duplex functions are built.
+transport's `queryDuplex` and the generated duplex methods are built.
 
 The remaining generated TypeScript limits are two or more parameter streams
 (driftsys/ridl#1224), inline fallible upload replies without a codec, and

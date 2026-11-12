@@ -1,20 +1,20 @@
 // The script of the page that browser.ts opens. It reads the server's `port`
 // and the catalog `hash` (64 hex digits) that the server announced from the
 // page's query string, rejects when that hash is not the `CATALOG_HASH` of the
-// generated codec module, fetches the cabin wasm codec from /veh_cabin.wasm
-// and loads it with the generated hash, payload types and rules, runs the
-// codec self-test of check.ts, attaches with the encoding `flatbuffers`
-// through a session with a bound of 10 s on `connect` and `subscribe`, and
-// binds the generated `CabinClient` to it. Through the client it sends
-// `setLevel` with 30 and with 51, calls `average` and rejects unless the reply
-// is 40 (the mean, rounded down), then subscribes to the `temperature` signal and watches it. The client
-// verifies each payload through the codec and decodes it; the page feeds each
-// decoded value to the check of check.ts. It sets `globalThis.result` to a
-// promise that resolves with the check's progress on the first `pass` verdict,
-// and rejects with the cause when the codec cannot be loaded, the self-test
-// fails, a call fails or replies another value, the client refuses or the
-// session check throws on a payload, the check gives a `fail` verdict, or the
-// connection closes first.
+// generated codec module, fetches the cabin wasm codec from /veh_cabin.wasm and
+// loads it with the generated hash, payload types and rules, runs the codec
+// self-test of check.ts, attaches with the encoding `flatbuffers` through a
+// session with a bound of 10 s on `connect` and `subscribe`, and binds the
+// generated `CabinClient` to it. Through the client it sends `setLevel` with 30
+// and with 51, calls `average` and rejects unless the reply is 40 (the mean,
+// rounded down), then subscribes to the `temperature` signal and watches it.
+// The client verifies each payload through the codec and decodes it; the page
+// feeds each decoded value to the check of check.ts. It sets
+// `globalThis.result` to a promise that resolves with the check's progress on
+// the first `pass` verdict, and rejects with the cause when the codec cannot be
+// loaded, the self-test fails, a call fails or replies another value, the
+// client refuses or the session check throws on a payload, the check gives a
+// `fail` verdict, or the connection closes first.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
 import { connect } from "../../../packages/ridl-transport-ws/mod.ts";

@@ -68,12 +68,12 @@ otherwise. Any other URL is fetched.
 
 ## Ports and generated clients
 
-A generated codec module holds one client class per interface,
-`<Interface>Client`. It is bound to a port and the loaded codec with
-`<Interface>Client.bind(port, codec)`. The port is any object that implements
-the interfaces below; a transport's session is one, and a fake in a test is
-another. They carry bytes and address a member by interface number and ordinal.
-They name no payload type, codec or transport.
+A generated codec module holds a client class, `<Interface>Client`, for each
+interface that has a member with a method. It is bound to a port and the loaded
+codec with `<Interface>Client.bind(port, codec)`. The port is any object that
+implements the interfaces below; a transport's session is one, and a fake in a
+test is another. They carry bytes and address a member by interface number and
+ordinal. They name no payload type, codec or transport.
 
 - `Caller`: `command(iface, ord, args, opts)` resolves when the provider
   accepted the command, and `query(...)` resolves with the reply bytes. `opts`
@@ -147,8 +147,11 @@ const docs = DocStoreClient.bind(transport, codec);
 A generated stream method takes `{ bound: milliseconds }` last. The bound
 defaults to the maximum response time that the member declares, so `opts` is
 optional then, as in `docs.fetch(id)`; a member with no usable maximum requires
-it, as in `docs.fetch(id, { bound: 1000 })`. The bound ends at the first element
-or at the end of the stream. The
+it, as in `client.member(args, { bound: 1000 })` for a member declared with no
+maximum response time. For a reply stream the bound starts at the request and
+ends at the first element or at the end of the stream; for a query with an
+upload and a plain reply it starts when the upload closes, and for a command
+with an upload it ends when the provider accepts the command. The
 [generated-code chapter](../../docs/book/generated-code.md) shows the supported
 signatures and document store calls. The transport import above belongs to the
 application; this runtime package does not import it.

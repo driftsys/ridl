@@ -308,8 +308,8 @@ other entry below is Accepted.
   6 and 7: `@driftsys/ridl-runtime` names the consumer port interfaces `Caller`,
   `SignalReader`, `EventSource` and `StreamCaller`,
   `@driftsys/ridl-transport-ws` implements them and depends on the runtime, and
-  the generated TypeScript module holds a client class per interface
-  (driftsys/ridl#1262).
+  the generated TypeScript module holds a client class for each interface with a
+  member that has a method (driftsys/ridl#1262).
 
 - **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
   dispositions, and the release policy.** Fixes what the earlier records left

@@ -215,8 +215,9 @@ because the first consumer that would need it is generated deprecation metadata.
    exported. The codec module also emits the public client classes, whose call
    methods, stream methods and signal held-sample methods carry the
    interaction's doc, while `bind`, `subscribeX`, `readX`, `watchX` and
-   `onEvent` carry fixed one-line TSDoc, and private helpers. Private helpers
-   carry no facade documentation, and no item carries `@internal`.
+   `onEvent` carry fixed TSDoc that the backend writes, not the interaction's
+   doc, and private helpers. Private helpers carry no facade documentation, and
+   no item carries `@internal`.
 
    Two kinds of Rust item are notes rather than facade or internals: the private
    constants `__RIDL_NO_FACE_<NAME>`, left where an interface's face was not

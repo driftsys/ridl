@@ -32,11 +32,12 @@ byte-only boundary of the Rust ports, and they address a member by interface
 number and ordinal. `@driftsys/ridl-transport-ws` implements the four consumer
 ports with `Session`, so it depends on `@driftsys/ridl-runtime`, as the
 2026-10-20 amendment allowed. The generated TypeScript module of a package with
-`codec = true` holds one client class per interface, `<Interface>Client`, bound
-to those ports, and neither names a transport nor imports one. The
-`@driftsys/ridl-runtime` and `@driftsys/ridl-transport-ws` rows of decision 6's
-table and decision 7's first paragraph are changed in place; the as-built
-records are [`ts-codec-table.md`](../design/ts-codec-table.md) and
+`codec = true` holds a client class, `<Interface>Client`, for each interface
+that has a member with a method, bound to those ports, and neither names a
+transport nor imports one. The `@driftsys/ridl-runtime` and
+`@driftsys/ridl-transport-ws` rows of decision 6's table and decision 7's first
+paragraph are changed in place; the as-built records are
+[`ts-codec-table.md`](../design/ts-codec-table.md) and
 [`ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md).
 
 **Amended 2026-10-24 (driftsys/ridl#1047) — decision 6, the `descriptor` feature
