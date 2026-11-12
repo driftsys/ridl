@@ -5,7 +5,7 @@ import {
   assertThrows,
 } from "@std/assert";
 import {
-  type CallError,
+  CallError,
   CatalogMismatch,
   checkCatalog,
   CodecError,
@@ -13,8 +13,10 @@ import {
   decodeOccurrence,
   decodeReply,
   decodeSample,
+  decodeStream,
   encodeRequest,
   initSample,
+  StreamError,
 } from "../mod.ts";
 import type {
   Codec,
@@ -398,4 +400,77 @@ Deno.test("decode_occurrence_decodes_and_marks_refusals", () => {
     ),
     refused,
   );
+});
+
+Deno.test("encode_request_refuses_bytes_longer_than_the_limit_before_verifying", () => {
+  let verified = 0;
+  const codec: Codec = {
+    ...codecWith({ ok: true }),
+    verify: () => {
+      verified++;
+      return { ok: true };
+    },
+  };
+  assertEquals(
+    encodeRequest(
+      codec,
+      bytesCodec({ encode: () => new Uint8Array(4) }),
+      0,
+      1,
+      4,
+    )
+      .length,
+    4,
+  );
+  assertEquals(verified, 1);
+  const refused = assertThrows(() =>
+    encodeRequest(
+      codec,
+      bytesCodec({ encode: () => new Uint8Array(5) }),
+      0,
+      1,
+      4,
+    )
+  ) as CallError;
+  assertEquals(refused.failure, { category: "corrupt" });
+  assertEquals(verified, 1);
+  // Without a limit, any length goes to the verification.
+  encodeRequest(codec, bytesCodec({ encode: () => new Uint8Array(500) }), 0, 1);
+  assertEquals(verified, 2);
+});
+
+Deno.test("a_failed_verification_maps_the_same_for_a_request_a_reply_and_a_stream_element", async () => {
+  const results: VerifyResult[] = [
+    { ok: false, kind: "malformed", code: 1 },
+    { ok: false, kind: "rule", code: 4, rule: "range" },
+    { ok: false, kind: "rule", code: 99, rule: "nope" },
+    { ok: false, kind: "unknown-type", code: -1 },
+  ];
+  const outcome = (error: unknown) =>
+    error instanceof CallError
+      ? { name: error.name, failure: error.failure }
+      : { name: (error as Error).name, message: (error as Error).message };
+  for (const result of results) {
+    const codec = codecWith(result);
+    const request = assertThrows(() =>
+      encodeRequest(codec, bytesCodec(), 0, 1)
+    );
+    const reply = assertThrows(() =>
+      decodeReply(codec, bytesCodec(), 0, Uint8Array.of(1))
+    );
+    const element = await Array.fromAsync(
+      ReadableStream.from([Uint8Array.of(1)]).pipeThrough(
+        decodeStream((bytes) => bytes[0], () => result),
+      ),
+    ).then(() => undefined, (error) => error);
+    assertEquals(outcome(request), outcome(reply));
+    assertEquals(outcome(element), outcome(reply));
+  }
+});
+
+Deno.test("stream_error_is_the_call_error_class", () => {
+  assert(StreamError === CallError);
+  const error = new StreamError({ category: "corrupt" });
+  assertInstanceOf(error, CallError);
+  assertEquals(error.name, "CallError");
 });
