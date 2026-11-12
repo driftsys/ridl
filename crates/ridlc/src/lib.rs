@@ -2381,6 +2381,10 @@ fn render_lib_rs(package_names: &[String], preamble: &str, wasm: bool, instances
                         out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));
                         out.push_str(&format!("{pad}    #[doc(hidden)]\n"));
                         out.push_str(&format!("{pad}    pub mod __ridl_package;\n"));
+                        // A package whose own file emits no public item
+                        // leaves this glob with nothing to import, which
+                        // rustc reports as an unused import.
+                        out.push_str(&format!("{pad}    #[allow(unused_imports)]\n"));
                         out.push_str(&format!("{pad}    pub use __ridl_package::*;\n"));
                     }
                     render(child, depth + 1, out);
