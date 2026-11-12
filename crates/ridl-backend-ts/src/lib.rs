@@ -41,7 +41,7 @@
 //!   width, so there is no proof the value fits 2^53.
 //! - **Docs** — TSDoc read from the codegen model (ADR-0028): the doc text
 //!   with each local link as `{@link Name}` (or `{@link t.Name}` in a codec
-//!   stream function), or a code span of the qualified name
+//!   stream method), or a code span of the qualified name
 //!   when the target is not an item of this module; the rules as a `Rules:`
 //!   list under `@remarks`; then the `@unit`, `@range` and `@bounds` tags,
 //!   `@see`, `@since` and `@deprecated` (typl §14). `internal` declarations
@@ -1748,7 +1748,7 @@ fn linked(ctx: &Ctx, doc: &str, links: &[v1::DocLink]) -> String {
 
 /// `{@link <name>}` when the target is emitted or imported by this module,
 /// using `ctx.local_doc_namespace` for a local declaration (`t.` for codec
-/// stream functions). Otherwise a code span of the qualified target name.
+/// stream methods). Otherwise a code span of the qualified target name.
 fn rendered_link(ctx: &Ctx, link: &v1::DocLink) -> String {
     match ts_link(
         ctx.model,
@@ -1766,7 +1766,7 @@ fn rendered_link(ctx: &Ctx, link: &v1::DocLink) -> String {
 /// name `pkg.Name` with an optional `.member`.
 ///
 /// `local_namespace` prefixes a local declaration: empty in the domain module,
-/// `t.` in codec stream functions, which import the domain module as `t`.
+/// `t.` in codec stream methods, which import the domain module as `t`.
 ///
 /// - A declaration of the package is its prefixed name, when emitted.
 /// - A foreign declaration is `<alias>.<Name>`, the alias of the namespace

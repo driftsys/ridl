@@ -884,7 +884,7 @@ server carries parameter streams, including a query with both an upload and a
 reply stream ([the server record](../design/ridl-transport-ws.md), D-30). The
 TypeScript transport methods and their limits are recorded in
 [D-23](../design/ridl-transport-ws-ts.md). The optional TypeScript codec module
-also emits typed stream functions, including duplex; see
+also emits typed stream methods, including duplex; see
 [Calling generated streams](generated-code.md#calling-generated-streams). The
 [interaction-face record](../design/interaction-face.md#stream-forms) lists the
 generated reader and writer methods. The specification's §12 and

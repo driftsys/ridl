@@ -1,4 +1,4 @@
-// Runs the generated typed stream functions against the Rust document provider.
+// Runs the generated stream methods against the Rust document provider.
 // Usage: deno run -A main.ts <docstore-server-executable>
 import assert from "node:assert/strict";
 import { loadCodec } from "../../../packages/ridl-runtime/mod.ts";
@@ -12,10 +12,7 @@ import {
   CATALOG_HASH,
   CATALOG_NAME,
   DocStore,
-  DocStore_chunks,
-  DocStore_exchange,
-  DocStore_fetch,
-  DocStore_put,
+  DocStoreClient,
   PAYLOAD_TYPES,
   RULES,
 } from "./generated/docstore.api.codec.ts";
@@ -74,7 +71,7 @@ try {
   void session.closed.then(() => {
     if (!stopping) fail("session closed before checks completed");
   });
-  const context = { transport: session, codec };
+  const docs = DocStoreClient.bind(session, codec);
   const id = "manual" as DocId;
   const bytes = Uint8Array.from({ length: 204_800 }, (_, i) => i % 251);
   const chunk = (index: number): DocChunk => ({
@@ -86,7 +83,7 @@ try {
   });
   const opts = { bound: 1000 };
   stage = "uploading bytes";
-  const { upload, accepted } = DocStore_put(context, {
+  const { upload, accepted } = docs.put({
     name: id,
     size: 204_800n as DocSize,
   }, opts);
@@ -102,16 +99,16 @@ try {
   // reads pending until it consumes the upload's explicit end.
   stage = "checking committed bytes and named chunks";
   await Promise.all([
-    checkBytes(DocStore_fetch(context, id, opts)),
-    checkChunks(DocStore_chunks(context, id, opts)),
+    checkBytes(docs.fetch(id, opts)),
+    checkChunks(docs.chunks(id, opts)),
   ]);
 
   stage = "checking duplex exchange";
-  await checkDuplex(DocStore_exchange(context, id, opts), chunk);
+  await checkDuplex(docs.exchange(id, opts), chunk);
 
   for (const action of ["cancel", "abort"] as const) {
     stage = `checking duplex ${action}`;
-    const exchange = DocStore_exchange(context, id, opts);
+    const exchange = docs.exchange(id, opts);
     const writer = exchange.upload.getWriter();
     const reader = exchange.stream.getReader();
     writer.closed.catch(() => {});
@@ -136,7 +133,7 @@ try {
     }
     // Reuse the same provider member, so locally rejected promises alone
     // cannot hide an exchange still occupying the remote member's slot.
-    await checkDuplex(DocStore_exchange(context, id, opts), chunk);
+    await checkDuplex(docs.exchange(id, opts), chunk);
   }
   stage = "stopping";
   stopping = true;

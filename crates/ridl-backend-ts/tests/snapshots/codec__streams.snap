@@ -22,7 +22,7 @@ export class RuleError extends RangeError {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "streams.demo";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([72, 109, 126, 220, 16, 117, 168, 206, 134, 46, 140, 233, 125, 248, 64, 149, 85, 43, 164, 153, 149, 196, 143, 224, 75, 194, 190, 64, 0, 154, 22, 235]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([118, 21, 32, 97, 108, 229, 140, 64, 23, 74, 216, 253, 33, 222, 95, 95, 39, 58, 60, 251, 233, 84, 245, 105, 67, 70, 190, 54, 19, 143, 31, 95]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
   "streams.demo.ArgsFetchParams",
@@ -35,6 +35,7 @@ export const PAYLOAD_TYPES = [
   "streams.demo.EntryFetchParams",
   "streams.demo.FeedDataParams",
   "streams.demo.FeedDuplexBytesParams",
+  "streams.demo.FeedDuplexMixedParams",
   "streams.demo.FeedDuplexNamedParams",
   "streams.demo.FeedDuplexParams",
   "streams.demo.FeedDuplexTextParams",
@@ -150,6 +151,9 @@ export interface FeedUploadTupleReply {
 
 /** The induced tuple of `Feed.uploadFallible`. */
 export type FeedUploadFallibleParams = Record<string, never>;
+
+/** The induced tuple of `Feed.duplexMixed`. */
+export type FeedDuplexMixedParams = Record<string, never>;
 
 /** The induced tuple of `Other.fetch`. */
 export type OtherFetchParams = Record<string, never>;
@@ -846,6 +850,25 @@ function unpackFeedUploadFallibleParams(_object: fb.FeedUploadFallibleParamsT): 
   return {};
 }
 
+/** Encodes a `streams.demo.FeedDuplexMixedParams` payload. */
+export function encodeFeedDuplexMixedParams(value: FeedDuplexMixedParams): Uint8Array {
+  const builder = new flatbuffers.Builder();
+  builder.finish(packFeedDuplexMixedParams(value, "streams.demo.FeedDuplexMixedParams").pack(builder));
+  return builder.asUint8Array();
+}
+/** Decodes a `streams.demo.FeedDuplexMixedParams` payload the codec has verified. */
+export function decodeFeedDuplexMixedParams(bytes: Uint8Array): FeedDuplexMixedParams {
+  return unpackFeedDuplexMixedParams(fb.FeedDuplexMixedParams.getRootAsFeedDuplexMixedParams(new flatbuffers.ByteBuffer(bytes)).unpack());
+}
+
+function packFeedDuplexMixedParams(_value: FeedDuplexMixedParams, _at: string): fb.FeedDuplexMixedParamsT {
+  const tuple = new fb.FeedDuplexMixedParamsT();
+  return tuple;
+}
+function unpackFeedDuplexMixedParams(_object: fb.FeedDuplexMixedParamsT): FeedDuplexMixedParams {
+  return {};
+}
+
 /** Encodes a `streams.demo.OtherFetchParams` payload. */
 export function encodeOtherFetchParams(value: OtherFetchParams): Uint8Array {
   const builder = new flatbuffers.Builder();
@@ -1101,6 +1124,7 @@ const codecFeedUploadDataParams: $rt.PayloadCodec<FeedUploadDataParams> = { type
 const codecFeedUploadChoiceParams: $rt.PayloadCodec<FeedUploadChoiceParams> = { type: "streams.demo.FeedUploadChoiceParams", encode: encodeFeedUploadChoiceParams, decode: decodeFeedUploadChoiceParams };
 const codecFeedUploadTupleParams: $rt.PayloadCodec<FeedUploadTupleParams> = { type: "streams.demo.FeedUploadTupleParams", encode: encodeFeedUploadTupleParams, decode: decodeFeedUploadTupleParams };
 const codecFeedUploadTupleReply: $rt.PayloadCodec<FeedUploadTupleReply> = { type: "streams.demo.FeedUploadTupleReply", encode: encodeFeedUploadTupleReply, decode: decodeFeedUploadTupleReply };
+const codecFeedDuplexMixedParams: $rt.PayloadCodec<FeedDuplexMixedParams> = { type: "streams.demo.FeedDuplexMixedParams", encode: encodeFeedDuplexMixedParams, decode: decodeFeedDuplexMixedParams };
 const codecOtherFetchParams: $rt.PayloadCodec<OtherFetchParams> = { type: "streams.demo.OtherFetchParams", encode: encodeOtherFetchParams, decode: decodeOtherFetchParams };
 const codecSessionFetchParams: $rt.PayloadCodec<SessionFetchParams> = { type: "streams.demo.SessionFetchParams", encode: encodeSessionFetchParams, decode: decodeSessionFetchParams };
 const codecOptsFetchParams: $rt.PayloadCodec<OptsFetchParams> = { type: "streams.demo.OptsFetchParams", encode: encodeOptsFetchParams, decode: decodeOptsFetchParams };
@@ -1112,58 +1136,6 @@ const codecRequestTypeFetchParams: $rt.PayloadCodec<RequestTypeFetchParams> = { 
 const codecElementTypeFetchParams: $rt.PayloadCodec<ElementTypeFetchParams> = { type: "streams.demo.ElementTypeFetchParams", encode: encodeElementTypeFetchParams, decode: decodeElementTypeFetchParams };
 const codecStreamEntryFetchParams: $rt.PayloadCodec<StreamEntryFetchParams> = { type: "streams.demo.StreamEntryFetchParams", encode: encodeStreamEntryFetchParams, decode: decodeStreamEntryFetchParams };
 const codecStreamEntry1FetchParams: $rt.PayloadCodec<StreamEntry1FetchParams> = { type: "streams.demo.StreamEntry1FetchParams", encode: encodeStreamEntry1FetchParams, decode: decodeStreamEntry1FetchParams };
-
-function checkStreamSession(session: $rt.StreamSession, limit: number | undefined): void {
-  const hash = session.codec.catalogHash;
-  if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {
-    throw new $rt.CatalogMismatch(
-      Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, "0")).join(""),
-      Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join(""),
-    );
-  }
-  if (limit === 0) throw new $rt.StreamError({ category: "corrupt" });
-}
-
-function encodeStreamRequest<T>(session: $rt.StreamSession, payload: $rt.PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {
-  let bytes: Uint8Array;
-  try {
-    bytes = payload.encode(value);
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "name" in error && (error.name === "RuleError" || error.name === "ConstraintError") && "rule" in error && (RULES as readonly unknown[]).includes(error.rule)) {
-      throw new $rt.StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
-    }
-    throw new $rt.StreamError({ category: "corrupt" }, { cause: error });
-  }
-  if (limit !== undefined && bytes.length > limit) throw new $rt.StreamError({ category: "corrupt" });
-  const result = session.codec.verify(typeId, bytes);
-  if (!result.ok) {
-    if (result.kind === "malformed") throw new $rt.StreamError({ category: "corrupt" });
-    if (result.kind === "rule" && (RULES as readonly string[]).includes(result.rule ?? "")) {
-      throw new $rt.StreamError({ category: "contract", contract: { category: "invalid-value", rule: result.rule as typeof RULES[number] } });
-    }
-    throw new $rt.CodecError("unknown payload type or rule during request verification");
-  }
-  return bytes;
-}
-
-function decodeStreamReply<T>(session: $rt.StreamSession, payload: $rt.PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {
-  const result = session.codec.verify(typeId, bytes);
-  if (!result.ok) {
-    if (result.kind === "malformed") throw new $rt.StreamError({ category: "corrupt" });
-    if (result.kind === "rule" && (RULES as readonly string[]).includes(result.rule ?? "")) {
-      throw new $rt.StreamError({ category: "contract", contract: { category: "invalid-value", rule: result.rule as typeof RULES[number] } });
-    }
-    throw new $rt.CodecError("unknown payload type or rule during reply verification");
-  }
-  try {
-    return payload.decode(bytes);
-  } catch (error) {
-    if (typeof error === "object" && error !== null && "name" in error && error.name === "RuleError" && "rule" in error && (RULES as readonly unknown[]).includes(error.rule)) {
-      throw new $rt.StreamError({ category: "contract", contract: { category: "invalid-value", rule: error.rule as typeof RULES[number] } }, { cause: error });
-    }
-    throw new $rt.StreamError({ category: "corrupt" }, { cause: error });
-  }
-}
 
 /** The members of interface `Feed`, interface number `1`. */
 export const Feed = {
@@ -1192,460 +1164,89 @@ export const Feed = {
   uploadTuple: { iface: 1, ord: 23, kind: "query", request: codecFeedUploadTupleParams, reply: codecFeedUploadTupleReply, streams: [{ no: 1, form: "bytes" }] },
   // uploadFallible has no entry: inline fallible replies have no codec
   uploadLabel: { iface: 1, ord: 25, kind: "command", request: codecText, streams: [{ no: 1, form: "bytes" }] },
-  newest: { iface: 1, ord: 26, kind: "signal", payload: codecChunk },
+  duplexMixed: { iface: 1, ord: 26, kind: "query", request: codecFeedDuplexMixedParams, streams: [{ no: 0, form: "elements", element: codecChunk }, { no: 1, form: "elements", element: codecData }] },
+  newest: { iface: 1, ord: 27, kind: "signal", payload: codecChunk },
 } as const;
 
 const streamEntry2 = Feed.scalars;
 
-/**
- * Reads sequence numbers.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_scalars(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<t.Count> {
-  const entry = streamEntry2;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
-}
-
 const streamEntry3 = Feed.structs;
-
-/**
- * Reads numbered elements for {@link t.Count}.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- *
- * @param seed - The first sequence number.
- * @since 1.0.0
- * @deprecated Use scalars.
- */
-export function Feed_structs(session: $rt.StreamSession, seed: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Chunk> {
-  const entry = streamEntry3;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, seed, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
-}
 
 const streamEntry4 = Feed.unions;
 
-/**
- * Reads results with parameter names also used by generated bindings.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- *
- * @param session2 - The session number.
- * @param session1 - A second number.
- * @param opts1 - A selection.
- */
-export function Feed_unions(session: $rt.StreamSession, session2: t.Count, session1: t.Count, opts1: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Choice> {
-  const entry = streamEntry4;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { session: session2, session1: session1, opts: opts1 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
-}
-
 const streamEntry5 = Feed.statuses;
-
-/**
- * Reads statuses.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_statuses(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<t.StatusValue> {
-  const entry = streamEntry5;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
-}
 
 const streamEntry6 = Feed.data;
 
-/**
- * Reads bounded byte elements.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_data(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<t.Data> {
-  const entry = streamEntry6;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
-}
-
 const streamEntry7 = Feed.labels;
-
-/**
- * Reads bounded text elements.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_labels(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<t.Text> {
-  const entry = streamEntry7;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
-}
 
 const streamEntry8 = Feed.readBytes;
 
-/**
- * Reads raw bytes for a sequence number.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_readBytes(session: $rt.StreamSession, seed: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry8;
-  checkStreamSession(session, entry.limit);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, seed, entry.limit);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
-}
-
 const streamEntry9 = Feed.text;
-
-/**
- * Reads UTF-8 text.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_text(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<string> {
-  const entry = streamEntry9;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeTextStream());
-}
 
 const streamEntry10 = Feed.zero;
 
-/**
- * Reads raw bytes with a 64-byte payload limit.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_zero(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry10;
-  checkStreamSession(session, entry.limit);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, entry.limit);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
-}
-
 const streamEntry11 = Feed.upload;
-
-/**
- * Receives bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_upload(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
-  const entry = streamEntry11;
-  checkStreamSession(session, entry.limit);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, entry.limit);
-  const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = $rt.byteUpload(raw.upload, entry.limit);
-  return { upload, accepted: raw.accepted };
-}
 
 const streamEntry12 = Feed.duplex;
 
-/**
- * Receives and replies concurrently.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_duplex(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<Uint8Array>; stream: ReadableStream<t.Chunk> } {
-  const entry = streamEntry12;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const replyElement = entry.streams[0].element;
-  const replyElementType = session.codec.typeId(replyElement.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryDuplex(entry.iface, entry.ord, args, opts);
-  const upload = $rt.byteUpload(raw.upload, 16128);
-  const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));
-  return { upload, stream };
-}
-
 const streamEntry13 = Feed.duplexNamed;
-
-/**
- * Exchanges numbered elements for {@link t.Count}.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- *
- * @param seed - The first {@link t.Count}.
- * @param tail - The last {@link t.Count}.
- */
-export function Feed_duplexNamed(session: $rt.StreamSession, seed: t.Count, tail: t.Count, opts: $rt.StreamOptions): { upload: WritableStream<t.Chunk>; stream: ReadableStream<t.Chunk> } {
-  const entry = streamEntry13;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[1].element;
-  const elementType = session.codec.typeId(element.type);
-  const replyElement = entry.streams[0].element;
-  const replyElementType = session.codec.typeId(replyElement.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { seed: seed, tail: tail }, undefined);
-  const raw = session.transport.queryDuplex(entry.iface, entry.ord, args, opts);
-  const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), 16128);
-  const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));
-  return { upload, stream };
-}
 
 const streamEntry14 = Feed.duplexText;
 
-/**
- * Exchanges UTF-8 text.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_duplexText(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<string>; stream: ReadableStream<string> } {
-  const entry = streamEntry14;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryDuplex(entry.iface, entry.ord, args, opts);
-  const upload = $rt.textUpload(raw.upload, 16128);
-  const stream = raw.stream.pipeThrough($rt.decodeTextStream());
-  return { upload, stream };
-}
-
 const streamEntry15 = Feed.duplexBytes;
-
-/**
- * Sends numbered elements and receives bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_duplexBytes(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<t.Chunk>; stream: ReadableStream<Uint8Array> } {
-  const entry = streamEntry15;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[1].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryDuplex(entry.iface, entry.ord, args, opts);
-  const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), 16128);
-  const stream = raw.stream;
-  return { upload, stream };
-}
 
 const streamEntry16 = Feed.fetch;
 
-/**
- * Reads the last live streamed member.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_fetch(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry16;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
-}
-
 const streamEntry17 = Feed.uploadNamed;
-
-/**
- * Receives numbered elements for {@link t.Count}.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- *
- * @param seed - The first {@link t.Count}.
- * @param tail - The last {@link t.Count}.
- * @see {@link t.Count}
- */
-export function Feed_uploadNamed(session: $rt.StreamSession, seed: t.Count, tail: t.Count, opts: $rt.StreamOptions): { upload: WritableStream<t.Chunk>; accepted: Promise<void> } {
-  const entry = streamEntry17;
-  checkStreamSession(session, entry.limit);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { seed: seed, tail: tail }, entry.limit);
-  const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
-  return { upload, accepted: raw.accepted };
-}
 
 const streamEntry18 = Feed.uploadData;
 
-/**
- * Receives one named bytes element per write.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_uploadData(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<t.Data>; accepted: Promise<void> } {
-  const entry = streamEntry18;
-  checkStreamSession(session, entry.limit);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, entry.limit);
-  const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = $rt.encodeUpload(raw.upload, (value: t.Data) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
-  return { upload, accepted: raw.accepted };
-}
-
 const streamEntry19 = Feed.uploadText;
-
-/**
- * Receives UTF-8 text.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_uploadText(session: $rt.StreamSession, seed: t.Count, opts: $rt.StreamOptions): { upload: WritableStream<string>; accepted: Promise<void> } {
-  const entry = streamEntry19;
-  checkStreamSession(session, entry.limit);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, seed, entry.limit);
-  const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = $rt.textUpload(raw.upload, entry.limit);
-  return { upload, accepted: raw.accepted };
-}
 
 const streamEntry20 = Feed.uploadChoice;
 
-/**
- * Receives data and returns a result.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_uploadChoice(session: $rt.StreamSession, seed: t.Count, tail: t.Count, opts: $rt.StreamOptions): { upload: WritableStream<t.Chunk>; reply: Promise<t.UploadResult> } {
-  const entry = streamEntry20;
-  checkStreamSession(session, entry.limit);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const replyType = session.codec.typeId(entry.reply.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { seed: seed, tail: tail }, entry.limit);
-  const raw = session.transport.queryWithUpload(entry.iface, entry.ord, args, opts);
-  const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), entry.limit);
-  const reply = raw.reply.then((bytes) => decodeStreamReply(session, entry.reply, replyType, bytes));
-  return { upload, reply };
-}
-
 const streamEntry21 = Feed.uploadTuple;
-
-/**
- * Receives data and returns a tuple.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_uploadTuple(session: $rt.StreamSession, opts: $rt.StreamOptions): { upload: WritableStream<Uint8Array>; reply: Promise<FeedUploadTupleReply> } {
-  const entry = streamEntry21;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const replyType = session.codec.typeId(entry.reply.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryWithUpload(entry.iface, entry.ord, args, opts);
-  const upload = $rt.byteUpload(raw.upload, 16128);
-  const reply = raw.reply.then((bytes) => decodeStreamReply(session, entry.reply, replyType, bytes));
-  return { upload, reply };
-}
 
 const streamEntry22 = Feed.uploadLabel;
 
-/**
- * Receives bytes under a bounded text label.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
- */
-export function Feed_uploadLabel(session: $rt.StreamSession, label: t.Text, opts: $rt.StreamOptions): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
-  const entry = streamEntry22;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, label, undefined);
-  const raw = session.transport.commandStream(entry.iface, entry.ord, args, opts);
-  const upload = $rt.byteUpload(raw.upload, 16128);
-  return { upload, accepted: raw.accepted };
-}
+const streamEntry23 = Feed.duplexMixed;
 
 /**
  * Streamed replies and an ordinary query.
  */
 export class FeedClient {
-  readonly #port: $rt.Caller & $rt.SignalReader;
+  readonly #port: $rt.StreamCaller & $rt.SignalReader;
   readonly #codec: $rt.Codec;
-  readonly #ids: { readonly latest: { readonly request: number; readonly reply: number }; readonly newest: { readonly payload: number } };
+  readonly #ids: { readonly scalars: { readonly request: number; readonly element: number }; readonly structs: { readonly request: number; readonly element: number }; readonly unions: { readonly request: number; readonly element: number }; readonly statuses: { readonly request: number; readonly element: number }; readonly data: { readonly request: number; readonly element: number }; readonly labels: { readonly request: number; readonly element: number }; readonly readBytes: { readonly request: number }; readonly text: { readonly request: number }; readonly zero: { readonly request: number }; readonly latest: { readonly request: number; readonly reply: number }; readonly upload: { readonly request: number }; readonly duplex: { readonly request: number; readonly replyElement: number }; readonly duplexNamed: { readonly request: number; readonly element: number; readonly replyElement: number }; readonly duplexText: { readonly request: number }; readonly duplexBytes: { readonly request: number; readonly element: number }; readonly fetch: { readonly request: number }; readonly uploadNamed: { readonly request: number; readonly element: number }; readonly uploadData: { readonly request: number; readonly element: number }; readonly uploadText: { readonly request: number }; readonly uploadChoice: { readonly request: number; readonly element: number; readonly reply: number }; readonly uploadTuple: { readonly request: number; readonly reply: number }; readonly uploadLabel: { readonly request: number }; readonly duplexMixed: { readonly request: number; readonly element: number; readonly replyElement: number }; readonly newest: { readonly payload: number } };
 
-  private constructor(port: $rt.Caller & $rt.SignalReader, codec: $rt.Codec) {
+  private constructor(port: $rt.StreamCaller & $rt.SignalReader, codec: $rt.Codec) {
     this.#port = port;
     this.#codec = codec;
     this.#ids = {
+      scalars: { request: codec.typeId(streamEntry2.request.type), element: codec.typeId(streamEntry2.streams[0].element.type) },
+      structs: { request: codec.typeId(streamEntry3.request.type), element: codec.typeId(streamEntry3.streams[0].element.type) },
+      unions: { request: codec.typeId(streamEntry4.request.type), element: codec.typeId(streamEntry4.streams[0].element.type) },
+      statuses: { request: codec.typeId(streamEntry5.request.type), element: codec.typeId(streamEntry5.streams[0].element.type) },
+      data: { request: codec.typeId(streamEntry6.request.type), element: codec.typeId(streamEntry6.streams[0].element.type) },
+      labels: { request: codec.typeId(streamEntry7.request.type), element: codec.typeId(streamEntry7.streams[0].element.type) },
+      readBytes: { request: codec.typeId(streamEntry8.request.type) },
+      text: { request: codec.typeId(streamEntry9.request.type) },
+      zero: { request: codec.typeId(streamEntry10.request.type) },
       latest: { request: codec.typeId(Feed.latest.request.type), reply: codec.typeId(Feed.latest.reply.type) },
+      upload: { request: codec.typeId(streamEntry11.request.type) },
+      duplex: { request: codec.typeId(streamEntry12.request.type), replyElement: codec.typeId(streamEntry12.streams[0].element.type) },
+      duplexNamed: { request: codec.typeId(streamEntry13.request.type), element: codec.typeId(streamEntry13.streams[1].element.type), replyElement: codec.typeId(streamEntry13.streams[0].element.type) },
+      duplexText: { request: codec.typeId(streamEntry14.request.type) },
+      duplexBytes: { request: codec.typeId(streamEntry15.request.type), element: codec.typeId(streamEntry15.streams[1].element.type) },
+      fetch: { request: codec.typeId(streamEntry16.request.type) },
+      uploadNamed: { request: codec.typeId(streamEntry17.request.type), element: codec.typeId(streamEntry17.streams[0].element.type) },
+      uploadData: { request: codec.typeId(streamEntry18.request.type), element: codec.typeId(streamEntry18.streams[0].element.type) },
+      uploadText: { request: codec.typeId(streamEntry19.request.type) },
+      uploadChoice: { request: codec.typeId(streamEntry20.request.type), element: codec.typeId(streamEntry20.streams[0].element.type), reply: codec.typeId(streamEntry20.reply.type) },
+      uploadTuple: { request: codec.typeId(streamEntry21.request.type), reply: codec.typeId(streamEntry21.reply.type) },
+      uploadLabel: { request: codec.typeId(streamEntry22.request.type) },
+      duplexMixed: { request: codec.typeId(streamEntry23.request.type), element: codec.typeId(streamEntry23.streams[1].element.type), replyElement: codec.typeId(streamEntry23.streams[0].element.type) },
       newest: { payload: codec.typeId(Feed.newest.payload.type) },
     };
   }
@@ -1654,7 +1255,7 @@ export class FeedClient {
    * Binds the client to a port and a loaded codec, and registers the check of each signal with the port. Throws `CatalogMismatch` when
    * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
    */
-  static bind<P extends $rt.Caller & $rt.SignalReader>(port: P, codec: $rt.Codec): FeedClient {
+  static bind<P extends $rt.StreamCaller & $rt.SignalReader>(port: P, codec: $rt.Codec): FeedClient {
     $rt.checkCatalog(CATALOG_HASH, port, codec);
     const client = new FeedClient(port, codec);
     {
@@ -1662,6 +1263,168 @@ export class FeedClient {
       port.checkWith(entry.iface, entry.ord, entry.check);
     }
     return client;
+  }
+
+  /**
+   * Reads sequence numbers.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  scalars(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Count> {
+    const entry = streamEntry2;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.scalars.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.scalars.request, {}, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
+  }
+
+  /**
+   * Reads numbered elements for {@link t.Count}.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param seed - The first sequence number.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @since 1.0.0
+   * @deprecated Use scalars.
+   */
+  structs(seed: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Chunk> {
+    const entry = streamEntry3;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.structs.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.structs.request, seed, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
+  }
+
+  /**
+   * Reads results with parameter names also used by generated bindings.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param session - The session number.
+   * @param session1 - A second number.
+   * @param opts1 - A selection.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  unions(session: t.Count, session1: t.Count, opts1: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Choice> {
+    const entry = streamEntry4;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.unions.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.unions.request, { session: session, session1: session1, opts: opts1 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
+  }
+
+  /**
+   * Reads statuses.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  statuses(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.StatusValue> {
+    const entry = streamEntry5;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.statuses.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.statuses.request, {}, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
+  }
+
+  /**
+   * Reads bounded byte elements.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  data(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Data> {
+    const entry = streamEntry6;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.data.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.data.request, {}, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
+  }
+
+  /**
+   * Reads bounded text elements.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  labels(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Text> {
+    const entry = streamEntry7;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.labels.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.labels.request, {}, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
+  }
+
+  /**
+   * Reads raw bytes for a sequence number.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  readBytes(seed: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry8;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.readBytes.request, seed, entry.limit);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
+
+  /**
+   * Reads UTF-8 text.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  text(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<string> {
+    const entry = streamEntry9;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.text.request, {}, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeTextStream());
+  }
+
+  /**
+   * Reads raw bytes with a 64-byte payload limit.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  zero(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry10;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.zero.request, {}, entry.limit);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
   }
 
   /**
@@ -1677,6 +1440,256 @@ export class FeedClient {
     const args = $rt.encodeRequest(this.#codec, Feed.latest.request, this.#ids.latest.request, {});
     const raw = await this.#port.query(Feed.latest.iface, Feed.latest.ord, args, { ...opts, bound: opts?.bound ?? 50 });
     return $rt.decodeReply(this.#codec, Feed.latest.reply, this.#ids.latest.reply, raw);
+  }
+
+  /**
+   * Receives bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  upload(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
+    const entry = streamEntry11;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.upload.request, {}, entry.limit);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.byteUpload(raw.upload, entry.limit);
+    return { upload, accepted: raw.accepted };
+  }
+
+  /**
+   * Receives and replies concurrently.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  duplex(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; stream: ReadableStream<t.Chunk> } {
+    const entry = streamEntry12;
+    const replyElement = entry.streams[0].element;
+    const replyElementType = this.#ids.duplex.replyElement;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplex.request, {}, undefined);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.byteUpload(raw.upload, 16128);
+    const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => this.#codec.verify(replyElementType, bytes)));
+    return { upload, stream };
+  }
+
+  /**
+   * Exchanges numbered elements for {@link t.Count}.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param seed - The first {@link t.Count}.
+   * @param tail - The last {@link t.Count}.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  duplexNamed(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; stream: ReadableStream<t.Chunk> } {
+    const entry = streamEntry13;
+    const element = entry.streams[1].element;
+    const elementType = this.#ids.duplexNamed.element;
+    const replyElement = entry.streams[0].element;
+    const replyElementType = this.#ids.duplexNamed.replyElement;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplexNamed.request, { seed: seed, tail: tail }, undefined);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), 16128);
+    const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => this.#codec.verify(replyElementType, bytes)));
+    return { upload, stream };
+  }
+
+  /**
+   * Exchanges UTF-8 text.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  duplexText(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<string>; stream: ReadableStream<string> } {
+    const entry = streamEntry14;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplexText.request, {}, undefined);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.textUpload(raw.upload, 16128);
+    const stream = raw.stream.pipeThrough($rt.decodeTextStream());
+    return { upload, stream };
+  }
+
+  /**
+   * Sends numbered elements and receives bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  duplexBytes(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; stream: ReadableStream<Uint8Array> } {
+    const entry = streamEntry15;
+    const element = entry.streams[1].element;
+    const elementType = this.#ids.duplexBytes.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplexBytes.request, {}, undefined);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), 16128);
+    const stream = raw.stream;
+    return { upload, stream };
+  }
+
+  /**
+   * Reads the last live streamed member.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry16;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, {}, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
+
+  /**
+   * Receives numbered elements for {@link t.Count}.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param seed - The first {@link t.Count}.
+   * @param tail - The last {@link t.Count}.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @see {@link t.Count}
+   */
+  uploadNamed(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; accepted: Promise<void> } {
+    const entry = streamEntry17;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.uploadNamed.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadNamed.request, { seed: seed, tail: tail }, entry.limit);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), entry.limit);
+    return { upload, accepted: raw.accepted };
+  }
+
+  /**
+   * Receives one named bytes element per write.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  uploadData(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Data>; accepted: Promise<void> } {
+    const entry = streamEntry18;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.uploadData.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadData.request, {}, entry.limit);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.encodeUpload(raw.upload, (value: t.Data) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), entry.limit);
+    return { upload, accepted: raw.accepted };
+  }
+
+  /**
+   * Receives UTF-8 text.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  uploadText(seed: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<string>; accepted: Promise<void> } {
+    const entry = streamEntry19;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadText.request, seed, entry.limit);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.textUpload(raw.upload, entry.limit);
+    return { upload, accepted: raw.accepted };
+  }
+
+  /**
+   * Receives data and returns a result.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  uploadChoice(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; reply: Promise<t.UploadResult> } {
+    const entry = streamEntry20;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.uploadChoice.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadChoice.request, { seed: seed, tail: tail }, entry.limit);
+    const raw = this.#port.queryWithUpload(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.encodeUpload(raw.upload, (value: t.Chunk) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), entry.limit);
+    const reply = raw.reply.then((bytes) => $rt.decodeReply(this.#codec, entry.reply, this.#ids.uploadChoice.reply, bytes));
+    return { upload, reply };
+  }
+
+  /**
+   * Receives data and returns a tuple.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  uploadTuple(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; reply: Promise<FeedUploadTupleReply> } {
+    const entry = streamEntry21;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadTuple.request, {}, undefined);
+    const raw = this.#port.queryWithUpload(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.byteUpload(raw.upload, 16128);
+    const reply = raw.reply.then((bytes) => $rt.decodeReply(this.#codec, entry.reply, this.#ids.uploadTuple.reply, bytes));
+    return { upload, reply };
+  }
+
+  /**
+   * Receives bytes under a bounded text label.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  uploadLabel(label: t.Text, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
+    const entry = streamEntry22;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.uploadLabel.request, label, undefined);
+    const raw = this.#port.commandStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.byteUpload(raw.upload, 16128);
+    return { upload, accepted: raw.accepted };
+  }
+
+  /**
+   * Receives bounded byte elements and replies with numbered elements.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  duplexMixed(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Data>; stream: ReadableStream<t.Chunk> } {
+    const entry = streamEntry23;
+    const element = entry.streams[1].element;
+    const elementType = this.#ids.duplexMixed.element;
+    const replyElement = entry.streams[0].element;
+    const replyElementType = this.#ids.duplexMixed.replyElement;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.duplexMixed.request, {}, undefined);
+    const raw = this.#port.queryDuplex(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    const upload = $rt.encodeUpload(raw.upload, (value: t.Data) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), 16128);
+    const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => this.#codec.verify(replyElementType, bytes)));
+    return { upload, stream };
   }
 
   /** Subscribes to signal `newest`. The promise resolves when the provider answered; `opts.bound` and `opts.signal` limit the wait, and the promise rejects with a `CallError` of the category `down` when the session has ended. */
@@ -1708,6 +1721,10 @@ export class FeedClient {
   watchNewest(listener: (sample: $rt.Sample<t.Chunk>) => void): () => void {
     return this.#port.watch(Feed.newest.iface, Feed.newest.ord, (raw) => listener($rt.decodeSample(this.#codec, Feed.newest.payload, this.#ids.newest.payload, raw, t.initChunk)));
   }
+
+  // multiple has no method: multiple parameter streams are not supported
+
+  // uploadFallible has no method: inline fallible replies have no codec
 }
 
 /** The members of interface `Other`, interface number `2`. */
@@ -1716,22 +1733,49 @@ export const Other = {
   fetch: { iface: 2, ord: 1, kind: "query", request: codecOtherFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry23 = Other.fetch;
+const streamEntry24 = Other.fetch;
 
 /**
- * Reads bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * An interface with the same member name.
  */
-export function Other_fetch(session: $rt.StreamSession, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry23;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, {  }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class OtherClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry24.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): OtherClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new OtherClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry24;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, {}, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 /** The members of interface `session`, interface number `10`. */
@@ -1740,22 +1784,49 @@ export const session = {
   fetch: { iface: 10, ord: 1, kind: "query", request: codecSessionFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry31 = session.fetch;
+const streamEntry32 = session.fetch;
 
 /**
- * Reads raw bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named session.
  */
-export function session_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry31;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class sessionClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry32.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): sessionClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new sessionClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads raw bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry32;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 /** The members of interface `opts`, interface number `7`. */
@@ -1764,22 +1835,49 @@ export const opts = {
   fetch: { iface: 7, ord: 1, kind: "query", request: codecOptsFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry28 = opts.fetch;
+const streamEntry29 = opts.fetch;
 
 /**
- * Reads raw bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named opts.
  */
-export function opts_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry28;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class optsClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry29.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): optsClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new optsClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads raw bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry29;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 /** The members of interface `entry`, interface number `6`. */
@@ -1788,22 +1886,49 @@ export const entry = {
   fetch: { iface: 6, ord: 1, kind: "query", request: codecEntryFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry27 = entry.fetch;
+const streamEntry28 = entry.fetch;
 
 /**
- * Reads raw bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named entry.
  */
-export function entry_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry27;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class entryClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry28.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): entryClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new entryClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads raw bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry28;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 /** The members of interface `args`, interface number `3`. */
@@ -1812,22 +1937,49 @@ export const args = {
   fetch: { iface: 3, ord: 1, kind: "query", request: codecArgsFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry24 = args.fetch;
+const streamEntry25 = args.fetch;
 
 /**
- * Reads raw bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named args.
  */
-export function args_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry24;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class argsClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry25.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): argsClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new argsClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads raw bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry25;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 /** The members of interface `raw`, interface number `8`. */
@@ -1836,22 +1988,49 @@ export const raw = {
   fetch: { iface: 8, ord: 1, kind: "query", request: codecRawFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry29 = raw.fetch;
+const streamEntry30 = raw.fetch;
 
 /**
- * Reads raw bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named raw.
  */
-export function raw_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry29;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class rawClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry30.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): rawClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new rawClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads raw bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry30;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 /** The members of interface `element`, interface number `4`. */
@@ -1860,24 +2039,51 @@ export const element = {
   fetch: { iface: 4, ord: 1, kind: "query", request: codecElementFetchParams, streams: [{ no: 0, form: "elements", element: codecChunk }] },
 } as const;
 
-const streamEntry25 = element.fetch;
+const streamEntry26 = element.fetch;
 
 /**
- * Reads numbered elements.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named element.
  */
-export function element_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Chunk> {
-  const entry = streamEntry25;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+export class elementClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number; readonly element: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry26.request.type), element: codec.typeId(streamEntry26.streams[0].element.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): elementClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new elementClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads numbered elements.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Chunk> {
+    const entry = streamEntry26;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.fetch.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
+  }
 }
 
 /** The members of interface `requestType`, interface number `9`. */
@@ -1886,22 +2092,49 @@ export const requestType = {
   fetch: { iface: 9, ord: 1, kind: "query", request: codecRequestTypeFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry30 = requestType.fetch;
+const streamEntry31 = requestType.fetch;
 
 /**
- * Reads raw bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named requestType.
  */
-export function requestType_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry30;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class requestTypeClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry31.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): requestTypeClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new requestTypeClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads raw bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry31;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 /** The members of interface `elementType`, interface number `5`. */
@@ -1910,24 +2143,51 @@ export const elementType = {
   fetch: { iface: 5, ord: 1, kind: "query", request: codecElementTypeFetchParams, streams: [{ no: 0, form: "elements", element: codecChunk }] },
 } as const;
 
-const streamEntry26 = elementType.fetch;
+const streamEntry27 = elementType.fetch;
 
 /**
- * Reads numbered elements.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named elementType.
  */
-export function elementType_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<t.Chunk> {
-  const entry = streamEntry26;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const element = entry.streams[0].element;
-  const elementType = session.codec.typeId(element.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));
+export class elementTypeClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number; readonly element: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry27.request.type), element: codec.typeId(streamEntry27.streams[0].element.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): elementTypeClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new elementTypeClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads numbered elements.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Chunk> {
+    const entry = streamEntry27;
+    const element = entry.streams[0].element;
+    const elementType = this.#ids.fetch.element;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));
+  }
 }
 
 /** The members of interface `streamEntry`, interface number `11`. */
@@ -1936,22 +2196,49 @@ export const streamEntry = {
   fetch: { iface: 11, ord: 1, kind: "query", request: codecStreamEntryFetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry32 = streamEntry.fetch;
+const streamEntry33 = streamEntry.fetch;
 
 /**
- * Reads raw bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named streamEntry.
  */
-export function streamEntry_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry32;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class streamEntryClient {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry33.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): streamEntryClient {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new streamEntryClient(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads raw bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry33;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 /** The members of interface `streamEntry1`, interface number `12`. */
@@ -1960,22 +2247,49 @@ export const streamEntry1 = {
   fetch: { iface: 12, ord: 1, kind: "query", request: codecStreamEntry1FetchParams, streams: [{ no: 0, form: "bytes" }] },
 } as const;
 
-const streamEntry33 = streamEntry1.fetch;
+const streamEntry34 = streamEntry1.fetch;
 
 /**
- * Reads raw bytes.
- *
- * @remarks
- * Rules:
- * - response within 50000 us
+ * A table named streamEntry1.
  */
-export function streamEntry1_fetch(session: $rt.StreamSession, streamEntry13: t.Count, streamEntry14: t.Count, opts: $rt.StreamOptions): ReadableStream<Uint8Array> {
-  const entry = streamEntry33;
-  checkStreamSession(session, undefined);
-  const requestType = session.codec.typeId(entry.request.type);
-  const args = encodeStreamRequest(session, entry.request, requestType, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
-  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);
-  return raw;
+export class streamEntry1Client {
+  readonly #port: $rt.StreamCaller;
+  readonly #codec: $rt.Codec;
+  readonly #ids: { readonly fetch: { readonly request: number } };
+
+  private constructor(port: $rt.StreamCaller, codec: $rt.Codec) {
+    this.#port = port;
+    this.#codec = codec;
+    this.#ids = {
+      fetch: { request: codec.typeId(streamEntry34.request.type) },
+    };
+  }
+
+  /**
+   * Binds the client to a port and a loaded codec. Throws `CatalogMismatch` when
+   * the catalog hash of the port or of the codec differs from `CATALOG_HASH`.
+   */
+  static bind<P extends $rt.StreamCaller>(port: P, codec: $rt.Codec): streamEntry1Client {
+    $rt.checkCatalog(CATALOG_HASH, port, codec);
+    const client = new streamEntry1Client(port, codec);
+    return client;
+  }
+
+  /**
+   * Reads raw bytes.
+   *
+   * @remarks
+   * Rules:
+   * - response within 50000 us
+   *
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   */
+  fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
+    const entry = streamEntry34;
+    const args = $rt.encodeRequest(this.#codec, entry.request, this.#ids.fetch.request, { streamEntry13: streamEntry13, streamEntry14: streamEntry14 }, undefined);
+    const raw = this.#port.queryStream(entry.iface, entry.ord, args, { bound: opts?.bound ?? 50 });
+    return raw;
+  }
 }
 
 function signalCheck(codec: $rt.Codec, entry: { readonly iface: number; readonly ord: number; readonly payload: { readonly type: string } }, typeId: number = codec.typeId(entry.payload.type)): $rt.SignalCheckEntry {

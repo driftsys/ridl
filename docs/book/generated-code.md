@@ -488,7 +488,8 @@ The catalog and its hash are described in
 `ridl build --emit typescript` writes the domain types of a package as one `.ts`
 file: branded scalars, interfaces, enums, enum sets, discriminated unions and
 init functions. This domain module has no interaction face or feature selection.
-The optional codec module also emits stream functions, using platform streams.
+The optional codec module also emits stream methods on a client class, using
+platform streams.
 
 A workspace that declares a `system` also writes `__ridl_instances.ts`, which
 exports an `instances` object with `as const` literal types. Import it from that
@@ -508,8 +509,8 @@ package that its interfaces name) or a supported stream interaction: one
 `encode<Name>` and one `decode<Name>` function per payload type, which take and
 return the plain objects of `<base>.ts` and call the object API that `flatc`
 generates; one table per interface, which gives each interaction its interface
-number, its ordinal, its kind and the functions of its payloads; generated typed
-stream functions and stream metadata for supported interactions; for a package
+number, its ordinal, its kind and the functions of its payloads; generated
+stream methods and stream metadata for supported interactions; for a package
 with a signal that has a table entry, `signalChecks(codec)`, which returns one
 `SignalCheckEntry` of `@driftsys/ridl-runtime` per signal that has a table
 entry; and the catalog's name and hash, the payload type names and the rule
@@ -571,17 +572,23 @@ that names both. An internal payload type has no `encode`/`decode`, because
 
 ### Calling generated streams
 
-A generated function is named `<Interface>_<declaredMember>`. It takes a runtime
-`StreamSession` context, the non-stream parameters in declaration order, and
-required `{ bound: number }` options, in milliseconds. Load the matching wasm
-codec and connect the byte transport before constructing the context. Generated
-code and `@driftsys/ridl-runtime` do not depend on the WebSocket package; its
-`Session` satisfies the structural transport interface.
+A stream member is a method of the interface's client class,
+`<Interface>Client`, named as the member is declared. The method takes the
+non-stream parameters in declaration order and `{ bound: number }` options, in
+milliseconds. As for a call, the bound defaults to the maximum response time
+that the member declares, and `opts` is optional then; a member with no usable
+maximum requires `opts.bound`. The bound ends at the first element or at the end
+of the stream. A stream method does not read an abort signal, and a stream ends
+when its reader is cancelled or its upload is aborted. Load the matching wasm
+codec and connect the byte transport, then bind the client to the transport and
+the codec with `<Interface>Client.bind(port, codec)`. The port is a
+`StreamCaller` of `@driftsys/ridl-runtime`. Generated code and the runtime do
+not depend on the WebSocket package; its `Session` is a `StreamCaller`.
 
-For the document example, `DocStore_fetch` returns `ReadableStream<Uint8Array>`,
-`DocStore_chunks` returns `ReadableStream<DocChunk>`, `DocStore_put` returns
+For the document example, `docs.fetch` returns `ReadableStream<Uint8Array>`,
+`docs.chunks` returns `ReadableStream<DocChunk>`, `docs.put` returns
 `{ upload: WritableStream<Uint8Array>, accepted: Promise<void> }`, and
-`DocStore_exchange` returns
+`docs.exchange` returns
 `{ upload: WritableStream<DocChunk>, stream: ReadableStream<DocChunk> }`. The
 following TypeScript illustration assumes the generated files, wasm and a
 running document server; the executable version is
@@ -591,8 +598,7 @@ running document server; the executable version is
 import { loadCodec } from "@driftsys/ridl-runtime";
 import { connect } from "@driftsys/ridl-transport-ws";
 import {
-  CATALOG_HASH, CATALOG_NAME, PAYLOAD_TYPES, RULES, DocStore,
-  DocStore_fetch, DocStore_put, DocStore_chunks, DocStore_exchange,
+  CATALOG_HASH, CATALOG_NAME, PAYLOAD_TYPES, RULES, DocStore, DocStoreClient,
 } from "./generated/docstore.api.codec.js";
 import type {
   ChunkIndex, DocBlock, DocChunk, DocId, DocSize,
@@ -607,11 +613,11 @@ const transport = await connect("ws://127.0.0.1:8080", {
   encoding: "flatbuffers",
   interfaces: [DocStore],
 });
-const context = { transport, codec };
+const docs = DocStoreClient.bind(transport, codec);
 const id = "manual" as DocId;
 const opts = { bound: 1000 };
 const bytes = new Uint8Array([1, 2, 3]);
-const put = DocStore_put(context, {
+const put = docs.put({
   name: id, size: BigInt(bytes.length) as DocSize,
 }, opts);
 await put.accepted;
@@ -621,14 +627,14 @@ await writer.close();
 writer.releaseLock();
 
 // This provider waits for explicit upload end before exposing committed data.
-for await (const chunk of DocStore_fetch(context, id, opts)) {
+for await (const chunk of docs.fetch(id, opts)) {
   console.log(chunk);
 }
-for await (const chunk of DocStore_chunks(context, id, opts)) {
+for await (const chunk of docs.chunks(id, opts)) {
   console.log(chunk.index, chunk.data);
 }
 
-const exchange = DocStore_exchange(context, id, opts);
+const exchange = docs.exchange(id, opts);
 const sending = (async () => {
   const writer = exchange.upload.getWriter();
   const chunk: DocChunk = {
@@ -645,7 +651,7 @@ await transport.closed;
 ```
 
 A query with an upload and a plain reply instead returns
-`{ upload: WritableStream<T>, reply: Promise<R> }`. The generated function
+`{ upload: WritableStream<T>, reply: Promise<R> }`. The generated method
 verifies that reply before decoding it. `accepted` acknowledges command
 acceptance; `writer.close()` confirms local upload transmission. Neither proves
 that the provider has consumed the upload's explicit end. A provider-specific
@@ -667,9 +673,9 @@ response bound of a duplex query starts at its request and stops at the first
 reply chunk or end, rather than bounding the complete transfer.
 
 A setup failure, such as a mismatched catalog (`CatalogMismatch`) or unknown
-payload type (`UnknownPayloadType`), occurs before sending the request.
+payload type (`UnknownPayloadType`), occurs in `bind`, before any request.
 `CodecError` also reports invalid or missing codec ABI exports or unknown
-verification-rule metadata. Local `StreamError.failure` is either
+verification-rule metadata. Local `CallError.failure` is either
 `{ category: "corrupt" }` or
 `{ category: "contract", contract: { category: "invalid-value", rule } }`.
 Remote transport errors retain their identity, including `SessionError` from the
@@ -688,7 +694,7 @@ The supported subset is reply streams and exactly one parameter stream on a
 command or query, including duplex. Two or more parameter streams
 (driftsys/ridl#1224), inline fallible upload replies without a codec, and
 payload roots without a finite FlatBuffers bound have an explicit omission
-comment and no function or table entry. Existing internal/foreign composite
+comment and no method or table entry. Existing internal/foreign composite
 payload refusals remain. The `.ts` type generator still refuses a stream as an
 ordinary typl value. [The codec table record][codec-table] owns the precise
 discovery, naming, metadata and runtime contracts.
@@ -729,14 +735,14 @@ the editor's hover shows in its **Contract** list.
 A generated doc holds these parts, in this order, and leaves out each part that
 is empty:
 
-| Part          | Rust                                       | TypeScript                                                                                                                                                                              |
-| ------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| doc text      | `///` lines; each link an intra-doc link   | the comment's text, then ``Build a value with `make<Name>`.`` for a named scalar that has a constructor; each local link `{@link Name}`, or `{@link t.Name}` in a codec stream function |
-| rules         | a `# Rules` section, one bullet per rule   | `@remarks`, then a `Rules:` list                                                                                                                                                        |
-| typl tags     | none                                       | `@unit`, `@range`, `@bounds`                                                                                                                                                            |
-| `@see`        | a `# See also` section, one bullet each    | one `@see` tag each                                                                                                                                                                     |
-| `@since`      | one `Available since <version>.` line each | one `@since` tag each                                                                                                                                                                   |
-| `@deprecated` | the `#[deprecated]` attribute              | one `@deprecated` tag                                                                                                                                                                   |
+| Part          | Rust                                       | TypeScript                                                                                                                                                                            |
+| ------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| doc text      | `///` lines; each link an intra-doc link   | the comment's text, then ``Build a value with `make<Name>`.`` for a named scalar that has a constructor; each local link `{@link Name}`, or `{@link t.Name}` in a codec stream method |
+| rules         | a `# Rules` section, one bullet per rule   | `@remarks`, then a `Rules:` list                                                                                                                                                      |
+| typl tags     | none                                       | `@unit`, `@range`, `@bounds`                                                                                                                                                          |
+| `@see`        | a `# See also` section, one bullet each    | one `@see` tag each                                                                                                                                                                   |
+| `@since`      | one `Available since <version>.` line each | one `@since` tag each                                                                                                                                                                 |
+| `@deprecated` | the `#[deprecated]` attribute              | one `@deprecated` tag                                                                                                                                                                 |
 
 A link, or an `@see` target, whose target has no item in the same output is
 written as a code span of the target's qualified name, such as
@@ -780,7 +786,7 @@ the parameter's rules as nested bullets), then the `# See also` section and the
 `Available since` lines. The doc of an interface goes on its face module, in the
 same order around the module's own sentence.
 
-The codec module's public stream functions also carry the interaction's
+The codec module's public stream methods also carry the interaction's
 model-derived documentation, canonical rules, `@see`, `@since` and
 `@deprecated`. Non-stream parameters use `@param`; stream-parameter
 documentation and parameter rules are not rendered. The
@@ -792,7 +798,7 @@ generated stream TSDoc. Private codec helpers carry no facade docs.
 The rules lists state the contract, not what the code checks. On each item the
 backend emits, every rule the schema declares is listed, in the same words in
 both languages, whether or not the generated code checks it. The one exception
-is a TypeScript stream function, whose parameter rules are not rendered (see
+is a TypeScript stream method, whose parameter rules are not rendered (see
 above). The sentence the backend writes about a method describes what that
 method does, its checks included: the doc of a named scalar's `new` says that it
 returns an error for a value that breaks a constraint the generated code checks,
@@ -907,10 +913,10 @@ The type assertion `20 as Temperature` still compiles, which is a limit of
 TypeScript. The domain module's types, constants, `<Name>Bits` objects, init
 functions and struct fields do not validate values; a collection bound and a
 unit are not checked. The TypeScript column above describes that domain module.
-Optional codec stream functions verify named requests, elements and plain
-replies through the wasm codec, so their validation uses the Rust codec's
-enabled checks, including pattern checks only when its feature is on. They also
-enforce chunk limits and UTF-8 as
+Optional codec stream methods verify named requests, elements and plain replies
+through the wasm codec, so their validation uses the Rust codec's enabled
+checks, including pattern checks only when its feature is on. They also enforce
+chunk limits and UTF-8 as
 [Calling generated streams](#calling-generated-streams) describes. They do not
 evaluate interaction `require` or `ensure` clauses. A standalone `encode<Name>`
 or `decode<Name>` is a converter, not a full validator. The one check that

@@ -67,22 +67,24 @@ otherwise. Any other URL is fetched.
 
 ## Streams
 
-`StreamSession` holds `{ transport, codec }`. Its `codec` is the loaded wasm
-`Codec`; its `transport` implements the structural `StreamTransport` interface,
-with `queryStream`, `commandStream`, `queryWithUpload` and `queryDuplex`
-byte-stream methods. `StreamOptions` requires `bound`, the response bound in
-milliseconds. The runtime has no dependency on a transport package.
+A stream member of a generated interface is a method of its client class. The
+client is bound to a port and the loaded wasm `Codec`. The port implements the
+`StreamCaller` interface, which has the `queryStream`, `commandStream`,
+`queryWithUpload` and `queryDuplex` byte-stream methods and takes `CallOptions`;
+a stream method reads its `bound`, the response bound in milliseconds, and not
+its `signal`. The runtime has no dependency on a transport package.
 
-A caller of a generated codec module constructs the context explicitly. This
-example uses the generated document store module and the WebSocket transport:
+A caller of a generated codec module binds the client explicitly. This example
+uses the generated document store module and the WebSocket transport:
 
 ```ts
-import { loadCodec, type StreamSession } from "@driftsys/ridl-runtime";
+import { loadCodec } from "@driftsys/ridl-runtime";
 import { connect } from "@driftsys/ridl-transport-ws";
 import {
   CATALOG_HASH,
   CATALOG_NAME,
   DocStore,
+  DocStoreClient,
   PAYLOAD_TYPES,
   RULES,
 } from "./generated/docstore.api.codec.ts";
@@ -100,13 +102,17 @@ const transport = await connect("ws://localhost:8080", {
   encoding: "flatbuffers",
   interfaces: [DocStore],
 });
-const context: StreamSession = { transport, codec };
+const docs = DocStoreClient.bind(transport, codec);
 ```
 
-Pass `context` first and required `{ bound: milliseconds }` last to a generated
-stream function. The [generated-code chapter](../../docs/book/generated-code.md)
-shows the supported signatures and document store calls. The transport import
-above belongs to the application; this runtime package does not import it.
+A generated stream method takes `{ bound: milliseconds }` last. The bound
+defaults to the maximum response time that the member declares, so `opts` is
+optional then, as in `docs.fetch(id)`; a member with no usable maximum requires
+it, as in `docs.fetch(id, { bound: 1000 })`. The bound ends at the first element
+or at the end of the stream. The
+[generated-code chapter](../../docs/book/generated-code.md) shows the supported
+signatures and document store calls. The transport import above belongs to the
+application; this runtime package does not import it.
 
 Resolve named payload types with `codec.typeId` before making a request, and
 load the codec with the expected catalog hash. An unknown name throws
@@ -150,7 +156,8 @@ Remote failures preserve the original error object: pending and later writes,
 object. A close requested after the writer has errored rejects with the
 platform's `TypeError`. An already resolved command acceptance stays resolved.
 
-Local payload failures throw `StreamError`. Its `failure` is
+Local payload failures throw `CallError`, the class that a call failure uses;
+`StreamError` is a deprecated alias of `CallError`. Its `failure` is
 `{ category: "corrupt" }` for malformed payloads, an oversized named element or
 code point, or any exception a generated `encode` or `decode` throws without a
 rule. Rule failures, including invalid UTF-8, a `RuleError` from a generated
