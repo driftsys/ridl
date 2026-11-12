@@ -127,7 +127,7 @@ B, [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) (the
 L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 [`../design/interaction-face.md`](../design/interaction-face.md) for lane R. The
 stories of lane C (#318 and #246 to #255) are closed. The coordination issue
-#328 stays open.
+#328 was closed on 2026-11-03.
 
 The lane P driver (`2026-09-22-lane-p-driver.md`) and its two design notes, the
 IR stability note (`2026-09-22-ir-stability-design.md`) and the codegen model
