@@ -1,10 +1,6 @@
-import type { Codec, PayloadCodec, VerifyResult } from "./codec.ts";
-import {
-  CallError,
-  CatalogMismatch,
-  CodecError,
-  type PayloadRule,
-} from "./errors.ts";
+import type { Codec, PayloadCodec } from "./codec.ts";
+import { CallError, CatalogMismatch } from "./errors.ts";
+import { assertVerified, exceptionFailure } from "./failures.ts";
 import type { Detection } from "./checks.ts";
 import type {
   Attached,
@@ -13,16 +9,6 @@ import type {
   RawSample,
   Sample,
 } from "./ports.ts";
-
-const RULES: readonly string[] = [
-  "length",
-  "pattern",
-  "range",
-  "step",
-  "unique",
-  "utf8",
-  "variant",
-];
 
 const hex = (hash: Uint8Array) =>
   Array.from(hash, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -51,60 +37,29 @@ export function checkCatalog(
   }
 }
 
-function ruleError(rule: PayloadRule, cause?: unknown): CallError {
-  return new CallError(
-    { category: "contract", contract: { category: "invalid-value", rule } },
-    cause === undefined ? undefined : { cause },
-  );
-}
-
-/**
- * Throws what a failed verification of one payload means for a call: a
- * `CallError` of the category `contract` for a failed rule, `corrupt` for a
- * malformed payload, and a `CodecError` for a rule text or a type the generated
- * module does not know.
- */
-function assertVerified(result: VerifyResult): void {
-  if (result.ok) return;
-  if (result.kind === "malformed") throw new CallError({ category: "corrupt" });
-  if (result.kind === "rule") {
-    if (result.rule !== undefined && RULES.includes(result.rule)) {
-      throw ruleError(result.rule as PayloadRule);
-    }
-    throw new CodecError(`unknown payload rule: ${result.rule}`);
-  }
-  throw new CodecError("unknown payload type during verification");
-}
-
-function isRuleException(error: unknown, names: readonly string[]): boolean {
-  return error instanceof Error && names.includes(error.name) &&
-    "rule" in error && typeof error.rule === "string" &&
-    RULES.includes(error.rule);
-}
-
 /**
  * Encodes the request of a call and verifies the bytes with the codec before
  * they are sent. A value that the encoder refuses for a rule, and bytes that
  * fail a rule, throw a `CallError` of the category `contract`; other encoder
- * failures and malformed bytes throw `corrupt`.
+ * failures and malformed bytes throw `corrupt`. When `limit` is given, bytes
+ * longer than it throw `corrupt` too, after the encoder and before the
+ * verification.
  */
 export function encodeRequest<T>(
   codec: Codec,
   payload: PayloadCodec<T>,
   typeId: number,
   value: T,
+  limit?: number,
 ): Uint8Array {
   let bytes: Uint8Array;
   try {
     bytes = payload.encode(value);
   } catch (error) {
-    if (isRuleException(error, ["RuleError", "ConstraintError"])) {
-      throw ruleError(
-        (error as { rule: PayloadRule }).rule,
-        error,
-      );
-    }
-    throw new CallError({ category: "corrupt" }, { cause: error });
+    throw exceptionFailure(error);
+  }
+  if (limit !== undefined && bytes.length > limit) {
+    throw new CallError({ category: "corrupt" });
   }
   assertVerified(codec.verify(typeId, bytes));
   return bytes;
@@ -124,10 +79,7 @@ export function decodeReply<T>(
   try {
     return payload.decode(bytes);
   } catch (error) {
-    if (isRuleException(error, ["RuleError"])) {
-      throw ruleError((error as { rule: PayloadRule }).rule, error);
-    }
-    throw new CallError({ category: "corrupt" }, { cause: error });
+    throw exceptionFailure(error);
   }
 }
 

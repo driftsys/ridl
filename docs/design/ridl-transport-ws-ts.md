@@ -22,12 +22,12 @@ structure. Verifying a payload is the wasm codec's, of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 7, loaded by `@driftsys/ridl-runtime`, and decoding and encoding one is
 the generated codec module's, `<base>.codec.ts`
-([`ts-codec-table.md`](ts-codec-table.md)). Generated stream functions use this
-package's `Session` (see [What is not built](#what-is-not-built)). Generated
-plain-call and provider faces remain unbuilt (driftsys/ridl#287). ADR-0020
-decision 6 places the package; its dependency row was amended on 2026-10-20
-(D-4). The wire rules are the frame specification §3 to §9 and §11.1 (binding
-versions 1, 2 and 3).
+([`ts-codec-table.md`](ts-codec-table.md)). The generated stream methods of a
+client class use this package's `Session` (see
+[What is not built](#what-is-not-built)). Generated plain-call and provider
+faces remain unbuilt (driftsys/ridl#287). ADR-0020 decision 6 places the
+package; its dependency row was amended on 2026-10-20 (D-4). The wire rules are
+the frame specification §3 to §9 and §11.1 (binding versions 1, 2 and 3).
 
 This is the architecture as built. The code and its tests are the source of
 truth; where this record and the code differ, this record is corrected. The
@@ -1070,8 +1070,8 @@ on a `v*` tag.
 ## What is not built
 
 - Generated plain-call and provider faces over this package (driftsys/ridl#287).
-  Generated stream functions are built and drive `Session` through
-  `StreamTransport` without a transport import; the
+  Generated stream methods are built and drive `Session` through `StreamCaller`
+  without a transport import; the
   [codec table record](ts-codec-table.md#stream-functions) owns their supported
   forms. The cabin signal demo still joins its generated payload codecs to this
   package by hand.

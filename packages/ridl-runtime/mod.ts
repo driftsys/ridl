@@ -52,8 +52,3 @@ export {
   encodeUpload,
   textUpload,
 } from "./src/streams.ts";
-export type {
-  StreamOptions,
-  StreamSession,
-  StreamTransport,
-} from "./src/streams.ts";

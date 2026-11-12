@@ -20,24 +20,25 @@
 //! A package with a signal that has a member table entry also gets
 //! `signalChecks(codec)`, which returns one `SignalCheckEntry` of the runtime
 //! package per such signal, for the `checks` option of a session. The entry's check refuses a payload that the wasm codec rejects.
-//! Stream queries and commands get typed functions over a runtime `StreamSession`:
-//! they verify requests before sending, verify named elements before decoding,
-//! decode raw text as UTF-8, and preserve raw byte streams. Uploads encode and
-//! verify whole named elements, and split raw bytes or text at the member limit.
-//! Each non-internal interface with a command, a query, a signal or an event
-//! also gets `<Interface>Client`, a class over the runtime ports that its
-//! members need (`Caller`, `SignalReader`, `EventSource`): `bind` checks the
+//! Each non-internal interface with a command, a query, a signal, an event or a
+//! supported stream member also gets `<Interface>Client`, a class over the
+//! runtime ports that its members need (`Caller`, `SignalReader`,
+//! `EventSource`, `StreamCaller`): `bind` checks the
 //! catalog hash of the port and of the codec, resolves each payload type id
 //! once and registers the check of each signal with the port. One method per
 //! command and query verifies the request before it is sent and the reply
 //! before it is decoded. A signal gets `subscribeX`, `x`, `readX` and `watchX`,
 //! whose samples carry the decoded value, and an event gets `subscribeX`; one
-//! `onEvent` delivers the occurrences as the union `<Interface>Event`. A query
-//! whose reply is an inline `T | E` has no method, and neither has a signal
-//! with an init override or without an init function of its payload type.
-//! Typed functions are omitted for calls with two or more parameter streams,
-//! uploads with an inline `T | E` reply, and calls whose request, named element
-//! or upload reply has no finite FlatBuffers bound.
+//! `onEvent` delivers the occurrences as the union `<Interface>Event`. A stream
+//! query or command is a method too: it verifies the request before opening the
+//! stream, verifies named elements before decoding, decodes raw text as UTF-8
+//! and preserves raw byte streams. Uploads encode and verify whole named
+//! elements, and split raw bytes or text at the member limit. A query whose
+//! reply is an inline `T | E` has no method, and neither has a signal with an
+//! init override or without an init function of its payload type. A stream
+//! member has no method with two or more parameter streams, with an upload
+//! whose reply is an inline `T | E`, or when its request, named element or
+//! upload reply has no finite FlatBuffers bound.
 //!
 //! A named scalar converts through the `make<Name>Unchecked` of its package's
 //! domain module when the module emits one (the codec has verified the bytes,
@@ -218,6 +219,9 @@ struct StreamCall<'a> {
     entry_binding: String,
     bindings: Vec<String>,
     param_types: Vec<String>,
+    /// The response bound in milliseconds, as a decimal number, when the
+    /// member records one in the range a port accepts.
+    bound_ms: Option<String>,
 }
 
 /// A command or query that the client class of its interface carries as a
@@ -552,20 +556,6 @@ impl<'a> Codec<'a> {
         ] {
             register(reserved.to_string(), reserved.to_string())?;
         }
-        if !self.stream_calls.is_empty() {
-            for helper in ["checkStreamSession", "encodeStreamRequest"] {
-                register(
-                    helper.to_string(),
-                    format!("runtime stream helper {helper}"),
-                )?;
-            }
-            if self.stream_calls.values().any(|s| s.reply.is_some()) {
-                register(
-                    "decodeStreamReply".to_string(),
-                    "stream reply helper".to_string(),
-                )?;
-            }
-        }
         if self.has_signals() {
             for helper in ["signalChecks", "signalCheck"] {
                 register(
@@ -666,7 +656,9 @@ impl<'a> Codec<'a> {
                 )?;
                 let has_client = interface.slots.iter().any(|slot| {
                     let key = (interface.number, slot.ordinal);
-                    self.call_members.contains_key(&key) || self.feed_members.contains_key(&key)
+                    self.call_members.contains_key(&key)
+                        || self.feed_members.contains_key(&key)
+                        || self.stream_calls.contains_key(&key)
                 });
                 if has_client {
                     let class = format!("{}Client", spelled.declared);
@@ -687,6 +679,9 @@ impl<'a> Codec<'a> {
                         {
                             let member = interaction_member(call.interaction);
                             (call.interaction, vec![member.to_string()])
+                        } else if let Some(stream) = self.stream_calls.get(&key) {
+                            let member = interaction_member(stream.interaction);
+                            (stream.interaction, vec![member.to_string()])
                         } else if let Some(feed) = self.feed_members.get(&key) {
                             let member = interaction_member(feed.interaction);
                             let pascal = pascal_member(member);
@@ -746,17 +741,6 @@ impl<'a> Codec<'a> {
                             .map_or("", |n| n.declared.as_str());
                         let path = format!("{}.{member}", spelled.declared);
                         register(path.clone(), path)?;
-                    }
-                    if let Some(stream) = self.stream_calls.get(&(interface.number, slot.ordinal)) {
-                        let member = stream
-                            .interaction
-                            .name
-                            .as_ref()
-                            .map_or("", |n| n.declared.as_str());
-                        register(
-                            format!("{}_{member}", spelled.declared),
-                            format!("{}.{member}", spelled.declared),
-                        )?;
                     }
                 }
             }
@@ -1497,9 +1481,6 @@ impl<'a> Codec<'a> {
             );
         }
 
-        if !self.stream_calls.is_empty() {
-            self.emit_stream_helpers(&mut body);
-        }
         for interface in &self.model.interfaces {
             let Some(v1::interface::Identity::Declared(spelled)) = &interface.identity else {
                 continue;
@@ -2577,6 +2558,11 @@ impl<'a> Codec<'a> {
                 entry_binding: String::new(),
                 bindings: Vec::new(),
                 param_types,
+                bound_ms: interaction
+                    .timing
+                    .as_ref()
+                    .and_then(|timing| timing.max_us.as_deref())
+                    .and_then(milliseconds),
             },
         );
         Ok(())
@@ -2621,35 +2607,47 @@ impl<'a> Codec<'a> {
         })
     }
 
-    fn emit_stream_helpers(&self, out: &mut String) {
-        out.push_str("\nfunction checkStreamSession(session: $rt.StreamSession, limit: number | undefined): void {\n  const hash = session.codec.catalogHash;\n  if (hash.length !== CATALOG_HASH.length || CATALOG_HASH.some((byte, i) => byte !== hash[i])) {\n    throw new $rt.CatalogMismatch(\n      Array.from(CATALOG_HASH, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n      Array.from(hash, (b) => b.toString(16).padStart(2, \"0\")).join(\"\"),\n    );\n  }\n  if (limit === 0) throw new $rt.StreamError({ category: \"corrupt\" });\n}\n");
-        out.push_str("\nfunction encodeStreamRequest<T>(session: $rt.StreamSession, payload: $rt.PayloadCodec<T>, typeId: number, value: T, limit: number | undefined): Uint8Array {\n  let bytes: Uint8Array;\n  try {\n    bytes = payload.encode(value);\n  } catch (error) {\n");
-        out.push_str("    if (typeof error === \"object\" && error !== null && \"name\" in error && (error.name === \"RuleError\" || error.name === \"ConstraintError\") && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new $rt.StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n");
-        out.push_str("    throw new $rt.StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n  if (limit !== undefined && bytes.length > limit) throw new $rt.StreamError({ category: \"corrupt\" });\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new $rt.StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new $rt.StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new $rt.CodecError(\"unknown payload type or rule during request verification\");\n  }\n  return bytes;\n}\n");
-        if self.stream_calls.values().any(|s| s.reply.is_some()) {
-            out.push_str("\nfunction decodeStreamReply<T>(session: $rt.StreamSession, payload: $rt.PayloadCodec<T>, typeId: number, bytes: Uint8Array): T {\n  const result = session.codec.verify(typeId, bytes);\n  if (!result.ok) {\n    if (result.kind === \"malformed\") throw new $rt.StreamError({ category: \"corrupt\" });\n    if (result.kind === \"rule\" && (RULES as readonly string[]).includes(result.rule ?? \"\")) {\n      throw new $rt.StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: result.rule as typeof RULES[number] } });\n    }\n    throw new $rt.CodecError(\"unknown payload type or rule during reply verification\");\n  }\n  try {\n    return payload.decode(bytes);\n  } catch (error) {\n    if (typeof error === \"object\" && error !== null && \"name\" in error && error.name === \"RuleError\" && \"rule\" in error && (RULES as readonly unknown[]).includes(error.rule)) {\n      throw new $rt.StreamError({ category: \"contract\", contract: { category: \"invalid-value\", rule: error.rule as typeof RULES[number] } }, { cause: error });\n    }\n    throw new $rt.StreamError({ category: \"corrupt\" }, { cause: error });\n  }\n}\n");
-        }
-    }
-
-    fn emit_stream_call(
-        &self,
-        out: &mut String,
-        name: &str,
-        member: &str,
-        stream: &StreamCall<'a>,
-    ) {
+    /// Writes the method of a stream query or command in the client class of
+    /// its interface. The method verifies the request before it opens the
+    /// stream, verifies each named element and plain reply before it decodes
+    /// it, decodes raw text as UTF-8 and passes raw bytes through. An upload
+    /// encodes and verifies whole named elements, and splits raw bytes or text
+    /// at the member limit. The bound defaults as it does for a call: to
+    /// the declared maximum response time when the member has a usable one,
+    /// and the caller must pass it otherwise. It ends at the first element or
+    /// at the end of the stream, not at the end of the transfer.
+    fn emit_stream_method(&self, out: &mut String, member: &str, stream: &StreamCall<'a>) {
         let params = stream
             .bindings
             .iter()
             .zip(&stream.param_types)
             .map(|(binding, ty)| format!("{binding}: {ty}"));
-        let mut signature = vec!["session: $rt.StreamSession".to_string()];
-        signature.extend(params);
-        signature.push("opts: $rt.StreamOptions".to_string());
+        let mut signature: Vec<String> = params.collect();
+        let (opts_param, bound_value, note) = match &stream.bound_ms {
+            Some(ms) => (
+                "opts?: Partial<Omit<$rt.CallOptions, \"signal\">>",
+                format!("{{ bound: opts?.bound ?? {ms} }}"),
+                format!("The bound defaults to the declared maximum response time, {ms} ms."),
+            ),
+            None => (
+                "opts: Omit<$rt.CallOptions, \"signal\">",
+                "opts".to_string(),
+                "The member has no maximum response time inside the range of a port bound, so `opts.bound` is required."
+                    .to_string(),
+            ),
+        };
+        signature.push(opts_param.to_string());
+        let extra = vec![format!(
+            "@param opts - {note} The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call."
+        )];
         out.push('\n');
-        let entry_binding = &stream.entry_binding;
-        let _ = writeln!(out, "const {entry_binding} = {name}.{member};\n");
-        out.push_str(&self.stream_docs(stream));
+        out.push_str(&self.call_docs(
+            stream.interaction,
+            &stream.params,
+            &stream.bindings,
+            "  ",
+            &extra,
+        ));
         let returns = if stream.upload {
             let result = if let Some(reply) = &stream.duplex_reply {
                 format!("stream: ReadableStream<{}>", reply.element_type)
@@ -2666,35 +2664,31 @@ impl<'a> Codec<'a> {
         } else {
             format!("ReadableStream<{}>", stream.element_type)
         };
-        let _ = writeln!(
-            out,
-            "export function {name}_{member}({}): {returns} {{",
-            signature.join(", ")
-        );
-        let _ = writeln!(out, "  const entry = {entry_binding};");
+        let _ = writeln!(out, "  {member}({}): {returns} {{", signature.join(", "));
+        let entry_binding = &stream.entry_binding;
+        let _ = writeln!(out, "    const entry = {entry_binding};");
+        let ids = format!("this.#ids.{member}");
         let limit = if stream.interaction.limit.is_some() {
             "entry.limit"
         } else {
             "undefined"
         };
-        let _ = writeln!(out, "  checkStreamSession(session, {limit});");
-        out.push_str("  const requestType = session.codec.typeId(entry.request.type);\n");
         if stream.element.is_some() {
             let index = usize::from(stream.duplex_reply.is_some());
             let _ = writeln!(
                 out,
-                "  const element = entry.streams[{index}].element;\n  const elementType = session.codec.typeId(element.type);"
+                "    const element = entry.streams[{index}].element;\n    const elementType = {ids}.element;"
             );
-        }
-        if stream.reply.is_some() {
-            out.push_str("  const replyType = session.codec.typeId(entry.reply.type);\n");
         }
         if stream
             .duplex_reply
             .as_ref()
             .is_some_and(|reply| reply.element.is_some())
         {
-            out.push_str("  const replyElement = entry.streams[0].element;\n  const replyElementType = session.codec.typeId(replyElement.type);\n");
+            let _ = writeln!(
+                out,
+                "    const replyElement = entry.streams[0].element;\n    const replyElementType = {ids}.replyElement;"
+            );
         }
         let value = if stream.named_request {
             stream.bindings[0].clone()
@@ -2710,11 +2704,15 @@ impl<'a> Codec<'a> {
                     )
                 })
                 .collect::<Vec<_>>();
-            format!("{{ {} }}", fields.join(", "))
+            if fields.is_empty() {
+                "{}".to_string()
+            } else {
+                format!("{{ {} }}", fields.join(", "))
+            }
         };
         let _ = writeln!(
             out,
-            "  const args = encodeStreamRequest(session, entry.request, requestType, {value}, {limit});"
+            "    const args = $rt.encodeRequest(this.#codec, entry.request, {ids}.request, {value}, {limit});"
         );
         if stream.upload {
             let method = if stream.duplex_reply.is_some() {
@@ -2726,7 +2724,7 @@ impl<'a> Codec<'a> {
             };
             let _ = writeln!(
                 out,
-                "  const raw = session.transport.{method}(entry.iface, entry.ord, args, opts);"
+                "    const raw = this.#port.{method}(entry.iface, entry.ord, args, {bound_value});"
             );
             let upload_limit = if stream.interaction.limit.is_some() {
                 "entry.limit"
@@ -2735,47 +2733,40 @@ impl<'a> Codec<'a> {
             };
             let adapter = match stream.form {
                 "elements" => format!(
-                    "$rt.encodeUpload(raw.upload, (value: {}) => element.encode(value), (bytes) => session.codec.verify(elementType, bytes), {upload_limit})",
+                    "$rt.encodeUpload(raw.upload, (value: {}) => element.encode(value), (bytes) => this.#codec.verify(elementType, bytes), {upload_limit})",
                     stream.element_type
                 ),
                 "text" => format!("$rt.textUpload(raw.upload, {upload_limit})"),
                 _ => format!("$rt.byteUpload(raw.upload, {upload_limit})"),
             };
-            let _ = writeln!(out, "  const upload = {adapter};");
+            let _ = writeln!(out, "    const upload = {adapter};");
             if let Some(reply) = &stream.duplex_reply {
                 match reply.form {
-                    "elements" => out.push_str("  const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes)));\n"),
-                    "text" => out.push_str("  const stream = raw.stream.pipeThrough($rt.decodeTextStream());\n"),
-                    _ => out.push_str("  const stream = raw.stream;\n"),
+                    "elements" => out.push_str("    const stream = raw.stream.pipeThrough($rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => this.#codec.verify(replyElementType, bytes)));\n"),
+                    "text" => out.push_str("    const stream = raw.stream.pipeThrough($rt.decodeTextStream());\n"),
+                    _ => out.push_str("    const stream = raw.stream;\n"),
                 }
-                out.push_str("  return { upload, stream };\n}\n");
+                out.push_str("    return { upload, stream };\n  }\n");
             } else if stream.reply.is_some() {
-                out.push_str("  const reply = raw.reply.then((bytes) => decodeStreamReply(session, entry.reply, replyType, bytes));\n  return { upload, reply };\n}\n");
+                let _ = writeln!(
+                    out,
+                    "    const reply = raw.reply.then((bytes) => $rt.decodeReply(this.#codec, entry.reply, {ids}.reply, bytes));\n    return {{ upload, reply }};\n  }}"
+                );
             } else {
-                out.push_str("  return { upload, accepted: raw.accepted };\n}\n");
+                out.push_str("    return { upload, accepted: raw.accepted };\n  }\n");
             }
             return;
         }
-        out.push_str(
-            "  const raw = session.transport.queryStream(entry.iface, entry.ord, args, opts);\n",
+        let _ = writeln!(
+            out,
+            "    const raw = this.#port.queryStream(entry.iface, entry.ord, args, {bound_value});"
         );
         match stream.form {
-            "elements" => out.push_str("  return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => session.codec.verify(elementType, bytes)));\n"),
-            "text" => out.push_str("  return raw.pipeThrough($rt.decodeTextStream());\n"),
-            _ => out.push_str("  return raw;\n"),
+            "elements" => out.push_str("    return raw.pipeThrough($rt.decodeStream((bytes) => element.decode(bytes), (bytes) => this.#codec.verify(elementType, bytes)));\n"),
+            "text" => out.push_str("    return raw.pipeThrough($rt.decodeTextStream());\n"),
+            _ => out.push_str("    return raw;\n"),
         }
-        out.push_str("}\n");
-    }
-
-    /// Reuses the domain renderer for canonical rules, links and doc tags.
-    fn stream_docs(&self, stream: &StreamCall<'a>) -> String {
-        self.call_docs(
-            stream.interaction,
-            &stream.params,
-            &stream.bindings,
-            "",
-            &[],
-        )
+        out.push_str("  }\n");
     }
 
     /// The doc comment of a call: the member's doc, its parameter tags, then
@@ -2948,16 +2939,6 @@ impl<'a> Codec<'a> {
             }
         }
         out.push_str("} as const;\n");
-        for slot in &interface.slots {
-            if let Some(stream) = self.stream_calls.get(&(number, slot.ordinal)) {
-                let member = stream
-                    .interaction
-                    .name
-                    .as_ref()
-                    .map_or("", |n| n.declared.as_str());
-                self.emit_stream_call(out, name, member, stream);
-            }
-        }
         self.emit_client(out, interface, name);
         Ok(())
     }
@@ -2972,6 +2953,7 @@ impl<'a> Codec<'a> {
         enum Item<'m, 'a> {
             Call(&'m CallMember<'a>),
             Feed(&'m FeedMember<'a>),
+            Stream(&'m StreamCall<'a>),
         }
         let items: Vec<Item<'_, 'a>> = interface
             .slots
@@ -2982,6 +2964,7 @@ impl<'a> Codec<'a> {
                     .get(&key)
                     .map(Item::Call)
                     .or_else(|| self.feed_members.get(&key).map(Item::Feed))
+                    .or_else(|| self.stream_calls.get(&key).map(Item::Stream))
             })
             .collect();
         if items.is_empty() {
@@ -2999,9 +2982,11 @@ impl<'a> Codec<'a> {
             match item {
                 Item::Call(call) => member_of(call.interaction),
                 Item::Feed(feed) => member_of(feed.interaction),
+                Item::Stream(stream) => member_of(stream.interaction),
             }
         };
         let has_calls = items.iter().any(|item| matches!(item, Item::Call(_)));
+        let has_streams = items.iter().any(|item| matches!(item, Item::Stream(_)));
         let has_signals = items
             .iter()
             .any(|item| matches!(item, Item::Feed(feed) if !feed.event));
@@ -3013,7 +2998,10 @@ impl<'a> Codec<'a> {
             })
             .collect();
         let mut ports = Vec::new();
-        if has_calls {
+        // `StreamCaller` extends `Caller`, so it covers the calls too.
+        if has_streams {
+            ports.push("$rt.StreamCaller");
+        } else if has_calls {
             ports.push("$rt.Caller");
         }
         if has_signals {
@@ -3050,6 +3038,15 @@ impl<'a> Codec<'a> {
                 );
             }
         }
+        // A stream member's table entry is captured under a name no parameter
+        // or table of the module can take, so a method body never names a
+        // table that a parameter or a local could shadow.
+        for item in &items {
+            if let Item::Stream(stream) = item {
+                let member = member_of(stream.interaction);
+                let _ = writeln!(out, "\nconst {} = {name}.{member};", stream.entry_binding);
+            }
+        }
         out.push('\n');
         out.push_str(&docs);
         let _ = writeln!(out, "export class {class} {{");
@@ -3062,10 +3059,27 @@ impl<'a> Codec<'a> {
             .map(|item| {
                 let shape = match item {
                     Item::Call(call) if call.reply_type.is_some() => {
-                        "readonly request: number; readonly reply: number"
+                        "readonly request: number; readonly reply: number".to_string()
                     }
-                    Item::Call(_) => "readonly request: number",
-                    Item::Feed(_) => "readonly payload: number",
+                    Item::Call(_) => "readonly request: number".to_string(),
+                    Item::Feed(_) => "readonly payload: number".to_string(),
+                    Item::Stream(stream) => {
+                        let mut shape = "readonly request: number".to_string();
+                        if stream.element.is_some() {
+                            shape.push_str("; readonly element: number");
+                        }
+                        if stream.reply.is_some() {
+                            shape.push_str("; readonly reply: number");
+                        }
+                        if stream
+                            .duplex_reply
+                            .as_ref()
+                            .is_some_and(|reply| reply.element.is_some())
+                        {
+                            shape.push_str("; readonly replyElement: number");
+                        }
+                        shape
+                    }
                 };
                 format!("readonly {}: {{ {shape} }}", member_name(item))
             })
@@ -3094,6 +3108,29 @@ impl<'a> Codec<'a> {
                         out,
                         "      {member}: {{ payload: codec.typeId({name}.{member}.payload.type) }},"
                     );
+                }
+                Item::Stream(stream) => {
+                    let entry = &stream.entry_binding;
+                    let mut ids = vec![format!("request: codec.typeId({entry}.request.type)")];
+                    if stream.element.is_some() {
+                        let index = usize::from(stream.duplex_reply.is_some());
+                        ids.push(format!(
+                            "element: codec.typeId({entry}.streams[{index}].element.type)"
+                        ));
+                    }
+                    if stream.reply.is_some() {
+                        ids.push(format!("reply: codec.typeId({entry}.reply.type)"));
+                    }
+                    if stream
+                        .duplex_reply
+                        .as_ref()
+                        .is_some_and(|reply| reply.element.is_some())
+                    {
+                        ids.push(format!(
+                            "replyElement: codec.typeId({entry}.streams[0].element.type)"
+                        ));
+                    }
+                    let _ = writeln!(out, "      {member}: {{ {} }},", ids.join(", "));
                 }
             }
         }
@@ -3124,6 +3161,9 @@ impl<'a> Codec<'a> {
             match item {
                 Item::Feed(feed) => {
                     self.emit_feed_methods(out, name, &member, feed);
+                }
+                Item::Stream(stream) => {
+                    self.emit_stream_method(out, &member, stream);
                 }
                 Item::Call(call) => {
                     let mut signature: Vec<String> = call
@@ -3229,7 +3269,11 @@ impl<'a> Codec<'a> {
             out.push_str("      }\n    });\n  }\n");
         }
         for slot in &interface.slots {
-            if let Some(reason) = self.member_omissions.get(&(interface.number, slot.ordinal))
+            let key = (interface.number, slot.ordinal);
+            if let Some(reason) = self
+                .member_omissions
+                .get(&key)
+                .or_else(|| self.stream_omissions.get(&key))
                 && let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =
                     &slot.occupant
             {
@@ -3497,24 +3541,18 @@ fn milliseconds(max_us: &str) -> Option<String> {
 /// Allocates local bindings without shadowing generated locals or helper functions.
 fn stream_bindings(params: &[&v1::Param], entry_binding: &str) -> Vec<String> {
     let reserved = [
-        "session",
         "opts",
         "entry",
         "element",
-        "requestType",
         "elementType",
-        "replyType",
         "replyElement",
         "replyElementType",
         "stream",
         "upload",
         "reply",
-        "decodeStreamReply",
         "args",
         "raw",
         "bytes",
-        "checkStreamSession",
-        "encodeStreamRequest",
         "undefined",
         "t",
         "await",

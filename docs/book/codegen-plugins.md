@@ -324,21 +324,22 @@ named-element streamed reply. Its client needs `StreamCaller`; its `serve` needs
 for byte or text replies, `Consumer` for named-element parameters, and
 `ByteConsumer` for byte or text parameters. A duplex provider implements both
 its consumer trait and `Source`. Calls with two or more parameter streams remain
-outside the face (driftsys/ridl#1224). The TypeScript codec module emits typed
-functions and stream table entries for reply streams and commands or queries
-with exactly one parameter stream, including duplex. It explicitly omits
-multiple parameter streams, inline fallible upload replies without a codec and
-payload roots without a finite FlatBuffers bound. Existing internal and foreign
-composite payload refusals remain; a stream is still refused as an ordinary typl
-value. [The codec table record](../design/ts-codec-table.md#stream-functions)
-owns the generated signatures and metadata. This is a change for a plugin
-written against an earlier model: a member with a stream parameter then had
-neither `request` nor `request_tuple`, so a plugin that does not read
-`Interaction.streams` emitted no call for it, and now sees what looks like a
-plain call; a query whose reply alone is a stream had its `request` then as now.
-Such a plugin skips every member whose `Interaction.streams` is not empty. A
-streamed reply adds nothing to the member's reservation, so a query that replies
-with a stream reserves its request alone.
+outside the face (driftsys/ridl#1224). The TypeScript codec module emits methods
+of the interface's client class and stream table entries for reply streams and
+commands or queries with exactly one parameter stream, including duplex. It
+explicitly omits multiple parameter streams, inline fallible upload replies
+without a codec and payload roots without a finite FlatBuffers bound. Existing
+internal and foreign composite payload refusals remain; a stream is still
+refused as an ordinary typl value.
+[The codec table record](../design/ts-codec-table.md#stream-functions) owns the
+generated signatures and metadata. This is a change for a plugin written against
+an earlier model: a member with a stream parameter then had neither `request`
+nor `request_tuple`, so a plugin that does not read `Interaction.streams`
+emitted no call for it, and now sees what looks like a plain call; a query whose
+reply alone is a stream had its `request` then as now. Such a plugin skips every
+member whose `Interaction.streams` is not empty. A streamed reply adds nothing
+to the member's reservation, so a query that replies with a stream reserves its
+request alone.
 
 **A plugin reads these sizes; it does not compute them.** The sizes of the
 `warning` event's payload in `examples/cabin`, and its reservation:
