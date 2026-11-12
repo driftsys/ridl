@@ -2,7 +2,7 @@
 //! codegen model: the snapshot of cabin's module, the completeness of its
 //! functions and member tables against the model, and its refusals.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use ridl_backend_ts::{GenerateError, generate_codec, generate_codec_with};
@@ -1836,7 +1836,7 @@ interface Cabin {
 }
 ";
 
-/// Every parameter-stream member gets a table entry and a typed upload function.
+/// Every parameter-stream member gets a table entry and a method of the client.
 /// A member of the same interface without a stream keeps its ordinary entry.
 #[test]
 fn parameter_stream_members_have_entries_in_the_interface_table() {
@@ -1861,14 +1861,14 @@ fn parameter_stream_members_have_entries_in_the_interface_table() {
             "`{member}` has no upload entry in:\n{source}"
         );
         assert!(
-            source.contains(&format!("export function Cabin_{member}(")),
-            "missing upload function {member}"
+            source.contains(&format!("\n  {member}(")),
+            "missing upload method {member}"
         );
     }
 }
 
 /// A package with reply streams and parameter streams is accepted: reply-only
-/// queries and uploads get typed functions.
+/// queries and uploads get methods of the client.
 #[test]
 fn a_package_with_stream_replies_is_accepted() {
     let model = codegen::lower(&rust_fixture("streams.ridl"), &[]);
@@ -2360,58 +2360,70 @@ fn stream_member_mut<'a>(model: &'a mut v1::Model, member: &str) -> &'a mut v1::
         .expect("stream member")
 }
 
+/// The methods of the client classes of `source` that return a reply stream:
+/// `<Interface>.<member>` with the element type. An upload method returns an
+/// object, so it is not among them.
+fn reply_stream_methods(source: &str) -> BTreeMap<String, String> {
+    let mut methods = BTreeMap::new();
+    let mut class = None;
+    for line in source.lines() {
+        if let Some(rest) = line.strip_prefix("export class ") {
+            class = rest
+                .strip_suffix("Client {")
+                .map(std::string::ToString::to_string);
+        } else if line == "}" {
+            class = None;
+        } else if let Some(class) = &class
+            && let Some(rest) = line.strip_prefix("  ")
+            && let Some((member, rest)) = rest.split_once('(')
+            && let Some((_, ty)) = rest.split_once("): ReadableStream<")
+            && let Some(ty) = ty.strip_suffix("> {")
+        {
+            methods.insert(format!("{class}.{member}"), ty.to_string());
+        }
+    }
+    methods
+}
+
 #[test]
 fn stream_reply_exports_match_model() {
     let model = streams_model();
     let source = module(&model, "streams.demo");
     // This independent list includes every live reply-only stream and no upload.
     let expected = [
-        ("Feed_scalars", "t.Count"),
-        ("Feed_structs", "t.Chunk"),
-        ("Feed_unions", "t.Choice"),
-        ("Feed_statuses", "t.StatusValue"),
-        ("Feed_data", "t.Data"),
-        ("Feed_labels", "t.Text"),
-        ("Feed_readBytes", "Uint8Array"),
-        ("Feed_text", "string"),
-        ("Feed_zero", "Uint8Array"),
-        ("Feed_fetch", "Uint8Array"),
-        ("Other_fetch", "Uint8Array"),
-        ("session_fetch", "Uint8Array"),
-        ("opts_fetch", "Uint8Array"),
-        ("entry_fetch", "Uint8Array"),
-        ("args_fetch", "Uint8Array"),
-        ("raw_fetch", "Uint8Array"),
-        ("element_fetch", "t.Chunk"),
-        ("requestType_fetch", "Uint8Array"),
-        ("elementType_fetch", "t.Chunk"),
-        ("streamEntry_fetch", "Uint8Array"),
-        ("streamEntry1_fetch", "Uint8Array"),
+        ("Feed.scalars", "t.Count"),
+        ("Feed.structs", "t.Chunk"),
+        ("Feed.unions", "t.Choice"),
+        ("Feed.statuses", "t.StatusValue"),
+        ("Feed.data", "t.Data"),
+        ("Feed.labels", "t.Text"),
+        ("Feed.readBytes", "Uint8Array"),
+        ("Feed.text", "string"),
+        ("Feed.zero", "Uint8Array"),
+        ("Feed.fetch", "Uint8Array"),
+        ("Other.fetch", "Uint8Array"),
+        ("session.fetch", "Uint8Array"),
+        ("opts.fetch", "Uint8Array"),
+        ("entry.fetch", "Uint8Array"),
+        ("args.fetch", "Uint8Array"),
+        ("raw.fetch", "Uint8Array"),
+        ("element.fetch", "t.Chunk"),
+        ("requestType.fetch", "Uint8Array"),
+        ("elementType.fetch", "t.Chunk"),
+        ("streamEntry.fetch", "Uint8Array"),
+        ("streamEntry1.fetch", "Uint8Array"),
     ];
-    let actual: BTreeSet<_> = exported_functions(&source, "")
-        .into_iter()
-        .filter(|name| {
-            name != "signalChecks"
-                && !name.starts_with("encode")
-                && !name.starts_with("decode")
-                && !name.starts_with("Feed_upload")
-                && !name.starts_with("Feed_duplex")
-        })
-        .collect();
     assert_eq!(
-        actual,
-        expected.iter().map(|(name, _)| name.to_string()).collect()
+        reply_stream_methods(&source),
+        expected
+            .iter()
+            .map(|(name, ty)| (name.to_string(), ty.to_string()))
+            .collect()
     );
-    for (name, ty) in expected {
-        let signature = source
-            .lines()
-            .find(|line| line.starts_with(&format!("export function {name}(")))
-            .unwrap();
-        assert!(
-            signature.ends_with(&format!("): ReadableStream<{ty}> {{")),
-            "{signature}"
-        );
-    }
+    assert!(
+        !source.contains("export function Feed_"),
+        "a stream is a method of the client, not a function"
+    );
     for interface in &model.interfaces {
         for slot in &interface.slots {
             let Some(v1::interaction_slot::Occupant::Interaction(i)) = &slot.occupant else {
@@ -2481,7 +2493,8 @@ fn stream_tables_keep_limits_and_roles() {
         "package raw.only\ninterface Raw { query fetch(): <bytes> @[..50ms] }",
     );
     let raw = module(&codegen::lower(&output.package, &[]), "raw.only");
-    assert!(raw.contains("export function Raw_fetch("), "{raw}");
+    assert!(raw.contains("export class RawClient {"), "{raw}");
+    assert!(raw.contains("\n  fetch("), "{raw}");
     assert!(
         !raw.contains("* as t from"),
         "induced requests use no domain namespace: {raw}"
@@ -2516,38 +2529,18 @@ fn stream_names_and_unsupported_shapes_are_explicit() {
             source.contains(&format!("// {member} has no entry: {reason}")),
             "{source}"
         );
-        assert!(!source.contains(&format!("export function Feed_{member}(")));
+        assert!(!source.contains(&format!("\n  {member}(")));
         assert!(!source.contains(&format!("  {member}: {{")));
+        assert!(
+            source.contains(&format!("// {member} has no method: {reason}")),
+            "{source}"
+        );
     }
     assert!(
         source.contains(
-            "session2: t.Count, session1: t.Count, opts1: t.Count | undefined, opts: $rt.StreamOptions"
+            "session2: t.Count, session1: t.Count, opts1: t.Count | undefined, opts: Omit<$rt.CallOptions, \"signal\">"
         ),
         "{source}"
-    );
-    // Two concatenations can collide even when their source paths differ.
-    model.interfaces[0].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
-        declared: "A_B".into(),
-        ..Default::default()
-    }));
-    stream_member_mut(&mut model, "scalars")
-        .name
-        .as_mut()
-        .unwrap()
-        .declared = "c".into();
-    model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
-        declared: "A".into(),
-        ..Default::default()
-    }));
-    let last = model.interfaces[1].slots[0].occupant.as_mut().unwrap();
-    let v1::interaction_slot::Occupant::Interaction(i) = last else {
-        panic!()
-    };
-    i.name.as_mut().unwrap().declared = "B_c".into();
-    let error = refusal(&model);
-    assert!(
-        error.contains("A_B.c") && error.contains("A.B_c"),
-        "{error}"
     );
     let mut model = streams_model();
     model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
@@ -2588,9 +2581,7 @@ fn generated_stream_docs_render_model_contract() {
         ..Default::default()
     }];
     let source = module(&model, "streams.demo");
-    let signature = source
-        .find("export function Feed_structs(")
-        .expect("callable");
+    let signature = source.find("\n  structs(").expect("callable");
     let start = source[..signature].rfind("/**").unwrap();
     let doc = &source[start..signature];
     for expected in [
@@ -2608,7 +2599,7 @@ fn generated_stream_docs_render_model_contract() {
         !doc.contains("github.com") && !doc.contains("rejects") && !doc.contains("range 0"),
         "{doc}"
     );
-    let sig = source.find("export function Feed_unions(").unwrap();
+    let sig = source.find("\n  unions(").unwrap();
     let start = source[..sig].rfind("/**").unwrap();
     assert!(source[start..sig].contains("@param session2 - The session number."));
     assert!(source[start..sig].contains("@param opts1 - A selection."));
@@ -2663,7 +2654,7 @@ fn stream_codec_limits_and_malformed_metadata_are_explicit() {
         ),
         "{source}"
     );
-    assert!(!source.contains("export function Feed_scalars("));
+    assert!(!source.contains("\n  scalars("));
     // Omitting the only stream must not leave unused request codec constants.
     let scalar_slot = model.interfaces[0].slots.iter().find(|slot| matches!(&slot.occupant,
         Some(v1::interaction_slot::Occupant::Interaction(i)) if i.name.as_ref().unwrap().declared == "scalars")).unwrap().clone();
@@ -2767,21 +2758,24 @@ fn stream_entry_bindings_avoid_interfaces_and_parameters() {
             .unwrap_or_else(|| panic!("{name}.fetch needs a module capture"));
         assert!(!names.contains(&capture), "capture shadows table {capture}");
         assert!(captures.insert(capture), "duplicate capture {capture}");
-        let signature = source
-            .lines()
-            .find(|line| line.starts_with(&format!("export function {name}_fetch(")))
-            .unwrap();
-        assert!(!signature.contains(&format!(" {capture}:")), "{signature}");
-        let body = source
-            .split(&format!("export function {name}_fetch("))
+        let class = source
+            .split(&format!("export class {name}Client {{"))
             .nth(1)
             .unwrap()
-            .split("\n}")
+            .split("\n}\n")
             .next()
             .unwrap();
+        let method = class.split("\n  fetch(").nth(1).unwrap();
+        let signature = method.lines().next().unwrap();
+        assert!(!signature.contains(&format!(" {capture}:")), "{signature}");
+        let body = method.split("\n  }\n").next().unwrap();
         assert!(
             body.contains(&format!("const entry = {capture};")),
             "{body}"
+        );
+        assert!(
+            class.contains(&format!("codec.typeId({capture}.request.type)")),
+            "bind resolves the request type from the capture:\n{class}"
         );
     }
 }
@@ -2830,9 +2824,7 @@ interface Feed {
             "valid literal documentation must not panic"
         );
         let source = generated.unwrap();
-        let signature = source
-            .find("export function Feed_upload(")
-            .expect("upload function");
+        let signature = source.find("\n  upload(").expect("upload method");
         let start = source[..signature].rfind("/**").unwrap();
         let doc = &source[start..signature];
         let expected: &[&str] = if input == unmatched {
@@ -2901,7 +2893,7 @@ fn stream_doc_links_qualify_every_local_target_spelling() {
             ..Default::default()
         }];
         let source = module(&model, "streams.demo");
-        let signature = source.find("export function Feed_structs(").unwrap();
+        let signature = source.find("\n  structs(").unwrap();
         let start = source[..signature].rfind("/**").unwrap();
         let doc = &source[start..signature];
         assert!(
@@ -2932,7 +2924,7 @@ fn generated_upload_encodes_only_plain_arguments() {
     ] {
         let signature = source
             .lines()
-            .find(|line| line.starts_with(&format!("export function Feed_{name}(")));
+            .find(|line| line.starts_with(&format!("  {name}(")));
         assert!(signature.is_some(), "missing generated upload {name}");
         let signature = signature.unwrap();
         assert!(
@@ -2943,13 +2935,13 @@ fn generated_upload_encodes_only_plain_arguments() {
     }
     let signature = source
         .lines()
-        .find(|line| line.starts_with("export function Feed_uploadNamed("))
+        .find(|line| line.starts_with("  uploadNamed("))
         .unwrap();
     assert!(
-        signature.contains("seed: t.Count, tail: t.Count, opts: $rt.StreamOptions"),
+        signature.contains("seed: t.Count, tail: t.Count, opts: Omit<$rt.CallOptions, \"signal\">"),
         "{signature}"
     );
-    let start = source.find("export function Feed_uploadNamed(").unwrap();
+    let start = source.find("\n  uploadNamed(").unwrap();
     let doc = &source[source[..start].rfind("/**").unwrap()..start];
     for text in [
         "Receives numbered elements for {@link t.Count}.",
@@ -2960,37 +2952,92 @@ fn generated_upload_encodes_only_plain_arguments() {
     ] {
         assert!(doc.contains(text), "{doc}");
     }
-    assert!(!source.contains("export function Feed_uploadFallible("));
+    assert!(!source.contains("\n  uploadFallible("));
     assert!(
         source.contains("// uploadFallible has no entry: inline fallible replies have no codec"),
         "{source}"
     );
+    assert!(
+        source.contains("// uploadFallible has no method: inline fallible replies have no codec"),
+        "{source}"
+    );
 }
 
+/// A stream member is a method of its client class, so a stream member named
+/// as a method that the class declares for another purpose is refused, and so
+/// is one named as a method that another member generates. The error names
+/// both sources.
+///
+/// Mutation: leave the stream members out of the method names that
+/// `check_names` registers.
 #[test]
-fn upload_helper_and_function_names_are_checked() {
-    {
-        let helper = "decodeStreamReply";
+fn a_stream_member_named_as_a_method_of_its_class_is_refused() {
+    for (member, taken) in [
+        ("bind", "the static method `bind`"),
+        ("constructor", "the constructor"),
+        ("onEvent", "the method `onEvent`"),
+    ] {
         let mut model = streams_model();
-        model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
-            declared: helper.into(),
-            ..Default::default()
-        }));
-        let error = refusal(&model);
-        assert!(
-            error.contains(helper) && error.contains("helper"),
-            "{error}"
+        rename_member(&mut model, "Feed", "readBytes", member);
+        assert_eq!(
+            refusal(&model),
+            format!(
+                "`Feed.{member}` in package `streams.demo` collides with {taken} of the client \
+                 class `FeedClient`, which the codec module also declares"
+            )
         );
     }
+    // The signal `newest` generates `readNewest`; the stream comes first in
+    // the interface, so the signal is the member that is refused.
+    let mut model = streams_model();
+    rename_member(&mut model, "Feed", "readBytes", "readNewest");
+    assert_eq!(
+        refusal(&model),
+        "`Feed.newest` in package `streams.demo` generates the method `readNewest`, which \
+         collides with the method `readNewest` that `Feed.readNewest` generates in the \
+         client class `FeedClient`"
+    );
+}
+
+/// An interface that has only stream members still has a client class, so an
+/// interface that takes the name of that class is refused, naming both.
+///
+/// Mutation: leave the stream members out of the test that decides whether an
+/// interface has a client class.
+#[test]
+fn an_interface_named_as_the_client_class_of_a_stream_interface_is_refused() {
+    let mut model = streams_model();
+    interface(&mut model, "session").identity =
+        Some(v1::interface::Identity::Declared(v1::Spellings {
+            declared: "OtherClient".to_string(),
+            ..Default::default()
+        }));
+    assert_eq!(
+        refusal(&model),
+        "`OtherClient` in package `streams.demo` collides with `Other client class`, which the \
+         codec module also declares"
+    );
+}
+
+/// The free function name `<Interface>_<member>` is not declared any more, so
+/// an interface of that name is free.
+///
+/// Mutation: register `<Interface>_<member>` for a stream member again.
+#[test]
+fn an_interface_named_as_the_old_stream_function_is_free() {
     let mut model = streams_model();
     model.interfaces[1].identity = Some(v1::interface::Identity::Declared(v1::Spellings {
         declared: "Feed_uploadNamed".into(),
         ..Default::default()
     }));
-    let error = refusal(&model);
+    let source = module(&model, "streams.demo");
     assert!(
-        error.contains("Feed.uploadNamed") && error.contains("Feed_uploadNamed"),
-        "{error}"
+        source.contains("export const Feed_uploadNamed = {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("export class Feed_uploadNamedClient {"),
+        "{source}"
     );
 }
 
@@ -3003,9 +3050,9 @@ fn generated_duplex_functions() {
         ("duplexText", "string", "string"),
         ("duplexBytes", "t.Chunk", "Uint8Array"),
     ] {
-        let start = source.find(&format!("export function Feed_{member}("));
-        assert!(start.is_some(), "missing duplex function {member}");
-        let body = source[start.unwrap()..].split("\n}\n").next().unwrap();
+        let start = source.find(&format!("\n  {member}("));
+        assert!(start.is_some(), "missing duplex method {member}");
+        let body = source[start.unwrap()..].split("\n  }\n").next().unwrap();
         assert!(
             body.contains(&format!(
                 "upload: WritableStream<{upload}>; stream: ReadableStream<{reply}>"
@@ -3013,18 +3060,18 @@ fn generated_duplex_functions() {
             "{body}"
         );
         assert!(
-            body.contains("session.transport.queryDuplex(entry.iface, entry.ord, args, opts)"),
+            body.contains("this.#port.queryDuplex(entry.iface, entry.ord, args, opts)"),
             "{body}"
         );
-        assert!(!body.lines().next().unwrap().contains("values:"), "{body}");
+        assert!(!body.lines().nth(1).unwrap().contains("values:"), "{body}");
         if member == "duplexNamed" {
             assert!(body.contains("{ seed: seed, tail: tail }"), "{body}");
             assert!(body.contains("encodeUpload(raw.upload"), "{body}");
-            assert!(body.contains("$rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => session.codec.verify(replyElementType, bytes))"), "{body}");
+            assert!(body.contains("$rt.decodeStream((bytes) => replyElement.decode(bytes), (bytes) => this.#codec.verify(replyElementType, bytes))"), "{body}");
         }
     }
     assert!(!source.contains("duplex streams are not generated yet"));
-    let signature = source.find("export function Feed_duplexNamed(").unwrap();
+    let signature = source.find("\n  duplexNamed(").unwrap();
     let doc_start = source[..signature].rfind("/**").unwrap();
     let doc = &source[doc_start..signature];
     assert!(
@@ -3061,7 +3108,7 @@ fn generated_duplex_functions() {
     let source = module(&model, "streams.demo");
     let signature = source
         .lines()
-        .find(|l| l.starts_with("export function Feed_duplexNamed("))
+        .find(|l| l.starts_with("  duplexNamed("))
         .unwrap();
     assert!(
         signature.contains("replyElement1: t.Count, replyElementType1: t.Count"),
@@ -3076,16 +3123,6 @@ fn generated_duplex_functions() {
     model.interfaces.push(collision);
     // The runtime helper is reached through `$rt`, so the name is free.
     module(&model, "streams.demo");
-    model.interfaces.last_mut().unwrap().identity =
-        Some(v1::interface::Identity::Declared(v1::Spellings {
-            declared: "Feed_duplexNamed".into(),
-            ..Default::default()
-        }));
-    let error = refusal(&model);
-    assert!(
-        error.contains("Feed_duplexNamed") && error.contains("Feed.duplexNamed"),
-        "{error}"
-    );
 }
 
 // Mutation: omit interface-table metadata reservations from check_names.
@@ -3189,7 +3226,7 @@ interface Feed {
     assert!(!domain.contains("export const RAW"), "{domain}");
     assert!(domain.contains("export const LIMIT"), "{domain}");
     let source = module(&codegen::lower(&output.package, &[]), "constant.docs");
-    let signature = source.find("export function Feed_read(").unwrap();
+    let signature = source.find("\n  read(").unwrap();
     let start = source[..signature].rfind("/**").unwrap();
     let doc = &source[start..signature];
     assert!(
@@ -3332,8 +3369,8 @@ fn a_signal_without_a_string_imports_the_runtime_as_a_value() {
     assert!(source.contains("new $rt.CodecError("), "{source}");
 }
 
-/// The same for a stream: the functions throw `$rt.StreamError`. An interface
-/// named like a runtime stream type is free.
+/// The same for a stream: the methods verify with the runtime and throw its
+/// `CallError`. An interface named like a runtime stream type is free.
 #[test]
 fn a_stream_without_a_string_imports_the_runtime_as_a_value() {
     let source = module(
@@ -3346,11 +3383,18 @@ fn a_stream_without_a_string_imports_the_runtime_as_a_value() {
     );
     assert!(!source.contains("import type * as $rt"), "{source}");
     assert!(!source.contains("$rt.checkWellFormed("), "{source}");
-    assert!(source.contains("new $rt.StreamError("), "{source}");
+    assert!(source.contains("$rt.encodeRequest("), "{source}");
     assert!(source.contains("export const StreamError = {"), "{source}");
     assert!(
         source.contains("export const StreamSession = {"),
         "{source}"
     );
-    assert!(source.contains("session: $rt.StreamSession"), "{source}");
+    assert!(
+        source.contains("export class StreamSessionClient {"),
+        "{source}"
+    );
+    assert!(
+        source.contains("static bind<P extends $rt.StreamCaller>("),
+        "a stream-only interface needs the stream port:\n{source}"
+    );
 }

@@ -11,31 +11,53 @@ import assert from "node:assert/strict";
 import * as flatbuffers from "flatbuffers";
 import { StatusBoxT } from "./streams/demo.ts";
 import {
+  CallError,
   CatalogMismatch,
   CodecError,
   ConstraintError,
-  StreamError,
   UnknownPayloadType,
 } from "@driftsys/ridl-runtime";
 import type {
+  CallOptions,
   Codec,
   PayloadCodec,
-  StreamOptions,
-  StreamSession,
-  StreamTransport,
+  SignalReader,
+  StreamCaller,
   VerifyResult,
 } from "@driftsys/ridl-runtime";
 import * as codec from "./streams.demo.codec.ts";
 import type * as t from "./streams.demo.ts";
 
+// The port and the loaded codec that a client is bound to. Each call of a
+// method below binds a new client, so a failure of `bind` (a catalog hash or an
+// unknown payload type) happens where the call is made.
+// `Feed` also has a signal, so its client needs a signal reader too.
+type Port = StreamCaller & SignalReader;
+type Session = { readonly codec: Codec; readonly transport: Port };
+
+type Method = (...args: unknown[]) => unknown;
+
 // Dynamic lookup makes the initial RED an assertion about missing generation.
-function generated(name: string) {
-  const fn = (codec as unknown as Record<string, unknown>)[name];
-  assert.equal(typeof fn, "function", `${name} must be generated`);
-  return fn as (
-    session: StreamSession,
-    ...args: unknown[]
-  ) => ReadableStream<unknown>;
+function generated(name: string, iface = "Feed") {
+  const cls = (codec as unknown as Record<
+    string,
+    { bind(port: Port, codec: Codec): Record<string, unknown> }
+  >)[`${iface}Client`];
+  assert.equal(
+    typeof cls?.bind,
+    "function",
+    `${iface}Client must be generated`,
+  );
+  return (session: Session, ...args: unknown[]) => {
+    const client = cls.bind(session.transport, session.codec);
+    const method = client[name] as Method;
+    assert.equal(
+      typeof method,
+      "function",
+      `${iface}Client.${name} must exist`,
+    );
+    return method.apply(client, args) as ReadableStream<unknown>;
+  };
 }
 
 type Entry = {
@@ -78,7 +100,7 @@ function harness(chunks: Uint8Array[]) {
     iface: number;
     ord: number;
     args: Uint8Array;
-    opts: StreamOptions;
+    opts: CallOptions;
   }[] = [];
   const raw = source(chunks);
   const ids = new Map<string, number>();
@@ -94,7 +116,20 @@ function harness(chunks: Uint8Array[]) {
       return { ok: true };
     },
   };
-  const transport: StreamTransport = {
+  const transport: Port = {
+    catalogHash: codec.CATALOG_HASH.slice(),
+    checkWith() {},
+    subscribe: () => Promise.resolve(),
+    unsubscribe() {},
+    sample: () => undefined,
+    read: () => Promise.reject(new Error("streams do not read signals")),
+    watch: () => () => {},
+    command() {
+      assert.fail("stream members must not call command");
+    },
+    query() {
+      assert.fail("stream members must not call query");
+    },
     queryStream(iface, ord, args, opts) {
       assert.strictEqual(
         this,
@@ -119,7 +154,7 @@ function harness(chunks: Uint8Array[]) {
 }
 
 Deno.test("generated_reply_uses_codec_and_session", async () => {
-  const structs = generated("Feed_structs");
+  const structs = generated("structs");
   const values: t.Chunk[] = Array.from(
     { length: 64 },
     (_, value) => ({ value: value as t.Count }),
@@ -142,20 +177,25 @@ Deno.test("generated_reply_uses_codec_and_session", async () => {
     assert.equal(h.calls[0].ord, 3);
     assert.strictEqual(h.calls[0].opts, opts);
     assert.equal(codec.decodeCount(h.calls[0].args), 7);
-    assert.deepEqual(h.events.slice(0, 4), [
-      "resolve:streams.demo.Count",
-      "resolve:streams.demo.Chunk",
-      "verify:1",
+    // `bind` resolves the payload types of every member before any request.
+    const firstOther = h.events.findIndex((e) => !e.startsWith("resolve:"));
+    const resolved = h.events.slice(0, firstOther);
+    assert.ok(resolved.includes("resolve:streams.demo.Count"));
+    assert.ok(resolved.includes("resolve:streams.demo.Chunk"));
+    const count = h.ids.get("streams.demo.Count")!;
+    const chunk = h.ids.get("streams.demo.Chunk")!;
+    assert.deepEqual(h.events.slice(firstOther, firstOther + 2), [
+      `verify:${count}`,
       "request",
     ]);
     assert.deepEqual(
-      h.events.slice(4),
-      values.flatMap(() => ["verify:2", "decode"]),
+      h.events.slice(firstOther + 2),
+      values.flatMap(() => [`verify:${chunk}`, "decode"]),
     );
   } finally {
     element.decode = original;
   }
-  const unions = generated("Feed_unions");
+  const unions = generated("unions");
   const u = harness([]);
   await collect(
     unions(u.session, 4 as t.Count, 5 as t.Count, 6 as t.Count, { bound: 80 }),
@@ -167,23 +207,23 @@ Deno.test("generated_reply_uses_codec_and_session", async () => {
   });
   const scalar = harness([codec.encodeCount(9 as t.Count)]);
   assert.deepEqual(
-    await collect(generated("Feed_scalars")(scalar.session, { bound: 50 })),
+    await collect(generated("scalars")(scalar.session, { bound: 50 })),
     [9],
   );
   const raw = harness([new Uint8Array([1, 2])]);
   assert.strictEqual(
-    generated("Feed_readBytes")(raw.session, 3 as t.Count, { bound: 50 }),
+    generated("readBytes")(raw.session, 3 as t.Count, { bound: 50 }),
     raw.raw,
   );
   const text = harness([new TextEncoder().encode("\uFEFFhello 🌍")]);
   assert.deepEqual(
-    await collect(generated("Feed_text")(text.session, { bound: 50 })),
+    await collect(generated("text")(text.session, { bound: 50 })),
     ["\uFEFFhello 🌍"],
   );
 });
 
 Deno.test("stream_tables_keep_limits_and_roles", () => {
-  generated("Feed_readBytes");
+  generated("readBytes");
   const bytes = entry("readBytes");
   assert.equal(bytes.limit, 512);
   assert.equal(bytes.request.type, "streams.demo.Count");
@@ -195,7 +235,7 @@ Deno.test("stream_tables_keep_limits_and_roles", () => {
 });
 
 Deno.test("setup_errors_send_no_request", () => {
-  const fn = generated("Feed_structs");
+  const fn = generated("structs");
   for (const byte of [0, 31]) {
     const h = harness([]);
     h.session.codec.catalogHash[byte] ^= 1;
@@ -215,13 +255,14 @@ Deno.test("setup_errors_send_no_request", () => {
     UnknownPayloadType,
   );
   assert.equal(h.calls.length, 0);
-  const zero = generated("Feed_zero");
+  const zero = generated("zero");
   const row = entry("zero");
   const original = row.limit;
   row.limit = 0;
   try {
-    assert.throws(() => zero(h.session, { bound: 1 }), StreamError);
-    assert.equal(h.calls.length, 0);
+    const fresh = harness([]);
+    assert.throws(() => zero(fresh.session, { bound: 1 }), CallError);
+    assert.equal(fresh.calls.length, 0);
   } finally {
     if (original === undefined) delete row.limit;
     else row.limit = original;
@@ -229,7 +270,7 @@ Deno.test("setup_errors_send_no_request", () => {
 });
 
 Deno.test("request_failures_send_no_request", () => {
-  const fn = generated("Feed_structs");
+  const fn = generated("structs");
   const results: VerifyResult[] = [
     { ok: false, kind: "malformed", code: 1 },
     { ok: false, kind: "rule", rule: "range", code: 4 },
@@ -244,11 +285,11 @@ Deno.test("request_failures_send_no_request", () => {
       (error: unknown) => {
         if (result.ok) return false;
         if (result.kind === "malformed") {
-          assert.deepEqual((error as StreamError).failure, {
+          assert.deepEqual((error as CallError).failure, {
             category: "corrupt",
           });
         } else if (result.kind === "rule" && result.rule === "range") {
-          assert.deepEqual((error as StreamError).failure, {
+          assert.deepEqual((error as CallError).failure, {
             category: "contract",
             contract: { category: "invalid-value", rule: "range" },
           });
@@ -288,7 +329,7 @@ Deno.test("stream_table_names_do_not_shadow_captured_entries", async () => {
     const h = harness([]);
     let result: ReadableStream<unknown> | undefined;
     assert.doesNotThrow(() => {
-      result = generated(`${name}_fetch`)(h.session, 7, 8, { bound: 50 });
+      result = generated("fetch", name)(h.session, 7, 8, { bound: 50 });
     }, name);
     if (name !== "element" && name !== "elementType") {
       assert.strictEqual(result, h.raw, name);
@@ -301,13 +342,13 @@ Deno.test("stream_table_names_do_not_shadow_captured_entries", async () => {
 });
 
 // Mutation: bypass request verification in raw byte or text functions.
-for (const name of ["Feed_readBytes", "Feed_text"]) {
+for (const name of ["readBytes", "text"]) {
   Deno.test(`raw_request_failures_send_no_request_${name}`, () => {
     const h = harness([]);
     h.session.codec.verify = () => ({ ok: false, kind: "malformed", code: 1 });
     const fn = generated(name);
-    const args = name === "Feed_readBytes" ? [1, { bound: 1 }] : [{ bound: 1 }];
-    assert.throws(() => fn(h.session, ...args), StreamError);
+    const args = name === "readBytes" ? [1, { bound: 1 }] : [{ bound: 1 }];
+    assert.throws(() => fn(h.session, ...args), CallError);
     assert.equal(h.calls.length, 0);
     assert.ok(!h.events.includes("request"));
   });
@@ -319,9 +360,8 @@ type UploadCall = {
   reply?: Promise<unknown>;
 };
 function uploadFunction(name: string) {
-  const fn = (codec as unknown as Record<string, unknown>)[`Feed_${name}`];
-  assert.equal(typeof fn, "function", `Feed_${name} must be generated`);
-  return fn as (session: StreamSession, ...args: unknown[]) => UploadCall;
+  const fn = generated(name);
+  return fn as unknown as (session: Session, ...args: unknown[]) => UploadCall;
 }
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -338,11 +378,11 @@ function uploadHarness() {
   let method = "";
   for (const key of ["commandStream", "queryWithUpload"] as const) {
     const call = function (
-      this: StreamTransport,
+      this: StreamCaller,
       iface: number,
       ord: number,
       args: Uint8Array,
-      opts: StreamOptions,
+      opts: CallOptions,
     ) {
       assert.strictEqual(this, h.session.transport);
       method = key;
@@ -424,7 +464,7 @@ Deno.test("generated_upload_encodes_only_plain_arguments", async () => {
     row.limit = 0;
     try {
       const zero = uploadHarness();
-      assert.throws(() => fn(zero.session, ...args), StreamError);
+      assert.throws(() => fn(zero.session, ...args), CallError);
       assert.equal(zero.calls.length, 0);
     } finally {
       if (limit === undefined) delete row.limit;
@@ -436,7 +476,7 @@ Deno.test("generated_upload_encodes_only_plain_arguments", async () => {
       kind: "malformed",
       code: 1,
     });
-    assert.throws(() => fn(invalid.session, ...args), StreamError);
+    assert.throws(() => fn(invalid.session, ...args), CallError);
     assert.equal(invalid.calls.length, 0);
     const mismatch = uploadHarness();
     mismatch.session.codec.catalogHash[0] ^= 1;
@@ -471,8 +511,8 @@ Deno.test("generated_upload_encodes_only_plain_arguments", async () => {
       });
       const writer = upload.upload.getWriter();
       writer.closed.catch(() => {});
-      await assert.rejects(writer.write(value), StreamError);
-      await assert.rejects(writer.write(value), StreamError);
+      await assert.rejects(writer.write(value), CallError);
+      await assert.rejects(writer.write(value), CallError);
       assert.equal(invalidElement.chunks.length, 0);
       assert.equal(invalidElement.raw.locked, false);
     }
@@ -516,7 +556,7 @@ Deno.test("plain_reply_is_verified_before_decode", async () => {
           assert.deepEqual(await call.reply, value);
           assert.equal(decodes, 1);
         } else {
-          await assert.rejects(call.reply!, StreamError);
+          await assert.rejects(call.reply!, CallError);
           assert.equal(decodes, 0);
         }
       } finally {
@@ -760,9 +800,10 @@ type DuplexCall = {
   stream: ReadableStream<unknown>;
 };
 function duplexFunction(name = "duplexNamed") {
-  const fn = (codec as unknown as Record<string, unknown>)[`Feed_${name}`];
-  assert.equal(typeof fn, "function", `Feed_${name} must be generated`);
-  return fn as (session: StreamSession, ...args: unknown[]) => DuplexCall;
+  return generated(name) as unknown as (
+    session: Session,
+    ...args: unknown[]
+  ) => DuplexCall;
 }
 function replyChunk(socket: FakeSocket, seq: number, value: unknown) {
   socket.deliver({
@@ -863,6 +904,49 @@ Deno.test("generated_duplex_functions", async () => {
     ]);
     assert.ok(h.events.indexOf("verify:1") < h.events.indexOf("request"));
   }
+});
+
+// Mutation: resolve the element type of the upload for the reply, or the other
+// way round, in `bind`.
+Deno.test("duplex_element_types_are_resolved_per_direction", async () => {
+  const h = harness([]);
+  h.session.transport.queryDuplex = () => ({
+    upload: new WritableStream<Uint8Array>(),
+    stream: source([codec.encodeChunk({ value: 1 as t.Count })]),
+  });
+  const call = duplexFunction("duplexMixed")(h.session, { bound: 50 });
+  const writer = call.upload.getWriter();
+  await writer.write(Uint8Array.of(1));
+  await writer.close();
+  assert.deepEqual(await collect(call.stream), [{ value: 1 }]);
+  const data = h.ids.get("streams.demo.Data")!;
+  const chunk = h.ids.get("streams.demo.Chunk")!;
+  assert.notEqual(data, chunk);
+  assert.deepEqual(
+    h.events.filter((e) => e.startsWith("verify:")).slice(1),
+    [`verify:${data}`, `verify:${chunk}`],
+  );
+});
+
+// Mutation: let the raw reply stream be split, so that cancelling the typed
+// stream does not reach the transport.
+Deno.test("cancelling_a_reply_stream_reaches_the_transport", async () => {
+  const h = harness([]);
+  const cancelled = Promise.withResolvers<unknown>();
+  h.session.transport.queryStream = () =>
+    new ReadableStream({
+      cancel(reason) {
+        cancelled.resolve(reason);
+      },
+    });
+  const stream = generated("structs")(h.session, 1, { bound: 50 });
+  const reason = new Error("stop reading");
+  await stream.cancel(reason);
+  const seen = await Promise.race([
+    cancelled.promise,
+    new Promise((resolve) => setTimeout(() => resolve("not cancelled"), 200)),
+  ]);
+  assert.strictEqual(seen, reason);
 });
 
 Deno.test("duplex_adapters_preserve_credit_and_close", async () => {
@@ -1038,7 +1122,7 @@ Deno.test("duplex_adapters_propagate_failure", async () => {
       assert.ok(
         remote instanceof
           (mode === "encode" || mode === "uploadVerify"
-            ? StreamError
+            ? CallError
             : SessionError),
         mode,
       );
@@ -1057,10 +1141,10 @@ Deno.test("duplex_adapters_propagate_failure", async () => {
         assert.equal(replyError.failure.category, "interrupted");
       }
       if (mode === "replyVerify") {
-        assert.ok(await read instanceof StreamError);
+        assert.ok(await read instanceof CallError);
         assert.equal(decodes, 0, "unverified reply must never be decoded");
       }
-      if (failedWrite) assert.ok(await failedWrite instanceof StreamError);
+      if (failedWrite) assert.ok(await failedWrite instanceof CallError);
       const ends = frames(socket).filter((f) => f.form === "stream_end");
       assert.deepEqual(
         ends.map((f) => [f.stream, f.outcome.kind]),
@@ -1083,7 +1167,7 @@ Deno.test("open_enum_int32_max_survives_stream_decode", async () => {
   const bytes = builder.asUint8Array();
   const h = harness([bytes]);
   assert.deepEqual(
-    await collect(generated("Feed_statuses")(h.session, { bound: 50 })),
+    await collect(generated("statuses")(h.session, { bound: 50 })),
     [{ unknown: 2147483647 }],
   );
 });
@@ -1101,9 +1185,9 @@ Deno.test("open_enum_decoder_failure_is_a_stream_contract_failure", async () => 
   };
   try {
     await assert.rejects(
-      () => collect(generated("Feed_statuses")(h.session, { bound: 50 })),
+      () => collect(generated("statuses")(h.session, { bound: 50 })),
       (error: unknown) => {
-        assert.ok(error instanceof StreamError);
+        assert.ok(error instanceof CallError);
         assert.deepEqual(error.failure, {
           category: "contract",
           contract: { category: "invalid-value", rule: "variant" },
@@ -1135,7 +1219,7 @@ for (const operation of ["request", "reply"] as const) {
         throw cause;
       };
       const check = (error: unknown) => {
-        assert.ok(error instanceof StreamError);
+        assert.ok(error instanceof CallError);
         assert.deepEqual(
           error.failure,
           kind === "rule"
@@ -1186,7 +1270,7 @@ Deno.test("generated_request_constraint_error_maps_to_the_utf8_contract", () => 
     assert.throws(
       () => uploadFunction("uploadChoice")(h.session, 7, 8, { bound: 50 }),
       (error: unknown) => {
-        assert.ok(error instanceof StreamError);
+        assert.ok(error instanceof CallError);
         assert.deepEqual(error.failure, {
           category: "contract",
           contract: { category: "invalid-value", rule: "utf8" },
@@ -1211,7 +1295,7 @@ Deno.test("generated_request_lone_surrogate_is_a_utf8_stream_error", () => {
     assert.throws(
       () => fn(h.session, label, { bound: 50 }),
       (error: unknown) => {
-        assert.ok(error instanceof StreamError);
+        assert.ok(error instanceof CallError);
         assert.deepEqual(error.failure, {
           category: "contract",
           contract: { category: "invalid-value", rule: "utf8" },
@@ -1256,7 +1340,7 @@ for (const direction of ["upload", "reply"] as const) {
           () =>
             direction === "reply" ? reader.read() : writer.write({ value: 1 }),
           (error: unknown) => {
-            assert.ok(error instanceof StreamError);
+            assert.ok(error instanceof CallError);
             assert.deepEqual(
               error.failure,
               kind === "rule"

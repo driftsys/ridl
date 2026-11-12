@@ -109,6 +109,8 @@ interface Feed {
   query uploadFallible(values: <bytes>): Chunk | UploadError @[..50ms]
   /// Receives bytes under a bounded text label.
   command uploadLabel(label: Text, values: <bytes>) @[..50ms]
+  /// Receives bounded byte elements and replies with numbered elements.
+  query duplexMixed(values: <Data>): <Chunk> @[..50ms]
   /// Reports the latest numbered element, so that this package has a signal and a stream.
   signal newest : Chunk @1s
 

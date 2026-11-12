@@ -9,7 +9,7 @@ package through the wasm codec of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 7: one `encode<Name>` and one `decode<Name>` per payload type, over
 plain objects; one table per interface that gives each interaction its address,
-its kind and its payload functions; typed functions for supported stream
+its kind and its payload functions; client class methods for supported stream
 interactions; and the catalog name, the catalog hash, the payload type names and
 the rule texts that the wasm module is loaded with. `@driftsys/ridl-runtime`
 resolves the wasm type ids from those names.
@@ -177,13 +177,14 @@ moving `variant` from 7 to 8 is a breaking change for the next breaking release.
 Regenerate the TypeScript module and wasm codec together. These payload ABI
 codes are separate from frame detail codes.
 
-**D-17. A runtime context supplies transport and verification.** Every function
-takes `session: StreamSession` first: `{ transport, codec }`, with a loaded
-`Codec` and a structural `StreamTransport`. The application connects its
-transport and loads wasm explicitly; there is no global codec or hidden load.
-The generator calls transport methods with their receiver retained. Generated
-code uses only these runtime names, through the `$rt` namespace import:
-`StreamSession`, `StreamOptions`, `PayloadCodec`, the setup and stream errors,
+**D-17. A bound port and codec supply transport and verification.** A stream
+member is a method of the interface's `<Interface>Client`, which is built with
+`bind(port, codec)`: the port is a `StreamCaller` of the runtime and the codec a
+loaded `Codec`. The application connects its transport and loads wasm
+explicitly; there is no global codec or hidden load. The generator calls the
+port's methods with their receiver retained. Generated code uses only runtime
+names, through the `$rt` namespace import: `StreamCaller`, `CallOptions`,
+`PayloadCodec`, `CallError`, `CatalogMismatch`, `encodeRequest`, `decodeReply`
 and the needed `decodeStream`, `decodeTextStream`, `encodeUpload`, `byteUpload`
 or `textUpload` adapters. The runtime has no dependency on the WebSocket
 package.
@@ -191,17 +192,19 @@ package.
 Discovery resolves the non-stream request, named stream elements and any plain
 reply through the same finite FlatBuffers payload roots used by ordinary
 entries. It includes induced request/reply tuples and foreign scalar roots.
-Before sending, a function checks the codec catalog hash, rejects a zero member
-limit, resolves all named payload ids and encodes and verifies its request.
-Named input elements are encoded and verified before transmission. Named output
-elements and plain replies are verified before decoding into application values.
-Text replies use fatal UTF-8 decoding per chunk; raw bytes pass through.
+`bind` checks the catalog hash of the port and of the codec and resolves all
+named payload ids. Before sending, a method encodes and verifies its request and
+refuses one longer than the member limit. Named input elements are encoded and
+verified before transmission. Named output elements and plain replies are
+verified before decoding into application values. Text replies use fatal UTF-8
+decoding per chunk; raw bytes pass through.
 
-**D-18. Functions and tables describe the supported stream forms.** The exported
-name is `<Interface>_<declaredMember>`, for example `DocStore_fetch`. Non-stream
-parameters follow the context in declaration order; the final
-`opts: StreamOptions` is required and contains `bound` in milliseconds. The
-functions return:
+**D-18. Methods and tables describe the supported stream forms.** The method
+name is the declared member name, for example `docs.fetch(id, opts)` on a
+`DocStoreClient`. Non-stream parameters come in declaration order; the final
+`opts` is required and carries `bound` in milliseconds, as `CallOptions` does
+without `signal`: a stream method does not read a signal, and a stream ends by
+cancelling the reader or aborting the upload. The methods return:
 
 - Reply only: `ReadableStream<T>`.
 - Command with one upload:
@@ -218,13 +221,12 @@ of `{ no, form, element? }`: reply 0 precedes parameter 1, `form` is `bytes`,
 `text` or `elements`, and only `elements` carries a `PayloadCodec`. The request
 contains non-stream parameters only.
 
-The collision checker registers the complete exported function name as well as
-`StreamSession`, `StreamOptions`, `CatalogMismatch`, `CodecError`,
-`StreamError`, `checkStreamSession`, `encodeStreamRequest`, any
-`decodeStreamReply` helper and the adapters the file uses. A collision is a
-generation error naming both sources; the generator does not silently rename
-public functions. Private parameter and table-capture bindings are allocated
-without changing public names.
+The collision checker registers each stream member's method name in its client
+class, with the names the class declares for another purpose and the methods
+that other members generate. A collision is a generation error naming both
+sources; the generator does not silently rename public methods. Private
+parameter and table-capture bindings are allocated without changing public
+names.
 
 Stream TSDoc renders the interaction's model doc, links, canonical interaction
 rule texts, `@see`, `@since` and `@deprecated`, then model-derived `@param` tags
@@ -241,21 +243,23 @@ rule. An oversized code point or encoded named element fails locally as corrupt;
 a named encoding is never split. Empty byte and text writes remain valid chunks.
 Named `bytes` and `string` types remain whole named elements.
 
-**D-20. Local errors are distinct from transport errors.** `StreamError.failure`
-is `{ category: "corrupt" }` for malformed bytes, an oversized encoding, or any
-other exception a generated `encode` or `decode` throws, or
+**D-20. Local errors are distinct from transport errors.** A local failure is a
+`CallError`; `StreamError` of the runtime is the same class under its earlier
+name. Its `failure` is `{ category: "corrupt" }` for malformed bytes, an
+oversized encoding, or any other exception a generated `encode` or `decode`
+throws, or
 `{ category: "contract", contract: { category:
 "invalid-value", rule } }` for a
 constraint or UTF-8 violation, including a `RuleError` a generated `encode` or
 `decode` throws and the `ConstraintError` with rule `utf8` that a generated
 `encode` throws for a string that is not well-formed. The original exception is
 kept as the `cause`. Remote errors retain their original object identity.
-`CatalogMismatch` and `UnknownPayloadType` are setup errors before request
-transmission. `CodecError` also reports invalid codec ABI or verifier metadata.
+`CatalogMismatch` and `UnknownPayloadType` are setup errors of `bind`, before
+any request. `CodecError` also reports invalid codec ABI or verifier metadata.
 Normal pipe cancellation interrupts the raw call when decoding fails; it does
 not invent an outbound contract frame. An upload adapter failure errors the
-local writer with `StreamError` and aborts the transport. A duplex reply then
-fails with the transport's interruption, rather than that local `StreamError`.
+local writer with `CallError` and aborts the transport. A duplex reply then
+fails with the transport's interruption, rather than that local `CallError`.
 Explicit upload abort preserves the supplied reason on the native writer; the
 other direction reports transport interruption.
 
