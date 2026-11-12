@@ -267,7 +267,9 @@ export function connect(
     first = attach(
       FRAME_VERSION,
       encodingTag(options.encoding ?? "proto3"),
-      options.catalog.hash,
+      // A copy, so that the frame and `catalogHash` hold the same bytes even
+      // if the caller changes its buffer before the connection opens.
+      new Uint8Array(options.catalog.hash),
       options.catalog.name,
     );
   } catch (e) {
@@ -530,7 +532,7 @@ export class Session {
   #limits: Map<string, number>;
   /** The kind of each member the generated tables hold, keyed `iface:ord`. */
   #kinds: Map<string, Kind>;
-  /** A copy of the catalog hash, taken when the session was created. */
+  /** A copy of the catalog hash, taken when `connect` was called. */
   #catalogHash: Uint8Array;
   /** The `watch` listeners of each signal, keyed `iface:ord`. */
   #watchers = new Map<string, Set<Registration<(sample: Sample) => void>>>();
@@ -560,7 +562,7 @@ export class Session {
     this.#options = options;
     this.#limits = recordedLimits(options.interfaces);
     this.#kinds = recordedKinds(options.interfaces);
-    this.#catalogHash = new Uint8Array(options.catalog.hash);
+    this.#catalogHash = new Uint8Array(attachFrame.hash);
     for (const entry of options.checks ?? []) {
       this.#checks.set(channel(entry.iface, entry.ord), entry.check);
     }
@@ -765,7 +767,7 @@ export class Session {
 
   /**
    * The 32-byte hash of the catalog this session is attached to: the hash
-   * given to {@link connect}, as it was when the session was created. Each
+   * given to {@link connect}, as it was when `connect` was called. Each
    * read returns a new copy.
    */
   get catalogHash(): Uint8Array {

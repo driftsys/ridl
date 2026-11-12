@@ -488,10 +488,11 @@ The catalog and its hash are described in
 `ridl build --emit typescript` writes the domain types of a package as one `.ts`
 file: branded scalars, interfaces, enums, enum sets, discriminated unions and
 init functions. This domain module has no interaction face or feature selection.
-The optional codec module also emits one client class per interface, with
-methods for its commands, queries, signals, events and supported stream members.
-A `fixed` member, and a few signals and queries, have a table entry and no
-method; [the codec table record][codec-table] lists them.
+The optional codec module also emits a client class for each interface that has
+a member with a method, with methods for its commands, queries, signals, events
+and supported stream members. An `internal` interface and an interface with no
+such member get no class. A `fixed` member, and a few signals and queries, have
+a table entry and no method; [the codec table record][codec-table] lists them.
 
 A workspace that declares a `system` also writes `__ridl_instances.ts`, which
 exports an `instances` object with `as const` literal types. Import it from that
@@ -511,15 +512,15 @@ package that its interfaces name) or a supported stream interaction: one
 `encode<Name>` and one `decode<Name>` function per payload type, which take and
 return the plain objects of `<base>.ts` and call the object API that `flatc`
 generates; one table per interface, which gives each interaction its interface
-number, its ordinal, its kind and the functions of its payloads; one client
-class per interface, `<Interface>Client`, and stream metadata for supported
-stream interactions; for a package with a signal that has a table entry,
-`signalChecks(codec)`, which returns one `SignalCheckEntry` of
-`@driftsys/ridl-runtime` per signal that has a table entry, for a program that
-uses the transport without a client class; and the catalog's name and hash, the
-payload type names and the rule texts that the wasm codec takes at load. `ridl`
-does not run `flatc`. For a package with two or more name components, build the
-files in two steps:
+number, its ordinal, its kind and the functions of its payloads; a client class,
+`<Interface>Client`, for each interface that has a member with a method, and
+stream metadata for supported stream interactions; for a package with a signal
+that has a table entry, `signalChecks(codec)`, which returns one
+`SignalCheckEntry` of `@driftsys/ridl-runtime` per signal that has a table
+entry, for a program that uses the transport without a client class; and the
+catalog's name and hash, the payload type names and the rule texts that the wasm
+codec takes at load. `ridl` does not run `flatc`. For a package with two or more
+name components, build the files in two steps:
 
 ```sh
 ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
@@ -576,11 +577,12 @@ that names both. An internal payload type has no `encode`/`decode`, because
 
 ### Calling generated clients
 
-Each interface has a client class, `<Interface>Client`, in the codec module. A
-program loads the wasm codec, connects a transport, and binds the class to both
-with `<Interface>Client.bind(port, codec)`. The port is any object that
-implements the consumer ports of `@driftsys/ridl-runtime` that the interface's
-members need: `Caller` for a command or a query, `SignalReader` for a signal,
+Each interface that has a member with a method has a client class,
+`<Interface>Client`, in the codec module. A program loads the wasm codec,
+connects a transport, and binds the class to both with
+`<Interface>Client.bind(port, codec)`. The port is any object that implements
+the consumer ports of `@driftsys/ridl-runtime` that the interface's members
+need: `Caller` for a command or a query, `SignalReader` for a signal,
 `EventSource` for an event and `StreamCaller` for a stream member. An interface
 with only signals binds over a port that implements `SignalReader` alone. The
 `Session` of `@driftsys/ridl-transport-ws` implements all four. Neither the
@@ -664,11 +666,15 @@ sample at once and returns the init sample before the first publish;
 `readTemperature` waits for the next publish; `watchTemperature` calls the
 listener for every accepted publish and returns the function that removes it.
 `subscribeTemperature` rejects with a `CallError` of the category `down` when
-the session has ended.
+the session has ended. The client has no method that unsubscribes a signal; call
+`session.unsubscribe(iface, ord)` on the session, which also clears the held
+sample.
 
 **Events.** `onEvent` registers one listener for every subscribed event of the
 interface and delivers a union discriminated by `event`. An occurrence that the
-port or the verification refused has `detected` set and no `value`.
+port or the verification refused has `detected` set and no `value`. The client
+has no method that unsubscribes an event; call `session.unsubscribe(iface, ord)`
+on the session.
 
 [The codec table design record][codec-table] gives the rules in full.
 
@@ -679,11 +685,14 @@ A stream member is a method of the interface's client class,
 non-stream parameters in declaration order and `{ bound: number }` options, in
 milliseconds. As for a call, the bound defaults to the maximum response time
 that the member declares, and `opts` is optional then; a member with no usable
-maximum requires `opts.bound`. The bound ends at the first element or at the end
-of the stream. A stream method does not read an abort signal, and a stream ends
-when its reader is cancelled or its upload is aborted. Load the matching wasm
-codec and connect the byte transport, then bind the client to the transport and
-the codec with `<Interface>Client.bind(port, codec)`. The port is a
+maximum requires `opts.bound`. For a reply stream the bound starts at the
+request and ends at the first element or at the end of the stream, not at the
+end of the transfer; for a query with an upload and a plain reply it starts when
+the upload closes, and for a command with an upload it ends when the provider
+accepts the command. A stream method does not read an abort signal, and a stream
+ends when its reader is cancelled or its upload is aborted. Load the matching
+wasm codec and connect the byte transport, then bind the client to the transport
+and the codec with `<Interface>Client.bind(port, codec)`. The port is a
 `StreamCaller` of `@driftsys/ridl-runtime`. Generated code and the runtime do
 not depend on the WebSocket package; its `Session` is a `StreamCaller`.
 
@@ -892,7 +901,8 @@ The call methods, the stream methods and the held-sample method of a signal
 (`temperature()`) in the codec module's client classes also carry the
 interaction's model-derived documentation, canonical rules, `@see`, `@since` and
 `@deprecated`. For a stream member, non-stream parameters use `@param`;
-stream-parameter documentation and parameter rules are not rendered. The
+stream-parameter documentation and parameter rules are not rendered. For a
+command or a query, each `@param` also lists the rules of its parameter. The
 [codec table record](../design/ts-codec-table.md#stream-functions) describes the
 generated stream TSDoc. Private codec helpers carry no facade docs.
 

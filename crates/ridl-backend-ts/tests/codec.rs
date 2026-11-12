@@ -1558,6 +1558,73 @@ fn an_internal_interface_gets_no_client_class() {
     assert!(!source.contains("class SensorsClient"), "{source}");
 }
 
+/// A parameter with both a doc and rules gets its doc, a line break, then its
+/// rules, in one `@param` tag.
+///
+/// Mutation: drop the line break between the doc and `Rules:` in `call_docs`,
+/// or clear the doc there.
+#[test]
+fn a_param_with_a_doc_and_rules_lists_both() {
+    let mut model = cabin_model();
+    let level = interface(&mut model, "Cabin")
+        .slots
+        .iter_mut()
+        .filter_map(|slot| match &mut slot.occupant {
+            Some(v1::interaction_slot::Occupant::Interaction(i)) => Some(i),
+            _ => None,
+        })
+        .find(|i| i.name.as_ref().is_some_and(|n| n.declared == "setLevel"))
+        .and_then(|i| match &mut i.shape {
+            Some(v1::interaction::Shape::Command(c)) => c.params.first_mut(),
+            _ => None,
+        })
+        .expect("setLevel has a parameter");
+    assert!(!level.rules.is_empty());
+    level.doc = "The level.".to_string();
+    let source = module(&model, "veh.cabin");
+    assert!(
+        source.contains("   * @param level - The level.\n   * Rules:\n   * - range 0 ..= 100\n"),
+        "{source}"
+    );
+}
+
+/// An interface with only events binds over `EventSource` alone.
+///
+/// Mutation: add `SignalReader` to the port list of an event-only interface in
+/// `emit_client`.
+#[test]
+fn an_event_only_interface_binds_over_an_event_source() {
+    let mut model = common_model();
+    interface(&mut model, "Sensors").slots.retain(|slot| {
+        matches!(
+            &slot.occupant,
+            Some(v1::interaction_slot::Occupant::Interaction(i)) if i.kind() == v1::Kind::Event
+        )
+    });
+    let source = module(&model, "veh.common");
+    assert!(
+        source.contains(
+            "static bind<P extends $rt.EventSource>(port: P, codec: $rt.Codec): SensorsClient"
+        ),
+        "{source}"
+    );
+}
+
+/// An internal interface with a stream member gets no client class and no
+/// table entry for the stream, as one with a command does.
+///
+/// Mutation: drop the internal-interface test of `discover_stream`.
+#[test]
+fn an_internal_interface_with_a_stream_gets_no_client_class() {
+    let mut model = streams_model();
+    let visible = module(&model, "streams.demo");
+    assert!(visible.contains("class FeedClient"), "{visible}");
+    interface(&mut model, "Feed").visibility = v1::Visibility::Internal as i32;
+    let source = module(&model, "streams.demo");
+    assert!(!source.contains("class FeedClient"), "{source}");
+    assert!(!source.contains("  scalars:"), "{source}");
+}
+
 /// A call whose payload has no finite bound has no table entry and no method,
 /// and the class says why.
 ///

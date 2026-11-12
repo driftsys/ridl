@@ -853,7 +853,7 @@ export class SensorsClient {
    * Rules:
    * - period 100000 us
    *
-   * @returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   latest(): $rt.Sample<t.SensorReading> {
     const raw = this.#port.sample(Sensors.latest.iface, Sensors.latest.ord);
@@ -886,6 +886,14 @@ export class SensorsClient {
    * Rules:
    * - response within 50000 us
    *
+   * @param limit - Rules:
+   * - range 0 ..= 250
+   * - step 0.5
+   * - unit km/h
+   * @param actual - Rules:
+   * - range 0 ..= 250
+   * - step 0.5
+   * - unit km/h
    * @param opts - The bound defaults to the declared maximum response time, 50 ms. `opts.signal` aborts the call; a provider that already received the command may still run it.
    * @returns Resolves when the provider accepted the command.
    */
@@ -899,6 +907,9 @@ export class SensorsClient {
    * Rules:
    * - response within 100000 us
    *
+   * @param name - Rules:
+   * - length 1 ..= 128
+   * - pattern `/^[\x20-\x7E]+$/`
    * @param opts - The bound defaults to the declared maximum response time, 100 ms. `opts.signal` aborts the call.
    */
   async profile(name: ridl_std.Name, opts?: Partial<$rt.CallOptions>): Promise<t.DriverProfile> {
@@ -930,7 +941,7 @@ export class SensorsClient {
    * Rules:
    * - period 1000000 us
    *
-   * @returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   setting(): $rt.Sample<t.Setting> {
     const raw = this.#port.sample(Sensors.setting.iface, Sensors.setting.ord);
@@ -958,7 +969,7 @@ export class SensorsClient {
    * Rules:
    * - period 1000000 us
    *
-   * @returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   note(): $rt.Sample<t.Note> {
     const raw = this.#port.sample(Sensors.note.iface, Sensors.note.ord);
@@ -986,7 +997,7 @@ export class SensorsClient {
    * Rules:
    * - period 1000000 us
    *
-   * @returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   pick(): $rt.Sample<t.Pick> {
     const raw = this.#port.sample(Sensors.pick.iface, Sensors.pick.ord);

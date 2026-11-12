@@ -1272,7 +1272,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   scalars(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Count> {
     const entry = streamEntry2;
@@ -1291,7 +1291,7 @@ export class FeedClient {
    * - response within 50000 us
    *
    * @param seed - The first sequence number.
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    * @since 1.0.0
    * @deprecated Use scalars.
    */
@@ -1314,7 +1314,7 @@ export class FeedClient {
    * @param session - The session number.
    * @param session1 - A second number.
    * @param opts1 - A selection.
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   unions(session: t.Count, session1: t.Count, opts1: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Choice> {
     const entry = streamEntry4;
@@ -1332,7 +1332,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   statuses(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.StatusValue> {
     const entry = streamEntry5;
@@ -1350,7 +1350,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   data(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Data> {
     const entry = streamEntry6;
@@ -1368,7 +1368,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   labels(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Text> {
     const entry = streamEntry7;
@@ -1386,7 +1386,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   readBytes(seed: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry8;
@@ -1402,7 +1402,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   text(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<string> {
     const entry = streamEntry9;
@@ -1418,7 +1418,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   zero(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry10;
@@ -1449,7 +1449,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends when the provider accepts the command. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   upload(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
     const entry = streamEntry11;
@@ -1466,7 +1466,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   duplex(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; stream: ReadableStream<t.Chunk> } {
     const entry = streamEntry12;
@@ -1488,7 +1488,7 @@ export class FeedClient {
    *
    * @param seed - The first {@link t.Count}.
    * @param tail - The last {@link t.Count}.
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   duplexNamed(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; stream: ReadableStream<t.Chunk> } {
     const entry = streamEntry13;
@@ -1510,7 +1510,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   duplexText(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<string>; stream: ReadableStream<string> } {
     const entry = streamEntry14;
@@ -1528,7 +1528,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   duplexBytes(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; stream: ReadableStream<Uint8Array> } {
     const entry = streamEntry15;
@@ -1548,7 +1548,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry16;
@@ -1566,7 +1566,7 @@ export class FeedClient {
    *
    * @param seed - The first {@link t.Count}.
    * @param tail - The last {@link t.Count}.
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends when the provider accepts the command. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    * @see {@link t.Count}
    */
   uploadNamed(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; accepted: Promise<void> } {
@@ -1586,7 +1586,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends when the provider accepts the command. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   uploadData(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Data>; accepted: Promise<void> } {
     const entry = streamEntry18;
@@ -1605,7 +1605,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends when the provider accepts the command. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   uploadText(seed: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<string>; accepted: Promise<void> } {
     const entry = streamEntry19;
@@ -1622,7 +1622,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts when the upload closes and ends at the reply. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   uploadChoice(seed: t.Count, tail: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Chunk>; reply: Promise<t.UploadResult> } {
     const entry = streamEntry20;
@@ -1642,7 +1642,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts when the upload closes and ends at the reply. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   uploadTuple(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; reply: Promise<FeedUploadTupleReply> } {
     const entry = streamEntry21;
@@ -1660,7 +1660,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends when the provider accepts the command. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   uploadLabel(label: t.Text, opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<Uint8Array>; accepted: Promise<void> } {
     const entry = streamEntry22;
@@ -1677,7 +1677,7 @@ export class FeedClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   duplexMixed(opts?: Partial<Omit<$rt.CallOptions, "signal">>): { upload: WritableStream<t.Data>; stream: ReadableStream<t.Chunk> } {
     const entry = streamEntry23;
@@ -1704,7 +1704,7 @@ export class FeedClient {
    * Rules:
    * - period 1000000 us
    *
-   * @returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   newest(): $rt.Sample<t.Chunk> {
     const raw = this.#port.sample(Feed.newest.iface, Feed.newest.ord);
@@ -1768,7 +1768,7 @@ export class OtherClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry24;
@@ -1819,7 +1819,7 @@ export class sessionClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry32;
@@ -1870,7 +1870,7 @@ export class optsClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry29;
@@ -1921,7 +1921,7 @@ export class entryClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry28;
@@ -1972,7 +1972,7 @@ export class argsClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry25;
@@ -2023,7 +2023,7 @@ export class rawClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry30;
@@ -2074,7 +2074,7 @@ export class elementClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Chunk> {
     const entry = streamEntry26;
@@ -2127,7 +2127,7 @@ export class requestTypeClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry31;
@@ -2178,7 +2178,7 @@ export class elementTypeClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<t.Chunk> {
     const entry = streamEntry27;
@@ -2231,7 +2231,7 @@ export class streamEntryClient {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry33;
@@ -2282,7 +2282,7 @@ export class streamEntry1Client {
    * Rules:
    * - response within 50000 us
    *
-   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
+   * @param opts - The bound defaults to the declared maximum response time, 50 ms. The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call.
    */
   fetch(streamEntry13: t.Count, streamEntry14: t.Count, opts?: Partial<Omit<$rt.CallOptions, "signal">>): ReadableStream<Uint8Array> {
     const entry = streamEntry34;

@@ -73,7 +73,10 @@ export interface Sample<T> {
    * is never absent.
    */
   readonly value: T;
-  /** Set when the port itself invalidated the sample; see {@link RawSample.detected}. */
+  /**
+   * Set when the port invalidated the sample (see {@link RawSample.detected})
+   * or the verification of its payload failed.
+   */
   readonly detected?: Detection;
 }
 
@@ -87,7 +90,10 @@ export interface Occurrence<T> {
   readonly envelope: Envelope;
   /** The decoded value; absent when the port refused the occurrence (`detected` is set). */
   readonly value?: T;
-  /** Set when the port refused the value; see {@link RawOccurrence.detected}. */
+  /**
+   * Set when the port refused the value (see {@link RawOccurrence.detected})
+   * or its verification failed.
+   */
   readonly detected?: "corrupt";
 }
 
@@ -97,7 +103,11 @@ export interface Attached {
   readonly catalogHash: Uint8Array;
 }
 
-/** Sends commands and queries as bytes and returns the reply bytes. */
+/**
+ * Sends commands and queries as bytes and returns the reply bytes. A port
+ * refuses a request that is longer than the limit of its member: the
+ * generated client passes no limit, so the check is the port's job.
+ */
 export interface Caller extends Attached {
   /**
    * Sends a command and resolves when the provider accepted it. Aborting after

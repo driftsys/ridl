@@ -1,4 +1,5 @@
-//! The codec module `<base>.codec.ts`, written from the codegen model only.
+//! The codec module `<base>.codec.ts`, written from the codegen model and, only
+//! to learn which `init<Name>` functions `<base>.ts` exports, the IR package.
 //!
 //! The module wraps the object API that `flatc --ts --gen-object-api` writes
 //! for the package's `.fbs` in plain-object functions: one
@@ -2380,6 +2381,12 @@ impl<'a> Codec<'a> {
         interaction: &'a v1::Interaction,
         name: &str,
     ) -> Result<(), GenerateError> {
+        // A member of an internal interface has no method, as for
+        // `discover_call`. Its stream loses its table entry too; a member of
+        // another shape keeps its entry.
+        if interface.visibility() == v1::Visibility::Internal {
+            return Ok(());
+        }
         let member = interaction
             .name
             .as_ref()
@@ -2614,8 +2621,10 @@ impl<'a> Codec<'a> {
     /// encodes and verifies whole named elements, and splits raw bytes or text
     /// at the member limit. The bound defaults as it does for a call: to
     /// the declared maximum response time when the member has a usable one,
-    /// and the caller must pass it otherwise. It ends at the first element or
-    /// at the end of the stream, not at the end of the transfer.
+    /// and the caller must pass it otherwise. For a reply stream it ends at
+    /// the first element or at the end of the stream, not at the end of the
+    /// transfer; for an upload with a plain reply it starts when the upload
+    /// closes, and for an upload of a command it ends at the acceptance.
     fn emit_stream_method(&self, out: &mut String, member: &str, stream: &StreamCall<'a>) {
         let params = stream
             .bindings
@@ -2637,8 +2646,17 @@ impl<'a> Codec<'a> {
             ),
         };
         signature.push(opts_param.to_string());
+        let ends = if stream.upload && stream.duplex_reply.is_none() {
+            if stream.reply.is_some() {
+                "The bound starts when the upload closes and ends at the reply."
+            } else {
+                "The bound starts at the request and ends when the provider accepts the command."
+            }
+        } else {
+            "The bound starts at the request and ends at the first element of the reply stream or at its end, not at the end of the transfer."
+        };
         let extra = vec![format!(
-            "@param opts - {note} The bound ends at the first element or at the end of the stream. A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call."
+            "@param opts - {note} {ends} A stream method does not read `opts.signal`: cancel the returned stream, or abort the upload, to end the call."
         )];
         out.push('\n');
         out.push_str(&self.call_docs(
@@ -2647,6 +2665,7 @@ impl<'a> Codec<'a> {
             &stream.bindings,
             "  ",
             &extra,
+            false,
         ));
         let returns = if stream.upload {
             let result = if let Some(reply) = &stream.duplex_reply {
@@ -2770,7 +2789,9 @@ impl<'a> Codec<'a> {
     }
 
     /// The doc comment of a call: the member's doc, its parameter tags, then
-    /// `extra` tags, indented by `indent`.
+    /// `extra` tags, indented by `indent`. With `param_rules`, each parameter
+    /// tag also lists the rules of its parameter; a stream method passes
+    /// `false`.
     fn call_docs(
         &self,
         i: &v1::Interaction,
@@ -2778,6 +2799,7 @@ impl<'a> Codec<'a> {
         bindings: &[String],
         indent: &str,
         extra: &[String],
+        param_rules: bool,
     ) -> String {
         let parts = crate::TsDocParts {
             doc: &i.doc,
@@ -2790,7 +2812,17 @@ impl<'a> Codec<'a> {
         self.with_doc_ctx(|ctx| {
             let mut tags = Vec::new();
             for (param, binding) in params.iter().zip(bindings) {
-                let doc = crate::linked(ctx, &param.doc, &param.links);
+                let mut doc = crate::linked(ctx, &param.doc, &param.links);
+                if param_rules && !param.rules.is_empty() {
+                    if !doc.is_empty() {
+                        doc.push('\n');
+                    }
+                    doc.push_str("Rules:");
+                    for rule in &param.rules {
+                        doc.push_str("\n- ");
+                        doc.push_str(&rule.text);
+                    }
+                }
                 if !doc.is_empty() {
                     tags.push(format!("@param {binding} - {doc}"));
                 }
@@ -3204,6 +3236,7 @@ impl<'a> Codec<'a> {
                         &call.bindings,
                         "  ",
                         &extra,
+                        true,
                     ));
                     let returns = call.reply_type.as_deref().unwrap_or("void");
                     let _ = writeln!(
@@ -3314,9 +3347,10 @@ impl<'a> Codec<'a> {
             &[],
             "  ",
             &[
-                "@returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set."
+                "@returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text."
                     .to_string(),
             ],
+            false,
         ));
         let _ = writeln!(
             out,

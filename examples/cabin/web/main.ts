@@ -16,22 +16,23 @@
 // and `subscribe` each have a bound of 10 s, and binds `CabinClient` to the
 // session. Through the client it sends `setLevel` with 30 and with 51, calls
 // `average` and fails unless the reply is 40 (the server answers with the mean
-// of the levels it received, rounded down: 40.5), then subscribes to the `temperature` signal and
-// watches it. The server steps the value through the whole range of
-// `Temperature` and starts again at the lowest value. The transport may
-// coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
-// expect every step. It exits with status 0 only if every value is inside
-// [-40..85], every received value is 1 to 63 steps ahead of the previous one
-// on the ring of the 126 values (85 is followed by -40; a repeated value is
-// ignored), 85 is reached by such a step, and -40 is seen after 85 (the first
-// sample counts for neither bound). Otherwise it exits with a non-zero status
-// and names the cause and the stage. One deadline, counted from the start of
-// the program, covers every stage including the exit of the server. A server
-// that exits or a connection that closes before the end of the check fails the
-// program at once. It prints the number of samples it received, the number of
-// wraps (a step from 85 to -40 or across it), whether 85 was seen, and whether
-// -40 was seen after 85. A sample that the client marks as invalid, a check
-// that throws, or a call that rejects fails the program with the cause.
+// of the levels it received, rounded down: 40.5), then subscribes to the
+// `temperature` signal and watches it. The server steps the value through the
+// whole range of `Temperature` and starts again at the lowest value. The
+// transport may coalesce samples (docs/design/ridl-transport-ws.md), so the
+// program does not expect every step. It exits with status 0 only if every
+// value is inside [-40..85], every received value is 1 to 63 steps ahead of the
+// previous one on the ring of the 126 values (85 is followed by -40; a repeated
+// value is ignored), 85 is reached by such a step, and -40 is seen after 85
+// (the first sample counts for neither bound). Otherwise it exits with a
+// non-zero status and names the cause and the stage. One deadline, counted from
+// the start of the program, covers every stage including the exit of the
+// server. A server that exits or a connection that closes before the end of the
+// check fails the program at once. It prints the number of samples it received,
+// the number of wraps (a step from 85 to -40 or across it), whether 85 was
+// seen, and whether -40 was seen after 85. A sample that the client marks as
+// invalid, a check that throws, or a call that rejects fails the program with
+// the cause.
 
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
 import { connect } from "../../../packages/ridl-transport-ws/mod.ts";

@@ -72,9 +72,10 @@ platform's `WebSocket` supports it). It is not yet published to JSR (D-3).
 written from the specification alone and this one behave differently against the
 same server; test its codec only against itself, so that a wrong constant
 cancels out in a round trip; reach for a Deno-only or Node-only API in its own
-code; pull a runtime dependency into a consumer's build; or hide a failure: a
-refused `attach`, a protocol violation, a lost occurrence or a call with no
-outcome is reported, never dropped silently.
+code; pull a runtime dependency into a consumer's build beyond the one that D-4
+records, `@driftsys/ridl-runtime`; or hide a failure: a refused `attach`, a
+protocol violation, a lost occurrence or a call with no outcome is reported,
+never dropped silently.
 
 ## The package and its dependencies
 
@@ -146,7 +147,7 @@ need that version on the registry.
 | `src/session.ts`    | `connect` and the `Session` class: the consumer's state machine over one `WebSocket`                                                |
 | `src/calls.ts`      | the calls in flight of one session (`Calls`, not exported from `mod.ts`): the caller counter, the bounds and the correlation        |
 | `src/duplex.ts`     | `DuplexCall`: the two stream states of one duplex query, its credit and sequence counters and its first-reply bound                 |
-| `src/errors.ts`     | the errors a session rejects with: `AttachRefused`, `ProtocolError`, `SessionError` and its `CallFailure`                           |
+| `src/errors.ts`     | the errors a session rejects with: `AttachRefused`, `ProtocolError` and `SessionError`, and the re-export of `CallFailure`          |
 | `mod.ts`            | the public exports: everything exported by `frame.ts`, `errors.ts` and `session.ts`                                                 |
 
 `src/calls.ts` was split out of `session.ts` during implementation, to keep the

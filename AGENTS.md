@@ -19,7 +19,8 @@ layout), `ridl-diff`, `ridl-fmt`, `ridl-rt`, `ridl-loopback`,
 repository), and `ridlc-gen-model` and `ridlc-gen-rust` (the reference codegen
 plugins, test-only) — plus `xtask` at the root, `packages/` (the TypeScript
 packages; `packages/ridl-transport-ws` is the Deno and browser client of the
-WebSocket binding, and `packages/ridl-runtime` loads the generated wasm codec),
+WebSocket binding, and `packages/ridl-runtime` loads the generated wasm codec
+and holds the port interfaces and call helpers of the generated client classes),
 the `editors/vscode` extension, `skills/` (the `ridl-authoring` agent skill,
 which the extension and the editor release package), `evals/` (the public
 corpus, the calibration records and the eval tasks for design evaluation, which
@@ -321,8 +322,9 @@ member; rsdl is the apex.
                          reason as ts-browser-e2e
     just ts-npm-check    build packages/ridl-runtime and packages/ridl-transport-ws
                          into npm packages with dnt, verify the built manifest and tarball,
-                         install the tarball in a temporary directory, and
-                         import it by name from Node. Needs deno, node and npm
+                         install a tarball in a temporary directory (the
+                         transport's script installs the runtime's tarball too),
+                         and import the package by name from Node. Needs deno, node and npm
                          on PATH and network access. Not a member of pre-push.
                          .github/workflows/npm-release.yml publishes the
                          packages to npm on a v* tag

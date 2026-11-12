@@ -318,7 +318,7 @@ export class CabinClient {
    * Rules:
    * - period 10000 us
    *
-   * @returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   temperature(): $rt.Sample<t.Temperature> {
     const raw = this.#port.sample(Cabin.temperature.iface, Cabin.temperature.ord);
@@ -349,6 +349,8 @@ export class CabinClient {
    * - response within 50000 us
    * - require `level < 100`
    *
+   * @param level - Rules:
+   * - range 0 ..= 100
    * @param opts - The bound defaults to the declared maximum response time, 50 ms. `opts.signal` aborts the call; a provider that already received the command may still run it.
    * @returns Resolves when the provider accepted the command.
    */
@@ -366,6 +368,8 @@ export class CabinClient {
    * - require `window > 0`
    * - ensure `result >= 0`
    *
+   * @param window - Rules:
+   * - range 0 ..= 100000
    * @param opts - The bound defaults to the declared maximum response time, 200 ms. `opts.signal` aborts the call.
    */
   async average(window: t.Window, opts?: Partial<$rt.CallOptions>): Promise<t.Average> {
@@ -444,7 +448,7 @@ export class HornClient {
    * Rules:
    * - period 10000 us
    *
-   * @returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set.
+   * @returns The held sample at once. After the session ended the session holds no sample, so this method returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set. The method throws the `CodecError` of the codec when the codec fails, for example for an unknown type id or an unknown rule text.
    */
   active(): $rt.Sample<t.Health> {
     const raw = this.#port.sample(Horn.active.iface, Horn.active.ord);

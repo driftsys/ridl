@@ -70,6 +70,38 @@ Deno.test("check_catalog_names_the_holder_of_the_differing_hash", () => {
   );
 });
 
+const toHex = (bytes: Uint8Array) =>
+  [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+Deno.test("check_catalog_reports_the_expected_and_the_actual_hash", () => {
+  const port = assertThrows(() =>
+    checkCatalog(hash, { catalogHash: other }, codecWith({ ok: true }))
+  );
+  assertInstanceOf(port, CatalogMismatch);
+  assertEquals(port.expected, toHex(hash));
+  assertEquals(port.actual, toHex(other));
+  const wasm = assertThrows(() =>
+    checkCatalog(hash, { catalogHash: hash }, codecWith({ ok: true }, other))
+  );
+  assertInstanceOf(wasm, CatalogMismatch);
+  assertEquals(wasm.expected, toHex(hash));
+  assertEquals(wasm.actual, toHex(other));
+});
+
+Deno.test("a_call_error_message_names_the_category_and_the_contract_category", () => {
+  assertEquals(
+    new CallError({ category: "timeout" }).message,
+    "call failed: timeout",
+  );
+  assertEquals(
+    new CallError({
+      category: "contract",
+      contract: { category: "invalid-value", rule: "range" },
+    }).message,
+    "call failed: contract, invalid-value",
+  );
+});
+
 Deno.test("encode_request_maps_a_failed_verification_to_a_call_error", () => {
   assertEquals(
     encodeRequest(codecWith({ ok: true }), bytesCodec(), 0, 7),
@@ -353,6 +385,24 @@ Deno.test("decode_sample_rejects_an_unknown_rule_text", () => {
   const unknown: Codec = {
     ...rejectNine,
     verify: () => ({ ok: false, kind: "rule", code: 9, rule: "mystery" }),
+  };
+  assertThrows(
+    () =>
+      decodeSample(
+        unknown,
+        bytesCodec(),
+        0,
+        rawSample({ payload: Uint8Array.of(1) }),
+        () => 0,
+      ),
+    CodecError,
+  );
+});
+
+Deno.test("decode_sample_rejects_an_unknown_type_id", () => {
+  const unknown: Codec = {
+    ...rejectNine,
+    verify: () => ({ ok: false, kind: "unknown-type", code: -1 }),
   };
   assertThrows(
     () =>

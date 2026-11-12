@@ -421,7 +421,11 @@ crate the workspace holds — see `AGENTS.md` for that.
   also holds `ConstraintError` and the helpers behind the generated `make<Name>`
   constructors and the utf8 check of `encode<Name>` (`length.ts`,
   `well_formed.ts`, `step.ts`), the types of the signal checks (`checks.ts`) and
-  the stream adapters. It has no dependency, and
+  the stream adapters. It also holds the port interfaces `Caller`,
+  `SignalReader`, `EventSource` and `StreamCaller` that the generated client
+  classes bind to, `CallError`, and the call helpers the generated methods use
+  (`checkCatalog`, `encodeRequest`, `decodeReply`, `decodeSample`,
+  `decodeOccurrence`, `initSample`). It has no dependency, and
   `.github/workflows/npm-release.yml` publishes it to npm on a `v*` tag. Deno
   builds and tests it (`just ts-check`, `just ts-npm-check`), and the version in
   its `deno.json` follows the workspace version.

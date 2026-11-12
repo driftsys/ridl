@@ -55,11 +55,14 @@ import {
 } from "./generated/veh.cabin.codec.ts";
 import { makeLevel, makeWindow } from "./generated/veh.cabin.ts";
 
-const codec = await loadCodec(new URL("./generated/veh_cabin.wasm", import.meta.url), {
-  catalogHash: CATALOG_HASH,
-  payloadTypes: PAYLOAD_TYPES,
-  ruleText: RULES,
-});
+const codec = await loadCodec(
+  new URL("./generated/veh_cabin.wasm", import.meta.url),
+  {
+    catalogHash: CATALOG_HASH,
+    payloadTypes: PAYLOAD_TYPES,
+    ruleText: RULES,
+  },
+);
 const session = await connect("ws://127.0.0.1:9000", {
   catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
   encoding: "flatbuffers",
