@@ -1033,7 +1033,7 @@ one stream parameter and a plain or named-element streamed reply. These forms
 run over `ridl-loopback`. The WebSocket server's upload support is recorded in
 [D-30](../design/ridl-transport-ws.md); the TypeScript transport methods and
 their limits are recorded in [D-23](../design/ridl-transport-ws-ts.md). Typed
-TypeScript stream functions are also emitted by the optional codec module; see
+TypeScript stream methods are also emitted by the optional codec module; see
 [Calling generated streams](generated-code.md#calling-generated-streams). A call
 with two or more stream parameters is left out of an otherwise emitted face
 without a note, while its descriptor row is still written (driftsys/ridl#1224).
@@ -1115,10 +1115,9 @@ call, and turns the `wasm` module on when `[backend.rust]` writes no `wasm` key.
 A written `wasm = false`, and a manifest with no `[backend.rust]` table, are
 MANI-019. `[backend.rust] encodings` must still name `flatbuffers`, and the Rust
 backend refuses an implied `wasm` module otherwise. The codec module includes
-typed stream functions and stream metadata for supported interactions, in
-addition to payload converters and interface tables. The application runs
-`flatc` and builds and loads the matching Rust wasm codec; `ridl build` does not
-run `flatc`.
+stream methods and stream metadata for supported interactions, in addition to
+payload converters and interface tables. The application runs `flatc` and builds
+and loads the matching Rust wasm codec; `ridl build` does not run `flatc`.
 [Calling generated streams](generated-code.md#calling-generated-streams) gives
 the setup, return shapes and remaining limits.
 

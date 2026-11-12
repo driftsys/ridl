@@ -1,12 +1,12 @@
 import { assertEquals, assertRejects, assertStrictEquals } from "@std/assert";
 import {
   byteUpload,
+  CallError,
   CodecError,
   ConstraintError,
   decodeStream,
   decodeTextStream,
   encodeUpload,
-  StreamError,
   textUpload,
   type VerifyResult,
 } from "../mod.ts";
@@ -35,7 +35,7 @@ Deno.test("decodes_64_verified_elements", async () => {
 });
 
 Deno.test("invalid_payload_never_reaches_decode", async (t) => {
-  const cases: { result: VerifyResult; failure?: StreamError["failure"] }[] = [
+  const cases: { result: VerifyResult; failure?: CallError["failure"] }[] = [
     {
       result: { ok: false, kind: "malformed", code: 1 },
       failure: { category: "corrupt" },
@@ -78,7 +78,7 @@ Deno.test("invalid_payload_never_reaches_decode", async (t) => {
           () => result,
         )).getReader();
       if (failure) {
-        const error = await assertRejects(() => reader.read(), StreamError);
+        const error = await assertRejects(() => reader.read(), CallError);
         assertEquals(error.failure, failure);
       } else {
         await assertRejects(() => reader.read(), CodecError);
@@ -116,7 +116,7 @@ Deno.test("text_chunks_are_independently_valid_utf8", async (t) => {
           Array.fromAsync(
             ReadableStream.from(chunks).pipeThrough(decodeTextStream()),
           ),
-        StreamError,
+        CallError,
       );
       assertEquals(error.failure, {
         category: "contract",
@@ -149,7 +149,7 @@ Deno.test("transform_cancel_and_error_cancel_upstream", async (t) => {
           () => ({ ok: false, kind: "malformed", code: 1 }),
         )).getReader();
         if (fail) {
-          await assertRejects(() => reader.read(), StreamError);
+          await assertRejects(() => reader.read(), CallError);
         } else {
           await reader.cancel();
         }
@@ -225,7 +225,7 @@ Deno.test("named_upload_is_one_verified_chunk", async () => {
   writer.closed.catch(() => {});
   await writer.write(1);
   await writer.write(2);
-  const error = await assertRejects(() => writer.write(101), StreamError);
+  const error = await assertRejects(() => writer.write(101), CallError);
   assertEquals(error.failure, {
     category: "contract",
     contract: { category: "invalid-value", rule: "range" },
@@ -285,7 +285,7 @@ Deno.test("unrepresentable_text_and_elements_abort", async (t) => {
       const sink = uploadSink();
       const writer = textUpload(sink.upload, limit).getWriter();
       writer.closed.catch(() => {});
-      const error = await assertRejects(() => writer.write(value), StreamError);
+      const error = await assertRejects(() => writer.write(value), CallError);
       assertEquals(
         error.failure,
         category === "contract"
@@ -304,7 +304,7 @@ Deno.test("unrepresentable_text_and_elements_abort", async (t) => {
     3,
   ).getWriter();
   writer.closed.catch(() => {});
-  await assertRejects(() => writer.write(new Uint8Array(4)), StreamError);
+  await assertRejects(() => writer.write(new Uint8Array(4)), CallError);
   assertEquals(sink.chunks.length, 0);
   assertEquals(sink.aborted.length, 1);
 });
@@ -527,7 +527,7 @@ for (const operation of ["decode", "encode"] as const) {
       const fail = () => {
         throw cause;
       };
-      let error: StreamError;
+      let error: CallError;
       if (operation === "decode") {
         error = await assertRejects(
           () =>
@@ -535,13 +535,13 @@ for (const operation of ["decode", "encode"] as const) {
               ReadableStream.from([Uint8Array.of(1)])
                 .pipeThrough(decodeStream(fail, valid)),
             ),
-          StreamError,
+          CallError,
         );
       } else {
         const sink = uploadSink();
         const writer = encodeUpload(sink.upload, fail, valid, 32).getWriter();
         writer.closed.catch(() => {});
-        error = await assertRejects(() => writer.write(1), StreamError);
+        error = await assertRejects(() => writer.write(1), CallError);
         assertStrictEquals(sink.aborted[0], error);
         assertEquals(sink.chunks, []);
       }
@@ -559,7 +559,7 @@ for (const operation of ["decode", "encode"] as const) {
   }
 }
 
-Deno.test("a ConstraintError from encode becomes a utf8 contract StreamError", async () => {
+Deno.test("a ConstraintError from encode becomes a utf8 contract CallError", async () => {
   const cause = new ConstraintError("utf8", "test.Text.label", "\ud83d", "x");
   const sink = uploadSink();
   const writer = encodeUpload(
@@ -571,7 +571,7 @@ Deno.test("a ConstraintError from encode becomes a utf8 contract StreamError", a
     32,
   ).getWriter();
   writer.closed.catch(() => {});
-  const error = await assertRejects(() => writer.write(1), StreamError);
+  const error = await assertRejects(() => writer.write(1), CallError);
   assertEquals(error.failure, {
     category: "contract",
     contract: { category: "invalid-value", rule: "utf8" },
@@ -583,7 +583,7 @@ Deno.test("a ConstraintError from encode becomes a utf8 contract StreamError", a
 Deno.test("named_upload_verification_classification", async (t) => {
   const cases: {
     result: Exclude<VerifyResult, { ok: true }>;
-    failure: StreamError["failure"];
+    failure: CallError["failure"];
   }[] = [
     {
       result: { ok: false, kind: "malformed", code: 1 },
@@ -607,7 +607,7 @@ Deno.test("named_upload_verification_classification", async (t) => {
         5,
       ).getWriter();
       writer.closed.catch(() => {});
-      const error = await assertRejects(() => writer.write(1), StreamError);
+      const error = await assertRejects(() => writer.write(1), CallError);
       assertEquals(error.failure, failure);
       assertEquals(sink.chunks, []);
       assertEquals(sink.aborted.length, 1);
@@ -658,7 +658,7 @@ for (const form of ["bytes", "text"] as const) {
                 new Uint8Array(),
               )
               : (writer as WritableStreamDefaultWriter<string>).write(""),
-          StreamError,
+          CallError,
         );
         assertEquals(error.failure, { category: "corrupt" });
         assertEquals(sink.chunks, []);

@@ -3263,8 +3263,11 @@ _codec-ts-check:
         sed -e "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-runtime/mod.ts#$PWD/packages/ridl-runtime/mod.ts#" -e "s#\.\./\.\./\.\./\.\./\.\./packages/ridl-transport-ws/#$PWD/packages/ridl-transport-ws/#" crates/ridl-backend-ts/tests/fixtures/codec-streams/"$config" > "$streams/$config"
     done
     cp crates/ridl-backend-ts/tests/fixtures/codec-streams/streams_test.ts "$streams/"
-    deno lint --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
-    deno check --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams_test.ts"
+    # The same module with no response bound on its members, for the type test
+    # that a stream method without a declared maximum requires `opts.bound`.
+    cargo run --locked -p ridl-backend-ts --example untimed_fixture -- "$streams/streams.demo.untimed.codec.ts" codec-streams streams.demo streams.demo
+    deno lint --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams.demo.untimed.codec.ts" "$streams/streams_test.ts"
+    deno check --config "$streams/deno.json" "$streams/streams.demo.codec.ts" "$streams/streams.demo.untimed.codec.ts" "$streams/streams_test.ts"
     deno check --config "$streams/generated-only.deno.json" "$streams/streams.demo.codec.ts"
     deno check --config "$streams/browser.deno.json" "$streams/streams.demo.codec.ts"
     deno test --config "$streams/deno.json" "$streams/streams_test.ts"

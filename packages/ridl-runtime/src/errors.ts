@@ -96,26 +96,16 @@ export class CallError extends Error {
   }
 }
 
-/** A locally detected invalid stream payload. */
-export class StreamError extends Error {
-  readonly failure:
-    | { category: "corrupt" }
-    | {
-      category: "contract";
-      contract: { category: "invalid-value"; rule: PayloadRule };
-    };
-
-  constructor(failure: StreamError["failure"], options?: ErrorOptions) {
-    super(
-      failure.category === "contract"
-        ? `invalid stream payload: ${failure.contract.rule}`
-        : "malformed stream payload",
-      options,
-    );
-    this.name = "StreamError";
-    this.failure = failure;
-  }
-}
+/**
+ * A locally detected invalid stream payload. This is `CallError`: a stream
+ * failure has the category `contract` with an `invalid-value` rule, or
+ * `corrupt`, which are two of the categories of a call failure.
+ *
+ * @deprecated Use `CallError`.
+ */
+export const StreamError = CallError;
+/** @deprecated Use `CallError`. */
+export type StreamError = CallError;
 
 /** Thrown when construction of a named scalar breaks a checked constraint. */
 export class ConstraintError extends RangeError {
