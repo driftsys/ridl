@@ -159,11 +159,11 @@ the emitted crate and runs the consumer with a 1,000-byte read buffer, checking
 every returned byte. The
 [WebSocket server](examples/docstore/server/src/main.rs) serves the same
 hand-written implementation of the generated Provider trait. The
-[TypeScript program](examples/docstore/web/main.ts) uses generated functions and
-the wasm verifier to check the byte read-back, 64 indexed named chunks, and a
-concurrent duplex exchange, including cancel and abort propagation.
-`just ts-e2e` builds and runs this program. This example is separate from
-`just demo`.
+[TypeScript program](examples/docstore/web/main.ts) uses the generated client
+class and the wasm verifier to check the byte read-back, 64 indexed named
+chunks, and a concurrent duplex exchange, including cancel and abort
+propagation. `just ts-e2e` builds and runs this program. This example is
+separate from `just demo`.
 
 ## Development
 

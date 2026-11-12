@@ -574,11 +574,12 @@ that names both. An internal payload type has no `encode`/`decode`, because
 
 ### Calling generated clients
 
-Each interface has a client class, `<Interface>Client`, in the codec module. A
-program loads the wasm codec, connects a transport, and binds the class to both
-with `<Interface>Client.bind(port, codec)`. The port is any object that
-implements the consumer ports of `@driftsys/ridl-runtime` that the interface's
-members need: `Caller` for a command or a query, `SignalReader` for a signal,
+Each interface that has a member with a method has a client class,
+`<Interface>Client`, in the codec module. A program loads the wasm codec,
+connects a transport, and binds the class to both with
+`<Interface>Client.bind(port, codec)`. The port is any object that implements
+the consumer ports of `@driftsys/ridl-runtime` that the interface's members
+need: `Caller` for a command or a query, `SignalReader` for a signal,
 `EventSource` for an event and `StreamCaller` for a stream member. An interface
 with only signals binds over a port that implements `SignalReader` alone. The
 `Session` of `@driftsys/ridl-transport-ws` implements all four. Neither the

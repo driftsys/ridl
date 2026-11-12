@@ -322,9 +322,9 @@ member; rsdl is the apex.
                          reason as ts-browser-e2e
     just ts-npm-check    build packages/ridl-runtime and packages/ridl-transport-ws
                          into npm packages with dnt, verify the built manifest and tarball,
-                         install the two tarballs (the transport's with the
-                         runtime's) in a temporary directory, and
-                         import each by name from Node. Needs deno, node and npm
+                         install a tarball in a temporary directory (the
+                         transport's script installs the runtime's tarball too),
+                         and import the package by name from Node. Needs deno, node and npm
                          on PATH and network access. Not a member of pre-push.
                          .github/workflows/npm-release.yml publishes the
                          packages to npm on a v* tag
