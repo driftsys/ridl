@@ -320,9 +320,10 @@ language layer at `int64`/`float64`.
    `Send` and `Sync` need no emit, since every backing has them. The rule in
    full, including the four positions that refuse every conditional derive, is
    the module documentation of `crates/ridl-backend-rust/src/derives.rs`. The
-   doc comment of a generated type names what its constructor does not check: a
-   cross-field invariant (typl §17.7), a value built through `new_unchecked`,
-   and a `match` pattern that did not resolve or that the check does not cover.
+   type's doc comment states the declared contract only; `new_unchecked` has a
+   method doc that says it does not check, and the pattern behaviour is recorded
+   in [Generated code](../book/generated-code.md). No constructor checks a
+   cross-field invariant (typl §17.7).
 
    `--emit rust` writes a crate that compiles: the per-package files, a `lib.rs`
    that declares the module tree with `#[path]`, and one `Cargo.toml` for the
