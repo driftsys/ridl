@@ -2388,3 +2388,36 @@ fn generated_debug_consumer_feature_probe() {
         }
     }
 }
+
+/// A parent package whose own file emits no public item still compiles with
+/// every warning denied. The crate root re-exports the parent's module with a
+/// glob, and rustc reports a glob over a module with no public item as an
+/// unused import, which `-D warnings` turns into an error.
+#[test]
+fn a_parent_package_with_no_public_item_compiles_denying_warnings() {
+    let fixture = tempfile::tempdir().expect("temp fixture dir");
+    let entry = write_prefix_package_workspace(fixture.path());
+    std::fs::write(entry.join("member-veh/veh.typl"), "package veh\n")
+        .expect("the parent source is rewritten");
+    std::fs::write(
+        entry.join("member-common/common.typl"),
+        "package veh.common\n\n/// Vehicle speed over ground\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+    )
+    .expect("the child source is rewritten");
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+
+    let lib = std::fs::read_to_string(out.path().join("lib.rs")).unwrap();
+    assert!(
+        lib.contains("pub use __ridl_package::*;"),
+        "the fixture must exercise the parent re-export; lib.rs was:\n{lib}"
+    );
+    compile_crate_root_denying_warnings(out.path());
+}
