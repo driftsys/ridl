@@ -1558,6 +1558,43 @@ fn an_internal_interface_gets_no_client_class() {
     assert!(!source.contains("class SensorsClient"), "{source}");
 }
 
+/// An interface with only events binds over `EventSource` alone.
+///
+/// Mutation: add `SignalReader` to the port list of an event-only interface in
+/// `emit_client`.
+#[test]
+fn an_event_only_interface_binds_over_an_event_source() {
+    let mut model = common_model();
+    interface(&mut model, "Sensors").slots.retain(|slot| {
+        matches!(
+            &slot.occupant,
+            Some(v1::interaction_slot::Occupant::Interaction(i)) if i.kind() == v1::Kind::Event
+        )
+    });
+    let source = module(&model, "veh.common");
+    assert!(
+        source.contains(
+            "static bind<P extends $rt.EventSource>(port: P, codec: $rt.Codec): SensorsClient"
+        ),
+        "{source}"
+    );
+}
+
+/// An internal interface with a stream member gets no client class and no
+/// table entry for the stream, as one with a command does.
+///
+/// Mutation: drop the internal-interface test of `discover_stream`.
+#[test]
+fn an_internal_interface_with_a_stream_gets_no_client_class() {
+    let mut model = streams_model();
+    let visible = module(&model, "streams.demo");
+    assert!(visible.contains("class FeedClient"), "{visible}");
+    interface(&mut model, "Feed").visibility = v1::Visibility::Internal as i32;
+    let source = module(&model, "streams.demo");
+    assert!(!source.contains("class FeedClient"), "{source}");
+    assert!(!source.contains("  scalars:"), "{source}");
+}
+
 /// A call whose payload has no finite bound has no table entry and no method,
 /// and the class says why.
 ///
