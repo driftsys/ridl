@@ -129,6 +129,18 @@ L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 stories of lane C (#318 and #246 to #255) are closed. The coordination issue
 #328 stays open.
 
+The lane P driver (`2026-09-22-lane-p-driver.md`) and its two design notes, the
+IR stability note (`2026-09-22-ir-stability-design.md`) and the codegen model
+note (`2026-09-22-codegen-model-design.md`), were archived on 2026-11-12, once
+the codegen model `ridl.codegen.v1`, the canonical encoding and the plugin
+contract had landed and coordination issue #328 was closed;
+[`../design/codegen-plugins.md`](../design/codegen-plugins.md),
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+[ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 9 and
+[the IR specification](../specification/ir-specification.md) are their durable
+records. The codegen model note's open items (its section 9) are recorded in
+section 9 of the codegen plugins design record.
+
 The deployment descriptor design and plan
 (`2026-11-01-deployment-descriptor-{design,plan}.md`) were archived on
 2026-11-02, once the work landed (driftsys/ridl#1176);
@@ -308,36 +320,6 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   **2026-09-12-interface-id-study-2.md** — the two identity study reports that
   note's D-7 summarises, kept verbatim; the first ranked the carriers, the
   second simulated the merges and the diff. **Not ratified.**
-- **2026-09-22-lane-p-driver.md** — the driver for lane P, the codegen plugin
-  system on the way to a Kotlin backend: E4.5a (the IR stability policy and the
-  canonical encoding, with #231 first), the lowered codegen model, E4.5b (the
-  backend contract and the process host), the Rust backend ported onto the
-  model, and E11.1's logical frame. Written for a session of any vendor with no
-  prior context, so it carries the working rules and the facts a driver prompt
-  otherwise leaves to the conversation. Six stages; two design notes inside it
-  stop for Sebastien's disposition. Coordination issue: #328.
-- **2026-09-22-ir-stability-design.md** — lane P stage P1a: the recommended
-  disposition of O-P1 (canonical protobuf JSON becomes the canonical encoding,
-  binary and prototext derived), with #231 reproduced as measured numbers, the
-  bound the canonical form nests to, what "canonical" fixes, the compatibility
-  rule and the versioning rule. A recommendation for Sebastien's disposition;
-  stage P1b implements it.
-- **2026-09-22-codegen-model-design.md** — lane P stage P2a: the lowered codegen
-  model, message by message — names already transformed per target namespace,
-  widths, inits, constraints, tombstones resolved into slots, the FlatBuffers
-  layouts and bounds, and the interface, interaction, timing, clause and catalog
-  facts an IPC binding needs (driver decision D-P4). It carries the recommended
-  disposition of O-P2, the model's home. A recommendation for Sebastien's
-  disposition; **implemented by P2b** as it stands — `ridl.codegen.v1` in
-  `crates/ridl-ir`, `ridl build --emit codegen-model`, and one fact-level drift
-  test per backend. §9 of the note is still open, and its items belong to the
-  stages it names. Stage P3 built the contract over it —
-  [`../design/codegen-plugins.md`](../design/codegen-plugins.md) — and its §10's
-  last item, ADR-0020 open item 5, was closed by P2b. Stage P4 ported the Rust
-  backend onto the model in the three layers §8.2 names, deleted that backend's
-  fact-level drift test — every fact it compared is a function of the model by
-  construction now — and closed §9 item 2 (the private `snake_case` of
-  driftsys/ridl#450) by construction. The other three backends keep theirs.
 - **fmt-ridl-rsdl-layout.md** — the canonical `ridl fmt` layout of the seven
   declarations covered by driftsys/ridl#387: ridl `interface` and `service`, and
   the five rsdl declarations. Every member form with its rendering, the rules

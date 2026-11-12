@@ -141,9 +141,9 @@ packages and imports.
 - Generated internals are hidden and carry no maintainer notes.
 
 Open decisions: the IR shape for the documented contract, and whether it changes
-the IR's stability promise (`2026-09-22-ir-stability-design.md`); how rules are
-worded so they read the same in each language; the relation to the validators
-that [`typl-value-objects-design.md`](../archive/typl-value-objects-design.md)
+the IR's stability promise (`docs/archive/2026-09-22-ir-stability-design.md`);
+how rules are worded so they read the same in each language; the relation to the
+validators that [`typl-value-objects-design.md`](../archive/typl-value-objects-design.md)
 plans, which enforce the same rules the docs state.
 
 ### Spec 1 — the design assistant

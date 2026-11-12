@@ -9,7 +9,7 @@
 //! the closure `derives.rs` walks), the tombstones in their slots, the
 //! FlatBuffers projection whole, the interaction facts the descriptors and
 //! the frame need, and the narrow contract-clause translation. The design
-//! note is `docs/wip/2026-09-22-codegen-model-design.md`.
+//! note is `docs/archive/2026-09-22-codegen-model-design.md`.
 //!
 //! **The home is this crate** (that note's D-11): the model is the projection
 //! facts generalized — it carries what [`crate::name`] produces and what
