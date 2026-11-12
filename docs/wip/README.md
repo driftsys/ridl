@@ -487,3 +487,12 @@ archived on 2026-11-09, once the work landed (driftsys/ridl#1236);
 [`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
 [`../design/ts-codec-table.md`](../design/ts-codec-table.md) and
 [the generated code chapter](../book/generated-code.md) are its durable records.
+
+The TypeScript wasm codec design (`2026-10-21-ts-wasm-codec-design.md`) was
+archived verbatim on 2026-11-12, after the work it covers landed (the wasm
+module, the runtime package, the cabin demos and the codec table);
+[`../design/ts-codec-table.md`](../design/ts-codec-table.md),
+[`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+(open items 4 and 6, amended 2026-11-12) and
+[the generated code chapter](../book/generated-code.md) are its durable records.
