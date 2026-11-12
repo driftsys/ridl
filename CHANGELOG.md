@@ -1,5 +1,123 @@
 # Changelog
 
+## [0.19.0] (2026-11-12)
+
+### Features
+
+- **ts-transport-ws:** cabin demo uses the typed client; records for the client
+  face ([#1262]) ([#1375]) ([5394b5a])
+- **ridl-backend-ts:** generate stream members as client methods ([#1262])
+  ([#1374]) ([21d425a])
+- **ridl-backend-ts:** generate signal and event methods on the client ([#1262])
+  ([#1372]) ([79a0218])
+- **ridl-backend-ts:** generate client classes for commands and queries
+  ([#1262]) ([#1369]) ([1668507])
+- **ts-transport-ws:** implement the client ports in Session ([#1262]) ([#1367])
+  ([ee7abbb])
+- **ts-runtime:** add the client ports, CallError and a test fake ([#1262])
+  ([#1363]) ([fdda9b1])
+
+### Bug Fixes
+
+- **ridlc:** allow an unused glob re-export of a parent package's module
+  ([#1387]) ([cd98f0d])
+- **ts-transport-ws:** review fixes for the typed client face ([#1262])
+  ([#1377]) ([b1daa56])
+- **ridl-transport-ws:** remove a flaky-test assumption, repair stale docs (part
+  of [#1235]) ([#1373]) ([2a0a68b]), refs [#1235], [#1235]
+- **ridl-sem:** refuse a clause literal outside the finite binary64 range
+  ([#1370]) ([98f234e]), closes [#1307]
+- **ridl-diff:** cache constraint direction per diff and close the review
+  follow-ups of [#1302] ([#1365]) ([8dfb382]), refs [#1308]
+- **ridl-backend-rust:** print exact float clause literals as Rust literals
+  ([#1358]) ([a6506f6])
+- **ridl-descriptor:** return an error for a declaration with no kind ([#1355])
+  ([590a614]), closes [#1319]
+
+### Documentation
+
+- **docs:** garden the typed client face design and archive its note ([#1386])
+  ([532afa4]), refs [#1262]
+- **docs:** garden the lane P design set and archive its working memory
+  ([#1380]) ([3f6ccef])
+- **docs:** garden the typl value objects design and plan ([#1379]) ([7d37534])
+- **docs:** archive the TypeScript wasm codec design ([#1378]) ([5a54695])
+- **ridl:** finish the minor findings of the catalog history evidence rule
+  ([#1362]) ([262cd32]), refs [#1304], [#1304], [#1304], [#1304], [#1304]
+- **ridl:** state the stdout write failure rule and pin the flush ([#1359])
+  ([0dd7ea8])
+- **docs:** add the design note for the typed TypeScript client face ([#1262])
+  ([#1361]) ([127d22e])
+
+### BREAKING CHANGES
+
+- A source that has a contract clause literal outside the finite binary64 range
+(a magnitude above the largest finite `f64`) compiled before and now fails with
+`RIDL-306`. Change the literal to a finite value. The Rust backend no longer
+clamps such a literal: an out-of-range float literal in hand-built IR is a
+generate error.
+- In generated TypeScript, a stream member is a method of the generated
+`<Interface>Client` class. The functions `<Interface>_<member>` and the context
+type `StreamSession` are removed, and the methods take the parameters of the
+former functions without the session parameter. A name that another member or
+the client class declares is now refused, with both sources named. Regenerate
+every TypeScript module and update the calling code.
+- In the `@driftsys/ridl-runtime` package, `StreamTransport`, `StreamOptions` and
+`StreamSession` are removed from the public types. The ports `StreamCaller` and
+`CallOptions` replace them. `StreamError` is the same class as `CallError` and
+stays only as a deprecated alias. A `ConstraintError` thrown by a decoder is a
+contract failure, as it already was for an encoder. `encodeRequest` takes an
+optional limit and throws a `corrupt` `CallError` for longer bytes.
+
+[0.19.0]: https://github.com/driftsys/ridl/compare/v0.18.0...v0.19.0
+[5394b5a]: https://github.com/driftsys/ridl/commit/5394b5a
+[#1262]: https://github.com/driftsys/ridl/issues/1262
+[#1375]: https://github.com/driftsys/ridl/issues/1375
+[21d425a]: https://github.com/driftsys/ridl/commit/21d425a
+[#1374]: https://github.com/driftsys/ridl/issues/1374
+[79a0218]: https://github.com/driftsys/ridl/commit/79a0218
+[#1372]: https://github.com/driftsys/ridl/issues/1372
+[1668507]: https://github.com/driftsys/ridl/commit/1668507
+[#1369]: https://github.com/driftsys/ridl/issues/1369
+[ee7abbb]: https://github.com/driftsys/ridl/commit/ee7abbb
+[#1367]: https://github.com/driftsys/ridl/issues/1367
+[fdda9b1]: https://github.com/driftsys/ridl/commit/fdda9b1
+[#1363]: https://github.com/driftsys/ridl/issues/1363
+[cd98f0d]: https://github.com/driftsys/ridl/commit/cd98f0d
+[#1387]: https://github.com/driftsys/ridl/issues/1387
+[b1daa56]: https://github.com/driftsys/ridl/commit/b1daa56
+[#1377]: https://github.com/driftsys/ridl/issues/1377
+[2a0a68b]: https://github.com/driftsys/ridl/commit/2a0a68b
+[#1235]: https://github.com/driftsys/ridl/issues/1235
+[#1373]: https://github.com/driftsys/ridl/issues/1373
+[98f234e]: https://github.com/driftsys/ridl/commit/98f234e
+[#1370]: https://github.com/driftsys/ridl/issues/1370
+[#1307]: https://github.com/driftsys/ridl/issues/1307
+[8dfb382]: https://github.com/driftsys/ridl/commit/8dfb382
+[#1302]: https://github.com/driftsys/ridl/issues/1302
+[#1365]: https://github.com/driftsys/ridl/issues/1365
+[#1308]: https://github.com/driftsys/ridl/issues/1308
+[a6506f6]: https://github.com/driftsys/ridl/commit/a6506f6
+[#1358]: https://github.com/driftsys/ridl/issues/1358
+[590a614]: https://github.com/driftsys/ridl/commit/590a614
+[#1355]: https://github.com/driftsys/ridl/issues/1355
+[#1319]: https://github.com/driftsys/ridl/issues/1319
+[532afa4]: https://github.com/driftsys/ridl/commit/532afa4
+[#1386]: https://github.com/driftsys/ridl/issues/1386
+[3f6ccef]: https://github.com/driftsys/ridl/commit/3f6ccef
+[#1380]: https://github.com/driftsys/ridl/issues/1380
+[7d37534]: https://github.com/driftsys/ridl/commit/7d37534
+[#1379]: https://github.com/driftsys/ridl/issues/1379
+[5a54695]: https://github.com/driftsys/ridl/commit/5a54695
+[#1378]: https://github.com/driftsys/ridl/issues/1378
+[262cd32]: https://github.com/driftsys/ridl/commit/262cd32
+[#1362]: https://github.com/driftsys/ridl/issues/1362
+[#1304]: https://github.com/driftsys/ridl/issues/1304
+[0dd7ea8]: https://github.com/driftsys/ridl/commit/0dd7ea8
+[#1359]: https://github.com/driftsys/ridl/issues/1359
+[127d22e]: https://github.com/driftsys/ridl/commit/127d22e
+[#1361]: https://github.com/driftsys/ridl/issues/1361
+
 ## [0.18.0] (2026-11-11)
 
 ### Features
