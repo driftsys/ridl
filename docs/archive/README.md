@@ -295,6 +295,15 @@ provenance. Nothing here is normative — the current references live in
   driftsys/ridl#470 until stage K9a took that as ADR-0019 decision 8, and landed
   in stage K9b on 2026-09-21. The face over the codec is
   [the interaction-face design record](../design/interaction-face.md).
+- **2026-09-22-lane-p-driver.md**, **2026-09-22-ir-stability-design.md** and
+  **2026-09-22-codegen-model-design.md** — the driver for lane P (the codegen
+  plugin system) and its two design notes, the canonical encoding and the
+  compatibility rule, and the lowered codegen model. Gardened into
+  [`../design/codegen-plugins.md`](../design/codegen-plugins.md),
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) and
+  [the IR specification](../specification/ir-specification.md). Archived
+  verbatim.
 - **2026-09-20-lane-k-driver.md** — the driver prompt lane K ran under, archived
   with the pair above when the lane closed on 2026-09-21. Its stage K0 filed the
   two rows the codec work surfaced, E11.14 (the face and the codec reach

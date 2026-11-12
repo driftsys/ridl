@@ -21,8 +21,8 @@ canonical cannot read back every package the front end admits, while the one it
 named derived can. Decisions 1 to 8 and 10 to 13 are unchanged; decision 14 is
 corrected on two facts it stated wrongly, in place. The amendment's reasoning
 trail is
-[the IR stability design note](../wip/2026-09-22-ir-stability-design.md), and
-the policy that follows from it is
+[the IR stability design note](../archive/2026-09-22-ir-stability-design.md),
+and the policy that follows from it is
 [the IR specification](../specification/ir-specification.md).
 
 **Amended 2026-10-04 — decision 15, the catalog hash.** The catalog hash of
@@ -247,9 +247,9 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
 
    The trigger is a measurement, reproduced on 2026-09-22 against this workspace
    and recorded in
-   [the IR stability design note](../wip/2026-09-22-ir-stability-design.md) §2.
-   `from_binary` refuses what `to_binary` writes at 101 message levels below the
-   `Package` root and reads 100 — a bound legal source reaches, at a struct
+   [the IR stability design note](../archive/2026-09-22-ir-stability-design.md)
+   §2. `from_binary` refuses what `to_binary` writes at 101 message levels below
+   the `Package` root and reads 100 — a bound legal source reaches, at a struct
    field nesting 48 arrays, 47 maps or 32 tuples, well inside the 127 levels the
    parser admits. The canonical encoding this record named derived has no such
    bound: every package the front end admits round-trips through it, at every
@@ -861,8 +861,8 @@ Decision 16, decided on 2026-11-11, updates these records:
 - [the IR specification](../specification/ir-specification.md) — the policy
   decision 9 is cited for, written out: what canonical fixes, the nesting bound,
   the compatibility rule, the versioning rule
-- [the IR stability design note](../wip/2026-09-22-ir-stability-design.md) — the
-  measurement and the reasoning behind the 2026-09-22 amendment
+- [the IR stability design note](../archive/2026-09-22-ir-stability-design.md) —
+  the measurement and the reasoning behind the 2026-09-22 amendment
 - `crates/ridl-ir/build.rs`, `crates/ridl-ir/src/lib.rs` — the descriptor set
   and the serialization surface
 - `crates/ridlc/src/lib.rs` — the emit filter of decision 10

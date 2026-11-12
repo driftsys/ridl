@@ -12,9 +12,9 @@ request is written under are
 [the IR specification](../specification/ir-specification.md) §3 (what canonical
 fixes), §6 (the compatibility rule) and §7 (versioning, and the two fields a
 request leads with). The reasoning behind the model the request carries is
-[the codegen model design note](../wip/2026-09-22-codegen-model-design.md). This
-record implements three rules: the parity test runs over the Rust backend, not
-the TypeScript one; the request carries the model, never the raw IR; and the
+[the codegen model design note](../archive/2026-09-22-codegen-model-design.md).
+This record implements three rules: the parity test runs over the Rust backend,
+not the TypeScript one; the request carries the model, never the raw IR; and the
 plugin never touches the filesystem.
 
 **What is built and what is not.** The contract, the in-process host over every
@@ -22,12 +22,12 @@ in-tree backend, the process host, the `--plugin` flag and the two reference
 plugins are built, and both parity tests run under `just test`. The **Rust
 backend** reads the lowered model, so it reads the request's model, options and
 artifact base and never the raw IR, and is run as a plugin, `ridlc-gen-rust`;
-the parity test over it is the exit test of the plugin split. The other three
-in-tree backends — TypeScript, proto3 and FlatBuffers — still read the raw IR
-through `RawIr` and are not plugins; each waits to be ported. The TypeScript
-backend's codec file, `<base>.codec.ts`, is written from the request's model
-only ([the codec table record](ts-codec-table.md)). §6 says what each parity
-test proves.
+the parity test over it is the exit test of the plugin split. The other four
+in-tree backends — TypeScript, proto3, FlatBuffers and the podbuf C header —
+still read the raw IR through `RawIr` and are not plugins; each waits to be
+ported. The TypeScript backend's codec file, `<base>.codec.ts`, is written from
+the request's model only ([the codec table record](ts-codec-table.md)). §6 says
+what each parity test proves.
 
 ## 1. Where the code is
 
@@ -35,7 +35,7 @@ test proves.
 | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The schema: `CodegenRequest`, `CodegenResponse`, `GeneratedFile`, `Diagnostic`, `BackendOption`              | `crates/ridl-ir/proto/ridl/codegen/v1/plugin.proto`, with the deployment section's messages in `crates/ridl-ir/proto/ridl/codegen/v1/deployment.proto`, in the package `ridl.codegen.v1` beside `model.proto`, all compiled by the same `build.rs` and registered with the same `pbjson-build` builder                                                                                                |
 | The trait `Backend`, the transitional `RawIr`, `ModelBackend`, `SCHEMA`, the encodings, `check_path`         | `crates/ridl-ir/src/codegen/contract.rs`, re-exported from `ridl_ir::codegen`                                                                                                                                                                                                                                                                                                                         |
-| The four in-tree backends behind the trait                                                                   | `crates/ridl-backend-{rust,ts,proto,flatbuffers}/src/contract.rs`. Rust is `pub struct Backend` over the request's model alone; the other three are `pub struct Backend<'a>` over `RawIr`, `generate` (TypeScript) or `generate_with` (proto3, FlatBuffers)                                                                                                                                           |
+| The five in-tree backends behind the trait                                                                   | `crates/ridl-backend-{rust,ts,proto,flatbuffers,podbuf}/src/contract.rs`. Rust is `pub struct Backend` over the request's model alone; the other four are `pub struct Backend<'a>` over `RawIr`, `generate` (TypeScript) or `generate_with` (proto3, FlatBuffers, podbuf)                                                                                                                             |
 | The in-process host: one request per package and backend, every emit through the trait, the response written | `crates/ridlc/src/lib.rs` — `codegen_request`, `write_emits`, `write_response`, `run_build_with`                                                                                                                                                                                                                                                                                                      |
 | The process host: `ridlc-gen-<language>`, `PATH` lookup, the pipe, the timeout, the error                    | `crates/ridlc/src/plugin.rs` — `PluginSpec`, `resolve`, `run`, `PluginError`                                                                                                                                                                                                                                                                                                                          |
 | The flags                                                                                                    | `crates/ridlc/src/main.rs` and `crates/ridl/src/main.rs`, `--plugin`, `--plugin-timeout` and `--deployment` on `build`; documented in [`docs/book/cli-reference.md`](../book/cli-reference.md)                                                                                                                                                                                                        |
@@ -102,10 +102,10 @@ its output out another way is free to ignore it.
 
 **A text file's content is a `string`.** The proto3 JSON mapping renders `bytes`
 as base64, which would make every generated source file unreadable in the
-response and in a fixture. Every file the four in-tree backends emit is UTF-8
-text, so `GeneratedFile.content` is a `oneof` of `text` (a `string`) and
-`binary` (`bytes`), and a backend picks the arm its file is. The IR stability
-note §5 had flagged this for this stage; this is the decision.
+response and in a fixture. Every file the in-tree backends emit is UTF-8 text,
+so `GeneratedFile.content` is a `oneof` of `text` (a `string`) and `binary`
+(`bytes`), and a backend picks the arm its file is. The IR stability note §5 had
+flagged this for this stage; this is the decision.
 
 **Options** are `{key, value}` pairs, not a `map<>`, because a `map<>` has no
 canonical order (IR specification §3 item 3). The host builds one request per
@@ -392,9 +392,10 @@ unmoved snapshots of `crates/ridl-backend-rust/src/snapshots/`,
 `crates/ridl-backend-rust/tests/generated/interaction_face.rs` prove beside it:
 the model carries every fact that output is a function of.
 
-**The other three backends stay on the raw IR** — TypeScript, proto3 and
-FlatBuffers — until their own stories port them, and are not plugins until then.
-Each keeps the fact-level drift test of the model design note §8.1
+**The other four backends stay on the raw IR** — TypeScript, proto3, FlatBuffers
+and podbuf — until their own stories port them, and are not plugins until then.
+TypeScript, proto3 and FlatBuffers each keep the fact-level drift test of the
+model design note §8.1
 (`crates/ridl-backend-{ts,proto,flatbuffers}/tests/model_drift.rs`), which is
 what catches the model and a backend deriving one fact differently. The Rust
 backend's is deleted: every fact it compared is a function of the model by
@@ -746,3 +747,31 @@ guide for a plugin author, and its "Reading order" section is the reading list.
    `generate_with` keeps its signature".** True; the trait is a second face over
    the same entry points, not a second entry point, and `generate_with` is
    unchanged.
+5. **Tuple names differ between the Rust backend and the wire backends.** The
+   Rust backend spells an induced tuple with `camel_case` and nests it by field
+   name; the proto3 and FlatBuffers backends nest by `Field<N>` and spell a
+   service's dotted name with their own `type_name`. The model carries
+   `DottedName.joined_camel` and both induced-name rules, so each backend reads
+   its own. Pinning one rule is an
+   [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
+   amendment and a breaking change to one side's generated names. **Open.** No
+   tracking issue.
+6. **The Rust and TypeScript printers resolve nothing across packages for inits,
+   derives and constants, while the model resolves over its scope.** Three
+   printer rules stay conservative. Lifting them changes what the generated
+   crate contains. **Open.** No tracking issue.
+7. **The model's unbounded-member facts are computed over the package alone**
+   (`others: &[]` in `crates/ridl-ir/src/codegen/unbounded.rs`), as
+   `check_flatbuffers_bound` computes them, even when the pipeline hands the
+   codec a scope. With the scope, a cross-package member could be judged and
+   named. That would change the attribution messages. **Open.** No tracking
+   issue.
+8. **The corpus harness and the CLI generate over different scopes.** The
+   byte-identity snapshots of the Rust backend are taken with no scope, and the
+   demo run uses one. No record states it elsewhere. **Open.** No tracking
+   issue.
+9. **The module documentation of the TypeScript backend's `generate` names an
+   `interact` module that does not exist**
+   (`crates/ridl-backend-ts/src/lib.rs`). The interaction layer the language
+   backends shipped was retracted by ADR-0018. A stale intra-doc link. **Open.**
+   No tracking issue.

@@ -723,7 +723,9 @@ as its public contract.
    the model is lowered over the same scope a code emit reads, `ridl.std`
    included, and `ridl baseline` publishes only `.ir.json`. The schema is
    `ridl.codegen.v1` (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`); the
-   reasoning is the codegen model design note's D-12 and D-14.
+   reasoning is
+   [the codegen model design note](../archive/2026-09-22-codegen-model-design.md)'s
+   D-12 and D-14.
 6. **Whether the codec loader checks the generated-unit coupling at
    instantiation.** Decision 2 requires a package's wasm codec and its
    TypeScript caller to be one generated unit; it does not say whether the

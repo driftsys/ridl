@@ -314,8 +314,8 @@ rather than after them: the Kotlin plugin depends on E4.5a and E4.5b, so the
 plugin seam precedes the remaining payload codecs and the TypeScript framework.
 Epic 4 keeps its place under the step 2 heading and the milestone summary keeps
 its step column: the steps are the release scope's, and this reorder did not
-re-scope the release. See the [lane P driver](wip/2026-09-22-lane-p-driver.md)
-decision D-P1.
+re-scope the release. See the
+[lane P driver](archive/2026-09-22-lane-p-driver.md) decision D-P1.
 
 ## Epic 15 — interface identity and the lock
 
@@ -1134,7 +1134,7 @@ every backend mostly a printer. A plugin over the raw IR would re-implement all
 of it a third time (§3.8, alternative (a)). Porting the Rust backend onto the
 contract is part of E4.5b, and it is a second pass over what step 1 finalized;
 the TypeScript, proto3 and FlatBuffers backends follow in their own stories (the
-[lane P driver](wip/2026-09-22-lane-p-driver.md) decision D-P1, corrected on
+[lane P driver](archive/2026-09-22-lane-p-driver.md) decision D-P1, corrected on
 2026-09-22 from "both in-tree backends").
 
 **E4.5b landed (2026-09-22).** The lowering step

@@ -13,7 +13,7 @@ Version: 0.1.0 — Draft
 > was amended on 2026-09-22: the canonical encoding is canonical protobuf JSON,
 > and the binary and prototext encodings are derived. The reasoning trail,
 > including the measurement that moved the decision, is
-> [the IR stability design note](../wip/2026-09-22-ir-stability-design.md).
+> [the IR stability design note](../archive/2026-09-22-ir-stability-design.md).
 > Where this document and an ADR disagree, the ADR wins and this document is
 > corrected.
 
