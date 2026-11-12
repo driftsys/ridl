@@ -1467,7 +1467,7 @@ archived plan
   with frame version 2, the encoding of the ports, and the catalog of the ports.
   It then waits for `attached`, for at most `liveness_timeout` (D-22). A message
   of another form before `attached` closes with 1002 and records
-  `Note::MessageBeforeAttach`, as does a discarded frame; a `chunk`,
+  `Note::MessageBeforeAttach`, and a discarded frame also records it; a `chunk`,
   `stream_end` or `stream_credit` records `Note::Violation(UnknownCode)`, and a
   message the codec cannot read records its own `Note::Violation`.
   `attached(refused)` closes the session with 1000, and the backend is dropped:

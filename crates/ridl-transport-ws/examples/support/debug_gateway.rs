@@ -224,8 +224,8 @@ impl Gateway {
         &self,
         path: &str,
     ) -> std::result::Result<Providing<Attachment>, SelectionError> {
-        // Every registered path has the form `/component/instance/catalog`
-        // with no empty segment, so a malformed path matches none.
+        // Registered paths are compared by equality, so a path with a
+        // trailing slash, an empty segment or an extra segment matches none.
         let selected = self
             .injections
             .iter()
