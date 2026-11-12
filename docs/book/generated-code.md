@@ -485,8 +485,10 @@ The catalog and its hash are described in
 `ridl build --emit typescript` writes the domain types of a package as one `.ts`
 file: branded scalars, interfaces, enums, enum sets, discriminated unions and
 init functions. This domain module has no interaction face or feature selection.
-The optional codec module also emits stream methods on a client class, using
-platform streams.
+The optional codec module also emits one client class per interface, with
+methods for its commands, queries, signals, events and supported stream members.
+A `fixed` member, and a few signals and queries, have a table entry and no
+method; [the codec table record][codec-table] lists them.
 
 A workspace that declares a `system` also writes `__ridl_instances.ts`, which
 exports an `instances` object with `as const` literal types. Import it from that
@@ -506,13 +508,15 @@ package that its interfaces name) or a supported stream interaction: one
 `encode<Name>` and one `decode<Name>` function per payload type, which take and
 return the plain objects of `<base>.ts` and call the object API that `flatc`
 generates; one table per interface, which gives each interaction its interface
-number, its ordinal, its kind and the functions of its payloads; generated
-stream methods and stream metadata for supported interactions; for a package
-with a signal that has a table entry, `signalChecks(codec)`, which returns one
-`SignalCheckEntry` of `@driftsys/ridl-runtime` per signal that has a table
-entry; and the catalog's name and hash, the payload type names and the rule
-texts that the wasm codec takes at load. `ridl` does not run `flatc`. For a
-package with two or more name components, build the files in two steps:
+number, its ordinal, its kind and the functions of its payloads; one client
+class per interface, `<Interface>Client`, and stream metadata for supported
+stream interactions; for a package with a signal that has a table entry,
+`signalChecks(codec)`, which returns one `SignalCheckEntry` of
+`@driftsys/ridl-runtime` per signal that has a table entry, for a program that
+uses the transport without a client class; and the catalog's name and hash, the
+payload type names and the rule texts that the wasm codec takes at load. `ridl`
+does not run `flatc`. For a package with two or more name components, build the
+files in two steps:
 
 ```sh
 ridl build --emit typescript --emit flatbuffers --out-dir <out-dir>
@@ -565,6 +569,104 @@ or an enum set goes through that package's own codec file; a payload type that
 reaches a struct, a union or an enum of another package is refused with an error
 that names both. An internal payload type has no `encode`/`decode`, because
 `<base>.ts` does not export its type.
+[The codec table design record][codec-table] gives the rules in full.
+
+### Calling generated clients
+
+Each interface has a client class, `<Interface>Client`, in the codec module. A
+program loads the wasm codec, connects a transport, and binds the class to both
+with `<Interface>Client.bind(port, codec)`. The port is any object that
+implements the consumer ports of `@driftsys/ridl-runtime` that the interface's
+members need: `Caller` for a command or a query, `SignalReader` for a signal,
+`EventSource` for an event and `StreamCaller` for a stream member. An interface
+with only signals binds over a port that implements `SignalReader` alone. The
+`Session` of `@driftsys/ridl-transport-ws` implements all four. Neither the
+generated module nor the runtime depends on the WebSocket package.
+
+`bind` throws `CatalogMismatch` when the catalog hash of the port or of the
+codec is not the hash the module was generated with, and `UnknownPayloadType`
+for a payload type the wasm module does not know. It registers the check of each
+signal with the port, so the program does not pass `signalChecks(codec)` to
+`connect`. A program never encodes, decodes or addresses a member by number: the
+client encodes and verifies a request before it sends it, and verifies a reply
+before it decodes it.
+
+For the cabin example, whose interface `Cabin` declares the signal
+`temperature`, the event `warning`, the command `setLevel` and the query
+`average`, the class has these methods. The executable version is
+`examples/cabin/web/main.ts`:
+
+| Member               | Methods                                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------------------------ |
+| command `setLevel`   | `setLevel(level, opts?): Promise<void>`                                                                |
+| query `average`      | `average(window, opts?): Promise<Average>`                                                             |
+| signal `temperature` | `subscribeTemperature(opts?)`, `temperature()`, `readTemperature(opts?)`, `watchTemperature(listener)` |
+| event `warning`      | `subscribeWarning(opts?)`, and one `onEvent(listener)` for the interface                               |
+
+```typescript
+import { loadCodec } from "@driftsys/ridl-runtime";
+import { connect } from "@driftsys/ridl-transport-ws";
+import {
+  Cabin, CabinClient, CATALOG_HASH, CATALOG_NAME, PAYLOAD_TYPES, RULES,
+} from "./generated/veh.cabin.codec.js";
+import { makeLevel, makeWindow } from "./generated/veh.cabin.js";
+
+const codec = await loadCodec(
+  await Deno.readFile("./generated/veh_cabin.wasm"),
+  { catalogHash: CATALOG_HASH, payloadTypes: PAYLOAD_TYPES, ruleText: RULES },
+);
+const session = await connect("ws://127.0.0.1:8080", {
+  catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
+  encoding: "flatbuffers",
+  interfaces: [Cabin],
+});
+const cabin = CabinClient.bind(session, codec);
+
+await cabin.setLevel(makeLevel(42));
+const average = await cabin.average(makeWindow(10));
+
+await cabin.subscribeTemperature({ bound: 1000 });
+const stop = cabin.watchTemperature((sample) => {
+  console.log(sample.provenance, sample.value);
+});
+console.log(cabin.temperature().value); // the held sample, at once
+stop();
+
+await cabin.subscribeWarning({ bound: 1000 });
+cabin.onEvent((event) => {
+  if (event.occurrence.value) console.log(event.event, event.occurrence.value);
+});
+session.close();
+```
+
+**Calls.** A command or query method takes the declared parameters in order,
+typed with the types of `<base>.ts`, and `opts` (`bound` in milliseconds, and
+`signal`, an `AbortSignal`). When the member declares a maximum response time
+inside the range of a port bound, `opts` is an optional `Partial<CallOptions>`
+and `bound` defaults to it (50 ms for `setLevel`, 200 ms for `average`);
+otherwise `opts` is a required `CallOptions` with a required `bound`, and a
+missing one is a type error. Aborting `opts.signal` rejects the call with the
+signal's reason, and a provider that already received a command may still run
+it. A request that fails verification rejects with a `CallError` of the category
+`contract` and sends nothing; a reply that fails it rejects the same way, or
+with `corrupt` for malformed bytes. Any other failure is the port's `CallError`,
+unchanged. The client does not check `require` clauses; the provider checks them
+and answers `contract`.
+
+**Signals.** A `Sample` is `provenance` (`init`, `live` or `invalid`),
+`envelope`, `value` and, when a payload was refused, `detected`. `value` is
+never absent: under `init` and `invalid` it is the last good value, or the
+type's `init<Name>()` value when there is none. `temperature()` returns the held
+sample at once and returns the init sample before the first publish;
+`readTemperature` waits for the next publish; `watchTemperature` calls the
+listener for every accepted publish and returns the function that removes it.
+`subscribeTemperature` rejects with a `CallError` of the category `down` when
+the session has ended.
+
+**Events.** `onEvent` registers one listener for every subscribed event of the
+interface and delivers a union discriminated by `event`. An occurrence that the
+port or the verification refused has `detected` set and no `value`.
+
 [The codec table design record][codec-table] gives the rules in full.
 
 ### Calling generated streams
@@ -783,10 +885,11 @@ the parameter's rules as nested bullets), then the `# See also` section and the
 `Available since` lines. The doc of an interface goes on its face module, in the
 same order around the module's own sentence.
 
-The codec module's public stream methods also carry the interaction's
-model-derived documentation, canonical rules, `@see`, `@since` and
-`@deprecated`. Non-stream parameters use `@param`; stream-parameter
-documentation and parameter rules are not rendered. The
+The call methods, the stream methods and the held-sample method of a signal
+(`temperature()`) in the codec module's client classes also carry the
+interaction's model-derived documentation, canonical rules, `@see`, `@since` and
+`@deprecated`. For a stream member, non-stream parameters use `@param`;
+stream-parameter documentation and parameter rules are not rendered. The
 [codec table record](../design/ts-codec-table.md#stream-functions) describes the
 generated stream TSDoc. Private codec helpers carry no facade docs.
 

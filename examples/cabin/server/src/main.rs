@@ -1,6 +1,7 @@
 //! A WebSocket provider for the cabin example: it publishes the `temperature`
-//! signal of the crate `ridl build --emit rust` writes for `cabin.ridl`, and
-//! serves it to clients of `ridl-transport-ws`.
+//! signal of the crate `ridl build --emit rust` writes for `cabin.ridl`, serves
+//! the `setLevel` command and the `average` query of the same crate, and
+//! offers all three interactions to clients of `ridl-transport-ws`.
 //!
 //! It binds `127.0.0.1:0` and prints two lines on standard output, each
 //! flushed: `port <n>`, and `hash <64 lowercase hexadecimal digits>`, the
@@ -10,6 +11,10 @@
 //! period, which steps through the whole range of the type, from -40 to 85, and
 //! then starts again at -40, with no pause at any value. The process exits
 //! with status 0 when its standard input reaches the end.
+//!
+//! The provider of the two calls keeps every level that `setLevel` received, on
+//! all connections, and answers `average` with their mean, rounded down, or 0
+//! when no level was set. `average` ignores its window.
 //!
 //! The Deno program `main.ts` and the browser page `page.ts` of
 //! `examples/cabin/web` pass only if every value is inside [-40..85], every
@@ -29,9 +34,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use api::Temperature;
 use api::cabin;
 use api::cabin::prelude::*;
+use api::{Average, Level, Temperature, Window};
 use ridl_loopback::Loopback;
 use ridl_rt::contract::{CatalogRef, Interface};
 use ridl_transport_ws::{Config, Described, MemberTable, Scanning, serve};
@@ -61,6 +66,28 @@ const HIGHEST: i64 = 85;
 /// because a sleep overshoots, and that overshoot also varies between cycles.
 const PERIOD: Duration = Duration::from_millis(7);
 
+/// The provider of the cabin interface's commands and queries.
+struct Levels {
+    /// Every level that `setLevel` received, oldest first.
+    received: Vec<i64>,
+}
+
+impl cabin::Provider for Levels {
+    fn set_level(&mut self, level: &Level) {
+        self.received.push(level.get());
+    }
+
+    fn average(&mut self, _window: &Window) -> Average {
+        let count = i64::try_from(self.received.len()).expect("the count fits in i64");
+        let mean = if count == 0 {
+            0
+        } else {
+            self.received.iter().sum::<i64>() / count
+        };
+        Average::new(mean).expect("a mean of levels is inside Average's range")
+    }
+}
+
 fn main() {
     let rt = Arc::new(Mutex::new(Loopback::new(CATALOG)));
     let table =
@@ -77,6 +104,18 @@ fn main() {
     thread::spawn(|| {
         let _ = io::copy(&mut io::stdin(), &mut io::sink());
         std::process::exit(0);
+    });
+
+    // A failure of the handler port here would leave every call unanswered, so
+    // it ends the process, as a failure of the publisher does.
+    let handler = rt.lock().expect("an unpoisoned runtime").handler();
+    thread::spawn(move || {
+        let mut provider = Levels {
+            received: Vec::new(),
+        };
+        let served = cabin::blocking::serve(handler, &mut provider, None);
+        eprintln!("the provider of the calls ended: {served:?}");
+        std::process::exit(1);
     });
 
     let mut publisher = cabin::Publisher::new(rt.lock().expect("an unpoisoned runtime").attach());

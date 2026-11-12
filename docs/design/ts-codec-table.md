@@ -9,15 +9,16 @@ package through the wasm codec of
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 decision 7: one `encode<Name>` and one `decode<Name>` per payload type, over
 plain objects; one table per interface that gives each interaction its address,
-its kind and its payload functions; client class methods for supported stream
-interactions; and the catalog name, the catalog hash, the payload type names and
-the rule texts that the wasm module is loaded with. `@driftsys/ridl-runtime`
-resolves the wasm type ids from those names.
+its kind and its payload functions; one client class per interface, with methods
+for the interactions that can have them (see
+[What is generated](#what-is-generated)); and the catalog name, the catalog
+hash, the payload type names and the rule texts that the wasm module is loaded
+with. `@driftsys/ridl-runtime` resolves the wasm type ids from those names.
 
 This is the design as built. The code and its tests are the source of truth;
 where this record and the code differ, this record is corrected. The original
-decisions keep their numbers D-1 to D-15; the stream decisions below continue
-that sequence. The original design is archived as
+decisions keep their numbers D-1 to D-15; the stream decisions and the client
+class decisions below continue that sequence. The original design is archived as
 [`2026-10-22-ts-codec-table-design.md`](../archive/2026-10-22-ts-codec-table-design.md),
 with its plan beside it; that note also holds the alternatives considered.
 [The generated code chapter](../book/generated-code.md#typescript) is the user's
@@ -99,9 +100,15 @@ Its exports:
   ([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)). A tombstone has no
   entry. A query with a fallible `T | E` reply has no `reply`. An interaction
   whose payload has no finite bound has no entry, and a comment stands at its
-  place. Supported stream interactions have a table entry and a method of the
-  client class, as [D-17 and D-18](#stream-functions) describe. Unsupported
-  forms have no entry or method, and a comment states the specific reason.
+  place. A table entry does not always mean a method: a command, a query, a
+  signal, an event and a supported stream member get methods of the interface's
+  client class ([D-30 to D-35](#the-client-class) and
+  [D-17 and D-18](#stream-functions)), and the exceptions are listed in the
+  paragraph on `<Interface>Client` below, which lists: a `fixed` member, a
+  signal with a `= value` init override, with an init-less payload or with a
+  payload of another package, a query with an inline fallible reply, and an
+  `internal` interface have none. Unsupported forms have no entry or method, and
+  a comment states the specific reason.
 
 An `internal` payload type is listed in `PAYLOAD_TYPES`, so that the list equals
 the package's part of `WASM_PAYLOAD_TYPES`, but gets no `encode` or `decode`,
@@ -147,16 +154,18 @@ ports its members need (`$rt.Caller`, `$rt.SignalReader`, `$rt.EventSource`),
 `$rt.initSample`. It also writes `<Interface>Event` for an interface with an
 event. A signal gets methods only when `<base>.ts` exports the `init<Name>`
 function of its payload type, which the domain emitter decides, so the sample of
-a signal with no value yet can hold an init value. Three cases get none, and the
-class says why in a comment: the signal has a `= value` init override, its
-payload type has no init function, or its payload type is declared in another
-package. Such a signal is reachable only through `signalChecks` and the raw port
-(tracked in driftsys/ridl#1371), and `bind` registers the checks only of the
-signals that have methods. A client class name, an event union name or a method
-name that another declaration or member takes is refused like any other
-collision. The names the file declares are checked before anything is written,
-and a second declaration of one is refused with an error that names both: an
-interface or an induced tuple named after a reserved name of the file
+a signal with no value yet can hold an init value. A `fixed` member and a member
+of an `internal` interface get no method, and a query with an inline fallible
+`T | E` reply has no reply codec and so no method. Three signal cases get none
+either, and the class says why in a comment: the signal has a `= value` init
+override, its payload type has no init function, or its payload type is declared
+in another package. Such a signal is reachable only through `signalChecks` and
+the raw port (tracked in driftsys/ridl#1371), and `bind` registers the checks
+only of the signals that have methods. A client class name, an event union name
+or a method name that another declaration or member takes is refused like any
+other collision. The names the file declares are checked before anything is
+written, and a second declaration of one is refused with an error that names
+both: an interface or an induced tuple named after a reserved name of the file
 (`CATALOG_NAME`, `CATALOG_HASH`, `PAYLOAD_TYPES`, `RULES`, `RuleError` when the
 module reaches an enum or an enum set, `signalChecks` and `signalCheck` when the
 package has a signal, an import alias `flatbuffers`, `t`, `fb`, `<package>` or
@@ -168,11 +177,93 @@ spells a foreign one. An interaction named `iface` is refused because it
 collides with the interface table metadata key of that name; the error names
 both sources.
 
+## The client class
+
+For every interface that is not `internal` and has at least one member with a
+method, the module holds `<Interface>Client`. This section records the class as
+a whole; the stream members are described by D-17 and D-18, which apply the same
+rules. A TypeScript program binds a client to a port and calls its methods; it
+does not address a member by interface number and ordinal, and it does not
+encode or decode a payload.
+
+**D-30. One class per interface, bound to ports.** The class is built with
+`<Interface>Client.bind(port, codec)`. The type parameter of `bind` is the
+intersection of the ports the interface's members need: `Caller` for a command
+or a query, `SignalReader` for a signal, `EventSource` for an event and
+`StreamCaller` for a stream member. An interface with only signals binds over an
+object that implements `SignalReader` alone, as `HornClient` of the cabin
+example does. The ports are the interfaces of `@driftsys/ridl-runtime`; they
+carry bytes and addresses and never name a payload type, a codec or a transport.
+`Session` of `@driftsys/ridl-transport-ws` implements all four
+([`ridl-transport-ws-ts.md`](ridl-transport-ws-ts.md)), and a test fake can
+implement any of them.
+
+**D-31. `bind` is the one place for the checks that run once.** It throws
+`CatalogMismatch` when the catalog hash of the port or of the codec differs from
+`CATALOG_HASH`. It resolves the type id of every payload with `codec.typeId`,
+which throws `UnknownPayloadType` for a name the wasm module does not know, and
+it registers the check of each signal that has methods with `port.checkWith`. A
+program that binds a client therefore does not pass `signalChecks(codec)` to
+`connect`; the function stays exported for a program that uses the transport
+without a client.
+
+**D-32. A call is verified on both sides and has a bound.** A command or query
+method takes the declared parameters in order, typed with the types of
+`<base>.ts`, and builds the request object itself: the single named parameter or
+the induced tuple. It encodes the request, verifies the bytes with the codec,
+and only then calls the port. The generated client passes no limit for a call:
+the port refuses a request longer than the member limit (`Session` throws a
+`SessionError` of the category `corrupt` before it sends anything), whereas a
+stream method passes the limit through the client (D-17). A reply is verified
+before it is decoded. The failures are `CallError`s: a rule failure is
+`contract` with `invalid-value` and the rule, and malformed bytes are `corrupt`,
+as for a stream element (D-20). A failure of the port reaches the caller
+unchanged. The last parameter is `opts`. When the member declares a maximum
+response time inside the range of a port bound, `opts` is an optional
+`Partial<CallOptions>` and `bound` defaults to that maximum, in milliseconds;
+otherwise `opts` is a required `CallOptions` with a required `bound`, and a
+missing one is a type error. `opts.signal` aborts the call. A provider that
+already received a command may still run it, which the TSDoc says. The client
+does not check `require` or `ensure` clauses: the provider checks the request
+and answers `contract` when it refuses it.
+
+**D-33. A signal has four methods and a sample is never empty.** `subscribeX`
+subscribes with the port's `WaitOptions`; `x()` returns the held sample at once;
+`readX` waits for the next publish; `watchX` calls a listener for every accepted
+publish and returns the function that removes it. The sample is `Sample<T>`:
+`provenance`, `envelope`, `value` and, when the port or the verification refused
+the payload, `detected`. A payload that fails verification becomes provenance
+`invalid` with `detected` set. `value` is the decoded live value; under `init`
+and `invalid` it is the last good value when there is one, and otherwise the
+`init<Name>()` of the payload type from `<base>.ts`, so a program never tests
+for an absent value. Before the first publish `x()` returns the init sample, and
+after the session ended it returns the init sample again, because the session
+clears its held samples when it ends; `readX` and `subscribeX` reject with
+`down`. A signal gets methods only when `<base>.ts` exports that init function;
+the cases that get none are listed in [What is generated](#what-is-generated).
+
+**D-34. Events reach one listener per interface.** `subscribeX` subscribes to an
+event. `onEvent` registers a listener for every accepted occurrence of any
+subscribed event of the interface, in arrival order, and returns the function
+that removes it. The listener receives `<Interface>Event`, a union discriminated
+by `event` (the member name) that holds an `Occurrence<T>`. An occurrence that
+the port refused, or whose payload fails verification, has `detected` set and no
+`value`, so no occurrence is lost without a trace.
+
+**D-35. Names and collisions.** The class is `<Interface>Client` and the event
+union is `<Interface>Event`. A member named `bind`, `constructor` or `onEvent`,
+a member whose `subscribeX`, `readX` or `watchX` equals the name of another
+member, and a declaration named like the class or the union are refused at
+generation, with an error that names both sources, as the other collision checks
+of the file do. The class keeps its port, codec and type ids in private fields;
+the table objects stay plain data that `connect` reads, and hold no function.
+
 ## Stream functions
 
 The heading keeps its name for the links that point to it. The decisions below
 describe the stream members, which are methods of the client class of their
-interface (`<Interface>Client`), not free functions.
+interface (`<Interface>Client`), not free functions. D-30 to D-35, which record
+the client class as a whole, are in [The client class](#the-client-class) above.
 
 **D-16. The payload rule table changes together with wasm.** The sorted table is
 `length, pattern, range, step, unique, utf8, variant`. Codes are 2 plus the

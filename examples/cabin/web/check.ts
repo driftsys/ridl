@@ -1,26 +1,27 @@
 // The check of the cabin demo, without any Deno API, so that a browser page
-// can load it too. It judges the sequence of received temperature values;
-// main.ts and page.ts supply the transport and decode each payload with the
-// generated codec module, generated/veh.cabin.codec.ts. It also verifies
-// payloads through the wasm codec that main.ts and page.ts load, and builds
-// the payloads of its self-test with the generated `encodeTemperature`.
+// can load it too. It judges the sequence of received temperature values and
+// the replies of the two calls; main.ts and page.ts supply the transport and
+// bind the generated `CabinClient`, which verifies and decodes each payload
+// with the wasm codec that they load. It builds the payloads of its self-test
+// with the generated `encodeTemperature`, because the client refuses to send or
+// accept a payload that the codec rejects.
 
 import type { Codec } from "../../../packages/ridl-runtime/mod.ts";
-import { Kind } from "../../../packages/ridl-transport-ws/mod.ts";
-import type {
-  connect,
-  Session,
-} from "../../../packages/ridl-transport-ws/mod.ts";
+import type { connect } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
   Cabin,
+  type CabinClient,
   CATALOG_HASH,
   CATALOG_NAME,
   encodeTemperature,
   Horn,
   RULES,
-  signalChecks,
 } from "./generated/veh.cabin.codec.ts";
-import type { Temperature } from "./generated/veh.cabin.ts";
+import {
+  makeLevel,
+  makeWindow,
+  type Temperature,
+} from "./generated/veh.cabin.ts";
 
 /** The lowest and the highest value of `Temperature` in cabin.ridl. */
 export const LOWEST = -40;
@@ -97,28 +98,6 @@ export const RANGE_RULE = 2 + RULES.indexOf("range");
  */
 function encode(value: number): Uint8Array {
   return encodeTemperature(value as Temperature);
-}
-
-/**
- * Verifies a temperature payload through the wasm codec. Returns `undefined`
- * when the codec accepts it, and otherwise the cause.
- */
-export function verifyPayload(
-  codec: Codec,
-  payload: Uint8Array,
-): string | undefined {
-  const id = codec.typeId(Cabin.temperature.payload.type);
-  const result = codec.verify(id, payload);
-  if (result.ok) return undefined;
-  switch (result.kind) {
-    case "rule":
-      return `the codec rejected the payload with rule code ${result.code}` +
-        (result.code === RANGE_RULE ? " (range)" : "");
-    case "malformed":
-      return "the codec found the payload malformed (code 1)";
-    case "unknown-type":
-      return `the codec does not know type id ${id}`;
-  }
 }
 
 /**
@@ -205,30 +184,56 @@ export class TemperatureCheck {
 export const STEP_BOUND_MS = 10_000;
 
 /**
- * Subscribes `session` to `Cabin.temperature` with the bound of each step.
+ * Subscribes `client` to the temperature signal with the bound of each step.
  * main.ts and page.ts both call it, so that one test of the bound covers both.
  */
 export function subscribeTemperature(
-  session: Pick<Session, "subscribe">,
+  client: Pick<CabinClient, "subscribeTemperature">,
 ): Promise<void> {
-  return session.subscribe({
-    kind: Kind.Signal,
-    iface: Cabin.temperature.iface,
-    ord: Cabin.temperature.ord,
-  }, { bound: STEP_BOUND_MS });
+  return client.subscribeTemperature({ bound: STEP_BOUND_MS });
+}
+
+/** The two levels that the demo sends with `setLevel`, in order. */
+export const LEVELS = [30, 51] as const;
+
+/**
+ * The average that the server replies with after both levels: the mean of 30
+ * and 51 is 40.5, rounded down. A server that answers with the last level, the
+ * first level or a constant such as 42 does not reply 40.
+ */
+export const AVERAGE = 40;
+
+/** The averaging window, in milliseconds, that the demo sends with `average`. */
+export const WINDOW_MS = 10;
+
+/**
+ * Sends `setLevel` with each of `LEVELS` and then calls `average` with
+ * `WINDOW_MS`. The server answers `average` with the mean of the levels it
+ * received, rounded down, and it received only these two, so the reply has to
+ * be `AVERAGE`. Returns `undefined` when it is, and otherwise a cause. A call
+ * that fails rejects, and the caller reports the rejection. Every call uses the
+ * bound of each step, not the bound the catalog declares (50 ms and 200 ms), so
+ * that a loaded machine does not fail the demo on a delay.
+ */
+export async function exerciseCalls(
+  client: Pick<CabinClient, "setLevel" | "average">,
+): Promise<string | undefined> {
+  const opts = { bound: STEP_BOUND_MS };
+  for (const level of LEVELS) await client.setLevel(makeLevel(level), opts);
+  const average = await client.average(makeWindow(WINDOW_MS), opts);
+  return average === AVERAGE ? undefined : `average replied ${average} after ` +
+    `setLevel(${LEVELS.join(") and setLevel(")}), not ${AVERAGE}`;
 }
 
 /**
  * The options that main.ts and page.ts give to `connect`: the catalog, the
- * encoding, the limits of the generated interfaces, the bound of each step,
- * and the signal checks of the generated module. Each program adds its own
- * `onNote` and `onPublish`.
+ * encoding, the limits of the generated interfaces and the bound of each step.
+ * Each program adds its own `onNote`. The signal checks are registered by
+ * `CabinClient.bind`, not here.
  */
-export function sessionOptions(
-  codec: Codec,
-): Pick<
+export function sessionOptions(): Pick<
   Parameters<typeof connect>[1],
-  "catalog" | "encoding" | "interfaces" | "bound" | "checks"
+  "catalog" | "encoding" | "interfaces" | "bound"
 > {
   return {
     catalog: { name: CATALOG_NAME, hash: CATALOG_HASH },
@@ -238,6 +243,5 @@ export function sessionOptions(
     // keeps the default ceiling of its kind.
     interfaces: [Cabin, Horn],
     bound: STEP_BOUND_MS,
-    checks: signalChecks(codec),
   };
 }
