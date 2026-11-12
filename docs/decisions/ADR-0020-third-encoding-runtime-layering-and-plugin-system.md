@@ -732,9 +732,9 @@ as its public contract.
    publication together is the only thing that carries it. The TypeScript
    backend settles it. (Amended 2026-11-12: it does. `loadCodec` of
    `@driftsys/ridl-runtime` compares the module's `ridl_catalog_hash` with the
-   catalog hash in the generated `<base>.codec.ts` and throws `CatalogMismatch`
-   at load. The hash that the IR already defines is the coupling, and no new
-   hash exists.)
+   catalog hash the caller passes, the `CATALOG_HASH` of the generated
+   `<base>.codec.ts`, and throws `CatalogMismatch` at load. The hash that the IR
+   already defines is the coupling, and no new hash exists.)
 7. **FlatBuffers' place among the three encodings.** After the proto3 codec
    lands (roadmap story E11.8), measure proto3 against FlatBuffers on real
    payloads: encode time, decode time, encoded size, on a native target and on
