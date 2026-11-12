@@ -757,8 +757,8 @@ issue, driftsys/ridl#253, was closed in error during the re-scope pass and is
 being reopened.
 
 Design and plan of record:
-[`typl-value-objects-design.md`](wip/typl-value-objects-design.md) and
-[`typl-value-objects-plan.md`](wip/typl-value-objects-plan.md).
+[`typl-value-objects-design.md`](archive/typl-value-objects-design.md) and
+[`typl-value-objects-plan.md`](archive/typl-value-objects-plan.md).
 
 | ID     | Story                                                                             | Done when                                                         | Size |
 | ------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |

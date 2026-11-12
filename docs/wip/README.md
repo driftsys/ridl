@@ -361,10 +361,6 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   note, written for a coding agent that starts with only the repository and the
   file. Follow the review report for execution status; the plan retains its
   original baseline wording.
-- **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
-  §1.1 promises validators across every backend and neither language backend
-  emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
-  record. Roadmap: Epic 10.
 - **2026-10-03-devex-and-agent-tracks-brief.md** — the agreed scope of two
   tracks, an AI design assistant (MCP tools, design lints, skill) and code
   documentation (doc lints, language server, rules in generated facade docs),
@@ -389,6 +385,13 @@ execution handoff and the Kotlin heads-up and release-note draft
 (`2026-10-08-catalog-per-unit-handoff.md`, `catalog-per-unit-handoff.md`), when
 the work landed and its material was gardened into ADR-0002, ADR-0014 decision
 15, ADR-0015, ADR-0022 decision 6 and the design records they name.
+
+The typl value objects design and plan (`typl-value-objects-{design,plan}.md`)
+were archived on 2026-11-12, once the Rust half of Epic 10 landed (the
+TypeScript half moved to step 2, see [the roadmap](../ROADMAP.md));
+[ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 8 and
+[typl §5.7](../specification/typl-language-reference.md) are their durable
+records.
 
 The size rules plan (`2026-10-30-size-rules-plan.md`) was archived on
 2026-10-30, once the work landed;

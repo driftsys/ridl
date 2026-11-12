@@ -293,6 +293,45 @@ language layer at `int64`/`float64`.
    `make<Name>Unchecked`, which does not. An `internal` scalar has neither. The
    pattern check is always on, with the ECMA-262 semantics of the checker.
 
+   **As built — the shape of the emitted Rust type.** The inner field of a named
+   scalar is private in every case, so adding a constraint to a declaration
+   later changes the constructor and not the field access. `new` returns
+   `Result<Self, ::ridl_rt::payload::Violation>`; the generated code defines no
+   error type and imports nothing, because a typl package may declare a type
+   named `Violation` or `Rule`. `new_unchecked` is a safe `const fn`, not an
+   `unsafe` one, because no memory-safety property depends on the invariant. The
+   conversions are `TryFrom<Inner> for Type`, which calls `new`, and
+   `From<Type> for Inner`; `From<Inner> for Type` is never emitted for a
+   constrained type, because it would give back an infallible construction. A
+   type whose constraint is vacuous (no range, step, length bound or pattern,
+   which means a `boolean` backing, or an `integer` or `float` backing with
+   neither range nor step) gets a `const fn new` that cannot fail, both `From`
+   conversions and no `new_unchecked`; the blanket `TryFrom` of `core` then
+   gives it `Error = Infallible`. `ridl_ir::v2::constraint_is_vacuous` is the
+   one classifier. A numeric range or step check rejects NaN and infinities, and
+   an unconstrained float keeps them (typl §5.5). The step check preserves the
+   supplied value and does not round it (typl §4.3).
+
+   Every generated type derives `Debug`, `Clone` and `PartialEq`. `Copy`, `Eq`
+   and `Hash` are conditional on the transitive closure, and `PartialOrd` and
+   `Ord` are derived for numeric named scalars only, because typl states no
+   order for a struct or a union. `Default` is never derived: the default comes
+   from the declared init value (typl §5.8), which a derive would contradict.
+   `Send` and `Sync` need no emit, since every backing has them. The rule in
+   full, including the four positions that refuse every conditional derive, is
+   the module documentation of `crates/ridl-backend-rust/src/derives.rs`. The
+   type's doc comment states the declared contract only; `new_unchecked` has a
+   method doc that says it does not check, and the pattern behaviour is recorded
+   in [Generated code](../book/generated-code.md). No constructor checks a
+   cross-field invariant (typl §17.7).
+
+   `--emit rust` writes a crate that compiles: the per-package files, a `lib.rs`
+   that declares the module tree with `#[path]`, and one `Cargo.toml` for the
+   whole output directory, because a cross-package reference is a `crate::`
+   path. The crate is named after the root package of `ridl.toml` with each `.`
+   replaced by `_`, and `ridl_generated` for a workspace manifest; no option
+   renames it.
+
    **`ridl diff`.** Constraint classification is owned by
    [ADR-0008](ADR-0008-e2-execution.md) decision 14, amended 2026-11-09. A
    lowered minimum that moves a stepped grid is breaking. An aligned widening is
@@ -301,15 +340,17 @@ language layer at `int64`/`float64`.
 
 ## Alternatives considered
 
-| Candidate                                                    | Verdict  | Reason                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Emit a proto3 `service` with a pub/sub sidecar convention    | rejected | moves §4.4 and §4.5 semantics into an undocumented sidecar the schema does not describe; the generated artifact then understates the contract                                                                                          |
-| Emit a `ServiceStore` message holding each signal's value    | deferred | a store slot needs value, provenance (§4.5), and envelope (§3.1) to answer freshness, which makes it a runtime contract rather than a wire schema                                                                                      |
-| Per-kind identity tables — one enum per signal/event/command | rejected | ridl §11 numbers interactions in one interface-wide, kind-blind sequence; four tables would imply four numberings the language does not have                                                                                           |
-| Let each wire backend infer its own widths from the range    | rejected | typl §4.2 resolves width once in the checker so every backend agrees; a second inference site is a second source of truth that drifts silently                                                                                         |
-| Emit typl constants as proto3 enum members                   | rejected | proto3 enums are `int32`, so every float and regex constant is unrepresentable, and the integer ones would misstate a compile-time value as a tag                                                                                      |
-| Let a type declare its own reserved wire values in typl now  | deferred | decision 7 needs no syntax: `?` already declares the fact and the backend chooses the value. Syntax earns its place only when a published standard fixes the value, and no such target is being implemented — typl §17 open question 8 |
-| Surface the reserved value to consumers as a named constant  | rejected | puts the protocol's private knowledge in every consumer, which is the leak decision 7's second clause forbids; the value is a wire fact, never an API fact                                                                             |
+| Candidate                                                                | Verdict  | Reason                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Emit a proto3 `service` with a pub/sub sidecar convention                | rejected | moves §4.4 and §4.5 semantics into an undocumented sidecar the schema does not describe; the generated artifact then understates the contract                                                                                          |
+| Emit a `ServiceStore` message holding each signal's value                | deferred | a store slot needs value, provenance (§4.5), and envelope (§3.1) to answer freshness, which makes it a runtime contract rather than a wire schema                                                                                      |
+| Per-kind identity tables — one enum per signal/event/command             | rejected | ridl §11 numbers interactions in one interface-wide, kind-blind sequence; four tables would imply four numberings the language does not have                                                                                           |
+| Let each wire backend infer its own widths from the range                | rejected | typl §4.2 resolves width once in the checker so every backend agrees; a second inference site is a second source of truth that drifts silently                                                                                         |
+| Emit typl constants as proto3 enum members                               | rejected | proto3 enums are `int32`, so every float and regex constant is unrepresentable, and the integer ones would misstate a compile-time value as a tag                                                                                      |
+| Let a type declare its own reserved wire values in typl now              | deferred | decision 7 needs no syntax: `?` already declares the fact and the backend chooses the value. Syntax earns its place only when a published standard fixes the value, and no such target is being implemented — typl §17 open question 8 |
+| Surface the reserved value to consumers as a named constant              | rejected | puts the protocol's private knowledge in every consumer, which is the leak decision 7's second clause forbids; the value is a wire fact, never an API fact                                                                             |
+| Make the constrained scalar's inner field public beside a checking `new` | rejected | the range is unenforceable while `Speed(x)` compiles; the validator would exist and anything could bypass it                                                                                                                           |
+| Emit the public-field form and the constructor together for a release    | rejected | keeps the field public through the interim and ships a validation feature that does not validate; a consumer regenerates a whole package at once, so a deprecation window has no benefit                                               |
 
 ## Consequences
 
