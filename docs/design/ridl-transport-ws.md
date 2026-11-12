@@ -289,7 +289,11 @@ Two more entry points serve the provided session (D-28):
 `serve_provided_selected(conn, select, &config) -> Ended`. They follow the same
 rules: the embedder owns the socket and the thread, both block until the session
 ends, and the backend is dropped on every exit. They take no `max_version`,
-because the provided role has the one subprotocol.
+because the provided role has the one subprotocol. The timeout rules of `serve`
+apply with one difference: a zero `poll_interval` is raised to the shortest read
+timeout, 1 ms, by the provided entry points, where `serve` refuses it and
+returns `Ended::Io(InvalidInput)`. A zero `liveness_timeout` is refused by the
+stream's `set_write_timeout` in both (D-22).
 
 `Connection` is `Read + Write` plus three methods: `set_read_timeout`,
 `set_write_timeout`, and `shutdown_write`, whose default does nothing. It is
@@ -959,10 +963,20 @@ whose messages the `Config` cannot carry, with the limit it needs; `serve`
 records it before the handshake. `serve_selected` records it after selection
 when ordinary attach checks pass, with `refused(range)` or, when the capability
 check also fails, `refused(frame_version_unsupported)`. Both return
-`ConfigRefused`, D-26) and `RetainedBelowMessageLimit` (the retained-bytes cap
-is below the message limit; `serve` records it alone and returns before it reads
+`ConfigRefused`, D-26), `RetainedBelowMessageLimit` (the retained-bytes cap is
+below the message limit; `serve` records it alone and returns before it reads
 the member table, and `serve_selected` records it after `MessageLimitTooSmall`,
-D-26).
+D-26), and the notes of the reversed role (D-28): `Discarded` (a `publish` or a
+`response` that has bytes after a header that says it carries no payload;
+dropped, and before `attached` it is `MessageBeforeAttach` instead),
+`NotSubscribed` (a `publish` or an `occurrence` that arrived before its
+subscription was accepted; dropped), `EventGap` (an event sequence skipped
+occurrences), `DetectedInvalid` (a detected invalidity that the local signal
+port cannot carry became a declared one), `CorruptOccurrence` (an invalid
+occurrence that the local event port cannot carry; not raised), `PortRefused` (a
+local port refused a delivered sample or occurrence, or the handler refused to
+serve an offered member) and `UnknownCorrelation` (a `response` that names no
+call in flight, or names it with another target; discarded).
 
 ### `Config`
 
@@ -1452,15 +1466,19 @@ archived plan
 - **The first messages.** The server writes `attach` right after the upgrade,
   with frame version 2, the encoding of the ports, and the catalog of the ports.
   It then waits for `attached`, for at most `liveness_timeout` (D-22). A message
-  of another form before `attached` closes with 1002; a discarded frame before
-  it is `Note::MessageBeforeAttach` and closes with 1002. `attached(refused)`
-  closes the session with 1000, and the backend is dropped: the client checks
-  the catalog and encoding of the `attach` (frame specification §6.1), as the
-  server does in the other role. `attached(accepted)` starts the session: the
-  handler serves the members (D-16), and the server sends one `subscribe` for
-  every signal and event of the table, with no `read`. A second `attached` and
-  every consumer form (`attach`, `subscribe`, `read`, `request`, `unsubscribe`),
-  and `chunk`, `stream_end` and `stream_credit`, close with 1002.
+  of another form before `attached` closes with 1002 and records
+  `Note::MessageBeforeAttach`, as does a discarded frame; a `chunk`,
+  `stream_end` or `stream_credit` records `Note::Violation(UnknownCode)`, and a
+  message the codec cannot read records its own `Note::Violation`.
+  `attached(refused)` closes the session with 1000, and the backend is dropped:
+  the client checks the catalog and encoding of the `attach` (frame
+  specification §6.1), as the server does in the other role.
+  `attached(accepted)` starts the session: the handler serves the members
+  (D-16), and the server sends one `subscribe` for every signal and event of the
+  table, with no `read`. A second `attached` and every consumer form (`attach`,
+  `subscribe`, `read`, `request`, `unsubscribe`), and `chunk`, `stream_end` and
+  `stream_credit`, close with 1002; they record `Note::SecondAttach`,
+  `Note::UnexpectedDirection` and `Note::Violation(UnknownCode)` respectively.
 - **The tick** is the one of D-8. In the provided session it closes a commit
   group that has been idle for a `poll_interval` and settles the calls of D-16.
   The WebSocket layer, the pings, the write timeout and the close codes are

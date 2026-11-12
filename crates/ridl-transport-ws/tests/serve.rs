@@ -3017,7 +3017,10 @@ fn a_chunk_restarts_the_abandon_bound() {
     let mut seq = 0u64;
     for _ in 0..6 {
         provider.step();
-        // One step fills the loopback's window of 4 chunks.
+        // A step pushes at least the 4 chunks of the loopback's window, and
+        // more when the session reads the window while the step runs. Reading
+        // 4 chunks per step stays valid either way; the surplus is read after
+        // the loop.
         for _ in 0..4 {
             let i = seq as u8;
             seq += 1;
@@ -3025,8 +3028,19 @@ fn a_chunk_restarts_the_abandon_bound() {
         }
         thread::sleep(Duration::from_millis(100));
     }
+    // Any chunk the steps pushed beyond the 24 read comes first, in order;
+    // the first other frame is the end of the abandoned stream.
+    let end = loop {
+        let frame = recv(&mut ws);
+        let i = seq as u8;
+        if frame == element(1, seq + 1, i) {
+            seq += 1;
+        } else {
+            break frame;
+        }
+    };
     assert_eq!(
-        decode(&recv(&mut ws)).unwrap(),
+        decode(&end).unwrap(),
         stream_end(1, seq + 1, StreamOutcome::Interrupted)
     );
     assert_eq!(*notes.lock().unwrap(), vec![Note::CallAbandoned { seq: 1 }]);

@@ -224,14 +224,8 @@ impl Gateway {
         &self,
         path: &str,
     ) -> std::result::Result<Providing<Attachment>, SelectionError> {
-        let segments: Vec<_> = path.split('/').collect();
-        if segments.len() != 4
-            || !segments[0].is_empty()
-            || segments[1..].iter().any(|s| s.is_empty())
-            || path.contains(['?', '%', '#'])
-        {
-            return Err(SelectionError::NotFound);
-        }
+        // Every registered path has the form `/component/instance/catalog`
+        // with no empty segment, so a malformed path matches none.
         let selected = self
             .injections
             .iter()
