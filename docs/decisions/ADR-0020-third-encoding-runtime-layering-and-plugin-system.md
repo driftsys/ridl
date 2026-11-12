@@ -705,7 +705,15 @@ as its public contract.
    `wasm32-unknown-unknown` target. Whether that is the TypeScript consumer's
    step, a `ridlc` step, or an artifact published beside the package is not
    settled, and roadmap story E12.1's "a Deno program constructs and validates a
-   payload without a TypeScript codec" depends on the answer.
+   payload without a TypeScript codec" depends on the answer. (Amended
+   2026-11-12: it is the consumer's step. `ridlc` does not run `cargo`, because
+   a tool that starts a build in a user's environment is a larger decision than
+   the codec needs;
+   [the `wasm-exports` feature](../book/generated-code.md#the-wasm-exports-feature)
+   gives the command, and the module's exports are raw, with no `wasm-bindgen`.
+   The reasoning is in
+   [the archived TypeScript wasm codec
+   design](../archive/2026-10-21-ts-wasm-codec-design.md), D-1 and D-6.)
 5. ~~**Whether the lowered model is a public artifact.**~~ **Closed
    2026-09-22.** It is: `ridl build --emit codegen-model` writes
    `<base>.codegen.json`, one per package, in the canonical encoding — the
@@ -716,14 +724,20 @@ as its public contract.
    the model is lowered over the same scope a code emit reads, `ridl.std`
    included, and `ridl baseline` publishes only `.ir.json`. The schema is
    `ridl.codegen.v1` (`crates/ridl-ir/proto/ridl/codegen/v1/model.proto`); the
-   reasoning is the codegen model design note's D-12 and D-14.
+   reasoning is
+   [the codegen model design note](../archive/2026-09-22-codegen-model-design.md)'s
+   D-12 and D-14.
 6. **Whether the codec loader checks the generated-unit coupling at
    instantiation.** Decision 2 requires a package's wasm codec and its
    TypeScript caller to be one generated unit; it does not say whether the
    loader of decision 6's runtime package verifies that at load — for example
    against a hash over the IR the pair was generated from — or whether
    publication together is the only thing that carries it. The TypeScript
-   backend settles it.
+   backend settles it. (Amended 2026-11-12: it does. `loadCodec` of
+   `@driftsys/ridl-runtime` compares the module's `ridl_catalog_hash` with the
+   catalog hash the caller passes, the `CATALOG_HASH` of the generated
+   `<base>.codec.ts`, and throws `CatalogMismatch` at load. The hash that the IR
+   already defines is the coupling, and no new hash exists.)
 7. **FlatBuffers' place among the three encodings.** After the proto3 codec
    lands (roadmap story E11.8), measure proto3 against FlatBuffers on real
    payloads: encode time, decode time, encoded size, on a native target and on

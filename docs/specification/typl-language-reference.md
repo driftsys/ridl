@@ -242,6 +242,7 @@ Follow [ISO/IEC 9899:2018 (C17)](https://www.iso.org/standard/74528.html)
 [IEEE 754-2019](https://ieeexplore.ieee.org/document/8766229) double precision.
 Must include a decimal point (`0.0`, `3.14`, `-40.0`). Scientific notation is
 not supported in v0.1. `NaN` and `Inf` are not permitted in range constraints.
+For numeric literals in contract clauses, see expr-core §5.3.
 
 ### 2.6 String Literals
 

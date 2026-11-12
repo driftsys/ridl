@@ -127,7 +127,19 @@ B, [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) (the
 L, and [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) and
 [`../design/interaction-face.md`](../design/interaction-face.md) for lane R. The
 stories of lane C (#318 and #246 to #255) are closed. The coordination issue
-#328 stays open.
+#328 was closed on 2026-11-03.
+
+The lane P driver (`2026-09-22-lane-p-driver.md`) and its two design notes, the
+IR stability note (`2026-09-22-ir-stability-design.md`) and the codegen model
+note (`2026-09-22-codegen-model-design.md`), were archived on 2026-11-12, once
+the codegen model `ridl.codegen.v1`, the canonical encoding and the plugin
+contract had landed and coordination issue #328 was closed;
+[`../design/codegen-plugins.md`](../design/codegen-plugins.md),
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+[ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 9 and
+[the IR specification](../specification/ir-specification.md) are their durable
+records. The codegen model note's open items (its section 9) are recorded in
+section 9 of the codegen plugins design record.
 
 The deployment descriptor design and plan
 (`2026-11-01-deployment-descriptor-{design,plan}.md`) were archived on
@@ -308,36 +320,6 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   **2026-09-12-interface-id-study-2.md** — the two identity study reports that
   note's D-7 summarises, kept verbatim; the first ranked the carriers, the
   second simulated the merges and the diff. **Not ratified.**
-- **2026-09-22-lane-p-driver.md** — the driver for lane P, the codegen plugin
-  system on the way to a Kotlin backend: E4.5a (the IR stability policy and the
-  canonical encoding, with #231 first), the lowered codegen model, E4.5b (the
-  backend contract and the process host), the Rust backend ported onto the
-  model, and E11.1's logical frame. Written for a session of any vendor with no
-  prior context, so it carries the working rules and the facts a driver prompt
-  otherwise leaves to the conversation. Six stages; two design notes inside it
-  stop for Sebastien's disposition. Coordination issue: #328.
-- **2026-09-22-ir-stability-design.md** — lane P stage P1a: the recommended
-  disposition of O-P1 (canonical protobuf JSON becomes the canonical encoding,
-  binary and prototext derived), with #231 reproduced as measured numbers, the
-  bound the canonical form nests to, what "canonical" fixes, the compatibility
-  rule and the versioning rule. A recommendation for Sebastien's disposition;
-  stage P1b implements it.
-- **2026-09-22-codegen-model-design.md** — lane P stage P2a: the lowered codegen
-  model, message by message — names already transformed per target namespace,
-  widths, inits, constraints, tombstones resolved into slots, the FlatBuffers
-  layouts and bounds, and the interface, interaction, timing, clause and catalog
-  facts an IPC binding needs (driver decision D-P4). It carries the recommended
-  disposition of O-P2, the model's home. A recommendation for Sebastien's
-  disposition; **implemented by P2b** as it stands — `ridl.codegen.v1` in
-  `crates/ridl-ir`, `ridl build --emit codegen-model`, and one fact-level drift
-  test per backend. §9 of the note is still open, and its items belong to the
-  stages it names. Stage P3 built the contract over it —
-  [`../design/codegen-plugins.md`](../design/codegen-plugins.md) — and its §10's
-  last item, ADR-0020 open item 5, was closed by P2b. Stage P4 ported the Rust
-  backend onto the model in the three layers §8.2 names, deleted that backend's
-  fact-level drift test — every fact it compared is a function of the model by
-  construction now — and closed §9 item 2 (the private `snake_case` of
-  driftsys/ridl#450) by construction. The other three backends keep theirs.
 - **fmt-ridl-rsdl-layout.md** — the canonical `ridl fmt` layout of the seven
   declarations covered by driftsys/ridl#387: ridl `interface` and `service`, and
   the five rsdl declarations. Every member form with its rendering, the rules
@@ -361,10 +343,6 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   note, written for a coding agent that starts with only the repository and the
   file. Follow the review report for execution status; the plan retains its
   original baseline wording.
-- **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
-  §1.1 promises validators across every backend and neither language backend
-  emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
-  record. Roadmap: Epic 10.
 - **2026-10-03-devex-and-agent-tracks-brief.md** — the agreed scope of two
   tracks, an AI design assistant (MCP tools, design lints, skill) and code
   documentation (doc lints, language server, rules in generated facade docs),
@@ -389,6 +367,13 @@ execution handoff and the Kotlin heads-up and release-note draft
 (`2026-10-08-catalog-per-unit-handoff.md`, `catalog-per-unit-handoff.md`), when
 the work landed and its material was gardened into ADR-0002, ADR-0014 decision
 15, ADR-0015, ADR-0022 decision 6 and the design records they name.
+
+The typl value objects design and plan (`typl-value-objects-{design,plan}.md`)
+were archived on 2026-11-12, once the Rust half of Epic 10 landed (the
+TypeScript half moved to step 2, see [the roadmap](../ROADMAP.md));
+[ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 8 and
+[typl §5.7](../specification/typl-language-reference.md) are their durable
+records.
 
 The size rules plan (`2026-10-30-size-rules-plan.md`) was archived on
 2026-10-30, once the work landed;
@@ -486,4 +471,13 @@ The TypeScript signal check design (`2026-11-09-ts-signal-check-design.md`) was
 archived on 2026-11-09, once the work landed (driftsys/ridl#1236);
 [`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
 [`../design/ts-codec-table.md`](../design/ts-codec-table.md) and
+[the generated code chapter](../book/generated-code.md) are its durable records.
+
+The TypeScript wasm codec design (`2026-10-21-ts-wasm-codec-design.md`) was
+archived verbatim on 2026-11-12, after the work it covers landed (the wasm
+module, the runtime package, the cabin demos and the codec table);
+[`../design/ts-codec-table.md`](../design/ts-codec-table.md),
+[`../design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md),
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+(open items 4 and 6, amended 2026-11-12) and
 [the generated code chapter](../book/generated-code.md) are its durable records.

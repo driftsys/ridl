@@ -90,7 +90,10 @@ fn visit<'a>(
                         .find_map(|p| {
                             p.decls
                                 .iter()
-                                .find(|d| format!("{}.{}", p.name, d.name) == *name)
+                                .find(|d| {
+                                    name.strip_prefix(&p.name).and_then(|n| n.strip_prefix('.'))
+                                        == Some(d.name.as_str())
+                                })
                                 .map(|d| (p, d))
                         })
                 });
@@ -148,32 +151,55 @@ fn visit<'a>(
     }
 }
 
-/// A widening is compatible only with at least one sent use and no received
-/// use. Unreached declarations fail closed.
-pub(crate) fn widening_verdict(
-    new: &v2::Package,
-    scope: &[&v2::Package],
-    identity: &str,
-) -> Verdict {
-    let mut sent = false;
-    let scope = packages(new, scope);
-    for home in &scope {
-        for shape in home.shapes() {
-            for interaction in &shape.interface.interactions {
-                for (ty, received) in roots(interaction) {
-                    if reached(home, &ty, &scope).contains_key(identity) {
-                        if received {
-                            return Verdict::Breaking;
+type ScopeKey = (usize, Vec<usize>);
+type Uses = BTreeMap<String, (bool, bool)>;
+
+/// Direction maps retained only for one comparison, keyed by package addresses.
+#[derive(Default)]
+pub(crate) struct DirectionCache {
+    uses: BTreeMap<ScopeKey, Uses>,
+}
+
+impl DirectionCache {
+    /// A widening needs a sent use and no received use; unreached types break.
+    pub(crate) fn widening_verdict(
+        &mut self,
+        new: &v2::Package,
+        scope: &[&v2::Package],
+        identity: &str,
+    ) -> Verdict {
+        let key = (
+            std::ptr::from_ref(new) as usize,
+            scope
+                .iter()
+                .map(|p| std::ptr::from_ref(*p) as usize)
+                .collect(),
+        );
+        let uses = self.uses.entry(key).or_insert_with(|| {
+            let mut uses = BTreeMap::<String, (bool, bool)>::new();
+            let scope = packages(new, scope);
+            for home in &scope {
+                for shape in home.shapes() {
+                    for interaction in &shape.interface.interactions {
+                        for (ty, received) in roots(interaction) {
+                            for identity in reached(home, &ty, &scope).into_keys() {
+                                let flags = uses.entry(identity).or_default();
+                                if received {
+                                    flags.1 = true;
+                                } else {
+                                    flags.0 = true;
+                                }
+                            }
                         }
-                        sent = true;
                     }
                 }
             }
+            uses
+        });
+        if uses.get(identity) == Some(&(true, false)) {
+            Verdict::Compatible
+        } else {
+            Verdict::Breaking
         }
-    }
-    if sent {
-        Verdict::Compatible
-    } else {
-        Verdict::Breaking
     }
 }

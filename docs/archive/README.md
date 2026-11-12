@@ -295,6 +295,15 @@ provenance. Nothing here is normative — the current references live in
   driftsys/ridl#470 until stage K9a took that as ADR-0019 decision 8, and landed
   in stage K9b on 2026-09-21. The face over the codec is
   [the interaction-face design record](../design/interaction-face.md).
+- **2026-09-22-lane-p-driver.md**, **2026-09-22-ir-stability-design.md** and
+  **2026-09-22-codegen-model-design.md** — the driver for lane P (the codegen
+  plugin system) and its two design notes, the canonical encoding and the
+  compatibility rule, and the lowered codegen model. Gardened into
+  [`../design/codegen-plugins.md`](../design/codegen-plugins.md),
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) and
+  [the IR specification](../specification/ir-specification.md). Archived
+  verbatim.
 - **2026-09-20-lane-k-driver.md** — the driver prompt lane K ran under, archived
   with the pair above when the lane closed on 2026-09-21. Its stage K0 filed the
   two rows the codec work surfaced, E11.14 (the face and the codec reach
@@ -710,7 +719,7 @@ provenance. Nothing here is normative — the current references live in
 
 - **2026-10-22-cabin-ws-server-plan.md** — the plan for the cabin WebSocket
   server and its Deno demo (step 2 of
-  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
+  [the TypeScript wasm codec design](2026-10-21-ts-wasm-codec-design.md)).
   Archived with one edit, the link to the design note. The durable record is the
   example itself, `examples/cabin/server` and `examples/cabin/web`, run by
   `just cabin-ws-demo`;
@@ -719,14 +728,14 @@ provenance. Nothing here is normative — the current references live in
 
 - **2026-10-22-cabin-browser-demo-plan.md** — the plan for the browser demo of
   the cabin temperature check (step 3 of
-  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
+  [the TypeScript wasm codec design](2026-10-21-ts-wasm-codec-design.md)).
   Archived with one edit, the link to the design note. The durable record is
   `examples/cabin/web` (`check.ts`, `page.ts`, `browser.ts`), run by
   `just cabin-browser-demo`.
 
 - **2026-10-22-cabin-wasm-verify-plan.md** — the plan for verifying the cabin
   temperature through the wasm codec in both demos (step 4 of
-  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)).
+  [the TypeScript wasm codec design](2026-10-21-ts-wasm-codec-design.md)).
   Archived with one edit, the link to the design note. The durable record is
   `examples/cabin/web/check.ts` and its tests, the `_cabin-wasm` recipe, and the
   out-of-memory check in `packages/ridl-runtime`.
@@ -734,7 +743,7 @@ provenance. Nothing here is normative — the current references live in
 - **2026-10-22-ts-codec-table-design.md** and
   **2026-10-22-ts-codec-table-plan.md** — the design and the plan for the
   generated TypeScript codec table (step 5 of
-  [the TypeScript wasm codec design](../wip/2026-10-21-ts-wasm-codec-design.md)):
+  [the TypeScript wasm codec design](2026-10-21-ts-wasm-codec-design.md)):
   `<base>.codec.ts`, the `codec` manifest key and MANI-019, and the
   `ridl_type_id` export. Archived with two edits, the links to that design note.
   The durable record is
@@ -925,3 +934,16 @@ provenance. Nothing here is normative — the current references live in
   [the generated code chapter](../book/generated-code.md),
   [the typl reference](../specification/typl-language-reference.md) §2.7 and
   [the runtime README](../../packages/ridl-runtime/README.md).
+
+- **2026-10-21-ts-wasm-codec-design.md** — the design note for the TypeScript
+  wasm codec and the runtime package: the raw-export wasm boundary, the `wasm`
+  module of the generated crate, the loader that checks the catalog hash, the
+  two-command build, and the plan change of 2026-10-22. Archived verbatim, on
+  2026-11-12, after the work landed. As built, the module also exports
+  `ridl_type_id`, and `loadCodec` takes the catalog hash as `catalogHash` rather
+  than `catalogs`. The durable records are
+  [the codec table design](../design/ts-codec-table.md),
+  [the TypeScript client design](../design/ridl-transport-ws-ts.md),
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  (open items 4 and 6) and
+  [the generated code chapter](../book/generated-code.md).

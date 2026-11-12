@@ -1,5 +1,5 @@
 //! `--emit rust` writes a compiling crate (Task 7,
-//! docs/wip/typl-value-objects-plan.md): a `Cargo.toml` and `lib.rs` alongside
+//! docs/archive/typl-value-objects-plan.md): a `Cargo.toml` and `lib.rs` alongside
 //! the per-package `.rs` files, so the flat emitted files resolve at the
 //! `crate::…` paths `ridl_backend_rust::type_path` already generates.
 //!

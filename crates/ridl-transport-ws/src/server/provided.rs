@@ -31,8 +31,12 @@ pub enum SelectionError {
 /// Consumes a remote provider over a connection the embedder accepted.
 ///
 /// Accepts only `ridl-ws-v2-provider`, ignores the URL path, and sends
-/// `attach` first. The peer must answer `attached`. The blocking, timeout,
-/// framing and cleanup rules of [`serve`](super::serve) apply. After acceptance
+/// `attach` first. The peer must answer `attached`. The blocking, framing and
+/// cleanup rules of [`serve`](super::serve) apply, and so do its timeout rules
+/// with one difference: a zero [`Config::poll_interval`] is raised to the
+/// shortest read timeout, 1 ms, where `serve` refuses it and returns
+/// [`Ended::Io`] with `InvalidInput`. A zero [`Config::liveness_timeout`] is
+/// refused by the stream's `set_write_timeout`, as in `serve`. After acceptance
 /// the session subscribes to every offered signal and event, and serves the
 /// offered commands and queries through the remote provider. At most 64 claims
 /// are in flight; further calls stay queued on the local handler. Streamed

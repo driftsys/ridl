@@ -12,7 +12,7 @@
 //! leaving the specification wrong.
 //!
 //! **Why this file is in `ridlc` and not in `ridl-ir`.** The design note
-//! (`docs/wip/2026-09-22-ir-stability-design.md` §6) asks for both tests in
+//! (`docs/archive/2026-09-22-ir-stability-design.md` §6) asks for both tests in
 //! `crates/ridl-ir`. `ridl-ir` holds the schema and the encodings and depends
 //! on nothing in this workspace; both tests need the front end, and the corpus
 //! test needs the corpus fixtures, which live beside this file. Reaching either

@@ -7,7 +7,7 @@ syntax = "proto3";
 // request of the plugin protocol carries a `Model`, never the raw IR, so a
 // plugin resolves no reference, applies no name transform, and re-derives no
 // typl rule. The design note is
-// `docs/wip/2026-09-22-codegen-model-design.md`; its §3 is this file message
+// `docs/archive/2026-09-22-codegen-model-design.md`; its §3 is this file message
 // by message, its §4 the decisions, and its §7 the list of what a printer
 // computes for itself rather than reads here.
 //

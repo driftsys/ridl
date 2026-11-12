@@ -1,6 +1,6 @@
 //! The lowered codegen model: its invariants, its encoding, its nesting
 //! bound, and the floor it has to meet
-//! (`docs/wip/2026-09-22-codegen-model-design.md` §10).
+//! (`docs/archive/2026-09-22-codegen-model-design.md` §10).
 //!
 //! **Why this file is in `ridlc` and not in `ridl-ir`.** The design note asks
 //! for these tests in `crates/ridl-ir`, which is where the model lives. Every

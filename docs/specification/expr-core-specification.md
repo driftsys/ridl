@@ -270,7 +270,7 @@ numeric operand** — this is the same rule that makes
 value unifies with literals and with values of the same bare primitive, never
 with a named type. The subset checker unifies literals nominally; it does not
 evaluate range conformance of literal operands (the test plane exercises
-values).
+values). The numeric literal admission check is specified in §5.3.
 
 ### 5.3 Operator rules
 
@@ -285,6 +285,12 @@ values).
 | unary `-`         | numeric                                                                                       | the operand type |
 | `Enum.MEMBER`     | postfix `SCREAMING_SNAKE_ID` member on an enum type name in scope                             | that enum type   |
 | `value.field`     | postfix `camelCase_id` member on a tuple-typed value, naming one of its fields                | the field's type |
+
+A numeric literal in a `require` or `ensure` clause is refused with RIDL-306 if
+its exact value exceeds `f64::MAX` in magnitude, compared as exact rationals.
+The diagnostic names the literal and states that it is outside the finite
+binary64 range. This check applies to integer and float literals and runs at
+compile time; it adds no runtime infinity check.
 
 Rules the table implies, stated explicitly:
 
@@ -346,7 +352,8 @@ IEEE-754 arithmetic anywhere in the contract plane**.
   ranges, steps, and constants are exact decimals — typl §4–§5 — carried by the
   toolchain's exact-scalar representation). `0.1 + 0.2 == 0.3` holds. Wire-width
   and float-representation concerns (typl §4.3) are boundary concerns; they do
-  not leak into contract evaluation.
+  not leak into contract evaluation. Numeric literal admission is specified in
+  §5.3.
 - **Durations are exact microsecond counts.** `1s` = `1000ms` = `1000000us`;
   duration comparison compares the counts. This matches platform time (`int64`
   microseconds, ridl §3.1) and the IR's exact-decimal microsecond timing rule
@@ -386,6 +393,7 @@ That includes, non-exhaustively:
 | duration arithmetic (§5.3)                                  | `require window + 10ms < 1s`         |
 | struct-field access — struct-typed base, not a tuple (§5.1) | `require filter.severity >= 4`       |
 | `%` over non-integer-backed operands (§5.3)                 | `require speed % 0.5 == 0.0`         |
+| numeric literal outside the finite binary64 range (§5.3)    | a 400-digit integer in a clause      |
 | non-boolean root (§5.3)                                     | `require 3`                          |
 | string/bytes operands; enum ordering (§5.3)                 | `require name == "x"`                |
 
