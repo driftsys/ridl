@@ -490,3 +490,166 @@ test("the abort listener is removed from the signal once the call settles", asyn
   assert.ok(added >= 1);
   assert.equal(removed, added);
 });
+
+test("catalogHash and the attach frame hold the same bytes when the caller changes its buffer before the connection opens", async () => {
+  const hash = Uint8Array.from(HASH);
+  const sockets: FakeSocket[] = [];
+  const pending = connect("ws://127.0.0.1:9000", {
+    catalog: { name: "veh.cabin", hash },
+    webSocket: (url, protocols) => {
+      const socket = new FakeSocket(url, protocols);
+      sockets.push(socket);
+      return socket as unknown as WebSocket;
+    },
+  });
+  hash[0] = 99;
+  const socket = sockets[0];
+  socket.open(SUBPROTOCOL_V3);
+  const first = frames(socket)[0];
+  assert.equal(first.form, "attach");
+  assert.deepEqual((first as { hash: Uint8Array }).hash, HASH);
+  socket.deliver({ form: "attached", outcome: { outcome: "accepted" } });
+  const session = await pending;
+  assert.deepEqual(session.catalogHash, HASH);
+});
+
+/** Runs `body` with a handler that keeps reported errors from failing the test. */
+async function catchingReported(
+  body: (seen: unknown[]) => Promise<void>,
+): Promise<void> {
+  const seen: unknown[] = [];
+  const handler = (e: ErrorEvent) => {
+    e.preventDefault();
+    seen.push(e.error);
+  };
+  globalThis.addEventListener("error", handler);
+  try {
+    await body(seen);
+  } finally {
+    globalThis.removeEventListener("error", handler);
+  }
+}
+
+test("a watch listener that throws is reported and does not stop the other listeners or the held sample", async () => {
+  await catchingReported(async (reported) => {
+    const { socket, session } = await attached();
+    const subscribed = session.subscribe(1, 2);
+    socket.deliver(accepted(SIGNAL));
+    await subscribed;
+    const boom = new Error("boom");
+    const seen: Sample[] = [];
+    session.watch(1, 2, () => {
+      throw boom;
+    });
+    session.watch(1, 2, (s) => seen.push(s));
+    socket.deliver(live(1n, [1]));
+    socket.deliver(live(2n, [2]));
+    assert.equal(seen.length, 2);
+    assert.deepEqual(session.sample(1, 2)?.payload, Uint8Array.from([2]));
+    assert.deepEqual(reported, [boom, boom]);
+  });
+});
+
+test("a listen listener that throws is reported and does not stop the other listeners", async () => {
+  await catchingReported(async (reported) => {
+    const { socket, session } = await attached();
+    const subscribed = session.subscribe(1, 3);
+    socket.deliver(accepted(EVENT));
+    await subscribed;
+    const boom = new Error("boom");
+    const seen: Occurrence[] = [];
+    session.listen(1, () => {
+      throw boom;
+    });
+    session.listen(1, (o) => seen.push(o));
+    socket.deliver(occurrence(1n, [1]));
+    socket.deliver(occurrence(2n, [2]));
+    assert.equal(seen.length, 2);
+    assert.deepEqual(reported, [boom, boom]);
+  });
+});
+
+test("watch listeners run after the sample is held and after onPublish", async () => {
+  const order: string[] = [];
+  const { socket, session } = await attached({
+    onPublish: () => order.push("onPublish"),
+  });
+  const subscribed = session.subscribe(1, 2);
+  socket.deliver(accepted(SIGNAL));
+  await subscribed;
+  session.watch(1, 2, () => {
+    const held = session.sample(1, 2)?.payload?.[0] ?? 0;
+    order.push(held === 1 ? "watch, held" : "watch");
+  });
+  socket.deliver(live(1n, [1]));
+  assert.deepEqual(order, ["onPublish", "watch, held"]);
+});
+
+test("a stale publish and a publish after unsubscribe(iface, ord) are not delivered to a watcher", async () => {
+  const { socket, session } = await attached();
+  const subscribed = session.subscribe(1, 2);
+  socket.deliver(accepted(SIGNAL));
+  await subscribed;
+  const seen: Sample[] = [];
+  session.watch(1, 2, (s) => seen.push(s));
+  socket.deliver(live(5n, [5]));
+  socket.deliver(live(3n, [3]));
+  assert.equal(seen.length, 1);
+  session.unsubscribe(1, 2);
+  assert.deepEqual(frames(socket).at(-1), {
+    form: "unsubscribe",
+    target: SIGNAL,
+  });
+  socket.deliver(live(6n, [6]));
+  assert.equal(seen.length, 1);
+});
+
+test("unsubscribe(iface, ord) of an event sends an event target", async () => {
+  const { socket, session } = await attached();
+  const subscribed = session.subscribe(1, 3);
+  socket.deliver(accepted(EVENT));
+  await subscribed;
+  session.unsubscribe(1, 3);
+  assert.deepEqual(frames(socket).at(-1), {
+    form: "unsubscribe",
+    target: EVENT,
+  });
+});
+
+test("query: an invalid bound is a RangeError even when the signal is aborted", async () => {
+  const { session } = await attached();
+  const controller = new AbortController();
+  controller.abort();
+  await assert.rejects(
+    session.query(1, 7, new Uint8Array(), {
+      bound: 0,
+      signal: controller.signal,
+    }),
+    RangeError,
+  );
+});
+
+test("the abort listener is removed from the signal when the call rejects", async () => {
+  const { socket, session } = await attached();
+  const signal = new AbortController().signal;
+  let added = 0;
+  let removed = 0;
+  const add = signal.addEventListener.bind(signal);
+  const remove = signal.removeEventListener.bind(signal);
+  signal.addEventListener = (...a: Parameters<typeof add>) => {
+    if (a[0] === "abort") added++;
+    return add(...a);
+  };
+  signal.removeEventListener = (...a: Parameters<typeof remove>) => {
+    if (a[0] === "abort") removed++;
+    return remove(...a);
+  };
+  const pending = session.command(1, 6, new Uint8Array(), {
+    bound: 20,
+    signal,
+  });
+  socket.serverClose(1006);
+  await assert.rejects(pending, (e) => e instanceof CallError);
+  assert.ok(added >= 1);
+  assert.equal(removed, added);
+});
