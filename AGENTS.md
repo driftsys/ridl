@@ -288,11 +288,12 @@ member; rsdl is the apex.
                          builds no codec module and runs no flatc), run the
                          unit tests of the check (check_test.ts),
                          then run the Deno program of examples/cabin/web,
-                         which reads the catalog, the interaction table and
-                         the decode function from the generated codec module
-                         against it: the program decodes the server's
-                         temperature payloads through the generated codec
-                         module and fails
+                         which binds the generated CabinClient to a session over
+                         the server: it sends setLevel with 30 and with 51, calls
+                         average and fails unless the reply is 40 (the mean, rounded
+                         down), then watches the temperature signal through the
+                         client, which registers the signal checks and verifies and
+                         decodes each payload. The program fails
                          unless every value is inside [-40..85], every
                          received value is 1 to 63 steps ahead of the previous
                          one on the ring of the 126 values (85 is followed by
@@ -300,11 +301,9 @@ member; rsdl is the apex.
                          such a step, and -40 is seen after 85 (the first
                          sample counts for neither bound). Before it connects,
                          the program checks that the codec accepts 20 and
-                         rejects -41 and 86 with the range rule; it then
-                         verifies every received payload with the codec.
+                         rejects -41 and 86 with the range rule.
                          The program's session has a bound of 10 s on connect
-                         and subscribe and registers the signal checks that
-                         the generated codec module writes.
+                         and subscribe.
                          Needs Deno and flatc at the version in .flatc-version
     just ts-browser-e2e  build the ridl-transport-ws example loopback_server,
                          then run the package's end-to-end test in a headless
@@ -313,9 +312,9 @@ member; rsdl is the apex.
                          contributor's build needs no browser
     just cabin-browser-demo
                          the generation and server build of cabin-ws-demo,
-                         then the same codec self-test, session bound and
-                         signal checks, payload verification
-                         and temperature check in a page that a
+                         then the same codec self-test, session bound, calls
+                         (setLevel twice, average replying 40) and
+                         temperature check through the client in a page that a
                          headless browser opens (RIDL_BROWSER names one);
                          needs Deno, flatc and a Chromium-family browser.
                          Runs in CI; not a member of build, for the same

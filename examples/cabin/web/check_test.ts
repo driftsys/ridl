@@ -60,9 +60,10 @@ import type {
   Window,
 } from "./generated/veh.cabin.ts";
 import {
+  AVERAGE,
   exerciseCalls,
   isPass,
-  LEVEL,
+  LEVELS,
   RANGE_RULE,
   selfTest,
   sessionOptions,
@@ -280,19 +281,29 @@ function fakeCalls(reply: number) {
   };
 }
 
-Deno.test("exerciseCalls sends setLevel and then average, each with the bound of a step", async () => {
-  const { calls, client } = fakeCalls(LEVEL);
+Deno.test("exerciseCalls sends both levels and then average, each with the bound of a step", async () => {
+  const { calls, client } = fakeCalls(AVERAGE);
   assert.equal(await exerciseCalls(client), undefined);
   assert.deepEqual(calls, [
-    ["setLevel", makeLevel(LEVEL), { bound: STEP_BOUND_MS }],
+    ["setLevel", makeLevel(30), { bound: STEP_BOUND_MS }],
+    ["setLevel", makeLevel(51), { bound: STEP_BOUND_MS }],
     ["average", makeWindow(WINDOW_MS), { bound: STEP_BOUND_MS }],
   ]);
+  assert.deepEqual([...LEVELS], [30, 51]);
+  assert.equal(AVERAGE, 40);
 });
 
-Deno.test("exerciseCalls names a reply that is not the level it sent", async () => {
-  const { client } = fakeCalls(LEVEL + 1);
-  const cause = await exerciseCalls(client);
-  assert.match(cause ?? "", /average replied 43 after setLevel\(42\), not 42/);
+Deno.test("exerciseCalls names a reply that is not the mean of the levels", async () => {
+  // The last level, the first level, a constant and the unrounded mean.
+  for (const reply of [51, 30, 42, 41]) {
+    const cause = await exerciseCalls(fakeCalls(reply).client);
+    assert.match(
+      cause ?? "",
+      new RegExp(
+        `average replied ${reply} after setLevel\\(30\\) and setLevel\\(51\\), not 40`,
+      ),
+    );
+  }
 });
 
 Deno.test("exerciseCalls does not call average when setLevel rejects", async () => {
@@ -302,7 +313,7 @@ Deno.test("exerciseCalls does not call average when setLevel rejects", async () 
       setLevel: () => Promise.reject(new Error("refused")),
       average: () => {
         calls.push("average");
-        return Promise.resolve(makeAverage(LEVEL));
+        return Promise.resolve(makeAverage(AVERAGE));
       },
     }),
     /refused/,

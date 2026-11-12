@@ -3372,20 +3372,21 @@ _cabin-wasm:
     mkdir -p examples/cabin/web/generated
     cp "$wasm_target/wasm32-unknown-unknown/release/veh_cabin.wasm" examples/cabin/web/generated/veh_cabin.wasm
 
-# Prove a Deno program can read a value from a Rust server and decode it with
-# code that `flatc` generated from the `ridl build` output. The server is
-# examples/cabin/server, which publishes cabin's `temperature` signal over
-# `ridl-transport-ws` with the member table read from the catalog descriptor
-# that `_cabin-generate` writes. The program is examples/cabin/web/main.ts,
-# which takes the catalog name and hash, the interface number and ordinal of
-# the signal, and the decode function from the generated codec module
-# examples/cabin/web/generated/veh.cabin.codec.ts. It fails when the catalog
-# hash the server announces is not the generated one, attaches with the
-# encoding `flatbuffers` through a session with a bound of 10 s and the
-# generated signal checks, subscribes, fails when the session check refuses a
-# payload, verifies each payload through cabin's
-# wasm codec and fails with the codec's cause on a rejection, decodes each
-# verified payload with the generated codec module, and fails unless every
+# Prove a Deno program can use the typed client that `ridl build` generates
+# against a Rust server. The server is examples/cabin/server, which publishes
+# cabin's `temperature` signal, serves its `setLevel` command and its `average`
+# query over `ridl-transport-ws`, with the member table read from the catalog
+# descriptor that `_cabin-generate` writes. The program is
+# examples/cabin/web/main.ts. It fails when the catalog hash the server
+# announces is not the generated one, attaches with the encoding `flatbuffers`
+# through a session with a bound of 10 s on connect and subscribe, and binds the
+# generated `CabinClient` to the session and the wasm codec. `bind` registers
+# the signal checks and the client verifies and decodes each payload; the
+# program neither encodes, decodes nor addresses a member by number. Through the
+# client the program sends `setLevel` with 30 and with 51, calls `average` and
+# fails unless the reply is 40 (the server answers with the mean of the levels
+# it received, rounded down), then subscribes to `temperature`, fails when the
+# client marks a payload invalid, and fails unless every
 # value is inside [-40..85], every received value is 1 to 63 steps ahead of
 # the previous one on the ring of the 126 values (85 is followed by -40; a
 # repeated value is ignored), 85 is reached by such a step, and -40 is seen
@@ -3478,12 +3479,12 @@ _find-browser name:
 # wasm32-unknown-unknown target) from 127.0.0.1, and opens it in the browser.
 # The page loads the codec with the announced catalog hash, runs the same
 # self-test (20 accepted, -41 and 86 rejected with the range rule), attaches
-# with the encoding `flatbuffers` (a bound of 10 s on connect and subscribe,
-# the signal checks of the generated codec module registered), verifies each
-# payload through the codec (a payload the session check or the codec refuses
-# fails the run with its cause), and
-# decodes each verified
-# payload with the `flatc` code. One 30 s limit
+# with the encoding `flatbuffers` (a bound of 10 s on connect and subscribe),
+# binds the generated `CabinClient`, sends `setLevel` with 30 and with 51 and
+# calls `average`, which has to reply 40, then watches `temperature` through the
+# client, which registers the signal checks and verifies and decodes each
+# payload (a payload the client marks invalid fails the run with its cause),
+# and feeds each value to the check. One 30 s limit
 # covers the page's verdict; the server is then stopped and must exit with
 # status 0. It prints the number of samples and the number of wraps.
 #

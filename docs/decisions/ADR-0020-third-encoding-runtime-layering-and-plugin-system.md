@@ -26,17 +26,17 @@ to, not here.
 port interfaces are named and the transport package depends on the runtime
 package.** `@driftsys/ridl-runtime` carries the consumer port interfaces
 `Caller`, `SignalReader`, `EventSource` and `StreamCaller`, and the provider
-ports follow with the TypeScript emulator. They are Promise-based, not
-poll-based: they keep the split by interaction kind and the byte-only boundary
-of the Rust ports, and they address a member by interface number and ordinal.
-`@driftsys/ridl-transport-ws` implements the four consumer ports with `Session`,
-so it depends on `@driftsys/ridl-runtime`, as the 2026-10-20 amendment allowed.
-The generated TypeScript module of a package with `codec = true` holds one
-client class per interface, `<Interface>Client`, bound to those ports, and
-neither names a transport nor imports one. The `@driftsys/ridl-runtime` and
-`@driftsys/ridl-transport-ws` rows of decision 6's table and decision 7's first
-paragraph are changed in place; the as-built records are
-[`ts-codec-table.md`](../design/ts-codec-table.md) and
+ports follow with the TypeScript emulator (driftsys/ridl#290). They are
+Promise-based, not poll-based: they keep the split by interaction kind and the
+byte-only boundary of the Rust ports, and they address a member by interface
+number and ordinal. `@driftsys/ridl-transport-ws` implements the four consumer
+ports with `Session`, so it depends on `@driftsys/ridl-runtime`, as the
+2026-10-20 amendment allowed. The generated TypeScript module of a package with
+`codec = true` holds one client class per interface, `<Interface>Client`, bound
+to those ports, and neither names a transport nor imports one. The
+`@driftsys/ridl-runtime` and `@driftsys/ridl-transport-ws` rows of decision 6's
+table and decision 7's first paragraph are changed in place; the as-built
+records are [`ts-codec-table.md`](../design/ts-codec-table.md) and
 [`ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md).
 
 **Amended 2026-10-24 (driftsys/ridl#1047) — decision 6, the `descriptor` feature

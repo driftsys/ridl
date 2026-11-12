@@ -6,8 +6,8 @@
 // codec self-test of check.ts, attaches with the encoding `flatbuffers`
 // through a session with a bound of 10 s on `connect` and `subscribe`, and
 // binds the generated `CabinClient` to it. Through the client it sends
-// `setLevel`, calls `average` and rejects unless the reply is the level it
-// sent, then subscribes to the `temperature` signal and watches it. The client
+// `setLevel` with 30 and with 51, calls `average` and rejects unless the reply
+// is 40 (the mean, rounded down), then subscribes to the `temperature` signal and watches it. The client
 // verifies each payload through the codec and decodes it; the page feeds each
 // decoded value to the check of check.ts. It sets `globalThis.result` to a
 // promise that resolves with the check's progress on the first `pass` verdict,

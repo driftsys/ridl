@@ -1,7 +1,7 @@
 //! A WebSocket provider for the cabin example: it publishes the `temperature`
 //! signal of the crate `ridl build --emit rust` writes for `cabin.ridl`, serves
-//! the `setLevel` command and the `average` query, and serves all three to
-//! clients of `ridl-transport-ws`.
+//! the `setLevel` command and the `average` query of the same crate, and
+//! offers all three interactions to clients of `ridl-transport-ws`.
 //!
 //! It binds `127.0.0.1:0` and prints two lines on standard output, each
 //! flushed: `port <n>`, and `hash <64 lowercase hexadecimal digits>`, the

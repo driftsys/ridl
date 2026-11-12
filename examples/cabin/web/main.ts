@@ -14,9 +14,9 @@
 // self-test (20 is accepted, -41 and 86 are rejected with the range rule),
 // attaches with the encoding `flatbuffers` through a session whose `connect`
 // and `subscribe` each have a bound of 10 s, and binds `CabinClient` to the
-// session. Through the client it sends `setLevel` with 42, calls `average`
-// and fails unless the reply is 42 (the server answers with the mean of the
-// levels it received), then subscribes to the `temperature` signal and
+// session. Through the client it sends `setLevel` with 30 and with 51, calls
+// `average` and fails unless the reply is 40 (the server answers with the mean
+// of the levels it received, rounded down: 40.5), then subscribes to the `temperature` signal and
 // watches it. The server steps the value through the whole range of
 // `Temperature` and starts again at the lowest value. The transport may
 // coalesce samples (docs/design/ridl-transport-ws.md), so the program does not
@@ -36,11 +36,12 @@
 import { type Codec, loadCodec } from "../../../packages/ridl-runtime/mod.ts";
 import { connect } from "../../../packages/ridl-transport-ws/mod.ts";
 import {
+  AVERAGE,
   exerciseCalls,
   hexFromHash,
   HIGHEST,
   isPass,
-  LEVEL,
+  LEVELS,
   LOWEST,
   RANGE_RULE,
   selfTest,
@@ -235,6 +236,8 @@ if (!isPass(check.progress)) {
 }
 console.log(
   `cabin-web: ok, self-test rejected ${LOWEST - 1} and ${HIGHEST + 1} ` +
-    `with rule ${RANGE_RULE}, average replied ${LEVEL} after setLevel`,
+    `with rule ${RANGE_RULE}, average replied ${AVERAGE} after setLevel(${
+      LEVELS.join(") and setLevel(")
+    })`,
 );
 Deno.exit(0);

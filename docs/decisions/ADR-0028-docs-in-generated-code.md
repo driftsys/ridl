@@ -34,18 +34,20 @@ It amends two records in place, in the same change:
   item 2, the R4 invariant and the decisions ledger: `@labels` and `@deprecated`
   stay doc tags.
 
-### Amended 2026-11-05
+### Amended 2026-11-05 and 2026-11-12
 
-The optional TypeScript codec module now emits stream members. Each is a method
-of its interface's client class since the amendment of 2026-11-12 (it was a free
-function when first recorded), and carries the interaction's model-derived doc,
-resolved links, canonical rules, `@see`, `@since` and `@deprecated`. Non-stream
-parameters render their model documentation as `@param` tags. Stream-parameter
-documentation and parameter rules are not rendered; the codec table record
-linked below describes this limit. This is a narrow extension of decision 6 to
-those emitted methods. Neutral contract wording and the private-helper policy of
-decisions 3 and 7 remain unchanged. The domain `.ts` module still emits no
-interaction face.
+The optional TypeScript codec module now emits stream members. Each was a free
+function when this amendment was first recorded on 2026-11-05. On 2026-11-12 it
+became a method of its interface's client class, a change that
+[ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+records in its amendment of decisions 6 and 7. It carries the interaction's
+model-derived doc, resolved links, canonical rules, `@see`, `@since` and
+`@deprecated`. Non-stream parameters render their model documentation as
+`@param` tags. Stream-parameter documentation and parameter rules are not
+rendered; the codec table record linked below describes this limit. This is a
+narrow extension of decision 6 to those emitted methods. Neutral contract
+wording and the private-helper policy of decisions 3 and 7 remain unchanged. The
+domain `.ts` module still emits no interaction face.
 [The codec table record](../design/ts-codec-table.md#stream-functions) owns the
 method surface.
 
@@ -210,8 +212,10 @@ because the first consumer that would need it is generated deprecation metadata.
    compiles with it, and `#[doc(hidden)]` where it must stay `pub`. The
    TypeScript domain module emits declaration types, constants, `<Name>Bits`
    objects and `init<Name>` functions; a declaration marked `internal` is not
-   exported. The codec module also emits the public client classes, whose
-   methods carry the interaction's doc, and private helpers. Private helpers
+   exported. The codec module also emits the public client classes, whose call
+   methods, stream methods and signal held-sample methods carry the
+   interaction's doc, while `bind`, `subscribeX`, `readX`, `watchX` and
+   `onEvent` carry fixed one-line TSDoc, and private helpers. Private helpers
    carry no facade documentation, and no item carries `@internal`.
 
    Two kinds of Rust item are notes rather than facade or internals: the private

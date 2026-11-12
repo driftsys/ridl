@@ -193,30 +193,36 @@ export function subscribeTemperature(
   return client.subscribeTemperature({ bound: STEP_BOUND_MS });
 }
 
-/** The level that the demo sends with `setLevel`. */
-export const LEVEL = 42;
+/** The two levels that the demo sends with `setLevel`, in order. */
+export const LEVELS = [30, 51] as const;
+
+/**
+ * The average that the server replies with after both levels: the mean of 30
+ * and 51 is 40.5, rounded down. A server that answers with the last level, the
+ * first level or a constant such as 42 does not reply 40.
+ */
+export const AVERAGE = 40;
 
 /** The averaging window, in milliseconds, that the demo sends with `average`. */
 export const WINDOW_MS = 10;
 
 /**
- * Sends `setLevel` with `LEVEL` and then calls `average` with `WINDOW_MS`.
- * The server answers `average` with the mean of the levels it received, and it
- * received only this one, so the reply has to be `LEVEL`. Returns `undefined`
- * when it is, and otherwise a cause. A call that fails rejects, and the caller
- * reports the rejection. Both calls use the bound of each step, not the bound
- * the catalog declares (50 ms and 200 ms), so that a loaded machine does not
- * fail the demo on a delay.
+ * Sends `setLevel` with each of `LEVELS` and then calls `average` with
+ * `WINDOW_MS`. The server answers `average` with the mean of the levels it
+ * received, rounded down, and it received only these two, so the reply has to
+ * be `AVERAGE`. Returns `undefined` when it is, and otherwise a cause. A call
+ * that fails rejects, and the caller reports the rejection. Every call uses the
+ * bound of each step, not the bound the catalog declares (50 ms and 200 ms), so
+ * that a loaded machine does not fail the demo on a delay.
  */
 export async function exerciseCalls(
   client: Pick<CabinClient, "setLevel" | "average">,
 ): Promise<string | undefined> {
   const opts = { bound: STEP_BOUND_MS };
-  await client.setLevel(makeLevel(LEVEL), opts);
+  for (const level of LEVELS) await client.setLevel(makeLevel(level), opts);
   const average = await client.average(makeWindow(WINDOW_MS), opts);
-  return average === LEVEL
-    ? undefined
-    : `average replied ${average} after setLevel(${LEVEL}), not ${LEVEL}`;
+  return average === AVERAGE ? undefined : `average replied ${average} after ` +
+    `setLevel(${LEVELS.join(") and setLevel(")}), not ${AVERAGE}`;
 }
 
 /**

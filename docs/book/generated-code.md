@@ -488,8 +488,10 @@ The catalog and its hash are described in
 `ridl build --emit typescript` writes the domain types of a package as one `.ts`
 file: branded scalars, interfaces, enums, enum sets, discriminated unions and
 init functions. This domain module has no interaction face or feature selection.
-The optional codec module also emits one client class per interface, with a
-method for each command, query, signal, event and supported stream member.
+The optional codec module also emits one client class per interface, with
+methods for its commands, queries, signals, events and supported stream members.
+A `fixed` member, and a few signals and queries, have a table entry and no
+method; [the codec table record][codec-table] lists them.
 
 A workspace that declares a `system` also writes `__ridl_instances.ts`, which
 exports an `instances` object with `as const` literal types. Import it from that
@@ -641,18 +643,18 @@ session.close();
 ```
 
 **Calls.** A command or query method takes the declared parameters in order,
-typed with the types of `<base>.ts`, and `opts`, a `Partial` of `CallOptions`
-(`bound` in milliseconds, and `signal`, an `AbortSignal`). When the member
-declares a maximum response time inside the range of a port bound, `opts` is
-optional and `bound` defaults to it (50 ms for `setLevel`, 200 ms for
-`average`); otherwise `opts` with `bound` is required, and a missing one is a
-type error. Aborting `opts.signal` rejects the call with the signal's reason,
-and a provider that already received a command may still run it. A request that
-fails verification rejects with a `CallError` of the category `contract` and
-sends nothing; a reply that fails it rejects the same way, or with `corrupt` for
-malformed bytes. Any other failure is the port's `CallError`, unchanged. The
-client does not check `require` clauses; the provider checks them and answers
-`contract`.
+typed with the types of `<base>.ts`, and `opts` (`bound` in milliseconds, and
+`signal`, an `AbortSignal`). When the member declares a maximum response time
+inside the range of a port bound, `opts` is an optional `Partial<CallOptions>`
+and `bound` defaults to it (50 ms for `setLevel`, 200 ms for `average`);
+otherwise `opts` is a required `CallOptions` with a required `bound`, and a
+missing one is a type error. Aborting `opts.signal` rejects the call with the
+signal's reason, and a provider that already received a command may still run
+it. A request that fails verification rejects with a `CallError` of the category
+`contract` and sends nothing; a reply that fails it rejects the same way, or
+with `corrupt` for malformed bytes. Any other failure is the port's `CallError`,
+unchanged. The client does not check `require` clauses; the provider checks them
+and answers `contract`.
 
 **Signals.** A `Sample` is `provenance` (`init`, `live` or `invalid`),
 `envelope`, `value` and, when a payload was refused, `detected`. `value` is
@@ -886,8 +888,9 @@ the parameter's rules as nested bullets), then the `# See also` section and the
 `Available since` lines. The doc of an interface goes on its face module, in the
 same order around the module's own sentence.
 
-The methods of the codec module's client classes also carry the interaction's
-model-derived documentation, canonical rules, `@see`, `@since` and
+The call methods, the stream methods and the held-sample method of a signal
+(`temperature()`) in the codec module's client classes also carry the
+interaction's model-derived documentation, canonical rules, `@see`, `@since` and
 `@deprecated`. For a stream member, non-stream parameters use `@param`;
 stream-parameter documentation and parameter rules are not rendered. The
 [codec table record](../design/ts-codec-table.md#stream-functions) describes the
