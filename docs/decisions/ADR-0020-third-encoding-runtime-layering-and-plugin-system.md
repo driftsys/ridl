@@ -22,6 +22,23 @@ placed behind a browser playground. The in-place amendments this record causes
 are listed in **Documents amended**; each is written into the record it belongs
 to, not here.
 
+**Amended 2026-11-12 (driftsys/ridl#1262) — decisions 6 and 7, the TypeScript
+port interfaces are named and the transport package depends on the runtime
+package.** `@driftsys/ridl-runtime` carries the consumer port interfaces
+`Caller`, `SignalReader`, `EventSource` and `StreamCaller`, and the provider
+ports follow with the TypeScript emulator (driftsys/ridl#290). They are
+Promise-based, not poll-based: they keep the split by interaction kind and the
+byte-only boundary of the Rust ports, and they address a member by interface
+number and ordinal. `@driftsys/ridl-transport-ws` implements the four consumer
+ports with `Session`, so it depends on `@driftsys/ridl-runtime`, as the
+2026-10-20 amendment allowed. The generated TypeScript module of a package with
+`codec = true` holds one client class per interface, `<Interface>Client`, bound
+to those ports, and neither names a transport nor imports one. The
+`@driftsys/ridl-runtime` and `@driftsys/ridl-transport-ws` rows of decision 6's
+table and decision 7's first paragraph are changed in place; the as-built
+records are [`ts-codec-table.md`](../design/ts-codec-table.md) and
+[`ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md).
+
 **Amended 2026-10-24 (driftsys/ridl#1047) — decision 6, the `descriptor` feature
 has no minimum of its own.** The minimum Rust version of every runtime crate is
 now 1.88 ([ADR-0029](ADR-0029-stability-policy.md)), so `ridl-transport-ws`
@@ -446,8 +463,8 @@ as its public contract.
    | `ridl-loopback`                  | the in-process reference runtime — every port over a queue and a map, and no IO                                                                             | `ridl-rt`; `ridl-descriptor` with its defaults off under `node` (off by default)                                                                                                                                                        |
    | `ridl-rt-conformance`            | the port contract tests, generic over a runtime factory, which a runtime runs from its own tests; published (2026-10-08)                                    | `ridl-rt`                                                                                                                                                                                                                               |
    | `ridl-transport-ws`              | the ports over a WebSocket, carrying the encoding the session names, proto3 by default (frame specification §11.1); the default of the getting-started path | `ridl-rt`; `ridl-descriptor` with its default features off, under the `descriptor` feature (off by default)                                                                                                                             |
-   | `@driftsys/ridl-runtime` (npm)   | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec                                                          | nothing outside itself                                                                                                                                                                                                                  |
-   | the TypeScript WebSocket package | the same binding for Deno and the browser                                                                                                                   | nothing until the runtime package exists; built as `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, which carries payload bytes without decoding them                                                                    |
+   | `@driftsys/ridl-runtime` (npm)   | the consumer port interfaces spelled in TypeScript (amended 2026-11-12), and the loader that instantiates a package's wasm codec                            | nothing outside itself                                                                                                                                                                                                                  |
+   | the TypeScript WebSocket package | the same binding for Deno and the browser                                                                                                                   | `@driftsys/ridl-runtime`, for the port interfaces it implements (amended 2026-11-12); built as `@driftsys/ridl-transport-ws` at `packages/ridl-transport-ws/`, which carries payload bytes without decoding them                        |
 
    Generated Rust links `ridl-rt`, generated TypeScript imports the runtime
    package, and neither ever names a transport.
@@ -455,6 +472,11 @@ as its public contract.
 7. **TypeScript is the same three layers, and the WebSocket transport is
    mandatory nowhere.** The runtime package carries the port interfaces and the
    loader; the generated faces sit on it; the transport is a separate package.
+   The port interfaces are `Caller`, `SignalReader`, `EventSource` and
+   `StreamCaller`, Promise-based, and the transport package implements them
+   (amended 2026-11-12). A generated face is a client class bound to those
+   ports, so a program binds it to any object that implements them, a
+   transport's session or a test fake.
 
    **The wasm codec is per package, not a library build.** ADR-0018 decision 4
    makes the codec a serializer for known types — no descriptors, no dynamic
@@ -743,6 +765,8 @@ as its public contract.
 | [ADR-0023](ADR-0023-interaction-face-generation.md)                                            | decision 2: the face is emitted only when an encoding is named; the face reads its buffers from `Payload::BUFFER` and `Sizes<E>`                                                                                                                                                                                                                                                                                                                                                                                                |
 | [`docs/design/interaction-face.md`](../design/interaction-face.md)                             | the size passage, the encoding default and the encoding-selection rule, rewritten for the manifest rule and the size table                                                                                                                                                                                                                                                                                                                                                                                                      |
 | [`docs/design/ridl-rt.md`](../design/ridl-rt.md)                                               | the `contract`, `payload` and `port` item lists, the reservation and budget section, `Encoding` without `max_size`, and the "Versioning" section                                                                                                                                                                                                                                                                                                                                                                                |
+| [`docs/design/ts-codec-table.md`](../design/ts-codec-table.md)                                 | the client class of the generated module: decisions D-30 to D-35, and the stream members as methods (decision 7's 2026-11-12 amendment)                                                                                                                                                                                                                                                                                                                                                                                         |
+| [`docs/design/ridl-transport-ws-ts.md`](../design/ridl-transport-ws-ts.md)                     | the ports `Session` implements, `watch`, `listen` and the `signal` option of calls (decisions 6 and 7's 2026-11-12 amendment)                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ## References
 

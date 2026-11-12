@@ -3314,7 +3314,7 @@ impl<'a> Codec<'a> {
             &[],
             "  ",
             &[
-                "@returns The held sample at once. This method never throws: after the session ended it keeps returning the last held sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set."
+                "@returns The held sample at once. This method never throws: after the session ended the session holds no sample, so it returns the init sample (`readX` and `subscribeX` reject with `down`). Before the first publish it is the init sample: provenance `init` and the init value of the type. Under `init` and `invalid` the value is the last good one when there is one, else the init value. A live payload that fails verification becomes provenance `invalid` with `detected` set."
                     .to_string(),
             ],
         ));
