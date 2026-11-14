@@ -51,11 +51,14 @@ and `to_json` are under the `std` feature of `ridl-descriptor`.
 
 ## The artifact
 
-One file per lowered deployment, named
-`<deployment package>.<DeploymentName>.deployment.binfb`. The FlatBuffers file
-identifier is `RDLD`, in bytes 4 to 8. The schema version is 1
-(`SCHEMA_VERSION`). The deployment's qualified name is unique in a workspace,
-because rsdl rejects a duplicate declaration name in a package.
+One file per lowered deployment, named `<package>.<name>.deployment.binfb` in
+ASCII lowercase, or `<file>.deployment.binfb` when the deployment sets the
+`file` attribute (rsdl reference §3.4). The FlatBuffers file identifier is
+`RDLD`, in bytes 4 to 8. The schema version is 1 (`SCHEMA_VERSION`). Two
+deployments whose file names are equal when case is ignored are RSDL-711, so
+each deployment has its own file on a case-insensitive file system too.
+`ridl_ir::artifact::deployment_file_stem` holds the rule, so the checker and the
+writer agree.
 
 `ridlc build --emit deployment` (and `ridl build --emit deployment`) writes one
 file for each deployment in `System.deployments`. It writes nothing in
@@ -281,9 +284,10 @@ The choices below were taken under delegation from the owner, each with its
 reason. They bind later changes to the artifact.
 
 - **One file per deployment, with its own name and identifier.** The file is
-  `<package>.<Name>.deployment.binfb` with identifier `RDLD`. The lowered IR
-  already uses `<pkg.Name>.system.{json,txtpb,binpb}` for the whole `System`, so
-  a `.system.binfb` would differ from the IR artifact by its last extension only
+  `<package>.<name>.deployment.binfb` (lowercase, or the `file` attribute's
+  stem) with identifier `RDLD`. The lowered IR already uses
+  `<pkg.Name>.system.{json,txtpb,binpb}` for the whole `System`, so a
+  `.system.binfb` would differ from the IR artifact by its last extension only
   and name a different thing. Rejected: the identifier `RDLS` with the name
   `<pkg.System>.<deployment>.system.binfb`, because its suffix collides in form
   with the IR artifact; one file per system that holds every deployment, because

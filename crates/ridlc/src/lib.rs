@@ -712,7 +712,8 @@ pub enum Emit {
     /// interfaces, their members and their catalog hash.
     Catalog,
     /// The deployment descriptor an engine reads, written to
-    /// `<deployment package>.<DeploymentName>.deployment.binfb` for every
+    /// `<package>.<name>.deployment.binfb` in lowercase, or to
+    /// `<file>.deployment.binfb` when the deployment sets `file`, for every
     /// deployment the lowered system holds: a FlatBuffers file of the
     /// deployment's instances, links, routes and machines, with the catalog
     /// descriptor of every region embedded byte for byte.
@@ -3433,10 +3434,12 @@ fn lower_catalogs(
     Ok(catalogs)
 }
 
-/// Writes `<deployment package>.<DeploymentName>.deployment.binfb` for each
-/// deployment of the lowered `system`, with the catalog descriptors in
-/// `catalogs` embedded. A lowering failure is an I/O error, which the command
-/// reports with exit code 2.
+/// Writes `<stem>.deployment.binfb` for each deployment of the lowered
+/// `system`, with the catalog descriptors in `catalogs` embedded. The stem is
+/// the deployment's `file` attribute, or `<package>.<name>` in lowercase
+/// ([`ridl_ir::artifact::deployment_file_stem`], rsdl reference §3.4). A
+/// lowering failure is an I/O error, which the command reports with exit
+/// code 2.
 fn write_deployments(
     out_dir: &Path,
     system: &ridl_ir::v2::System,
@@ -3447,11 +3450,14 @@ fn write_deployments(
         let bytes =
             ridl_descriptor::deployment::lower(system, &deployment.name, packages, catalogs)
                 .map_err(|err| std::io::Error::other(err.to_string()))?;
+        let stem = ridl_ir::artifact::deployment_file_stem(
+            &deployment.package,
+            &deployment.name,
+            deployment.file.as_deref(),
+        );
         std::fs::write(
             out_dir.join(format!(
-                "{}.{}{}",
-                deployment.package,
-                deployment.name,
+                "{stem}{}",
                 ridl_descriptor::deployment::FILE_SUFFIX
             )),
             bytes,

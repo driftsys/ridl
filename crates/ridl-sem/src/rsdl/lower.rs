@@ -367,6 +367,7 @@ impl<'a> Lowering<'a> {
             since: decl.doc.since.clone(),
             sizing: sizing(decl.sizing),
             deprecated: decl.attrs.deprecated.clone(),
+            file: decl.file.clone(),
         }
     }
 

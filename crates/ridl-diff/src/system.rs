@@ -957,6 +957,7 @@ mod tests {
                 "tier" => new.distributions[0].tier = v2::Tier::Application as i32,
                 "labels" => new.distributions[0].labels = vec!["QM".to_string()],
                 "deprecated" => new.deployments[0].deprecated = Some("use v2".to_string()),
+                "file" => new.deployments[0].file = Some("production-v2".to_string()),
                 "depth" => {
                     new.deployments[0].sizing = Some(v2::Sizing {
                         depth: Some(4),

@@ -30,6 +30,13 @@ component Dash { requires Alerts }
 // RSDL-704 (§3.4): `Nowhere` names no declared system.
 deployment Lab for Nowhere {}
 
+// RSDL-710 (§3.4): a `file` value is a lowercase stem; `Lab` is not.
+deployment Shelf for Nowhere [ file = "Lab" ] {}
+
+// RSDL-711 (§3.4): `Spare` writes its descriptor to the file name the default
+// stem of `Bench` (attributes.rsdl) already takes.
+deployment Spare for Nowhere [ file = "rsdl.showcase.bench" ] {}
+
 // RSDL-708 (§3.4): a second deployment named `Bench`. It is `for` the second
 // system (closure.rsdl), so it is not placed.
 deployment Bench for Second {}

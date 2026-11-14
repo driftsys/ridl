@@ -10,6 +10,7 @@ attribute depth placement assignment
 attribute ensure query predicate
 attribute external component flag
 attribute external machine flag
+attribute file deployment assignment
 attribute instances component assignment
 attribute labels component assignment
 attribute labels deployment assignment
