@@ -274,7 +274,7 @@ fn path_use_markdown(scope: Scope<'_>, path: &SyntaxNode, name: &str) -> Option<
         return Some(markdown);
     }
     let interaction = path.ancestors().find_map(InterfaceMember::cast)?;
-    let (owner, shape) = enclosing_shape(&ir, interaction.syntax())?;
+    let (owner, shape) = enclosing_shape(&ir, scope.pkg.name(scope.db), interaction.syntax())?;
     let decl = shape.interactions.iter().find(|decl| {
         decl.name == name && !matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_)))
     })?;
@@ -454,7 +454,7 @@ fn param_markdown(
 ) -> Option<String> {
     let interaction = member.ancestors().find_map(InterfaceMember::cast)?;
     let interaction_name = interaction.name()?.ident_token()?.text().to_string();
-    let (owner, shape) = enclosing_shape(ir, interaction.syntax())?;
+    let (owner, shape) = enclosing_shape(ir, scope.pkg.name(scope.db), interaction.syntax())?;
     let decl = shape.interactions.iter().find(|decl| {
         decl.name == interaction_name && !matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_)))
     })?;
@@ -607,7 +607,7 @@ impl<'db> SymbolDocs<'db> {
 }
 
 /// The `interface` declaration `name` of `ir`. The walk is over every
-/// shape; an inline shape is keyed by its dotted service name, which no
+/// shape; an inline shape is keyed by its global service name, which no
 /// interface name spells.
 fn named_interface<'a>(ir: &'a v2::Package, name: &str) -> Option<&'a v2::Interface> {
     ir.shapes()
@@ -942,6 +942,7 @@ fn symbol_kind(kind: SymbolKind) -> &'static str {
         SymbolKind::EnumSet => "enumset",
         SymbolKind::Union => "union",
         SymbolKind::Interface => "interface",
+        SymbolKind::Service => "service",
     }
 }
 
@@ -998,7 +999,7 @@ fn interaction_hover(
     let name = member.name()?.ident_token()?.text().to_string();
 
     let ir = &check_package(db, ws, pkg, std).ir;
-    let (owner, shape) = enclosing_shape(ir, member.syntax())?;
+    let (owner, shape) = enclosing_shape(ir, pkg.name(db), member.syntax())?;
     let decl = shape.interactions.iter().find(|decl| {
         decl.name == name && !matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_)))
     })?;
@@ -1024,7 +1025,9 @@ fn interaction_markdown(
     markdown
 }
 
-/// The hover for a service declaration: the cursor on its dotted global name.
+/// The hover for a service declaration: the cursor on its declared name. The
+/// IR holds the service under its global name, the package name joined to the
+/// declared name.
 fn service_hover(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -1043,7 +1046,8 @@ fn service_hover(
     if service_node.kind() != SyntaxKind::ServiceDef {
         return None;
     }
-    let name = non_empty(ServiceDef::cast(service_node)?.name()?.text())?;
+    let declared = ServiceDef::cast(service_node)?.declared_name()?;
+    let name = format!("{}.{}", pkg.name(db), declared.text());
 
     let ir = &check_package(db, ws, pkg, std).ir;
     let service = ir.services.iter().find(|service| service.name == name)?;
@@ -1053,19 +1057,14 @@ fn service_hover(
     })
 }
 
-/// A dotted name's text, or `None` when the parser recovered the declaration
-/// with no tokens at all. The text itself is [`DottedName::text`] — the key
-/// `v2::Service.name` carries, so it is what the IR lookup matches on.
-fn non_empty(text: String) -> Option<String> {
-    (!text.is_empty()).then_some(text)
-}
-
 /// The interface shape a node sits inside, with the name to display for it: an
-/// `interface` declaration's own name, or the dotted name of the service whose
-/// inline shape holds the node (ridl §14.5). `None` when the enclosing shape
-/// did not lower — a file that failed to parse past the header, most often.
+/// `interface` declaration's own name, or the global name of the service whose
+/// inline shape holds the node (ridl §14.5), `package` joined to the declared
+/// name. `None` when the enclosing shape did not lower — a file that failed to
+/// parse past the header, most often.
 fn enclosing_shape<'a>(
     ir: &'a v2::Package,
+    package: &str,
     node: &SyntaxNode,
 ) -> Option<(String, &'a v2::Interface)> {
     for ancestor in node.ancestors() {
@@ -1075,11 +1074,14 @@ fn enclosing_shape<'a>(
                 .ident_token()?
                 .text()
                 .to_string(),
-            SyntaxKind::ServiceDef => non_empty(ServiceDef::cast(ancestor)?.name()?.text())?,
+            SyntaxKind::ServiceDef => format!(
+                "{package}.{}",
+                ServiceDef::cast(ancestor)?.declared_name()?.text()
+            ),
             _ => continue,
         };
         // One lookup for both: `Package::shapes` keys a named interface on its
-        // own name and a service's inline shape on the dotted service name, so
+        // own name and a service's inline shape on the global service name, so
         // a shape stored outside `Package.interfaces` is still found.
         let shape = ir.shapes().find(|shape| shape.name == name)?;
         return Some((name, shape.interface));

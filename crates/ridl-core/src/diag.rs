@@ -191,7 +191,12 @@ macro_rules! diag_codes {
 /// RIDL-158 (an `open` enum or enum set in a package that podbuf encodes) was
 /// retired on 2026-11-01 (ADR-0031 decision 12): the podbuf codec and the C
 /// header carry an open declaration, so the case it refused is valid.
-pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148, 150, 158, 415];
+///
+/// RIDL-140 (a duplicate `service` name across the workspace) was retired
+/// (ADR-0033 decision 6): a service is a symbol of its package, so its global
+/// name is unique unless two packages share a name, which MANI-014 refuses, and
+/// a second declaration of a name within a package is TYPL-009.
+pub const RETIRED_RIDL_CODES: &[u16] = &[140, 146, 147, 148, 150, 158, 415];
 
 /// The lint names of retired codes. A released lint name is a stable contract
 /// (ADR-0024 decision 7): a `ridl.toml` refers to it, so the name of a retired
@@ -650,11 +655,10 @@ diag_codes! {
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
     /// this module, with the severity the ridl reference §16 tables classify it
-    /// at. RIDL-140, RIDL-141, and RIDL-143 to RIDL-145 sit in the 1xx band
-    /// while the reference lists them under the §16.4 evolution table — a
-    /// documented anomaly kept as written (ADR-0008 decision 6). RIDL-111 and
-    /// RIDL-142 are reserved by ADR-0008 decision 21 and are not declared yet,
-    /// so they are absent here too.
+    /// at. RIDL-141 to RIDL-145 sit in the 1xx band while the reference
+    /// lists them under the §16.4 evolution table — a documented anomaly kept
+    /// as written (ADR-0008 decision 6). RIDL-111 is reserved by ADR-0008
+    /// decision 21 and is not declared yet, so it is absent here too.
     ///
     /// Adding a code here does **not** make it show up in a corpus fixture.
     /// `RIDL_PROFILE_CODES` in `crates/ridlc/tests/corpus.rs` — the list that
@@ -777,31 +781,31 @@ diag_codes! {
         RIDL_112 = "RIDL-112", Warning,
             "`command` or `query` takes the default response bound", lint = "missing-response-bound";
 
-        /// Duplicate `service` name across the whole workspace — the service
-        /// catalog is a flat global namespace (ridl §14.5, §16.4). Emitted
-        /// workspace-wide by `service_catalog`. The reference numbers
-        /// it in the 1xx band while listing it under the §16.4 evolution/profile
-        /// table — a documented anomaly kept as written (ADR-0008 decision 6).
-        RIDL_140 = "RIDL-140", Error,
-            "duplicate `service` name across the workspace";
-
         /// A `service` names a type that is not an `interface`, and has no inline
         /// shape (ridl §14.5, §16.4). Emitted per-package by the checker. Kept in
-        /// the 1xx band per ADR-0008 decision 6 (see RIDL-140).
+        /// the 1xx band per ADR-0008 decision 6.
         /// Applies per shape in the service's shape list since ADR-0015
         /// decision 18: the rule is unchanged, the span reports against
         /// the offending list element.
         RIDL_141 = "RIDL-141", Error,
             "`service` names a type that is not an `interface`";
 
+        /// The name after `service` is not one `CamelCase` identifier: a dotted
+        /// name, or a one-segment name that is not `CamelCase_id` (ridl §14.5,
+        /// §16.4; ADR-0033 decision 5). The code ADR-0008 decision 21 reserved
+        /// for the uncoded lowercase error. A declaration that draws it binds
+        /// nothing; the diagnostic carries a suggested name as a fix-it.
+        /// Emitted per-package by the checker.
+        RIDL_142 = "RIDL-142", Error,
+            "`service` declared name is not one `CamelCase_id`";
+
         /// A `service` publishes an `internal` interface (ridl §14.5, §16.4).
         /// Emitted per-package by the checker's exposure pass. Distinct from
         /// TYPL-005: what leaks is an interface rather than a type, and a service
         /// takes no `internal` modifier, so the TYPL-005 remedy — make the
         /// exposing declaration internal too — does not exist here. Kept in the
-        /// 1xx band beside RIDL-140/-141 per ADR-0008 decision 6. RIDL-111 and
-        /// RIDL-142 are reserved by decision 21 and not yet implemented, so 143 is
-        /// the next free code; decision 13's allocation ledger needs the ninth
+        /// 1xx band beside RIDL-141 per ADR-0008 decision 6. RIDL-111 is
+        /// reserved by decision 21 and not yet implemented; decision 13's allocation ledger needs the ninth
         /// entry (issue #169). Applies per shape in the service's shape list
         /// since ADR-0015 decision 18: the rule is unchanged, the span
         /// reports against the offending list element.
@@ -812,7 +816,7 @@ diag_codes! {
         /// §16.4; ADR-0015 decisions 16 and 18): two composed interfaces both
         /// declaring `status` would give `service.status` two referents, which
         /// flat addressing cannot express. Emitted per-package by the checker
-        /// The service codes sit in the 1xx band (see RIDL-140);
+        /// The service codes sit in the 1xx band (see RIDL-141);
         /// RIDL-112 is minted by ADR-0015 decision 6, so 144 is the first free
         /// code.
         RIDL_144 = "RIDL-144", Error,
@@ -3037,7 +3041,7 @@ mod tests {
     /// more uppercase ASCII letters.
     ///
     /// The quotes are required on both sides, which is what keeps prose out: the
-    /// doc comments in this module name RIDL-111 and RIDL-142 as reserved and
+    /// doc comments in this module name RIDL-111 as reserved and
     /// not yet declared, and a scan that read unquoted text would report them.
     /// Matching is position-local rather than quote-pairing, so an escaped quote
     /// earlier in a string cannot shift the scan out of alignment.

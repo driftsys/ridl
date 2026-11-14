@@ -624,8 +624,9 @@ fn service_package(
     package_of(db, ws, entry.package)
 }
 
-/// The dotted name of the `service` declaration the catalog holds for `name`:
-/// the first one in file order, as the catalog keeps the first (RIDL-140).
+/// The declared name of the `service` declaration the catalog holds for the
+/// global name `name`: the first one in file order, as the catalog keeps the
+/// first.
 fn service_site(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -635,8 +636,9 @@ fn service_site(
     let package = service_package(db, ws, std, name)?;
     package.files(db).iter().find_map(|file| {
         nav::source_file(db, *file).services().find_map(|service| {
-            let dotted = service.name()?;
-            (dotted.text() == name).then(|| (*file, dotted.syntax().text_range()))
+            let declared = service.declared_name()?;
+            (format!("{}.{}", package.name(db), declared.text()) == name)
+                .then(|| (*file, declared.text_range()))
         })
     })
 }

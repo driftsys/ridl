@@ -2934,11 +2934,11 @@ impl DeclIndex {
             // Every interface shape, `interface` declarations and services'
             // inline shapes alike (`SourceFile::shapes`). A service's inline
             // shape is an interface body in every way that matters to wire
-            // identity, and the diff paths it produces are keyed by the service
-            // name — so it earns a fallback entry exactly as a named interface
+            // identity, and the diff paths it produces are keyed by the service's
+            // global name — so it earns a fallback entry exactly as a named interface
             // does, or a removal from it renders with no span at all.
             for shape in source.shapes() {
-                let Some(name) = shape.identity() else {
+                let Some(name) = shape.identity(&package) else {
                     continue;
                 };
                 let Some(range) = shape.identity_range() else {
@@ -2954,7 +2954,7 @@ impl DeclIndex {
             // only inline-form services, so without this pass a service-level
             // diff path found nothing and rendered detached. Each listed
             // reference is indexed under its final segment, and the service's
-            // dotted name is the fallback for one that is gone from the
+            // global name is the fallback for one that is gone from the
             // source.
             for service in source
                 .services()
@@ -2963,10 +2963,10 @@ impl DeclIndex {
                 let Some(dotted) = service.name() else {
                     continue;
                 };
-                let name = dotted.text();
-                if name.is_empty() {
+                let Some(declared) = service.declared_name() else {
                     continue;
-                }
+                };
+                let name = format!("{package}.{}", declared.text());
                 index.shapes.insert(
                     (package.clone(), name.clone()),
                     (path.clone(), dotted.syntax().text_range()),

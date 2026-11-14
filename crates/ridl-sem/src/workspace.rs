@@ -1,20 +1,20 @@
 //! The semantic workspace passes, after per-package resolution and checking.
-//! Compiler and language-server drivers call [`check_workspace`] for the service
-//! catalog and system diagnostics. Design lints run separately through
+//! Compiler and language-server drivers call [`check_workspace`] for the system
+//! diagnostics. Design lints run separately through
 //! `ridlc::check_design_lints`, using checked IR and the current source map.
 //! The language server's hover and navigation read `check_system` and
 //! `service_catalog` directly for the model rather than the diagnostics.
 
 use ridl_core::diag::Diagnostic;
-use ridl_core::package::{Package, Workspace, service_catalog};
+use ridl_core::package::{Package, Workspace};
 
 use crate::rsdl::{CheckedSystem, check_system};
 
 /// What the workspace-wide passes return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CheckedWorkspace {
-    /// Every diagnostic of the workspace-wide passes: the service catalog's
-    /// (RIDL-140) first, then the rsdl system query's. Each [`FileId`] indexes
+    /// Every diagnostic of the workspace-wide passes: the rsdl system
+    /// query's. Each [`FileId`] indexes
     /// the workspace's source files in package-then-file order. A package's
     /// `interfaces.lock` is not one of those files, so a driver remaps these
     /// diagnostics onto the render ids of the source files alone, in that
@@ -27,19 +27,17 @@ pub struct CheckedWorkspace {
     pub system: CheckedSystem,
 }
 
-/// Runs the workspace-wide passes over `ws`: the service catalog,
-/// whose RIDL-140 duplicate-name diagnostics span the whole workspace, and the
-/// rsdl system query (rsdl reference v0.2), which checks every `.rsdl` file at
-/// once because the closure is workspace-wide.
+/// Runs the workspace-wide pass over `ws`: the rsdl system query (rsdl
+/// reference v0.2), which checks every `.rsdl` file at once because the
+/// closure is workspace-wide.
 ///
 /// RSDL-804 is not raised here: only a driver knows which backends are
 /// configured, so each driver calls
 /// [`unclaimed_backend_keys`](crate::rsdl::unclaimed_backend_keys) with the
 /// namespaces it claims.
 pub fn check_workspace(db: &dyn salsa::Database, ws: Workspace, std: Package) -> CheckedWorkspace {
-    let mut diagnostics = service_catalog(db, ws, std).diagnostics;
     let mut system = check_system(db, ws, std);
-    diagnostics.append(&mut system.diagnostics);
+    let diagnostics = std::mem::take(&mut system.diagnostics);
     CheckedWorkspace {
         diagnostics,
         system,
@@ -59,10 +57,10 @@ mod tests {
     use super::*;
 
     /// One package whose first file draws RSDL-602 from the rsdl system query
-    /// and whose second draws RIDL-140 from the service catalog: file order
-    /// and pass order disagree, so the result shows which one the list follows.
+    /// and whose second declares a service: the workspace list holds the
+    /// system's diagnostic and the system keeps none of its own.
     #[test]
-    fn the_catalog_diagnostics_come_first_and_the_system_keeps_none() {
+    fn the_workspace_diagnostics_are_the_systems_and_the_system_keeps_none() {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
         let texts = [
@@ -72,7 +70,7 @@ mod tests {
             ),
             (
                 "p/b.ridl",
-                "package p\ninterface I {}\nservice p.s : I\nservice p.s : I\n",
+                "package p\ninterface I {}\nservice Access : I\n",
             ),
         ];
         // The ids the diagnostics carry: the files interned in package-then-file
@@ -104,12 +102,7 @@ mod tests {
             .iter()
             .map(|diagnostic| (diagnostic.code.as_str(), diagnostic.primary.file))
             .collect();
-        assert_eq!(
-            found,
-            [("RIDL-140", ids[1]), ("RSDL-602", ids[0])],
-            "{:?}",
-            checked.diagnostics
-        );
+        assert_eq!(found, [("RSDL-602", ids[0])], "{:?}", checked.diagnostics);
         assert_eq!(checked.system.diagnostics, Vec::new());
     }
 }

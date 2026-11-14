@@ -14,7 +14,7 @@ use ridl_syntax::SyntaxKind;
 use ridl_syntax::ast::AstNode;
 use rowan::{TextRange, TextSize};
 
-use super::closure::{InterfaceId, Lookup};
+use super::closure::{Bound, InterfaceId, Lookup};
 use super::{CheckedSystem, Reference, ReferenceForm};
 use crate::resolve::source_file;
 
@@ -170,7 +170,7 @@ fn naming_offset(target: &Target, reference: &Reference, slot: Slot<'_>) -> Opti
         (
             Target::Service(_) | Target::Interface(InterfaceId::Inline { .. }),
             Slot::Member { .. },
-            ReferenceForm::Service { .. },
+            ReferenceForm::Declared { .. },
         ) => start,
         (Target::Interface(InterfaceId::Declared { .. }), Slot::Requires { .. }, _) => start,
         _ => None,
@@ -218,8 +218,26 @@ fn target_of(
                     package: written,
                     name,
                 } => {
-                    let index = lookup.component(package, written.as_deref(), name)?;
-                    (Target::Component(index), whole)
+                    match lookup.bind(package, written.as_deref(), name)? {
+                        Bound::Component(index) => (Target::Component(index), whole),
+                        // A service a declared component offers does not stand
+                        // for a component (RSDL-504); the checker's
+                        // `Lookup::record_offers` reads the same resolved
+                        // `offers` lines.
+                        Bound::Service(service)
+                            if lookup.catalog.entries.contains_key(&service)
+                                && !system.component_lines.iter().any(|lines| {
+                                    lines
+                                        .offers
+                                        .iter()
+                                        .flatten()
+                                        .any(|offered| *offered == service)
+                                }) =>
+                        {
+                            (Target::Service(service), whole)
+                        }
+                        _ => return None,
+                    }
                 }
                 // A `system` or `distribution` line naming an instance is
                 // RSDL-602 or RSDL-903.
@@ -246,18 +264,7 @@ fn target_of(
                         (Target::Component(index), component_part)
                     }
                 }
-                // A service a declared component offers does not stand for a
-                // component (RSDL-504); the checker's `Lookup::record_offers`
-                // reads the same resolved `offers` lines.
-                ReferenceForm::Service { name }
-                    if lookup.catalog.entries.contains_key(name)
-                        && !system.component_lines.iter().any(|lines| {
-                            lines.offers.iter().flatten().any(|offered| offered == name)
-                        }) =>
-                {
-                    (Target::Service(name.clone()), whole)
-                }
-                ReferenceForm::Service { .. } | ReferenceForm::Unreadable => return None,
+                ReferenceForm::Unreadable => return None,
             }
         }
     };
@@ -404,6 +411,46 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
         ]
     }
 
+    /// A bare name binds the package's own service before an imported component
+    /// of that name, in the editor target as in the checker.
+    #[test]
+    fn a_local_service_shadows_an_imported_component_in_the_target() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let packages = vec![
+            package(&db, "q", &[("q.rsdl", "package q\ncomponent S {}\n")]),
+            package(
+                &db,
+                "p",
+                &[
+                    ("p.ridl", "package p\ninterface I {}\nservice S : I\n"),
+                    (
+                        "p.rsdl",
+                        "package p\nimport q.S\ncomponent Host { offers S }\nsystem V { Host }\n",
+                    ),
+                ],
+            ),
+        ];
+        let ws = Workspace::new(&db, packages, BTreeMap::new());
+        let system = super::super::check_system(&db, ws, std);
+        let (reference, _) = written_references(&system)
+            .into_iter()
+            .find(|(reference, slot)| {
+                matches!(slot, Slot::Offers { .. }) && reference.text() == "S"
+            })
+            .expect("the offers line");
+        let found = reference_at(
+            &db,
+            ws,
+            std,
+            &system,
+            reference.site.file,
+            reference.site.range.start(),
+        )
+        .expect("the reference binds");
+        assert_eq!(found.target, Target::Service("p.S".to_string()));
+    }
+
     /// The declaration a target names, for grading `references` without
     /// `same_declaration`: a service and the inline shape of that service are
     /// one declaration, and every other target is its own.
@@ -485,13 +532,13 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
                 "the fixture names a {kind}: {kinds:?}"
             );
         }
-        // The lone service `veh.diag.access` is bound as a service by a member
+        // The lone service `veh.diag.FaultAccess` is bound as a service by a member
         // line and as the inline shape by a `requires` line.
         assert!(
             oracle.iter().any(|(target, _)| matches!(
                 target,
                 Target::Service(name) | Target::Interface(InterfaceId::Inline { service: name })
-                    if name == "veh.diag.access"
+                    if name == "veh.diag.FaultAccess"
             )),
             "{kinds:?}"
         );
@@ -579,8 +626,12 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
         }
 
         // The references of one service include no site of another service.
-        let services = ["veh.adas.cruise", "veh.adas.lane", "veh.diag.access"]
-            .map(|name| actual(&Target::Service(name.to_string())));
+        let services = [
+            "veh.adas.AdaptiveCruise",
+            "veh.adas.LaneKeeping",
+            "veh.diag.FaultAccess",
+        ]
+        .map(|name| actual(&Target::Service(name.to_string())));
         for (index, sites) in services.iter().enumerate() {
             assert!(!sites.is_empty(), "service {index} is referenced");
             for other in &services[index + 1..] {
@@ -647,10 +698,14 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
                 .map(|(reference, slot)| (*reference, *slot))
                 .expect("the fixture has such a reference")
         };
-        let declared =
-            |reference: &Reference| matches!(reference.form, ReferenceForm::Declared { .. });
-        let service =
-            |reference: &Reference| matches!(reference.form, ReferenceForm::Service { .. });
+        // A service is named in the declared form too, so the form no longer
+        // tells it from a component: `naming_offset` offers a member or
+        // placement line to both kinds of target and `target_of` decides. The
+        // fixture's one service is `FaultAccess`.
+        let service = |reference: &Reference| matches!(&reference.form, ReferenceForm::Declared { name, .. } if name == "FaultAccess");
+        let declared = |reference: &Reference| {
+            matches!(reference.form, ReferenceForm::Declared { .. }) && !service(reference)
+        };
         let instance =
             |reference: &Reference| matches!(reference.form, ReferenceForm::Instance { .. });
         let member = |placement: bool, slot: Slot<'_>| matches!(slot, Slot::Member { placement: p, .. } if p == placement);
@@ -698,7 +753,7 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
                 find(&|_, slot| matches!(slot, Slot::For { .. })),
             ),
         ];
-        let service_name = "veh.diag.access".to_string();
+        let service_name = "veh.diag.FaultAccess".to_string();
         // Each target with the expected part for each class above.
         let table: [(Target, [Option<Part>; 10]); 6] = [
             (
@@ -720,10 +775,10 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
                 Target::Component(0),
                 [
                     Some(Start),
-                    None,
-                    None,
                     Some(Start),
                     None,
+                    Some(Start),
+                    Some(Start),
                     Some(Start),
                     None,
                     None,
@@ -752,10 +807,10 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
             (
                 Target::Service(service_name.clone()),
                 [
-                    None,
+                    Some(Start),
                     Some(Start),
                     None,
-                    None,
+                    Some(Start),
                     Some(Start),
                     None,
                     Some(Start),
@@ -769,10 +824,10 @@ distribution Spare { Cruise, Track, veh.topology.Panel, Cruise.primary }
                     service: service_name,
                 }),
                 [
-                    None,
+                    Some(Start),
                     Some(Start),
                     None,
-                    None,
+                    Some(Start),
                     Some(Start),
                     None,
                     Some(Start),

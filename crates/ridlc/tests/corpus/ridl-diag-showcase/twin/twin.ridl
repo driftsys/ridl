@@ -1,6 +1,5 @@
-// The second workspace member. Its job is the cross-package half a single
-// package cannot provoke: republishing `diag.showcase.duplicate` collides
-// with the `diag.ridl` member (RIDL-140).
+// The second workspace member. It publishes a service of its own, whose global
+// name `diag.twin.Echo` shares no namespace with the `diag.ridl` member.
 
 package diag.twin
 
@@ -10,4 +9,4 @@ interface Twin {
   signal alive : Heartbeat @[1s..10s]
 }
 
-service diag.showcase.duplicate : Twin
+service Echo : Twin

@@ -7,7 +7,7 @@ import veh.adas.CruiseControl
 /// @since 1.0
 component Cruise {
   /// Lists [CruiseControl.target].
-  offers veh.adas.cruise
+  offers veh.adas.Cruise
 }
 
 /// The panel component.

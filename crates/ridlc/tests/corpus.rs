@@ -572,8 +572,8 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-109", Showcase),
     ("RIDL-110", Showcase),
     ("RIDL-112", Showcase),
-    ("RIDL-140", Showcase),
     ("RIDL-141", Showcase),
+    ("RIDL-142", Showcase),
     ("RIDL-143", Showcase),
     ("RIDL-144", Showcase),
     ("RIDL-145", Showcase),
@@ -1222,7 +1222,8 @@ fn rsdl_reference_rules_match_the_catalogue_summaries() {
 
 /// The codes a reference table specifies that the catalogue has no entry for,
 /// each with the reason: the codes the checker does not emit yet, the codes
-/// the lock retired, the retired lint RIDL-150, and the retired error RIDL-158.
+/// the lock retired, the retired lint RIDL-150, and the retired errors RIDL-140
+/// and RIDL-158.
 /// Each code is a prefix and a number, because the guard that finds code
 /// literals in Rust sources (`codes_written_as_string_literals_are_all_catalogued`)
 /// reads a quoted code as an emitted one, and none of these is catalogued.
@@ -1251,6 +1252,11 @@ const DEFERRED_OR_RETIRED: &[(&str, u16, &str)] = &[
         "TYPL",
         403,
         "deferred: the `@labels` combination check is not emitted (driftsys/ridl#172)",
+    ),
+    (
+        "RIDL",
+        140,
+        "retired: a service name is in its package's namespace (ADR-0033 decision 6)",
     ),
     (
         "RIDL",
@@ -1558,8 +1564,8 @@ fn showcase_pins_every_severity() {
         ("RIDL-109", Severity::Error),
         ("RIDL-110", Severity::Error),
         ("RIDL-112", Severity::Warning),
-        ("RIDL-140", Severity::Error),
         ("RIDL-141", Severity::Error),
+        ("RIDL-142", Severity::Error),
         ("RIDL-143", Severity::Error),
         ("RIDL-144", Severity::Error),
         ("RIDL-145", Severity::Error),

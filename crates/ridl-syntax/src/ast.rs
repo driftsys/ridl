@@ -549,15 +549,17 @@ pub enum InterfaceShape {
 
 impl InterfaceShape {
     /// The name this shape is known by: an `interface` declaration's own
-    /// name, or the owning service's **dotted** global name — the identity
-    /// the IR, the diff paths, and the observer-stub scoping all use. `None`
-    /// when the parser recovered the declaration without a name.
-    pub fn identity(&self) -> Option<String> {
+    /// name, or the owning service's global name — `package` joined to the
+    /// declared name by `.` — the identity the IR, the diff paths, and the
+    /// observer-stub scoping all use. `None` when the parser recovered the
+    /// declaration without a name, and for a service written in the dotted or
+    /// lowercase form, which binds nothing (RIDL-142).
+    pub fn identity(&self, package: &str) -> Option<String> {
         match self {
             Self::Interface(def) => Some(def.name()?.ident_token()?.text().to_string()),
             Self::ServiceInline(def) => {
-                let text = def.name()?.text();
-                (!text.is_empty()).then_some(text)
+                let declared = def.declared_name()?;
+                Some(format!("{package}.{}", declared.text()))
             }
         }
     }
@@ -1381,9 +1383,9 @@ interface VehicleStatus {
   event doorOpened : DoorState
 }
 
-service veh.adas.status : VehicleStatus
+service Status : VehicleStatus
 
-service veh.adas.logs {
+service Logs {
   signal level : Level @1s
   reserved oldTail
   query tailLogs(filter: Filter): Line
@@ -1406,7 +1408,7 @@ service veh.adas.logs {
             .shapes()
             .map(|shape| {
                 (
-                    shape.identity().expect("every shape here is named"),
+                    shape.identity("app").expect("every shape here is named"),
                     shape.members().count(),
                 )
             })
@@ -1415,9 +1417,9 @@ service veh.adas.logs {
             walk,
             [
                 ("VehicleStatus".to_string(), 2),
-                ("veh.adas.logs".to_string(), 3),
+                ("app.Logs".to_string(), 3),
             ],
-            "the interface, then the inline shape under the service's dotted \
+            "the interface, then the inline shape under the service's global \
              name; the reference-form service contributes nothing",
         );
 
@@ -1426,7 +1428,7 @@ service veh.adas.logs {
         assert!(
             !file
                 .shapes()
-                .any(|shape| shape.identity().as_deref() == Some("veh.adas.status")),
+                .any(|shape| shape.identity("app").as_deref() == Some("app.Status")),
         );
     }
 
@@ -1440,13 +1442,13 @@ service veh.adas.logs {
         let file = SourceFile::cast(parsed.syntax()).expect("the root is a SourceFile");
 
         for shape in file.shapes() {
-            let name = shape.identity().expect("named");
+            let name = shape.identity("app").expect("named");
             let range = shape.identity_range().expect("named");
             let start = usize::from(range.start());
             let end = usize::from(range.end());
             assert_eq!(
                 &THREE_SHAPES[start..end],
-                name,
+                name.strip_prefix("app.").unwrap_or(&name),
                 "the range must cover exactly the declared name",
             );
         }
@@ -1460,12 +1462,12 @@ service veh.adas.logs {
     fn a_service_with_neither_form_is_an_empty_inline_shape() {
         use crate::{Profile, parse};
 
-        let parsed = parse("package app\nservice veh.adas.broken\n", Profile::Ridl);
+        let parsed = parse("package app\nservice Broken\n", Profile::Ridl);
         let file = SourceFile::cast(parsed.syntax()).expect("the root is a SourceFile");
 
         let shapes: Vec<InterfaceShape> = file.shapes().collect();
         assert_eq!(shapes.len(), 1);
-        assert_eq!(shapes[0].identity().as_deref(), Some("veh.adas.broken"));
+        assert_eq!(shapes[0].identity("app").as_deref(), Some("app.Broken"));
         assert_eq!(shapes[0].members().count(), 0);
     }
 

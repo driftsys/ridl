@@ -964,7 +964,7 @@ fn type_kind(kind: SymbolKind) -> lt::CompletionItemKind {
         SymbolKind::Enum | SymbolKind::EnumSet => lt::CompletionItemKind::ENUM,
         SymbolKind::Union => lt::CompletionItemKind::INTERFACE,
         SymbolKind::Const => lt::CompletionItemKind::CONSTANT,
-        SymbolKind::Interface => lt::CompletionItemKind::INTERFACE,
+        SymbolKind::Interface | SymbolKind::Service => lt::CompletionItemKind::INTERFACE,
     }
 }
 

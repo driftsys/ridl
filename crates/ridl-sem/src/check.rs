@@ -30,7 +30,7 @@ use std::path::Path;
 use std::sync::{LazyLock, Mutex, PoisonError};
 
 use ridl_core::db::{InputFile, profile_of_path};
-use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span};
+use ridl_core::diag::{DiagCode, Diagnostic, FileId, FixIt, Label, Severity, SourceMap, Span};
 use ridl_core::interface_lock::{self, InterfaceLock, LockEntry, LockKey};
 use ridl_core::limits::{BYTES_BOUND_MAX, PAYLOAD_CEILING, STRING_BOUND_MAX_CHARS};
 use ridl_core::package::{Package, Workspace, package_of};
@@ -178,9 +178,9 @@ pub(crate) fn lower_package(
     let mut decls = Vec::new();
     let mut interfaces = Vec::new();
     let mut services = Vec::new();
-    // Service dotted names already lowered in this package, so a same-package
-    // duplicate lowers once (first-wins).
-    let mut lowered_services: HashSet<String> = HashSet::new();
+    // The name each old-form service declaration is told to take (RIDL-142),
+    // computed over the whole package before any file is lowered.
+    let old_service_suggestions = checker.suggest_old_service_names(&files);
     let mut composite_starts = Vec::new();
     // Every winning declaration's name and site, and the names of the open
     // enums among them, for the RIDL-149 check over the type namespace below.
@@ -216,23 +216,29 @@ pub(crate) fn lower_package(
             }
             interfaces.push(checker.lower_interface(&interface));
         }
-        // Services: the global published declarations. Their dotted
-        // names live in the workspace catalog namespace, not the type
-        // namespace, so the resolver's `is_winner` does not apply — uniqueness
-        // across the workspace is `service_catalog`'s job (RIDL-140). A
-        // same-package duplicate still lowers only once, first-wins, so the IR
-        // never carries a name twice while the catalog holds one entry.
+        // Services: the global published declarations. A service is a symbol
+        // of its package (ADR-0033), so the resolver's first-wins rule applies
+        // to it as to an interface; a loser was reported as TYPL-009. A service
+        // that is not declared with one CamelCase name binds nothing and is
+        // reported as RIDL-142.
         for service in source.services() {
-            let name = service
-                .name()
-                .map(|dotted| significant_text(dotted.syntax()))
-                .unwrap_or_default();
             // A service the parser recovered without a name does not lower,
             // for the reason a nameless interaction does not: a service is
-            // published at its dotted global name, and the empty address is
-            // not one. The parser has already reported FORM-101, so no second
+            // published at its global name, and the empty address is not one.
+            // The parser has already reported FORM-101, so no second
             // diagnostic is raised here.
-            if name.is_empty() || !lowered_services.insert(name) {
+            let Some(dotted) = service.name() else {
+                continue;
+            };
+            if service.declared_name().is_none() {
+                if let Some(suggested) =
+                    old_service_suggestions.get(&(index, dotted.syntax().text_range().start()))
+                {
+                    checker.report_old_service_name(&service, suggested);
+                }
+                continue;
+            }
+            if !checker.is_winning_service(*file, &service) {
                 continue;
             }
             services.push(checker.lower_service(&service));
@@ -485,7 +491,7 @@ fn number_unit(
         })
         .collect();
     // Byte order of the name; the interface first when an interface and an
-    // inline shape are spelled the same (`interface cabin`, `service cabin`).
+    // inline shape are spelled the same.
     sort_provisional(&mut keys);
 
     let mut next = lock.map_or(1, |lock| lock.next);
@@ -493,9 +499,8 @@ fn number_unit(
     let mut numbers = BTreeMap::new();
     for key in keys {
         if numbers.contains_key(&key) {
-            // One dotted service name declared inline in two packages: the
-            // duplicate is RIDL-140, reported by the service catalog; both
-            // shapes take the one number.
+            // Two shapes with one key take the one number. A service's global
+            // name is unique in a loaded workspace, so this is a guard only.
             continue;
         }
         let number = match lock.and_then(|lock| lock.live(&key)) {
@@ -699,7 +704,7 @@ pub(crate) struct Checker<'db> {
     pub(crate) ws: Workspace,
     pub(crate) std: Package,
     pkg: Package,
-    package_name: String,
+    pub(crate) package_name: String,
     resolution: Resolution,
     pub(crate) file_ids: Vec<FileId>,
     pub(crate) current_file: usize,
@@ -1009,6 +1014,15 @@ impl Checker<'_> {
                     DiagCode::NONE,
                     range,
                     format!("expected a type, but `{written}` names an interface"),
+                );
+                PathTarget::Unresolved(written)
+            }
+            // A service is not a type either (ADR-0033 decision 2).
+            Some(symbol) if symbol.kind == SymbolKind::Service => {
+                self.error(
+                    DiagCode::NONE,
+                    range,
+                    format!("expected a type, but `{written}` names a service"),
                 );
                 PathTarget::Unresolved(written)
             }
@@ -2656,7 +2670,7 @@ impl Checker<'_> {
             },
             // Unreachable through `resolve_type_path`, which rejects an
             // interface in type position; kept derivable as the safe default.
-            SymbolKind::Interface => v2::InitValue {
+            SymbolKind::Interface | SymbolKind::Service => v2::InitValue {
                 derivable: true,
                 value: None,
             },
@@ -4159,19 +4173,14 @@ impl Checker<'_> {
     /// inline body; never both (decision 14). A service is posture-neutral by
     /// design (§14.5): in rsdl a component offers a service and requires
     /// interfaces (rsdl reference §3.2), and posture derivation is reserved
-    /// (rsdl §12), so nothing beyond the shapes lowers here. Its dotted name
-    /// lives in the workspace catalog namespace, not the type namespace, so it
-    /// is never a `SymbolKind`. Services always publish with public visibility
-    /// — a global contract takes no `internal` modifier.
+    /// (rsdl §12), so nothing beyond the shapes lowers here. It is called for a
+    /// service with a declared name only; its IR name is the global name, the
+    /// package name followed by the declared name. Services always publish
+    /// with public visibility — a global contract takes no `internal`
+    /// modifier.
     fn lower_service(&mut self, service: &ast::ServiceDef) -> v2::Service {
         let dotted = service.name();
-        let name = dotted
-            .as_ref()
-            .map(|dotted| significant_text(dotted.syntax()))
-            .unwrap_or_default();
-        if let Some(dotted) = &dotted {
-            self.check_service_name(dotted);
-        }
+        let name = self.service_global_name(service);
         let doc_info = docs::scan(&service.doc_comments());
         let (links, see) = self.doc_links(&doc_info);
         self.deprecated_without_reason(
@@ -4540,26 +4549,116 @@ impl Checker<'_> {
             .collect()
     }
 
-    /// A service's dotted global name is reverse-domain, like a package name:
-    /// every segment is `lowercase_id` — an ASCII lowercase letter followed by
-    /// ASCII lowercase letters or digits (ridl §14.5, ADR-0002 §1, the same
-    /// rule the manifest enforces for package names). The parser accepts any
-    /// identifier run and the checker narrows, the E1 discipline. No §16 code
-    /// covers the name shape, so this is a description-first diagnostic (the
-    /// [`Checker::resolve_type_path`] precedent).
-    fn check_service_name(&mut self, dotted: &ast::DottedName) {
-        for segment in dotted.segments() {
-            let text = segment.text();
-            if !is_lowercase_name_segment(text) {
-                self.error(
-                    DiagCode::NONE,
-                    segment.text_range(),
-                    format!(
-                        "service name segment `{text}` is not lowercase — a service has a dotted, reverse-domain global name"
-                    ),
-                );
+    /// The global name of a service: the checked package's name followed by
+    /// the declared name, joined by `.` (ADR-0033 decision 1).
+    fn service_global_name(&self, service: &ast::ServiceDef) -> String {
+        service
+            .declared_name()
+            .map(|declared| format!("{}.{}", self.package_name, declared.text()))
+            .unwrap_or_default()
+    }
+
+    /// Whether `service` is the declaration the resolver bound its declared
+    /// name to — the first of the package's declarations of that name. A
+    /// losing duplicate was reported as TYPL-009 and does not lower.
+    fn is_winning_service(&self, file: InputFile, service: &ast::ServiceDef) -> bool {
+        let Some(declared) = service.declared_name() else {
+            return false;
+        };
+        self.resolution
+            .symbols
+            .get(declared.text())
+            .is_some_and(|symbol| {
+                symbol.package == self.package_name
+                    && symbol.file == file
+                    && symbol.range == declared.text_range()
+            })
+    }
+
+    /// The name RIDL-142 suggests for each old-form service of the package,
+    /// keyed by the file index and the start of the written name. The
+    /// declarations are read in the package's file order and in source order
+    /// within a file; a suggestion is also taken when an earlier old-form
+    /// declaration was given it, because a declaration that draws RIDL-142
+    /// binds nothing (ADR-0033 decision 5).
+    fn suggest_old_service_names(
+        &self,
+        files: &[InputFile],
+    ) -> HashMap<(usize, rowan::TextSize), String> {
+        let mut suggestions = HashMap::new();
+        let mut given: HashSet<String> = HashSet::new();
+        // The resolver binds vocabulary only, so the rsdl declarations of the
+        // package (components, systems, distributions, deployments) are read
+        // off the top-level `Name` nodes of every file of the package.
+        let declared: HashSet<String> = files
+            .iter()
+            .flat_map(|file| {
+                source_file(self.db, *file)
+                    .syntax()
+                    .children()
+                    .filter(|node| node.kind() != SyntaxKind::ServiceDef)
+                    .filter_map(|node| {
+                        node.children()
+                            .find(|child| child.kind() == SyntaxKind::Name)
+                            .map(|name| significant_text(&name))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        for (index, file) in files.iter().enumerate() {
+            for service in source_file(self.db, *file).services() {
+                let Some(dotted) = service.name() else {
+                    continue;
+                };
+                if service.declared_name().is_some() {
+                    continue;
+                }
+                let written = significant_text(dotted.syntax());
+                if written.is_empty() {
+                    continue;
+                }
+                let suggested = suggested_service_name(&self.package_name, &written, &|name| {
+                    given.contains(name)
+                        || declared.contains(name)
+                        || self
+                            .resolution
+                            .symbols
+                            .get(name)
+                            .is_some_and(|symbol| symbol.package == self.package_name)
+                });
+                given.insert(suggested.clone());
+                suggestions.insert((index, dotted.syntax().text_range().start()), suggested);
             }
         }
+        suggestions
+    }
+
+    /// RIDL-142 for a service whose name is not one `CamelCase` identifier
+    /// (ridl §14.5), with the suggested name as a fix-it.
+    fn report_old_service_name(&mut self, service: &ast::ServiceDef, suggested: &str) {
+        let Some(dotted) = service.name() else {
+            return;
+        };
+        let written = significant_text(dotted.syntax());
+        let range = dotted.syntax().text_range();
+        let file = self.file_ids[self.current_file];
+        let package = self.package_name.clone();
+        self.diagnostics.push(Diagnostic {
+            code: DiagCode::RIDL_142,
+            severity: Severity::Error,
+            message: format!(
+                "`{written}` is not a service name: a service is declared with one CamelCase \
+                 name, and its global name is its package followed by that name — write \
+                 `service {suggested}` (global name `{package}.{suggested}`) (ridl §14.5)"
+            ),
+            primary: Span { file, range },
+            labels: Vec::new(),
+            fixits: vec![FixIt {
+                span: Span { file, range },
+                replacement: suggested.to_string(),
+                label: format!("rename the service to `{suggested}`"),
+            }],
+        });
     }
 
     /// Resolves one shape of a service's list (ridl §14.5). The reference
@@ -4613,13 +4712,10 @@ impl Checker<'_> {
         // see [`Checker::lower_interface`].
 
         // An inline shape has no name of its own, so its observer stubs are
-        // scoped to the service's dotted global name. A service takes no
+        // scoped to the service's global name. A service takes no
         // `internal` modifier (ridl §14.5), so its shape is always public.
         self.interface_internal = false;
-        self.interface_name = service
-            .name()
-            .map(|dotted| significant_text(dotted.syntax()))
-            .unwrap_or_default();
+        self.interface_name = self.service_global_name(service);
         // An inline shape IS an interface shape (ridl §14.5), so a `require`
         // on one of its interactions reads its own signals exactly as it does
         // inside an `interface` body (ridl §13) — the same pre-pass.
@@ -5997,7 +6093,9 @@ impl Checker<'_> {
         }
         let result = match symbol.kind {
             SymbolKind::Enum | SymbolKind::EnumSet => true,
-            SymbolKind::Union | SymbolKind::Const | SymbolKind::Interface => false,
+            SymbolKind::Union | SymbolKind::Const | SymbolKind::Interface | SymbolKind::Service => {
+                false
+            }
             SymbolKind::Type => match self.find_definition(symbol) {
                 Some(Definition::Type(decl)) => match decl.backing() {
                     Some(ast::Backing::Unit(_)) => true,
@@ -6235,22 +6333,63 @@ fn regex_crate_refusal(error: &regex::Error) -> String {
     }
 }
 
+/// The name RIDL-142 suggests for a service written as `written` in `package`
+/// (ADR-0033 decision 5): the written segments without the leading run they
+/// share with the package name (the last segment when nothing is left), each
+/// split at `_`, written with an upper-case first letter and joined. When
+/// `taken` holds the result, the first of the result followed by `Service`,
+/// `Service2`, `Service3`, … that it does not hold. A name that would not
+/// start with a letter is prefixed with `Service`, so the rule is total.
+pub(crate) fn suggested_service_name(
+    package: &str,
+    written: &str,
+    taken: &dyn Fn(&str) -> bool,
+) -> String {
+    let segments: Vec<&str> = written
+        .split('.')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let shared = segments
+        .iter()
+        .zip(package.split('.'))
+        .take_while(|(segment, package_segment)| *segment == package_segment)
+        .count();
+    let kept = if shared < segments.len() {
+        &segments[shared..]
+    } else {
+        &segments[segments.len().saturating_sub(1)..]
+    };
+    let mut base = String::new();
+    for part in kept.iter().flat_map(|segment| segment.split('_')) {
+        let mut chars = part.chars().filter(char::is_ascii_alphanumeric);
+        if let Some(first) = chars.next() {
+            base.push(first.to_ascii_uppercase());
+            base.extend(chars);
+        }
+    }
+    if !base.starts_with(|c: char| c.is_ascii_uppercase()) {
+        base.insert_str(0, "Service");
+    }
+    if !taken(&base) {
+        return base;
+    }
+    let mut suffix = 1;
+    loop {
+        let candidate = if suffix == 1 {
+            format!("{base}Service")
+        } else {
+            format!("{base}Service{suffix}")
+        };
+        if !taken(&candidate) {
+            return candidate;
+        }
+        suffix += 1;
+    }
+}
+
 /// The declared name of a body member (field, arm, enum value, bit,
 /// tombstone) — these nodes carry a `name()` accessor but not the `HasName`
 /// trait.
-/// One segment of a dotted global name: an ASCII lowercase letter followed by
-/// ASCII lowercase letters or digits (ADR-0002 §1). This is the rule
-/// `ridl-core`'s manifest applies to package names; a service's dotted name is
-/// reverse-domain in exactly the same shape (ridl §14.5).
-fn is_lowercase_name_segment(segment: &str) -> bool {
-    let mut chars = segment.chars();
-    match chars.next() {
-        Some(first) if first.is_ascii_lowercase() => {}
-        _ => return false,
-    }
-    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
-}
-
 fn member_name(name: Option<ast::Name>) -> Option<String> {
     Some(name?.ident_token()?.text().to_string())
 }
@@ -6258,7 +6397,8 @@ fn member_name(name: Option<ast::Name>) -> Option<String> {
 /// The declared name of a top-level item as written, read off the tree rather
 /// than off a typed node so that [`Checker::check_exposure`] stays independent
 /// of the declaration kinds: a typl definition and an `interface` carry a
-/// `Name`, a `service` carries its dotted `DottedName` (ridl §14.5). `None` for
+/// `Name`, a `service` carries its `DottedName`, one segment when declared
+/// correctly (ridl §14.5). `None` for
 /// an item that declares no name of its own — a `package` header, a bare
 /// `import`, or a declaration the parser recovered without one.
 fn item_declared_name(item: &ridl_syntax::SyntaxNode) -> Option<String> {
@@ -6462,6 +6602,7 @@ fn kind_noun(kind: SymbolKind) -> &'static str {
         SymbolKind::EnumSet => "enumset",
         SymbolKind::Union => "union",
         SymbolKind::Interface => "interface",
+        SymbolKind::Service => "service",
     }
 }
 
@@ -6664,6 +6805,31 @@ mod tests {
         codes_all(checked)
             .into_iter()
             .filter(|code| *code != "TYPL-406")
+            .collect()
+    }
+
+    /// The codes of the resolver's diagnostics for a single-package workspace
+    /// whose one file is a `.ridl` file: the declaration clashes (TYPL-009)
+    /// are the resolver's, not the checker's.
+    fn resolver_codes(name: &str, text: &str) -> Vec<String> {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(&db, name, text);
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        resolve_package(&db, ws, pkg, std)
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str().to_string())
+            .collect()
+    }
+
+    /// The codes of `checked`'s errors, warnings left out.
+    fn errors(checked: &CheckedPackage) -> Vec<&str> {
+        checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == Severity::Error)
+            .map(|diagnostic| diagnostic.code.as_str())
             .collect()
     }
 
@@ -10574,14 +10740,14 @@ mod tests {
             "app",
             "package app\n\
              internal type Hidden : integer [0..10]\n\
-             service app.panel {\n\
+             service Panel {\n\
              \x20 signal a : Hidden @1s\n\
              \x20 command e(p : Hidden) @[..50ms]\n\
              }\n",
         );
         assert_eq!(codes(&checked), vec!["TYPL-005", "TYPL-005"]);
         assert!(
-            checked.diagnostics[0].message.contains("`app.panel`"),
+            checked.diagnostics[0].message.contains("`Panel`"),
             "the message names the service: {}",
             checked.diagnostics[0].message,
         );
@@ -10600,12 +10766,12 @@ mod tests {
              internal interface Hidden {\n\
              \x20 signal a : Tick @1s\n\
              }\n\
-             service app.panel : Hidden\n",
+             service Panel : Hidden\n",
         );
         assert_eq!(codes(&checked), vec!["RIDL-143"]);
         let message = &checked.diagnostics[0].message;
         assert!(
-            message.contains("`app.panel`") && message.contains("`Hidden`"),
+            message.contains("`Panel`") && message.contains("`Hidden`"),
             "the message names the service and the shape: {message}",
         );
         assert!(
@@ -10625,7 +10791,7 @@ mod tests {
              interface Shown {\n\
              \x20 signal a : Tick @1s\n\
              }\n\
-             service app.panel : Shown\n",
+             service Panel : Shown\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
     }
@@ -12474,7 +12640,7 @@ mod tests {
             (
                 "RIDL-401, service inline shape",
                 format!(
-                    "{PRELUDE}service app.svc {{\n  reserved legacyTemp\n  \
+                    "{PRELUDE}service Svc {{\n  reserved legacyTemp\n  \
                      signal legacyTemp : Speed @10ms\n}}\n"
                 ),
                 "`legacyTemp` is retired here",
@@ -12513,7 +12679,7 @@ mod tests {
             (
                 "RIDL-402, three declarations, service inline shape",
                 format!(
-                    "{PRELUDE}service app.svc {{\n  signal speed : Speed @10ms\n  \
+                    "{PRELUDE}service Svc {{\n  signal speed : Speed @10ms\n  \
                      signal speed : Speed @20ms\n  signal speed : Speed @30ms\n}}\n"
                 ),
                 "`speed` is declared here, and this is the one that is kept",
@@ -12521,7 +12687,7 @@ mod tests {
             (
                 "RIDL-401, two tombstones, service inline shape",
                 format!(
-                    "{PRELUDE}service app.svc {{\n  reserved legacyTemp\n  \
+                    "{PRELUDE}service Svc {{\n  reserved legacyTemp\n  \
                      reserved legacyTemp\n  signal legacyTemp : Speed @10ms\n}}\n"
                 ),
                 "`legacyTemp` is retired here",
@@ -12636,7 +12802,7 @@ mod tests {
             ),
             (
                 "a service inline shape",
-                format!("{PRELUDE}service app.svc {{\n  type X: m\n  signal s : Speed @10ms\n}}\n"),
+                format!("{PRELUDE}service Svc {{\n  type X: m\n  signal s : Speed @10ms\n}}\n"),
             ),
         ] {
             let parsed = ridl_syntax::parse(&source, ridl_syntax::Profile::Ridl);
@@ -15825,7 +15991,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.a.b {{\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+                "{PRELUDE}service B {{\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
             ),
         );
         assert_eq!(inline_walk(&checked), [("after", 2)]);
@@ -15836,7 +16002,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.a.b {{\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+                "{PRELUDE}service B {{\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
             ),
         );
         assert_eq!(inline_walk(&checked), [("after", 2)]);
@@ -15854,8 +16020,8 @@ interface VehicleStatus {
             "interface I {\n  query (): Speed\n  signal after : Speed @10ms\n}\n",
             "interface I {\n  fixed : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
             "interface I {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
-            "service veh.a.b {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
-            "service veh.a.b {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+            "service B {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+            "service B {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
         ] {
             let checked = check_ridl("app", &format!("{PRELUDE}{body}"));
             let mut interactions: Vec<&v2::Decl> = checked
@@ -15912,7 +16078,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.a.b {{\n  signal a : Speed @10ms\n}}\nservice veh.a.b {{\n  signal b : Speed @10ms\n}}\n"
+                "{PRELUDE}service B {{\n  signal a : Speed @10ms\n}}\nservice B {{\n  signal b : Speed @10ms\n}}\n"
             ),
         );
         let names: Vec<&str> = checked
@@ -15921,7 +16087,7 @@ interface VehicleStatus {
             .iter()
             .map(|service| service.name.as_str())
             .collect();
-        assert_eq!(names, ["veh.a.b"]);
+        assert_eq!(names, ["app.B"]);
     }
 
     // --- services (ridl reference §14.5) --------------------------
@@ -15931,13 +16097,13 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface CruiseControl {{\n  signal engaged : Speed @10ms\n}}\nservice veh.adas.cruise : CruiseControl\n"
+                "{PRELUDE}interface CruiseControl {{\n  signal engaged : Speed @10ms\n}}\nservice Cruise : CruiseControl\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         assert_eq!(checked.ir.services.len(), 1);
         let service = &checked.ir.services[0];
-        assert_eq!(service.name, "veh.adas.cruise");
+        assert_eq!(service.name, "app.Cruise");
         assert_eq!(service.visibility, v2::Visibility::Public as i32);
         assert_eq!(
             service.shapes,
@@ -15951,7 +16117,7 @@ interface VehicleStatus {
 
     #[test]
     fn ridl_141_service_names_a_type_not_an_interface() {
-        let checked = check_ridl("app", &format!("{PRELUDE}service veh.adas.speed : Speed\n"));
+        let checked = check_ridl("app", &format!("{PRELUDE}service SpeedService : Speed\n"));
         assert!(
             codes(&checked).contains(&"RIDL-141"),
             "got: {:?}",
@@ -15976,7 +16142,7 @@ interface VehicleStatus {
     fn ridl_141_reports_per_shape_in_the_list() {
         let checked = check_ridl(
             "app",
-            &format!("{PRELUDE}service veh.adas.speed : Speed, Speed2\n"),
+            &format!("{PRELUDE}service SpeedService : Speed, Speed2\n"),
         );
         let ridl_141: Vec<&Diagnostic> = checked
             .diagnostics
@@ -15999,7 +16165,7 @@ interface VehicleStatus {
             &format!(
                 "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
                  interface HealthBlock {{\n  signal uptime : Speed @10ms\n}}\n\
-                 service veh.body.doors : DoorControl, HealthBlock\n"
+                 service Doors : DoorControl, HealthBlock\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -16037,7 +16203,7 @@ interface VehicleStatus {
             "veh.body",
             "package veh.body\nimport veh.common.DiagBlock\ntype Flag: boolean\n\
              interface DoorControl {\n  signal status : Flag @[1s..10s]\n}\n\
-             service veh.body.doors : DoorControl, DiagBlock\n",
+             service Doors : DoorControl, DiagBlock\n",
         );
         let ws = Workspace::new(&db, vec![common, body], BTreeMap::new());
 
@@ -16062,7 +16228,7 @@ interface VehicleStatus {
             "app",
             &format!(
                 "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
-                 service veh.body.doors : DoorControl, DoorControl\n"
+                 service Doors : DoorControl, DoorControl\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-145"]);
@@ -16088,7 +16254,7 @@ interface VehicleStatus {
             "app",
             &format!(
                 "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
-                 service veh.body.doors : DoorControl, reserved LegacyDoorDiag\n"
+                 service Doors : DoorControl, reserved LegacyDoorDiag\n"
             ),
         );
         assert!(
@@ -16118,7 +16284,7 @@ interface VehicleStatus {
             "app",
             &format!(
                 "{PRELUDE}interface Bad {{\n  signal x : Speed @10ms\n  signal x : Speed @10ms\n}}\n\
-                 service veh.body.bad : Bad\n"
+                 service Bad : Bad\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-402"]);
@@ -16134,7 +16300,7 @@ interface VehicleStatus {
             &format!(
                 "{PRELUDE}internal interface Hidden {{\n  signal a : Speed @10ms\n}}\n\
                  internal interface Secret {{\n  signal b : Speed @10ms\n}}\n\
-                 service veh.adas.leak : Hidden, Secret\n"
+                 service Leak : Hidden, Secret\n"
             ),
         );
         let ridl_143: Vec<&Diagnostic> = checked
@@ -16154,7 +16320,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) @[..50ms]\n}}\n"
+                "{PRELUDE}service Cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -16183,7 +16349,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  signal temperature : Speed @10ms\n}}\n"
+                "{PRELUDE}service Cabin {{\n  signal temperature : Speed @10ms\n  signal temperature : Speed @10ms\n}}\n"
             ),
         );
         // The inline body runs the same duplicate-interaction check an
@@ -16209,7 +16375,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) [ require temperature < t ] @[..50ms]\n}}\n"
+                "{PRELUDE}service Cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) [ require temperature < t ] @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -16232,12 +16398,12 @@ interface VehicleStatus {
         assert_eq!(set_target.contracts.len(), 1);
         assert_eq!(
             set_target.contracts[0].signal_refs,
-            ["veh.hvac.cabin.temperature"],
+            ["app.Cabin.temperature"],
         );
         assert_eq!(set_target.contracts[0].param_refs, ["t"]);
         assert_eq!(
             set_target.contracts[0].observer_id,
-            "veh.hvac.cabin.setTarget.require[0]",
+            "app.Cabin.setTarget.require[0]",
         );
     }
 
@@ -16302,7 +16468,7 @@ interface VehicleStatus {
                 ),
                 (
                     "b.ridl",
-                    "package veh.adas\nservice veh.adas.cruise : CruiseControl\n",
+                    "package veh.adas\nservice Cruise : CruiseControl\n",
                 ),
             ],
         );
@@ -16317,10 +16483,9 @@ interface VehicleStatus {
             "got: {:?}",
             checked.diagnostics
         );
-        assert!(catalog.diagnostics.is_empty());
         assert_eq!(service_ref(&checked), "veh.common.CruiseControl");
         assert_eq!(
-            catalog.entries["veh.adas.cruise"].interface_refs,
+            catalog.entries["veh.adas.Cruise"].interface_refs,
             [service_ref(&checked)],
             "the catalog and the IR must agree on the canonical reference",
         );
@@ -16336,7 +16501,7 @@ interface VehicleStatus {
         let adas = ridl_package(
             &db,
             "veh.adas",
-            "package veh.adas\nimport veh.common.CruiseControl\ntype Flag: boolean\ninterface CruiseControl {\n  signal engaged : Flag @10ms\n}\nservice veh.adas.cruise : CruiseControl\n",
+            "package veh.adas\nimport veh.common.CruiseControl\ntype Flag: boolean\ninterface CruiseControl {\n  signal engaged : Flag @10ms\n}\nservice Cruise : CruiseControl\n",
         );
         let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
 
@@ -16349,53 +16514,190 @@ interface VehicleStatus {
             "got: {:?}",
             checked.diagnostics
         );
-        assert!(catalog.diagnostics.is_empty());
         assert_eq!(service_ref(&checked), "CruiseControl");
         assert_eq!(
-            catalog.entries["veh.adas.cruise"].interface_refs,
+            catalog.entries["veh.adas.Cruise"].interface_refs,
             [service_ref(&checked)],
             "the catalog and the IR must agree on the canonical reference",
         );
     }
 
     #[test]
-    fn service_name_segments_must_be_lowercase() {
+    fn a_camel_case_service_lowers_under_its_global_name() {
         let checked = check_ridl(
-            "app",
-            &format!(
-                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice veh.X.y : I\n"
-            ),
+            "veh.body",
+            "package veh.body\ninterface DoorControl {}\nservice Doors : DoorControl\n",
         );
-        let checked = without_missing_docs(checked);
-        let messages = messages(&checked);
-        assert_eq!(messages.len(), 1, "got: {:?}", checked.diagnostics);
-        assert!(
-            messages[0].contains("`X` is not lowercase"),
-            "got: {:?}",
-            messages,
-        );
-
-        let good = check_ridl(
-            "app",
-            &format!(
-                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice veh.x2.y : I\n"
-            ),
-        );
-        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+        assert!(errors(&checked).is_empty(), "{:?}", checked.diagnostics);
+        assert_eq!(checked.ir.services[0].name, "veh.body.Doors");
     }
 
     #[test]
-    fn a_same_package_duplicate_service_lowers_once() {
+    fn a_dotted_service_name_is_ridl_142_with_a_suggested_name() {
+        let checked = check_ridl(
+            "veh.body",
+            "package veh.body\ninterface DoorControl {}\nservice veh.body.doors.front : DoorControl\n",
+        );
+        let diagnostic = checked
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .expect("RIDL-142");
+        assert!(
+            diagnostic.message.contains("service DoorsFront"),
+            "{}",
+            diagnostic.message
+        );
+        assert_eq!(diagnostic.fixits[0].replacement, "DoorsFront");
+        assert!(checked.ir.services.is_empty(), "the old form binds nothing");
+    }
+
+    #[test]
+    fn a_lowercase_one_segment_service_name_is_ridl_142() {
         let checked = check_ridl(
             "app",
-            &format!(
-                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice veh.adas.cruise : I\nservice veh.adas.cruise : I\n"
-            ),
+            "package app\ninterface I {}\nservice doors : I\nservice cabin_2 : I\n",
         );
-        // The workspace-wide RIDL-140 is `service_catalog`'s job; the IR must
-        // not carry the name twice regardless.
+        let suggested: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .map(|diagnostic| diagnostic.fixits[0].replacement.as_str())
+            .collect();
+        assert_eq!(suggested, ["Doors", "Cabin2"]);
+        assert!(checked.ir.services.is_empty());
+    }
+
+    #[test]
+    fn the_suggestion_drops_only_the_shared_package_prefix() {
+        for (package, written, suggested) in [
+            ("veh.cluster", "veh.hvac.cabin", "HvacCabin"),
+            ("veh.cabin", "veh.cabin.control", "Control"),
+            ("fleet.vehicle", "fleet.vehicle.doors.front", "DoorsFront"),
+            ("p", "doors", "Doors"),
+            ("p", "cabin_2", "Cabin2"),
+            ("a.b", "a.b", "B"),
+        ] {
+            assert_eq!(
+                suggested_service_name(package, written, &|_| false),
+                suggested
+            );
+        }
+    }
+
+    #[test]
+    fn the_suggestion_appends_service_on_a_clash() {
+        let checked = check_ridl(
+            "alpha",
+            "package alpha\ninterface Face {}\nservice alpha.face : Face\n",
+        );
+        let diagnostic = checked
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .expect("RIDL-142");
+        assert_eq!(diagnostic.fixits[0].replacement, "FaceService");
+    }
+
+    /// ADR-0033 decision 5: old-form declarations bind nothing, so the
+    /// suggestion must also avoid the names already suggested in the same
+    /// package.
+    #[test]
+    fn colliding_old_form_services_get_distinct_suggestions() {
+        let checked = check_ridl(
+            "veh.cabin",
+            "package veh.cabin\ninterface I {}\n\
+             service veh.cabin.control : I\nservice control : I\nservice veh.cabin.control_ : I\n",
+        );
+        let suggested: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .map(|diagnostic| diagnostic.fixits[0].replacement.as_str())
+            .collect();
+        assert_eq!(suggested, ["Control", "ControlService", "ControlService2"]);
+    }
+
+    /// The suggestion avoids the rsdl declarations of the package too, which
+    /// the resolver does not bind.
+    #[test]
+    fn the_suggestion_avoids_an_rsdl_declaration_of_the_package() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_files(
+            &db,
+            "veh.cabin",
+            &[
+                (
+                    "a.ridl",
+                    "package veh.cabin\ninterface I {}\nservice control : I\n",
+                ),
+                ("b.rsdl", "package veh.cabin\ncomponent Control {}\n"),
+            ],
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        let diagnostic = checked
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .expect("RIDL-142");
+        assert_eq!(diagnostic.fixits[0].replacement, "ControlService");
+    }
+
+    #[test]
+    fn a_service_and_an_interface_of_one_name_are_typl_009() {
+        assert_eq!(
+            resolver_codes(
+                "veh.hvac",
+                "package veh.hvac\ntype State: integer [0..1]\n\
+                 interface Cabin { signal i : State @[100ms..1s] }\n\
+                 service Cabin { signal s : State @[100ms..1s] }\n",
+            ),
+            ["TYPL-009"]
+        );
+    }
+
+    #[test]
+    fn a_service_in_a_type_position_is_not_a_type() {
+        let checked = check_ridl(
+            "p",
+            "package p\ninterface I {}\nservice S : I\nstruct X { s: S }\n",
+        );
+        assert!(
+            checked
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("names a service")),
+            "{:?}",
+            checked.diagnostics
+        );
+    }
+
+    #[test]
+    fn a_doc_link_names_a_service_and_its_member() {
+        let checked = check_ridl(
+            "p",
+            "package p\ntype V: integer [0..1]\n\
+             interface I { signal level: V @[100ms..1s] }\n\
+             /// Published as [S]; see [S.level].\nservice S : I\n",
+        );
+        assert!(
+            !codes(&checked).contains(&"TYPL-401"),
+            "{:?}",
+            checked.diagnostics
+        );
+    }
+
+    #[test]
+    fn a_same_package_duplicate_service_is_typl_009_and_lowers_once() {
+        let source = format!(
+            "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice Cruise : I\nservice Cruise : I\n"
+        );
+        assert_eq!(resolver_codes("app", &source), ["TYPL-009"]);
+        let checked = check_ridl("app", &source);
         assert_eq!(checked.ir.services.len(), 1);
-        assert_eq!(checked.ir.services[0].name, "veh.adas.cruise");
+        assert_eq!(checked.ir.services[0].name, "app.Cruise");
     }
 
     // --- the interface identity fold (lock design §3, §4, §8) --------------
@@ -16407,7 +16709,7 @@ interface VehicleStatus {
 type State: integer [0..1]
 interface Zone { signal z : State @[100ms..1s] }
 interface Cabin { signal c : State @[100ms..1s] }
-service veh.hvac.rear { signal r : State @[100ms..1s] }
+service Rear { signal r : State @[100ms..1s] }
 ";
 
     /// A workspace-member package whose files are all `.ridl` and which
@@ -16495,7 +16797,7 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
         let checked = check_ridl_with_lock(
             "veh.hvac",
             &[("hvac.ridl", NUMBERED)],
-            "next 9\nCabin 7\nservice:veh.hvac.rear 2\nZone 4\n",
+            "next 9\nCabin 7\nservice:veh.hvac.Rear 2\nZone 4\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         assert_eq!(
@@ -16503,7 +16805,7 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
             [
                 ("Zone".to_string(), 4, false),
                 ("Cabin".to_string(), 7, false),
-                ("service:veh.hvac.rear".to_string(), 2, false),
+                ("service:veh.hvac.Rear".to_string(), 2, false),
             ]
         );
     }
@@ -16521,7 +16823,7 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
             [
                 ("Zone".to_string(), 1, false),
                 ("Cabin".to_string(), 3, true),
-                ("service:veh.hvac.rear".to_string(), 4, true),
+                ("service:veh.hvac.Rear".to_string(), 4, true),
             ]
         );
 
@@ -16532,7 +16834,7 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
             [
                 ("Zone".to_string(), 2, true),
                 ("Cabin".to_string(), 1, true),
-                ("service:veh.hvac.rear".to_string(), 3, true),
+                ("service:veh.hvac.Rear".to_string(), 3, true),
             ],
             "with no lock every number is provisional, from 1"
         );
@@ -16543,7 +16845,7 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
     #[test]
     fn a_file_rename_leaves_every_number_unchanged() {
         const ZONE: &str = "package veh.hvac\ntype State: integer [0..1]\ninterface Zone { signal z : State @[100ms..1s] }\n";
-        const CABIN: &str = "package veh.hvac\ninterface Cabin { signal c : State @[100ms..1s] }\nservice veh.hvac.rear { signal r : State @[100ms..1s] }\n";
+        const CABIN: &str = "package veh.hvac\ninterface Cabin { signal c : State @[100ms..1s] }\nservice Rear { signal r : State @[100ms..1s] }\n";
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
         let before = ridl_package_files(&db, "veh.hvac", &[("a.ridl", ZONE), ("b.ridl", CABIN)]);
@@ -16560,44 +16862,25 @@ service veh.hvac.rear { signal r : State @[100ms..1s] }
             [
                 ("Cabin".to_string(), 1, true),
                 ("Zone".to_string(), 2, true),
-                ("service:veh.hvac.rear".to_string(), 3, true),
+                ("service:veh.hvac.Rear".to_string(), 3, true),
             ]
         );
     }
 
-    /// Design §2, §3: `interface cabin` and `service cabin` check clean
-    /// together, get two entries, and the interface sorts first when the
-    /// spelling is the same.
+    /// A service and an interface share the package's namespace, so a service
+    /// named like an interface is TYPL-009 (ADR-0033 decision 2), and only the
+    /// first declaration is numbered.
     #[test]
-    fn interface_cabin_and_service_cabin_get_two_numbers() {
+    fn a_service_and_an_interface_of_one_name_are_one_entry() {
         const CABINS: &str = "package veh.hvac
 type State: integer [0..1]
-service cabin { signal s : State @[100ms..1s] }
-interface cabin { signal i : State @[100ms..1s] }
+interface Cabin { signal i : State @[100ms..1s] }
+service Cabin { signal s : State @[100ms..1s] }
 ";
+        assert_eq!(resolver_codes("veh.hvac", CABINS), ["TYPL-009"]);
         let checked = check_ridl("veh.hvac", CABINS);
-        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
-        assert_eq!(
-            numbering(&checked),
-            [
-                ("cabin".to_string(), 1, true),
-                ("service:cabin".to_string(), 2, true),
-            ]
-        );
-
-        let checked = check_ridl_with_lock(
-            "veh.hvac",
-            &[("hvac.ridl", CABINS)],
-            "next 3\nservice:cabin 1\ncabin 2\n",
-        );
-        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
-        assert_eq!(
-            numbering(&checked),
-            [
-                ("cabin".to_string(), 2, false),
-                ("service:cabin".to_string(), 1, false),
-            ]
-        );
+        assert!(errors(&checked).is_empty(), "{:?}", checked.diagnostics);
+        assert_eq!(numbering(&checked), [("Cabin".to_string(), 1, true)]);
     }
 
     /// Design §3: the inline shape's number is written on the `Interface`
@@ -16608,7 +16891,7 @@ interface cabin { signal i : State @[100ms..1s] }
         let checked = check_ridl_with_lock(
             "veh.hvac",
             &[("hvac.ridl", NUMBERED)],
-            "next 2\nservice:veh.hvac.rear 1\n",
+            "next 2\nservice:veh.hvac.Rear 1\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         let Some(v2::service_shape::Kind::Inline(inline)) =
@@ -16622,7 +16905,7 @@ interface cabin { signal i : State @[100ms..1s] }
             [
                 ("Zone".to_string(), 3, true),
                 ("Cabin".to_string(), 2, true),
-                ("service:veh.hvac.rear".to_string(), 1, false),
+                ("service:veh.hvac.Rear".to_string(), 1, false),
             ]
         );
     }
@@ -16635,7 +16918,7 @@ interface cabin { signal i : State @[100ms..1s] }
         let checked = check_ridl_with_lock(
             "veh.hvac",
             &[("hvac.ridl", NUMBERED)],
-            "next 6\nCabin 1\nservice:veh.hvac.gone 5 retired\nZone 3\nOld 2 retired\nservice:veh.hvac.rear 4\n",
+            "next 6\nCabin 1\nservice:veh.hvac.Gone 5 retired\nZone 3\nOld 2 retired\nservice:veh.hvac.Rear 4\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         assert_eq!(
@@ -16646,7 +16929,7 @@ interface cabin { signal i : State @[100ms..1s] }
                     number: 2,
                 },
                 v2::RetiredInterface {
-                    name: "service:veh.hvac.gone".to_string(),
+                    name: "service:veh.hvac.Gone".to_string(),
                     number: 5,
                 },
             ]
@@ -16669,7 +16952,7 @@ interface cabin { signal i : State @[100ms..1s] }
         let checked = check_ridl_with_lock(
             "veh.hvac",
             &[("hvac.ridl", NUMBERED)],
-            "next 4\nCabin 1 retired\nZone 2\nservice:veh.hvac.rear 3\n",
+            "next 4\nCabin 1 retired\nZone 2\nservice:veh.hvac.Rear 3\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         assert_eq!(
@@ -16677,7 +16960,7 @@ interface cabin { signal i : State @[100ms..1s] }
             [
                 ("Zone".to_string(), 2, false),
                 ("Cabin".to_string(), 4, true),
-                ("service:veh.hvac.rear".to_string(), 3, false),
+                ("service:veh.hvac.Rear".to_string(), 3, false),
             ]
         );
         assert_eq!(
@@ -16695,7 +16978,7 @@ interface cabin { signal i : State @[100ms..1s] }
     /// package directory as `ridl lock` takes it (PD-4).
     #[test]
     fn an_orphan_entry_names_retire_alone() {
-        let lock = "next 5\nCabin 1\nLegacy 2\nZone 3\nservice:veh.hvac.rear 4\n";
+        let lock = "next 5\nCabin 1\nLegacy 2\nZone 3\nservice:veh.hvac.Rear 4\n";
         let checked = check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], lock);
         let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), ["RIDL-409"]);
@@ -16730,7 +17013,7 @@ interface cabin { signal i : State @[100ms..1s] }
     /// in file order; a `service:` key is named as the lock spells it.
     #[test]
     fn an_orphan_entry_beside_an_unentered_declaration_names_both_commands() {
-        let lock = "next 4\nCabin 1\nLegacy 2\nservice:veh.hvac.old 3\n";
+        let lock = "next 4\nCabin 1\nLegacy 2\nservice:veh.hvac.Old 3\n";
         let checked = check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], lock);
         let checked = without_missing_docs(checked);
         assert_eq!(codes(&checked), ["RIDL-409", "RIDL-409"]);
@@ -16741,22 +17024,22 @@ interface cabin { signal i : State @[100ms..1s] }
                  run `ridl lock veh/hvac --rename Legacy=New` when a declaration without an entry, \
                  `New`, is this interface under a new name, or `ridl lock veh/hvac --retire Legacy` \
                  when the interface is gone",
-                "`service:veh.hvac.old` is a live entry of `interfaces.lock` with no declaration in \
-                 the unit: run `ridl lock veh/hvac --rename service:veh.hvac.old=New` when a \
+                "`service:veh.hvac.Old` is a live entry of `interfaces.lock` with no declaration in \
+                 the unit: run `ridl lock veh/hvac --rename service:veh.hvac.Old=New` when a \
                  declaration without an entry, `New`, is this interface under a new name, or \
-                 `ridl lock veh/hvac --retire service:veh.hvac.old` when the interface is gone",
+                 `ridl lock veh/hvac --retire service:veh.hvac.Old` when the interface is gone",
             ]
         );
         assert_eq!(
             checked.diagnostics[1].primary.range,
-            line_range(lock, "service:veh.hvac.old 3")
+            line_range(lock, "service:veh.hvac.Old 3")
         );
         assert_eq!(
             numbering(&checked),
             [
                 ("Zone".to_string(), 4, true),
                 ("Cabin".to_string(), 1, false),
-                ("service:veh.hvac.rear".to_string(), 5, true),
+                ("service:veh.hvac.Rear".to_string(), 5, true),
             ],
             "the orphans' numbers are never reused: provisional numbers start at `next`"
         );
@@ -16881,8 +17164,8 @@ interface cabin { signal i : State @[100ms..1s] }
 
     /// The order is the byte order of the name, not the whole lock key: the
     /// `service:` prefix of an inline shape is not part of the order. The
-    /// root's inline service `alpha` (key `service:alpha`) sorts before
-    /// `cluster.Speed` by name, and after it by whole key.
+    /// root's inline service `Alpha` (key `service:u.Alpha`) sorts after
+    /// `cluster.Speed` by name, and before it by whole key.
     #[test]
     fn provisional_numbers_follow_name_byte_order_not_whole_key_order() {
         let unit = UnitFixture::new(
@@ -16891,20 +17174,23 @@ interface cabin { signal i : State @[100ms..1s] }
             &[
                 (
                     "u",
-                    "package u\ntype Level: integer [0..1]\nservice alpha { signal z : Level @[100ms..1s] }\n",
+                    "package u\ntype Level: integer [0..1]\nservice Alpha { signal z : Level @[100ms..1s] }\n",
                 ),
                 ("u.cluster", "package u.cluster\ninterface Speed {}\n"),
             ],
         );
         assert_eq!(
             unit.numbers("u.cluster"),
-            [("cluster.Speed".to_string(), 2, true)]
+            [("cluster.Speed".to_string(), 1, true)]
         );
-        assert_eq!(unit.numbers("u"), [("service:alpha".to_string(), 1, true)]);
+        assert_eq!(
+            unit.numbers("u"),
+            [("service:u.Alpha".to_string(), 2, true)]
+        );
     }
 
     /// The order is the byte order of the name, not the package order: the
-    /// root's inline service `zone` sorts after `cluster.Speed` by name,
+    /// root's inline service `Zone` sorts after `cluster.Speed` by name,
     /// although its package `u` sorts before `u.cluster`.
     #[test]
     fn provisional_numbers_follow_name_byte_order_not_package_order() {
@@ -16914,7 +17200,7 @@ interface cabin { signal i : State @[100ms..1s] }
             &[
                 (
                     "u",
-                    "package u\ntype Level: integer [0..1]\nservice zone { signal z : Level @[100ms..1s] }\n",
+                    "package u\ntype Level: integer [0..1]\nservice Zone { signal z : Level @[100ms..1s] }\n",
                 ),
                 ("u.cluster", "package u.cluster\ninterface Speed {}\n"),
             ],
@@ -16923,7 +17209,7 @@ interface cabin { signal i : State @[100ms..1s] }
             unit.numbers("u.cluster"),
             [("cluster.Speed".to_string(), 1, true)]
         );
-        assert_eq!(unit.numbers("u"), [("service:zone".to_string(), 2, true)]);
+        assert_eq!(unit.numbers("u"), [("service:u.Zone".to_string(), 2, true)]);
     }
 
     /// A subpackage's shape is frozen by the entry under its relative key,

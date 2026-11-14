@@ -24,6 +24,6 @@ interface LintsTwo {
 }
 
 /// Third scope — an inline service shape, not a named interface.
-service diag.lints.inline {
+service LintsInline {
   query readThree(limit: Level): Sample | SharedFault @[..50ms]
 }

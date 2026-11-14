@@ -48,6 +48,9 @@ pub enum SymbolKind {
     EnumSet,
     Union,
     Interface,
+    /// A `service` declaration (ADR-0033): bound only for a service declared
+    /// with one `CamelCase` name.
+    Service,
 }
 
 // ==========================================================================
@@ -805,12 +808,14 @@ pub fn declared_symbols(db: &dyn salsa::Database, package: Package) -> HashMap<S
     symbols
 }
 
-/// A named top-level declaration — a typl definition or a ridl interface.
-/// [`declarations`] yields them in source order, so the first-wins
-/// tiebreak (ADR-0007 decision 6) holds across the two shapes.
+/// A named top-level declaration — a typl definition, a ridl interface, or a
+/// ridl service with a declared name. [`declarations`] yields them in source
+/// order, so the first-wins tiebreak (ADR-0007 decision 6) holds across the
+/// shapes.
 pub(crate) enum Declaration {
     Definition(Definition),
     Interface(InterfaceDef),
+    Service(ast::ServiceDef),
 }
 
 /// The declarations of a source file, in source order.
@@ -819,7 +824,14 @@ pub(crate) fn declarations(source: &SourceFile) -> impl Iterator<Item = Declarat
         if let Some(definition) = Definition::cast(node.clone()) {
             return Some(Declaration::Definition(definition));
         }
-        InterfaceDef::cast(node).map(Declaration::Interface)
+        if let Some(interface) = InterfaceDef::cast(node.clone()) {
+            return Some(Declaration::Interface(interface));
+        }
+        // A service written in the dotted or lowercase form binds nothing
+        // (RIDL-142).
+        ast::ServiceDef::cast(node)
+            .filter(|service| service.declared_name().is_some())
+            .map(Declaration::Service)
     })
 }
 
@@ -828,6 +840,7 @@ impl Declaration {
         match self {
             Self::Definition(definition) => declared_name(definition),
             Self::Interface(interface) => declared_name(interface),
+            Self::Service(service) => Some(service.declared_name()?.text().to_string()),
         }
     }
 
@@ -835,6 +848,10 @@ impl Declaration {
         match self {
             Self::Definition(definition) => name_range(definition),
             Self::Interface(interface) => name_range(interface),
+            Self::Service(service) => service
+                .declared_name()
+                .map(|token| token.text_range())
+                .unwrap_or_default(),
         }
     }
 
@@ -857,6 +874,7 @@ impl Declaration {
                 interface.is_internal(),
                 interface.is_error(),
             ),
+            Self::Service(_) => (SymbolKind::Service, false, false),
         };
         Symbol {
             name,
@@ -1093,6 +1111,7 @@ pub fn doc_link_members(
             ast::InterfaceMember::Reserved(_) => None,
             _ => declared_name(&member),
         })),
+        Declaration::Service(def) => service_members(db, ws, std, pkg, symbol, &def),
         Declaration::Definition(Definition::Struct(def)) => {
             names(&mut def.members().map(|member| match member {
                 ast::StructMember::Field(field) => name_text(field.name()),
@@ -1113,6 +1132,50 @@ pub fn doc_link_members(
         },
         Declaration::Definition(Definition::Type(_) | Definition::Const(_)) => Vec::new(),
     }
+}
+
+/// The member names of a service (ADR-0015 decision 16, flat addressing): the
+/// interactions of its inline shape, or the interactions of every interface of
+/// its list, each interface resolved in the declaring package's view. A
+/// `reserved` tombstone is not a member.
+fn service_members(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    service: &Symbol,
+    def: &ast::ServiceDef,
+) -> Vec<String> {
+    let inline: Vec<String> = def
+        .inline_members()
+        .filter_map(|member| match member {
+            ast::InterfaceMember::Reserved(_) => None,
+            _ => declared_name(&member),
+        })
+        .collect();
+    if !inline.is_empty() {
+        return inline;
+    }
+    let Some(declaring) = package_named(db, ws, std, pkg, &service.package) else {
+        return Vec::new();
+    };
+    let resolution = resolve_package(db, ws, declaring, std);
+    let mut members = Vec::new();
+    for shape in def.shapes() {
+        let Some(qualified) = shape.qualified_name() else {
+            continue;
+        };
+        let segments = qualified_segments(&qualified);
+        let Some((name, path)) = segments.split_last() else {
+            continue;
+        };
+        if let Ok(symbol) = resolve_declaration(db, ws, std, declaring, &resolution, path, name)
+            && symbol.kind == SymbolKind::Interface
+        {
+            members.extend(doc_link_members(db, ws, std, declaring, &symbol));
+        }
+    }
+    members
 }
 
 /// The text of a member's `Name` node, or `None` on a malformed tree.

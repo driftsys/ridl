@@ -251,32 +251,33 @@ fn a_fixed_is_checked_against_a_declared_limit() {
 #[test]
 fn an_inline_service_is_keyed_by_its_short_name() {
     let source = "package demo\ntype Payload: bytes [0..1000]\n\
-                  service demo.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
-    let diagnostics = check(source, "[limits.interaction]\n\"svc.sig\" = 10\n");
+                  service Svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let diagnostics = check(source, "[limits.interaction]\n\"Svc.sig\" = 10\n");
     let found = with("RIDL-151", &diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
-    assert!(found[0].message.contains("`svc.sig`"), "{found:?}");
+    assert!(found[0].message.contains("`Svc.sig`"), "{found:?}");
     assert!(with("RIDL-152", &diagnostics).is_empty(), "{diagnostics:?}");
-    // The dotted form is not a key.
-    let diagnostics = check(source, "[limits.interaction]\n\"demo.svc.sig\" = 10\n");
+    // The global name is not a key.
+    let diagnostics = check(source, "[limits.interaction]\n\"demo.Svc.sig\" = 10\n");
     assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
     assert_eq!(with("RIDL-152", &diagnostics).len(), 1, "{diagnostics:?}");
 }
 
+/// The member sites of an inline shape are keyed by the service's global name,
+/// as the IR names the shape; a payload above the ceiling in one is RIDL-157.
 #[test]
-fn a_short_name_shared_by_two_shapes_is_ambiguous() {
-    let source = "package demo\ntype Payload: bytes [0..1000]\n\
-                  service demo.a.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n\
-                  service demo.b.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
-    let diagnostics = check(source, "[limits.interaction]\n\"svc.sig\" = 10\n");
-    let found = with("RIDL-152", &diagnostics);
+fn an_inline_service_payload_above_the_ceiling_draws_ridl_157() {
+    let source = "package demo\ntype Text: string [0..4032]\n\
+                  struct Huge { a: Text, b: Text }\n\
+                  service Cabin {\n  signal blob: Huge @[10ms..100ms]\n}\n";
+    let diagnostics = check(source, "");
+    let found = with("RIDL-157", &diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
-    assert!(found[0].message.contains("ambiguous"), "{found:?}");
-    // The entry applies to neither shape.
-    assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
-    // A kind entry still applies to both.
-    let diagnostics = check(source, "[limits.kind]\nsignal = 10\n");
-    assert_eq!(with("RIDL-151", &diagnostics).len(), 2, "{diagnostics:?}");
+    let range = found[0].primary.range;
+    assert_eq!(
+        &source[usize::from(range.start())..usize::from(range.end())],
+        "blob"
+    );
 }
 
 #[test]

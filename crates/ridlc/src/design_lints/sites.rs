@@ -84,7 +84,7 @@ impl SiteIndex {
                     }
                 }
                 for shape in ast.shapes() {
-                    let Some(name) = shape.identity() else {
+                    let Some(name) = shape.identity(pkg) else {
                         continue;
                     };
                     if matches!(shape, ast::InterfaceShape::Interface(_))

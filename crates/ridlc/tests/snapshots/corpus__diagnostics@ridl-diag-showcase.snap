@@ -242,11 +242,11 @@ error[TYPL-005]: public `Exposed` exposes internal constant `HANDLE_MAX` — a p
 66 │     ensure result < HANDLE_MAX
    │                     ^^^^^^^^^^
 
-error[RIDL-143]: service `diag.showcase.backdoor` publishes internal interface `Backdoor` — a service is a global published contract and takes no `internal` modifier, so its shape must be public: drop `internal` from `Backdoor`, or give the service an inline shape (ridl §14.5)
-   ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:74:34
+error[RIDL-143]: service `BackdoorService` publishes internal interface `Backdoor` — a service is a global published contract and takes no `internal` modifier, so its shape must be public: drop `internal` from `Backdoor`, or give the service an inline shape (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:74:27
    │
-74 │ service diag.showcase.backdoor : Backdoor
-   │                                  ^^^^^^^^
+74 │ service BackdoorService : Backdoor
+   │                           ^^^^^^^^
 
 error[RIDL-109]: signal payload type `Serial` has no derivable init value and no `= value` override
   ┌─ tests/corpus/ridl-diag-showcase/main/init.ridl:9:19
@@ -408,27 +408,37 @@ error[TYPL-220]: the Rust `regex` crate cannot compile this pattern: backreferen
 12 │ const REPEATED_PATTERN = /^(a)\1$/
    │                          ^^^^^^^^^
 
-error[RIDL-141]: `Sample` is not an interface, and a service publishes an interface — name the interface that carries these interactions, or give the service an inline `{ … }` body of its own (ridl §14.5)
-   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:15:34
+error[RIDL-142]: `diag.showcase.legacy` is not a service name: a service is declared with one CamelCase name, and its global name is its package followed by that name — write `service ShowcaseLegacy` (global name `diag.ridl.ShowcaseLegacy`) (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:12:9
    │
-15 │ service diag.showcase.mistyped : Sample
-   │                                  ^^^^^^
+12 │ service diag.showcase.legacy : Published
+   │         ^^^^^^^^^^^^^^^^^^^^
+   │         │
+   │         rename the service to `ShowcaseLegacy`
+   │
+   = suggestion: replace with `ShowcaseLegacy` — rename the service to `ShowcaseLegacy`
+
+error[RIDL-141]: `Sample` is not an interface, and a service publishes an interface — name the interface that carries these interactions, or give the service an inline `{ … }` body of its own (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:15:20
+   │
+15 │ service Mistyped : Sample
+   │                    ^^^^^^
 
 error[RIDL-144]: `HealthBlock` declares `status`, which `DoorBlock` already contributes — members are addressed `service.member`, so one name cannot have two referents. Rename the member in one of the two interfaces (ridl §14.5)
-   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:27:42
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:27:28
    │
-27 │ service diag.showcase.doors : DoorBlock, HealthBlock
-   │                               ---------  ^^^^^^^^^^^
-   │                               │           
-   │                               `DoorBlock`, listed here, contributes `status`
+27 │ service Doors : DoorBlock, HealthBlock
+   │                 ---------  ^^^^^^^^^^^
+   │                 │           
+   │                 `DoorBlock`, listed here, contributes `status`
 
 error[RIDL-145]: `Published` is already listed by this service — every member of the two listings would collide, so this second listing is dropped and holds no slot of its own (ridl §14.5)
-   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:31:42
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:31:28
    │
-31 │ service diag.showcase.twice : Published, Published
-   │                               ---------  ^^^^^^^^^
-   │                               │           
-   │                               `Published` is listed here, and this is the listing that is kept
+31 │ service Twice : Published, Published
+   │                 ---------  ^^^^^^^^^
+   │                 │           
+   │                 `Published` is listed here, and this is the listing that is kept
 
 error[TYPL-301]: stream type `<T>` not valid on a struct field or collection — interaction parameters and query returns only
   ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:8:12
@@ -540,7 +550,7 @@ note[RIDL-406]: signal payload `EnvelopeEcho` declares `frameCounter`, which the
    │
    = lint: `redeclared-envelope-metadata` (set its level in `[lints]` in ridl.toml)
 
-note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
+note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.ridl.LintsInline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:18:32
    │
 18 │   query readOne(limit: Level): Sample | SharedFault @[..50ms]
@@ -548,7 +558,7 @@ note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 inte
    │
    = lint: `shared-error-type` (set its level in `[lints]` in ridl.toml)
 
-note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
+note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.ridl.LintsInline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:23:32
    │
 23 │   query readTwo(limit: Level): Sample | SharedFault @[..50ms]
@@ -556,7 +566,7 @@ note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 inte
    │
    = lint: `shared-error-type` (set its level in `[lints]` in ridl.toml)
 
-note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
+note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.ridl.LintsInline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:28:34
    │
 28 │   query readThree(limit: Level): Sample | SharedFault @[..50ms]
@@ -569,14 +579,3 @@ error[RIDL-409]: `Legacy` is a live entry of `interfaces.lock` with no declarati
   │
 4 │ Legacy 2
   │ ^^^^^^^^
-
-error[RIDL-140]: duplicate service name `diag.showcase.duplicate` — the service catalog is a flat global namespace
-   ┌─ tests/corpus/ridl-diag-showcase/twin/twin.ridl:13:9
-   │
-13 │ service diag.showcase.duplicate : Twin
-   │         ^^^^^^^^^^^^^^^^^^^^^^^
-   │
-   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:12:9
-   │
-12 │ service diag.showcase.duplicate : Published
-   │         ----------------------- `diag.showcase.duplicate` is first declared here

@@ -787,7 +787,7 @@ mod tests {
             "veh.topology.Lane",
             "veh.topology.Panel",
             "veh.topology.Backend",
-            "veh.diag.access",
+            "veh.diag.FaultAccess",
         ];
         assert_eq!(members, closure);
 
@@ -835,11 +835,11 @@ mod tests {
         assert_eq!(
             offers,
             [
-                vec!["veh.adas.cruise"],
-                vec!["veh.adas.lane"],
+                vec!["veh.adas.AdaptiveCruise"],
+                vec!["veh.adas.LaneKeeping"],
                 vec![],
                 vec![],
-                vec!["veh.diag.access"],
+                vec!["veh.diag.FaultAccess"],
             ]
         );
 
@@ -867,36 +867,36 @@ mod tests {
                     "Cruise",
                     "veh.adas/LaneAssist".to_string(),
                     false,
-                    "veh.adas.lane",
+                    "veh.adas.LaneKeeping",
                     "veh.topology.Lane"
                 ),
                 (
                     "Panel",
                     "veh.adas/CruiseControl".to_string(),
                     false,
-                    "veh.adas.cruise",
+                    "veh.adas.AdaptiveCruise",
                     "veh.topology.Cruise"
                 ),
                 (
                     "Panel",
                     "veh.adas/LaneAssist".to_string(),
                     false,
-                    "veh.adas.lane",
+                    "veh.adas.LaneKeeping",
                     "veh.topology.Lane"
                 ),
                 (
                     "Backend",
                     "veh.adas/CruiseControl".to_string(),
                     false,
-                    "veh.adas.cruise",
+                    "veh.adas.AdaptiveCruise",
                     "veh.topology.Cruise"
                 ),
                 (
                     "Backend",
-                    "veh.diag/veh.diag.access".to_string(),
+                    "veh.diag/veh.diag.FaultAccess".to_string(),
                     true,
-                    "veh.diag.access",
-                    "veh.diag.access"
+                    "veh.diag.FaultAccess",
+                    "veh.diag.FaultAccess"
                 ),
             ]
         );
@@ -917,13 +917,23 @@ mod tests {
             producers,
             [
                 (
-                    "veh.adas.cruise",
+                    "veh.adas.AdaptiveCruise",
                     "veh.topology.Cruise",
                     vec!["primary", "backup"],
                     true
                 ),
-                ("veh.adas.lane", "veh.topology.Lane", vec!["Unit"], false),
-                ("veh.diag.access", "veh.diag.access", vec!["Unit"], false),
+                (
+                    "veh.adas.LaneKeeping",
+                    "veh.topology.Lane",
+                    vec!["Unit"],
+                    false
+                ),
+                (
+                    "veh.diag.FaultAccess",
+                    "veh.diag.FaultAccess",
+                    vec!["Unit"],
+                    false
+                ),
             ]
         );
     }
@@ -937,7 +947,7 @@ mod tests {
         let text = "package veh.topology\n\
                     import veh.adas.LaneAssist\n\
                     component Lane [ rust.crate = \"lane\", labels = (QM) ] {\n\
-                    \x20 offers veh.adas.lane [ someip.serviceId = 4097 ]\n\
+                    \x20 offers veh.adas.LaneKeeping [ someip.serviceId = 4097 ]\n\
                     }\n\
                     component Panel { requires LaneAssist [ someip.reliable ] }\n\
                     system Vehicle [ owner.teams = (hmi, adas) ] { Lane [ linux.nice = 5 ], Panel }\n";
@@ -998,7 +1008,7 @@ mod tests {
                     /// @since 1.0\n\
                     component Lane {\n\
                     \x20 /// Doc offers.\n\
-                    \x20 offers veh.adas.lane\n\
+                    \x20 offers veh.adas.LaneKeeping\n\
                     }\n\
                     component Panel {\n\
                     \x20 /// Doc requires.\n\
@@ -1042,7 +1052,7 @@ mod tests {
                     /// @see veh.common.Speed\n\
                     component Lane {\n\
                     \x20 /// Lists [LaneAssist].\n\
-                    \x20 offers veh.adas.lane\n\
+                    \x20 offers veh.adas.LaneKeeping\n\
                     }\n\
                     component Panel {\n\
                     \x20 /// Needs [LaneAssist].\n\
@@ -1175,7 +1185,7 @@ mod tests {
             ("veh.topology.Lane.Unit", "AdasHpc"),
             ("veh.topology.Panel.Unit", "Cockpit"),
             ("veh.topology.Backend.Unit", "Cloud"),
-            ("veh.diag.access.Unit", "AdasHpc"),
+            ("veh.diag.FaultAccess.Unit", "AdasHpc"),
         ];
         assert_eq!(
             placements,
@@ -1225,7 +1235,7 @@ mod tests {
                 ),
                 (
                     "veh.topology.Backend.Unit",
-                    "veh.diag.access.Unit",
+                    "veh.diag.FaultAccess.Unit",
                     "off-board"
                 ),
             ])
@@ -1238,9 +1248,9 @@ mod tests {
                 interface.name.as_str(),
                 interface.inline
             ),
-            ("veh.diag", "veh.diag.access", true)
+            ("veh.diag", "veh.diag.FaultAccess", true)
         );
-        assert_eq!(link.service, "veh.diag.access");
+        assert_eq!(link.service, "veh.diag.FaultAccess");
 
         assert!(
             link_rows(bench)
@@ -1274,7 +1284,7 @@ mod tests {
                         consumes
                     ),
                     (
-                        "veh.topology.Backend -> veh.diag.access".to_string(),
+                        "veh.topology.Backend -> veh.diag.FaultAccess".to_string(),
                         consumes
                     ),
                 ]
@@ -1289,7 +1299,7 @@ mod tests {
     fn external_endpoints_shape_the_link_and_surface_sets() {
         let text = "package veh.topology\n\
                     import veh.adas.LaneAssist\n\
-                    component Lane [ external ] { offers veh.adas.lane }\n\
+                    component Lane [ external ] { offers veh.adas.LaneKeeping }\n\
                     component Probe [ external ] { requires LaneAssist }\n\
                     component Panel { requires LaneAssist }\n\
                     component Idle {}\n\
@@ -1334,7 +1344,7 @@ mod tests {
     #[test]
     fn a_placement_error_leaves_out_its_own_deployment() {
         let text = "package veh.topology\n\
-                    component Lane { offers veh.adas.lane }\n\
+                    component Lane { offers veh.adas.LaneKeeping }\n\
                     system Vehicle { Lane }\n\
                     deployment Good for Vehicle { machine A { Lane } }\n\
                     deployment Bad for Vehicle { machine A {} }\n";
@@ -1450,7 +1460,7 @@ mod tests {
                     1,
                     "CruiseControl",
                     "engaged",
-                    "veh.adas.cruise",
+                    "veh.adas.AdaptiveCruise",
                     cruise("AdasHpc", "Cockpit")
                 ),
                 (
@@ -1459,7 +1469,7 @@ mod tests {
                     2,
                     "CruiseControl",
                     "target",
-                    "veh.adas.cruise",
+                    "veh.adas.AdaptiveCruise",
                     cruise("AdasHpc", "Cockpit")
                 ),
                 (
@@ -1468,7 +1478,7 @@ mod tests {
                     3,
                     "CruiseControl",
                     "setLever",
-                    "veh.adas.cruise",
+                    "veh.adas.AdaptiveCruise",
                     cruise("AdasHpc", "Cockpit")
                 ),
                 (
@@ -1477,17 +1487,17 @@ mod tests {
                     1,
                     "LaneAssist",
                     "active",
-                    "veh.adas.lane",
+                    "veh.adas.LaneKeeping",
                     one("veh.topology.Lane.Unit@AdasHpc")
                 ),
                 (
                     "veh.diag",
                     1,
                     1,
-                    "veh.diag.access",
+                    "veh.diag.FaultAccess",
                     "readFaults",
-                    "veh.diag.access",
-                    one("veh.diag.access.Unit@AdasHpc")
+                    "veh.diag.FaultAccess",
+                    one("veh.diag.FaultAccess.Unit@AdasHpc")
                 ),
             ]
         );
@@ -1504,16 +1514,23 @@ mod tests {
                     false,
                     1,
                     true,
-                    "veh.adas.cruise"
+                    "veh.adas.AdaptiveCruise"
                 ),
-                ("veh.adas", "LaneAssist", false, 2, true, "veh.adas.lane"),
+                (
+                    "veh.adas",
+                    "LaneAssist",
+                    false,
+                    2,
+                    true,
+                    "veh.adas.LaneKeeping"
+                ),
                 (
                     "veh.diag",
-                    "veh.diag.access",
+                    "veh.diag.FaultAccess",
                     true,
                     1,
                     true,
-                    "veh.diag.access"
+                    "veh.diag.FaultAccess"
                 ),
             ]
         );
@@ -1529,7 +1546,7 @@ mod tests {
                 ("veh.topology.Lane", false, vec![]),
                 ("veh.topology.Panel", false, vec!["veh.adas"]),
                 ("veh.topology.Backend", true, vec!["veh.adas", "veh.diag"]),
-                ("veh.diag.access", false, vec![]),
+                ("veh.diag.FaultAccess", false, vec![]),
             ]
         );
     }
@@ -1558,10 +1575,24 @@ mod tests {
                     false,
                     1,
                     true,
-                    "veh.adas.cruise"
+                    "veh.adas.AdaptiveCruise"
                 ),
-                ("veh", "adas.LaneAssist", false, 2, true, "veh.adas.lane"),
-                ("veh", "veh.diag.access", true, 3, true, "veh.diag.access"),
+                (
+                    "veh",
+                    "adas.LaneAssist",
+                    false,
+                    2,
+                    true,
+                    "veh.adas.LaneKeeping"
+                ),
+                (
+                    "veh",
+                    "veh.diag.FaultAccess",
+                    true,
+                    3,
+                    true,
+                    "veh.diag.FaultAccess"
+                ),
             ]
         );
         assert!(
@@ -1594,9 +1625,9 @@ mod tests {
                          \x20 signal fault: Flag @[100ms..1s]\n\
                          }\n\
                          \n\
-                         service veh.topology.hub : Status, LaneAssist\n";
+                         service HubService : Status, LaneAssist\n";
         let topology = "package veh.topology\n\
-                        component Hub { offers veh.topology.hub }\n\
+                        component Hub { offers veh.topology.HubService }\n\
                         component Screen { requires Status, requires LaneAssist }\n\
                         system Vehicle { Hub, Screen }\n\
                         deployment Desk for Vehicle { machine Top { Hub, Screen } }\n";
@@ -1610,8 +1641,22 @@ mod tests {
         assert_eq!(
             region_rows(&system),
             [
-                ("veh.adas", "LaneAssist", false, 2, true, "veh.topology.hub"),
-                ("veh.topology", "Status", false, 1, true, "veh.topology.hub"),
+                (
+                    "veh.adas",
+                    "LaneAssist",
+                    false,
+                    2,
+                    true,
+                    "veh.topology.HubService"
+                ),
+                (
+                    "veh.topology",
+                    "Status",
+                    false,
+                    1,
+                    true,
+                    "veh.topology.HubService"
+                ),
             ]
         );
         assert_eq!(
@@ -1635,7 +1680,7 @@ mod tests {
                     1,
                     "LaneAssist",
                     "active",
-                    "veh.topology.hub",
+                    "veh.topology.HubService",
                     hub()
                 ),
                 (
@@ -1644,7 +1689,7 @@ mod tests {
                     1,
                     "Status",
                     "ready",
-                    "veh.topology.hub",
+                    "veh.topology.HubService",
                     hub()
                 ),
                 (
@@ -1653,7 +1698,7 @@ mod tests {
                     3,
                     "Status",
                     "fault",
-                    "veh.topology.hub",
+                    "veh.topology.HubService",
                     hub()
                 ),
             ]
@@ -1677,13 +1722,13 @@ mod tests {
                          \x20 signal ready: Flag @[100ms..1s]\n\
                          }\n\
                          \n\
-                         service veh.topology.hub : Status\n";
+                         service HubService : Status\n";
         let topology = "package veh.topology\n\
-                        component Hub { offers veh.topology.hub }\n\
-                        component Screen { requires Status, requires veh.diag.access }\n\
-                        system Vehicle { Hub, Screen, veh.diag.access }\n\
+                        component Hub { offers veh.topology.HubService }\n\
+                        component Screen { requires Status, requires veh.diag.FaultAccess }\n\
+                        system Vehicle { Hub, Screen, veh.diag.FaultAccess }\n\
                         deployment Desk for Vehicle {\n\
-                        \x20 machine Top { Hub, Screen, veh.diag.access }\n\
+                        \x20 machine Top { Hub, Screen, veh.diag.FaultAccess }\n\
                         }\n";
         let (checked, lowered) = lower_topology(&[
             ("veh/topology/status.ridl", contracts),
@@ -1699,10 +1744,10 @@ mod tests {
                     "veh.diag",
                     1,
                     1,
-                    "veh.diag.access",
+                    "veh.diag.FaultAccess",
                     "readFaults",
-                    "veh.diag.access",
-                    vec!["veh.diag.access.Unit@Top".to_string()]
+                    "veh.diag.FaultAccess",
+                    vec!["veh.diag.FaultAccess.Unit@Top".to_string()]
                 ),
                 (
                     "veh.topology",
@@ -1710,7 +1755,7 @@ mod tests {
                     1,
                     "Status",
                     "ready",
-                    "veh.topology.hub",
+                    "veh.topology.HubService",
                     vec!["veh.topology.Hub.Unit@Top".to_string()]
                 ),
             ]
@@ -1737,9 +1782,9 @@ mod tests {
                          \x20 signal c: Flag @[100ms..1s]\n\
                          }\n\
                          \n\
-                         service veh.topology.hub : Zone, Cabin\n";
+                         service HubService : Zone, Cabin\n";
         let topology = "package veh.topology\n\
-                        component Hub { offers veh.topology.hub }\n\
+                        component Hub { offers veh.topology.HubService }\n\
                         component Screen { requires Zone, requires Cabin }\n\
                         system Vehicle { Hub, Screen }\n\
                         deployment Desk for Vehicle {\n\
@@ -1801,10 +1846,18 @@ mod tests {
                     1,
                     "Zone",
                     "z",
-                    "veh.topology.hub",
+                    "veh.topology.HubService",
                     hub.clone()
                 ),
-                ("veh.topology", 2, 1, "Cabin", "c", "veh.topology.hub", hub),
+                (
+                    "veh.topology",
+                    2,
+                    1,
+                    "Cabin",
+                    "c",
+                    "veh.topology.HubService",
+                    hub
+                ),
             ]
         );
     }
@@ -1838,7 +1891,7 @@ mod tests {
                     vec![
                         "veh.topology.Cruise",
                         "veh.topology.Lane",
-                        "veh.diag.access"
+                        "veh.diag.FaultAccess"
                     ],
                     vec![]
                 ),
@@ -1892,7 +1945,7 @@ mod tests {
     fn distribution_lines_keep_their_order_and_backend_keys() {
         let closure = "package veh.topology\n\
                        import veh.adas.LaneAssist\n\
-                       component Lane { offers veh.adas.lane }\n\
+                       component Lane { offers veh.adas.LaneKeeping }\n\
                        component Panel { requires LaneAssist }\n\
                        system Vehicle { Lane, Panel }\n\
                        deployment Desk for Vehicle { machine Top { Lane, Panel } }\n";
@@ -1935,7 +1988,7 @@ mod tests {
     #[test]
     fn a_distribution_lowers_its_tier_and_its_deprecation() {
         let closure = "package veh.topology\n\
-                       component Lane { offers veh.adas.lane }\n\
+                       component Lane { offers veh.adas.LaneKeeping }\n\
                        system Vehicle { Lane }\n\
                        deployment Desk for Vehicle { machine Top { Lane } }\n";
         let distribution = "package veh.topology\n\
@@ -1964,7 +2017,7 @@ mod tests {
     #[test]
     fn a_deployment_with_no_for_clause_is_left_out() {
         let text = "package veh.topology\n\
-                    component Lane { offers veh.adas.lane }\n\
+                    component Lane { offers veh.adas.LaneKeeping }\n\
                     system Vehicle { Lane }\n\
                     deployment Good for Vehicle { machine A { Lane } }\n\
                     deployment Bench { machine B { Lane } }\n";
@@ -2013,14 +2066,14 @@ mod tests {
     fn the_lowering_is_blocked_by_a_closure_error_only() {
         let (_, lowered) = lower_topology(&[(
             "veh/topology/x.rsdl",
-            "package veh.topology\ncomponent Lane { offers veh.adas.lane }\n",
+            "package veh.topology\ncomponent Lane { offers veh.adas.LaneKeeping }\n",
         )]);
         assert_eq!(lowered, None);
 
         let (checked, lowered) = lower_topology(&[(
             "veh/topology/x.rsdl",
             "package veh.topology\n\
-             component Lane { offers veh.adas.lane }\n\
+             component Lane { offers veh.adas.LaneKeeping }\n\
              system Vehicle { Lane, Lane }\n",
         )]);
         assert!(checked.closure_has_errors);
@@ -2041,7 +2094,7 @@ mod tests {
     fn lower_sized_with_lock(instance_lock: Option<&str>) -> Option<v2::System> {
         let text = format!(
             "{SIZED_CLOSURE}deployment Prod for Vehicle {{\n  \
-             machine A {{ Lane, Panel, Backend, Pair, veh.diag.access }}\n}}\n"
+             machine A {{ Lane, Panel, Backend, Pair, veh.diag.FaultAccess }}\n}}\n"
         );
         let (checked, lowered) = lower_topology_locked(
             None,
@@ -2075,7 +2128,7 @@ mod tests {
     /// rsdl §7, §13: a live lock entry gives its number and clears the
     /// provisional flag; the other instances count from `next` in the byte
     /// order of their keys. Three unlocked keys sort before
-    /// `veh.topology.Pair/primary` (`veh.diag.access`, `veh.topology.Backend`
+    /// `veh.topology.Pair/primary` (`veh.diag.FaultAccess`, `veh.topology.Backend`
     /// and `veh.topology.Lane`), so `primary` takes 10 + 3 = 13.
     #[test]
     fn a_locked_instance_keeps_its_number() {
@@ -2134,7 +2187,7 @@ mod tests {
         let deployment = sized_deployment(
             "deployment Prod for Vehicle [ depth = 3, slots = 8, budget = 4096 ] {\n  \
              machine A { Lane, Panel [ depth = 5, slots = 2, budget = 512 ], \
-             Backend, Pair [ depth = 7 ], veh.diag.access }\n}\n",
+             Backend, Pair [ depth = 7 ], veh.diag.FaultAccess }\n}\n",
         );
         assert_eq!(
             deployment.sizing,
@@ -2172,7 +2225,7 @@ mod tests {
     fn a_deployment_and_a_placement_with_no_sizing_key_lower_to_an_absent_sizing() {
         let deployment = sized_deployment(
             "deployment Prod for Vehicle {\n  \
-             machine A { Lane, Panel, Backend, Pair, veh.diag.access }\n}\n",
+             machine A { Lane, Panel, Backend, Pair, veh.diag.FaultAccess }\n}\n",
         );
         assert_eq!(deployment.sizing, None);
         assert_eq!(deployment.placements.len(), 6);
@@ -2189,7 +2242,7 @@ mod tests {
         let deployment = sized_deployment(
             "deployment Prod for Vehicle [ slots = 8 ] {\n  \
              machine A { Panel [ depth = 5 ], Lane, Backend [ budget = 512 ], \
-             veh.diag.access, Pair [ slots = 2 ] }\n}\n",
+             veh.diag.FaultAccess, Pair [ slots = 2 ] }\n}\n",
         );
         assert_eq!(
             deployment.sizing,
@@ -2220,7 +2273,7 @@ mod tests {
             })
         );
         assert_eq!(
-            placement_sizing(&deployment, "veh.diag.access", "Unit"),
+            placement_sizing(&deployment, "veh.diag.FaultAccess", "Unit"),
             None
         );
         for instance in ["primary", "backup"] {

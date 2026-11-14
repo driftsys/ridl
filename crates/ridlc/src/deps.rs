@@ -213,7 +213,7 @@ mod tests {
         }
         std::fs::write(
             dir.path().join("a/a.ridl"),
-            "package a\ntype Reading: integer [0..10]\ninterface Status {\n  signal reading: Reading @[100ms..1s]\n}\nservice a.status: Status\n",
+            "package a\ntype Reading: integer [0..10]\ninterface Status {\n  signal reading: Reading @[100ms..1s]\n}\nservice StatusService: Status\n",
         )
         .unwrap();
         let mut source = "package b\nimport a.Reading\nstruct Sample {\n  reading: Reading\n  id: ridl.std.Uuid\n}\nstruct Pair {\n  first: Sample\n  second: Sample\n}\n".to_string();
@@ -223,7 +223,7 @@ mod tests {
         std::fs::write(dir.path().join("b/b.typl"), source).unwrap();
         std::fs::write(
             dir.path().join("c/c.rsdl"),
-            "package c\nimport a.Status\ncomponent Consumer [ external ] {\n  requires Status\n}\nsystem Example {\n  Consumer\n  a.status\n}\n",
+            "package c\nimport a.Status\ncomponent Consumer [ external ] {\n  requires Status\n}\nsystem Example {\n  Consumer\n  a.StatusService\n}\n",
         )
         .unwrap();
         let output = crate::compile_workspace(&mut RidlDatabase::default(), dir.path()).unwrap();
@@ -305,7 +305,7 @@ mod tests {
             ),
             (
                 "c",
-                "package c\nimport a.Reading\nimport b.Sensor\ninterface Monitor {\n  signal reading: Reading @[100ms..1s]\n}\nservice c.sensor: Sensor\n",
+                "package c\nimport a.Reading\nimport b.Sensor\ninterface Monitor {\n  signal reading: Reading @[100ms..1s]\n}\nservice SensorService: Sensor\n",
             ),
         ] {
             std::fs::create_dir(dir.path().join(name)).unwrap();

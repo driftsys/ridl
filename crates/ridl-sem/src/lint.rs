@@ -118,8 +118,7 @@ fn collect_scopes(checker: &Checker<'_>, files: &[InputFile]) -> Vec<Scope> {
         let source = source_file(checker.db, *file);
         for shape in source.shapes() {
             // The first-wins filter applies to `interface` declarations only:
-            // a service's dotted name lives in the catalog namespace, not the
-            // type namespace the resolver arbitrates.
+            // an inline shape's identity is its service's global name.
             if let ast::InterfaceShape::Interface(def) = &shape
                 && !checker.is_winner(*file, def)
             {
@@ -127,7 +126,7 @@ fn collect_scopes(checker: &Checker<'_>, files: &[InputFile]) -> Vec<Scope> {
             }
             scopes.push(Scope {
                 file: index,
-                name: shape.identity().unwrap_or_default(),
+                name: shape.identity(&checker.package_name).unwrap_or_default(),
                 members: shape.members().collect(),
             });
         }
@@ -880,7 +879,7 @@ struct AuditRecord {{
     fn lints_reach_inline_service_shapes() {
         let checked = check_ridl(&format!(
             "{PRELUDE}
-service veh.drive {{
+service Drive {{
   query setGear(position: GearPosition): Speed @[..50ms]
 }}
 "

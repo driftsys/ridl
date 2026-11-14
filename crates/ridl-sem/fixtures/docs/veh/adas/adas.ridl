@@ -35,4 +35,4 @@ interface CruiseControl {
 /// The published cruise service, over [CruiseControl].
 /// @see veh.common.Gear
 /// @since 1.0
-service veh.adas.cruise : CruiseControl
+service Cruise : CruiseControl

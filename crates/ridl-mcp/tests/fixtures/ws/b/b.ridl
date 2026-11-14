@@ -19,8 +19,8 @@ interface Status {
   fixed softwareVersion: Version
 }
 
-service fx.b.status: Status
+service StatusService: Status
 
-service fx.b.diag {
+service Diag {
   query readSpeed(): Speed @[..100ms]
 }

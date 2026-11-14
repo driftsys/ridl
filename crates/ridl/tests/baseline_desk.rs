@@ -349,6 +349,47 @@ fn check_flags_a_reorder_against_the_baseline() {
     );
 }
 
+/// An interaction removed from a service's inline shape is reported with a span
+/// on the service's declared name: the diff path carries the service's global
+/// name, so the index of the source must be keyed by it, not by the name as
+/// written.
+#[test]
+fn check_spans_the_declared_name_of_an_inline_service_shape() {
+    const PUBLISHED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+service Cabin {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+    let dir = TempDir::new("inline-removal");
+    let root = package_workspace(&dir, PUBLISHED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+service Cabin {
+  event doorClosed: DoorState @[100ms..1s]
+}
+",
+    );
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    let block = ridl_407_block(&stderr, "doorOpened");
+    assert!(
+        block.contains("┌─") && block.contains("service Cabin {"),
+        "the removal spans the inline shape's service:\n{block}"
+    );
+    assert!(
+        block.contains("cluster.ridl:3:9"),
+        "the span starts at the declared name:\n{block}"
+    );
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
 /// A non-tombstoned removal is ordinal-affecting too, and is reported even
 /// though the declaration it names is gone from the current source.
 #[test]
