@@ -502,7 +502,7 @@ fn build_cabin_deployment(out: &Path) -> (PathBuf, PathBuf) {
     let cabin = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/cabin");
     build_from(&cabin, out, "catalog,deployment");
     (
-        out.join("veh.cabin.Bench.deployment.binfb"),
+        out.join("veh.cabin.bench.deployment.binfb"),
         out.join("veh.cabin.catalog.binfb"),
     )
 }

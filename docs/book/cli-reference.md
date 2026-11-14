@@ -818,7 +818,7 @@ Options:
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
-          - deployment:      The deployment descriptor an engine reads, written to `<deployment package>.<DeploymentName>.deployment.binfb` for every deployment the lowered system holds: a FlatBuffers file of the deployment's instances, links, routes and machines, with the catalog descriptor of every region embedded byte for byte
+          - deployment:      The deployment descriptor an engine reads, written to `<package>.<name>.deployment.binfb` in lowercase, or to `<file>.deployment.binfb` when the deployment sets `file`, for every deployment the lowered system holds: a FlatBuffers file of the deployment's instances, links, routes and machines, with the catalog descriptor of every region embedded byte for byte
           
           [default: rust]
 
@@ -858,18 +858,20 @@ system declares no deployment. A deployment that an `RSDL-7xx` error removed
 from the system is not unknown either: the build reports that error and exits 1.
 
 **The deployment descriptor.** `--emit deployment` writes one file per
-deployment of the lowered system, named
-`<deployment package>.<DeploymentName>.deployment.binfb`, whatever
-`--deployment` selects. Each file holds the deployment's instances, links,
-routes and machines, and embeds the catalog descriptor of every region of the
-system byte for byte, including the catalog of a remote unit, for which the
-build writes no `<unit>.catalog.binfb` file. An embedded descriptor is the same
-bytes the build writes for `--emit catalog`, so the two emits state one fact. A
-deployment that an `RSDL-7xx` error removed from the system gets no file, the
-build exits 1 for that error, and the other deployments are written. A
-single-file build, and a workspace with no `system`, write no deployment
-descriptor. [`ridl
-describe`](#ridl-describe) prints the file.
+deployment of the lowered system, whatever `--deployment` selects. The file is
+named `<package>.<name>.deployment.binfb` in ASCII lowercase, with the
+deployment's package and name, or `<file>.deployment.binfb` when the deployment
+sets the `file` attribute (rsdl reference §3.4). Each file holds the
+deployment's instances, links, routes and machines, and embeds the catalog
+descriptor of every region of the system byte for byte, including the catalog of
+a remote unit, for which the build writes no `<unit>.catalog.binfb` file. An
+embedded descriptor is the same bytes the build writes for `--emit catalog`, so
+the two emits state one fact. A deployment that an `RSDL-7xx` error removed from
+the system gets no file, the build exits 1 for that error, and the other
+deployments are written. A single-file build, and a workspace with no `system`,
+write no deployment descriptor. [`ridl
+describe`](#ridl-describe) prints the
+file.
 
 **The compatible catalogs.** When the build writes a catalog descriptor or
 generates code, `ridl build` reads `.ridl/baseline/` at the workspace root, as
@@ -2659,7 +2661,7 @@ Print a catalog or deployment descriptor as strict JSON, after verifying it
 Usage: ridl describe <PATH>
 
 Arguments:
-  <PATH>  The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote, or a `<package>.<Name>.deployment.binfb` file `ridl build --emit deployment` wrote
+  <PATH>  The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote, or a `.deployment.binfb` file `ridl build --emit deployment` wrote
 
 Options:
   -h, --help  Print help
@@ -2976,7 +2978,7 @@ Options:
           - codegen-model:   The lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON, written to `<base>.codegen.json`
           - codegen-request: The whole codegen request a build hands a backend, as canonical protobuf JSON, written to `<base>.codegen-request.json`
           - catalog:         The catalog descriptor an engine reads, written to `<unit>.catalog.binfb` for every unit that declares an interface or a service with an inline body: a FlatBuffers file of the unit's interfaces, their members and their catalog hash
-          - deployment:      The deployment descriptor an engine reads, written to `<deployment package>.<DeploymentName>.deployment.binfb` for every deployment the lowered system holds: a FlatBuffers file of the deployment's instances, links, routes and machines, with the catalog descriptor of every region embedded byte for byte
+          - deployment:      The deployment descriptor an engine reads, written to `<package>.<name>.deployment.binfb` in lowercase, or to `<file>.deployment.binfb` when the deployment sets `file`, for every deployment the lowered system holds: a FlatBuffers file of the deployment's instances, links, routes and machines, with the catalog descriptor of every region embedded byte for byte
           
           [default: rust]
 

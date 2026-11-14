@@ -31,9 +31,11 @@ a check in another:
   components are listed in `Showcase` and placed on `DevBox`, so the placement
   checks have nothing to report about them.
 - `placement.rsdl` — the deployment and placement rules of rsdl §3.4, §3.5 and
-  §9: RSDL-701, RSDL-702 and RSDL-704 to RSDL-708, and RSDL-709 for a `slots`
+  §9: RSDL-701, RSDL-702 and RSDL-704 to RSDL-708, RSDL-709 for a `slots`
   value out of range on `Road`, the one §5 value rule that is scoped to its
-  deployment. `Bench`, in `attributes.rsdl`, places every closure instance
+  deployment, RSDL-710 for a `file` value that is not a lowercase stem on
+  `Shelf`, and RSDL-711 on `Spare`, whose `file` takes the descriptor file name
+  of `Bench`. `Bench`, in `attributes.rsdl`, places every closure instance
   once, so it draws none of them. The depth rules of §5 are read over the links
   of `Bench`: `Siren` offers `rsdl.showcase.alerts`, whose two events
   (`contracts.ridl`) `Dash` consumes with `depth = 2`, the RSDL-805 warning,

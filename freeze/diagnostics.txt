@@ -122,6 +122,8 @@ RSDL-706 error
 RSDL-707 error
 RSDL-708 error
 RSDL-709 error
+RSDL-710 error
+RSDL-711 error
 RSDL-804 warning lint=unclaimed-backend-key default=warn
 RSDL-805 warning lint=depth-below-bound default=warn
 RSDL-806 warning lint=depth-underivable default=warn

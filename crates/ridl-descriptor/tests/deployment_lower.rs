@@ -469,3 +469,11 @@ fn a_value_that_is_neither_scalar_nor_list_is_an_internal_error() {
     let error = lower(&system, "Prod", &[], &catalogs()).unwrap_err();
     assert!(matches!(error, DeploymentLowerError::Internal(text) if text.contains("dep.empty")));
 }
+
+#[test]
+fn file_suffix_is_the_ir_artifact_suffix() {
+    assert_eq!(
+        ridl_descriptor::deployment::FILE_SUFFIX,
+        ridl_ir::artifact::DEPLOYMENT_FILE_SUFFIX
+    );
+}

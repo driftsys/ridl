@@ -6,8 +6,8 @@
 //! twice in one block is FORM-108. Predicate keys use the same lookup and
 //! placement checks; the registry gives them no legal rsdl site. A `namespace.key` is a backend key, carried
 //! uninterpreted. The value rules of the core keys are RSDL-305 (`instances`),
-//! RSDL-313 (`external`), RSDL-908 (`tier`) and RSDL-709 (`depth`, `slots`,
-//! `budget`).
+//! RSDL-313 (`external`), RSDL-908 (`tier`), RSDL-709 (`depth`, `slots`,
+//! `budget`) and RSDL-710 (`file`).
 //!
 //! The ridl member check (`check::Checker::check_member_attrs`) raises the same
 //! three FORM codes, but it is a method of the package checker, bound to the
@@ -80,6 +80,9 @@ pub(super) struct ReadAttrs {
     /// The site of the `depth` attribute when `sizing.depth` is read, for
     /// RSDL-805 to point at the value rather than at the line.
     pub(super) depth_site: Option<Site>,
+    /// `file = "stem"` on a deployment, when the value is a valid stem
+    /// (RSDL-710).
+    pub(super) file: Option<String>,
 }
 
 /// Reads `block` at `at`, reporting every key rule of rsdl §5.
@@ -197,7 +200,9 @@ pub(super) fn read(
             // `slots = 50ms`: the parser refused the value and reported
             // FORM-101, which stops the build; a second report would describe
             // the key as bare.
-            "depth" | "slots" | "budget" if value.is_none() && attribute.eq_token().is_some() => {}
+            "depth" | "slots" | "budget" | "file"
+                if value.is_none() && attribute.eq_token().is_some() => {}
+            "file" => out.file = file_stem(value, site, reporter),
             "depth" | "slots" | "budget" => {
                 sizing_key(&key, value, site, reporter, &mut out.sizing);
                 if key == "depth" && out.sizing.depth.is_some() {
@@ -318,6 +323,38 @@ fn sizing_key(
         "slots" => into.slots = u32::try_from(integer).ok(),
         _ => into.budget = Some(integer),
     }
+}
+
+/// `file = "stem"` on a deployment (rsdl §3.4): the text between the quotes,
+/// when it is a valid stem (`ridl_ir::artifact::is_valid_file_stem`). Any
+/// other value — none, a name, a number, a list, or a string that is not a
+/// valid stem — is RSDL-710.
+fn file_stem(value: Option<ast::AttrValue>, site: Site, reporter: &mut Reporter) -> Option<String> {
+    let stem = value
+        .as_ref()
+        .and_then(ast::AttrValue::literal)
+        .and_then(|literal| literal.string_lit_token())
+        .and_then(|token| {
+            let text = token.text();
+            Some(text.strip_prefix('"')?.strip_suffix('"')?.to_string())
+        })
+        .filter(|stem| ridl_ir::artifact::is_valid_file_stem(stem));
+    if stem.is_none() {
+        let written = match &value {
+            Some(value) => format!("`{}`", significant_text(value.syntax())),
+            None => "a bare `file`".to_string(),
+        };
+        reporter.error(
+            DiagCode::RSDL_710,
+            site,
+            format!(
+                "`file` takes a string of lowercase letters, digits, `.`, `_` and `-` that starts \
+                 with a letter or a digit and holds no `..`, written `file = \"<stem>\"`; \
+                 {written} is not one (rsdl reference §3.4)"
+            ),
+        );
+    }
+    stem
 }
 
 /// `labels = (LABEL, …)` (rsdl §5, general form §4.7). A value of another shape

@@ -88,6 +88,9 @@ impl Site {
 pub enum NotReported {
     /// A sizing value changes no link and no contract (rsdl reference §14).
     Sizing,
+    /// The file name of a build artifact changes no link and no contract
+    /// (rsdl reference §14).
+    FileName,
 }
 
 /// What `ridl diff` does with a change to the key.
@@ -232,6 +235,14 @@ pub const ATTRIBUTES: &[AttrKey] = &[
         diff: Diff::NotReported(NotReported::Sizing),
     },
     AttrKey {
+        name: AttrName::Key("file"),
+        owner: Owner::Core,
+        form: Form::Assignment,
+        sites: &[Site::Deployment],
+        consumer: "the file name of the deployment descriptor (rsdl reference §3.4)",
+        diff: Diff::NotReported(NotReported::FileName),
+    },
+    AttrKey {
         name: AttrName::Namespaced,
         owner: Owner::Backend,
         form: Form::FlagOrAssignment,
@@ -309,13 +320,14 @@ mod tests {
             "depth",
             "slots",
             "budget",
+            "file",
         ] {
             assert!(lookup(key).is_some(), "`{key}` has no row");
         }
         assert_eq!(backend_pattern().owner, Owner::Backend);
         assert_eq!(
             ATTRIBUTES.len(),
-            11,
+            12,
             "one row per key, plus the pattern row"
         );
     }
@@ -328,6 +340,11 @@ mod tests {
         assert!(allows("instances", Site::Component) && !allows("instances", Site::System));
         assert!(allows("external", Site::Component) && allows("external", Site::Machine));
         assert!(allows("tier", Site::Distribution) && !allows("tier", Site::Component));
+        assert!(allows("file", Site::Deployment) && !allows("file", Site::Machine));
+        assert_eq!(
+            lookup("file").unwrap().diff,
+            Diff::NotReported(NotReported::FileName)
+        );
         for key in ["labels", "deprecated"] {
             for site in RSDL_DECLARATIONS {
                 assert!(allows(key, *site), "`{key}` on {site:?}");

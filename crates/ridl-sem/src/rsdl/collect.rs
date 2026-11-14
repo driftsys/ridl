@@ -309,7 +309,8 @@ fn deployment_decl(
         .filter_map(|machine| machine_decl(&machine, file, reporter))
         .collect();
     // rsdl §13: an RSDL-7xx error raised on the deployment's blocks — RSDL-709
-    // on the declaration or on a placement line — blocks this deployment only.
+    // or RSDL-710 on the declaration, RSDL-709 on a placement line — blocks
+    // this deployment only.
     let has_errors = reporter.diagnostics[reported..].iter().any(|diagnostic| {
         diagnostic.severity == Severity::Error && diagnostic.code.as_str().starts_with("RSDL-7")
     });
@@ -320,6 +321,7 @@ fn deployment_decl(
         machines,
         attrs: read.attrs,
         sizing: read.sizing,
+        file: read.file,
         has_errors,
         doc: docs::scan(&decl.doc_comments()),
         links: Vec::new(),

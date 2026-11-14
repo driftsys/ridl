@@ -990,7 +990,7 @@ writes one per deployment of the system. Twelve emit targets exist today:
 | `codegen-model`   | `<package>.codegen.json`            | the lowered codegen model (`ridl.codegen.v1`) as canonical protobuf JSON                                                                                  |
 | `codegen-request` | `<package>.codegen-request.json`    | the whole codegen request a build hands a backend, as canonical protobuf JSON                                                                             |
 | `catalog`         | `<unit>.catalog.binfb`              | the catalog descriptor an engine reads — interfaces, numbers, members, sizes                                                                              |
-| `deployment`      | `<package>.<Name>.deployment.binfb` | the deployment descriptor an engine reads — instances, links, routes, machines, and the embedded catalogs                                                 |
+| `deployment`      | `<package>.<name>.deployment.binfb` | the deployment descriptor an engine reads — instances, links, routes, machines, and the embedded catalogs                                                 |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by

@@ -19,7 +19,7 @@ fn identity_descriptor_matches_its_sources() {
         "{}",
         String::from_utf8_lossy(&output.stderr)
     );
-    let generated = std::fs::read(out.path().join("alpha.Bench.deployment.binfb")).unwrap();
+    let generated = std::fs::read(out.path().join("alpha.bench.deployment.binfb")).unwrap();
     ridl_descriptor::deployment::verify(&generated).unwrap();
     assert_eq!(
         generated,

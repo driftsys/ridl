@@ -489,10 +489,14 @@ pub struct DeploymentDecl {
     /// for every consumer link of the deployment that no placement line
     /// overrides (rsdl §5).
     pub sizing: Sizing,
+    /// `file = "stem"` (rsdl §3.4): the stem of the descriptor's file name,
+    /// when the declaration writes a valid one. `None` means the default stem
+    /// (`ridl_ir::artifact::deployment_file_stem`).
+    pub file: Option<String>,
     /// Whether an RSDL-7xx error was raised while reading the declaration's
-    /// attribute blocks — RSDL-709 on the deployment or on one of its
-    /// placement lines. The placement pass marks the deployment blocked
-    /// (rsdl §13).
+    /// attribute blocks — RSDL-709 or RSDL-710 on the deployment, or RSDL-709
+    /// on one of its placement lines. The placement pass marks the deployment
+    /// blocked (rsdl §13).
     pub has_errors: bool,
     /// The doc comment (typl §14, ADR-0026).
     pub doc: DocInfo,
@@ -1995,6 +1999,118 @@ deployment Bench for Vehicle {
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), Vec::<&str>::new());
         assert_eq!(system.deployments[0].sizing, UNSIZED);
+    }
+
+    /// rsdl §3.4, §5: `file = "stem"` on a deployment is read as written.
+    #[test]
+    fn a_file_attribute_is_read_onto_the_deployment() {
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle [ file = \"veh-prod\" ] {{ machine A {{ {SIZED_LINES} }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
+        assert_eq!(system.deployments[0].file.as_deref(), Some("veh-prod"));
+        assert!(!system.placements[0].has_errors);
+
+        let text =
+            format!("{SIZED}deployment Prod for Vehicle {{ machine A {{ {SIZED_LINES} }} }}\n");
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(system.deployments[0].file, None);
+    }
+
+    /// rsdl §3.4, §13: a `file` value that is not a lowercase stem inside the
+    /// output directory is RSDL-710, which blocks its own deployment and no
+    /// other.
+    #[test]
+    fn a_file_value_that_is_not_a_valid_stem_is_rsdl_710_and_blocks_its_deployment() {
+        let cases: &[(&str, &str)] = &[
+            ("file = \"View\"", "`\"View\"`"),
+            ("file = \"../out\"", "`\"../out\"`"),
+            ("file = \"a/b\"", "`\"a/b\"`"),
+            ("file = \"a..b\"", "`\"a..b\"`"),
+            ("file = \"\"", "`\"\"`"),
+            ("file = \"-x\"", "`\"-x\"`"),
+            ("file = view", "`view`"),
+            ("file = 3", "`3`"),
+            ("file", "a bare `file`"),
+        ];
+        for (attribute, written) in cases {
+            let bad = format!(
+                "deployment Bad for Vehicle [ {attribute} ] {{ machine A {{ {SIZED_LINES} }} }}"
+            );
+            let good = format!("deployment Good for Vehicle {{ machine A {{ {SIZED_LINES} }} }}");
+            let text = format!("{SIZED}{good}\n{bad}\n");
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), ["RSDL-710"], "`{attribute}`");
+            assert_eq!(
+                system.diagnostics[0].message,
+                format!(
+                    "`file` takes a string of lowercase letters, digits, `.`, `_` and `-` that \
+                     starts with a letter or a digit and holds no `..`, written \
+                     `file = \"<stem>\"`; {written} is not one (rsdl reference §3.4)"
+                ),
+                "`{attribute}`"
+            );
+            let blocked: Vec<bool> = system.placements.iter().map(|p| p.has_errors).collect();
+            assert_eq!(blocked, [false, true], "`{attribute}`");
+            assert_eq!(system.deployments[1].file, None, "`{attribute}`");
+        }
+    }
+
+    /// rsdl §3.4, §5: `file` is legal on a `deployment` only.
+    #[test]
+    fn a_file_attribute_on_a_machine_is_form_107() {
+        let text = format!(
+            "{SIZED}deployment Prod for Vehicle {{ machine A [ file = \"a\" ] {{ {SIZED_LINES} }} }}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["FORM-107"]);
+    }
+
+    /// rsdl §3.4, §13: two deployments whose descriptor file names are equal
+    /// when case is ignored are RSDL-711, reported on the later one, which it
+    /// blocks. Two deployments of one name are RSDL-708 alone.
+    #[test]
+    fn deployments_whose_file_names_clash_are_rsdl_711() {
+        let machine = format!("{{ machine A {{ {SIZED_LINES} }} }}");
+        let cases: &[(&str, &str, &str)] = &[
+            (
+                "deployment Devlab for Vehicle",
+                "deployment DevLab for Vehicle",
+                "the descriptor of `DevLab` is written to `veh.topology.devlab.deployment.binfb`, \
+                 a file name `Devlab` already takes when case is ignored — set a different \
+                 `file` on one of them (rsdl reference §3.4)",
+            ),
+            (
+                "deployment Bench for Vehicle [ file = \"bench\" ]",
+                "deployment Lab for Vehicle [ file = \"bench\" ]",
+                "the descriptor of `Lab` is written to `bench.deployment.binfb`, a file name \
+                 `Bench` already takes when case is ignored — set a different `file` on one of \
+                 them (rsdl reference §3.4)",
+            ),
+            (
+                "deployment Bench for Vehicle",
+                "deployment Lab for Vehicle [ file = \"veh.topology.bench\" ]",
+                "the descriptor of `Lab` is written to \
+                 `veh.topology.bench.deployment.binfb`, a file name `Bench` already takes \
+                 when case is ignored — set a different `file` on one of them (rsdl reference \
+                 §3.4)",
+            ),
+        ];
+        for (first, second, message) in cases {
+            let text = format!("{SIZED}{first} {machine}\n{second} {machine}\n");
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), ["RSDL-711"], "`{second}`");
+            assert_eq!(system.diagnostics[0].message, *message, "`{second}`");
+            let blocked: Vec<bool> = system.placements.iter().map(|p| p.has_errors).collect();
+            assert_eq!(blocked, [false, true], "`{second}`");
+        }
+
+        let text = format!(
+            "{SIZED}deployment Bench for Vehicle {machine}\ndeployment Bench for Vehicle {machine}\n"
+        );
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["RSDL-708"]);
     }
 
     /// rsdl §5, §13: the sizing keys are legal on a `deployment` and on a

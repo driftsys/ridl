@@ -41,7 +41,9 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// descriptor.
 pub const FILE_IDENTIFIER: [u8; 4] = *b"RDLD";
 
-/// The artifact suffix: `<deployment>.deployment.binfb`.
+/// The artifact suffix: `<stem>.deployment.binfb`. It is written here and not
+/// taken from `ridl_ir::artifact`, because `ridl-ir` comes only with the `std`
+/// feature; a test keeps the two equal.
 pub const FILE_SUFFIX: &str = ".deployment.binfb";
 
 /// The deepest nesting of `AttributeValue` lists the verifier accepts.

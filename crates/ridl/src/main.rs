@@ -288,8 +288,8 @@ enum Command {
     /// verifying it.
     Describe {
         /// The `<unit>.catalog.binfb` file `ridl build --emit catalog` wrote,
-        /// or a `<package>.<Name>.deployment.binfb` file `ridl build --emit
-        /// deployment` wrote.
+        /// or a `.deployment.binfb` file `ridl build --emit deployment`
+        /// wrote.
         path: PathBuf,
     },
     /// Copy every remote unit of the workspace's `[imports]` into `vendor/`

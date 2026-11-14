@@ -60,6 +60,14 @@ and the codegen deployment section and the deployment descriptor carry `number`
 and `provisional` for each instance. Decision 9 gains the heading "instance
 number changed", the one system heading that carries a verdict: breaking.
 
+Amended 2026-11-14 (driftsys/ridl#1389): decision 12's file name is lowercase.
+The descriptor is written to `<package>.<name>.deployment.binfb` in ASCII
+lowercase, or to `<file>.deployment.binfb` when the deployment sets the `file`
+attribute (rsdl reference §3.4; RSDL-710 rejects a stem outside
+`[a-z0-9][a-z0-9._-]*` or one that holds `..`). Two deployments whose file names
+are equal when case is ignored are RSDL-711. The old mixed-case name is not
+written as well: on a case-insensitive file system it is the same file.
+
 ## Context
 
 rsdl §13 states the lowering as facts and leaves their carrier open: "a

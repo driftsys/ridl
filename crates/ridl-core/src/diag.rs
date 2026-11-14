@@ -1356,6 +1356,19 @@ diag_codes! {
             "a `depth`, `slots` or `budget` value that the parser reads is not an integer within its \
              range, or the key is written bare";
 
+        /// A `file` value that is not a string of lowercase letters, digits,
+        /// `.`, `_` and `-` starting with a letter or a digit and holding no
+        /// `..`, or the key written bare (rsdl §3.4, §16.1). Error, scoped to
+        /// its deployment (rsdl §13). Raised by the rsdl attribute reader.
+        RSDL_710 = "RSDL-710", Error,
+            "a `file` value that is not a lowercase file stem, or the key is written bare";
+
+        /// Two deployments whose descriptor file names are equal when case is
+        /// ignored (rsdl §3.4, §16.1). Error, scoped to the later deployment
+        /// (rsdl §13). Raised by the rsdl placement check.
+        RSDL_711 = "RSDL-711", Error,
+            "two deployments whose descriptor file names are equal when case is ignored";
+
         /// A backend key whose namespace no configured backend claims (rsdl §5,
         /// §16.1). Warning: the key is still carried. Raised by `ridlc`, which
         /// knows the configured backends (plan decision P-B4).

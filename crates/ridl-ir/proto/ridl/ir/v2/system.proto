@@ -343,6 +343,10 @@ message Deployment {
   optional Sizing sizing = 15;
   // `deprecated = "reason"`: the text between the quotes (rsdl §5).
   optional string deprecated = 16;
+  // `file = "stem"`: the text between the quotes (rsdl §3.4, §5). The stem of
+  // the deployment descriptor's file name; absent when the declaration does
+  // not write the key, and the stem is then `<package>.<name>` in lowercase.
+  optional string file = 17;
 }
 
 // The sizing keys `depth`, `slots` and `budget` of a `deployment` declaration
