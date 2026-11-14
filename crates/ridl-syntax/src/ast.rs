@@ -472,11 +472,41 @@ impl HasDocComments for DeploymentDef {}
 impl HasDocComments for MachineDef {}
 impl HasDocComments for MemberLine {}
 
+/// `CamelCase_id` (typl Appendix E): an upper-case ASCII letter, then ASCII
+/// letters and digits.
+pub fn is_camel_case_id(text: &str) -> bool {
+    let mut chars = text.chars();
+    chars.next().is_some_and(|c| c.is_ascii_uppercase()) && chars.all(|c| c.is_ascii_alphanumeric())
+}
+
+impl ServiceDef {
+    /// The declared name of the service: the one `ident` token of its name
+    /// when the name has exactly one segment and that segment is a
+    /// `CamelCase_id` and nothing else is written in the name. A dotted or
+    /// lowercase name is still parsed, so that the checker can report it
+    /// (RIDL-142), and has no declared name here; nor has a name the parser
+    /// recovered with a stray dot (`Doors.`).
+    pub fn declared_name(&self) -> Option<SyntaxToken> {
+        let name = self.name()?;
+        let mut tokens = name
+            .syntax()
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .filter(|token| !token.kind().is_trivia());
+        let first = tokens.next()?;
+        (first.kind() == SyntaxKind::Ident
+            && tokens.next().is_none()
+            && is_camel_case_id(first.text()))
+        .then_some(first)
+    }
+}
+
 impl DottedName {
-    /// The `lowercase_id` segments of the dotted name, in source order — the
-    /// three `ident` tokens of `veh.adas.cruise` (ridl reference §14.5). The
-    /// dots between them are excluded; a consumer that needs the full dotted
-    /// text calls [`DottedName::text`].
+    /// The `ident` segments of the name, in source order. A declared service
+    /// name has one segment (`Doors`); the parser also accepts the dotted
+    /// spelling (`veh.adas.cruise`) so that the checker can report it
+    /// (RIDL-142). The dots are excluded; a consumer that needs the full
+    /// dotted text calls [`DottedName::text`].
     pub fn segments(&self) -> impl Iterator<Item = SyntaxToken> + '_ {
         self.syntax()
             .children_with_tokens()

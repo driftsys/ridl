@@ -1224,7 +1224,8 @@ impl<'a> Parser<'a> {
 
     /// `ServiceDef = 'service' DottedName (':' shapes (',' shapes)* ','? |
     /// '{' (inline_members ','?)* '}')` — the global published declaration of
-    /// one or more interfaces (ridl reference §14.5, ADR-0015 decision 12).
+    /// one or more interfaces (ridl reference §14.5, ADR-0015 decision 12),
+    /// named by one `CamelCase` identifier (ADR-0033).
     /// The named form carries a comma-separated shape list after `:`; the
     /// inline form carries an interaction body reusing
     /// [`Parser::interface_body`], so the checker runs the same structural pass
@@ -1287,9 +1288,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// `DottedName = 'ident' ('.' 'ident')*` — a dotted global service name
-    /// (`veh.adas.cruise`, ADR-0002 §1). Each segment is a plain identifier;
-    /// a trailing `.` with no segment after it is FORM-101.
+    /// `DottedName = 'ident' ('.' 'ident')*` — the name of a service. The
+    /// declared name is one `CamelCase` identifier (`Doors`); the dotted
+    /// spelling (`veh.adas.cruise`) is still parsed so that the checker
+    /// reports it (RIDL-142). Each segment is a plain identifier; a trailing
+    /// `.` with no segment after it is FORM-101.
     fn dotted_name(&mut self) {
         self.start(SyntaxKind::DottedName);
         if self.at(SyntaxKind::Ident) {
