@@ -1274,9 +1274,10 @@ plus every source package in its directory tree (ADR-0002 §1), and the lock is
 one line table in the manifest directory, beside the root source package, that
 only `ridl lock` writes: a `next N` line, then one entry per interface,
 `Name N`, keyed by the interface's **catalog name** or, for an inline shape, by
-`service:` and the service's dotted name. The catalog name of a declared
-interface is its source package relative to the unit, then its name, joined by
-`.`: `cluster.SpeedDisplay` for an interface of the source package
+`service:` and the service's global name (§14.5), such as
+`service:veh.hvac.Cabin`. The catalog name of a declared interface is its source
+package relative to the unit, then its name, joined by `.`:
+`cluster.SpeedDisplay` for an interface of the source package
 `com.example.hmi.cluster` in the unit `com.example.hmi`, and `Session` for an
 interface of the root source package. The key is therefore one identifier or a
 dotted path of identifiers ending in the interface name. The number is 1-based,
@@ -1530,8 +1531,9 @@ endpoint):
   analogue of a class or a proto service definition.
 - **`service`** — a **global, named, published declaration of one or more
   interfaces**: the SSOT catalog entry that gives contracts concrete identity in
-  the system, addressable as `service.member`. The analogue of a global named
-  instance. What actually gets offered, deployed, and (optionally) discovered.
+  the system, named `Name` in its package and addressable as
+  `package.Name.member`. The analogue of a global named instance. What actually
+  gets offered, deployed, and (optionally) discovered.
 
 `interface : service :: type : global-named-instance`. This section covers both.
 
@@ -1594,16 +1596,25 @@ system-visible at design time, addressable by name, and the unit that an rsdl
 component _offers_ (§14.6) and that deployment realizes.
 
 ```ridl
-service veh.adas.cruise      : CruiseControl
-service veh.body.doors       : DoorControl, DiagBlock
-service veh.powertrain.motor : MotorControl
+package veh.body
+
+service Doors   : DoorControl, DiagBlock
+service Mirrors : MirrorControl
 ```
 
-- A service has a **dotted global name** (reverse-domain, like packages) and a
-  **comma-separated set of interfaces** after `:` (ADR-0015 decision 12, as
-  amended by the lock design): the list's order carries nothing. Its members are
-  addressed `service.member` — `veh.adas.cruise.engaged`,
-  `veh.adas.cruise.setLever`.
+- A service has a **declared name**, one `CamelCase_id` — the rule an interface
+  name follows (§14.1, Appendix C) — and a **comma-separated set of interfaces**
+  after `:` (ADR-0015 decision 12, as amended by the lock design): the list's
+  order carries nothing. Its **global name** is its package followed by the
+  declared name, joined by `.`: `veh.body.Doors`. Its members are addressed
+  `package.Name.member` — `veh.body.Doors.lock`, `veh.body.Doors.faultCount` —
+  and, inside the package or after an import of the service, `Doors.lock`
+  (ADR-0033 decisions 1 and 4).
+- The checker requires the `CamelCase_id` rule for a service name, which it does
+  not do for an interface name, because rsdl reads the role of a reference from
+  its case (rsdl §4): a service with a name that is not `CamelCase_id` could be
+  declared but could not be offered. The position after `service` or `offers`
+  already says that a name is a service, so case does not have to.
 - **Commas are required between shapes** — the one list in the family whose
   separators are not optional (ADR-0015 decision 13). The reason is structural:
   every other list is terminated by a closing token, and this one is not — it
@@ -1612,10 +1623,40 @@ service veh.powertrain.motor : MotorControl
   for `struct Foo {`) would be absorbed as another shape, with the error
   surfacing at the `{` and saying nothing about the mistake. A trailing comma
   stays optional.
-- The name is **unique across the system** (RIDL-140) — the service catalog is a
-  flat global namespace, the SSOT every component agrees on. This is what makes
-  `veh.adas.cruise.engaged` an unambiguous system-wide address (the
-  VSS/uProtocol model).
+- The declared name is in its **package's declaration namespace**, beside the
+  package's types, constants and interfaces and its rsdl declarations: a second
+  declaration of that name in the package, of any kind, is TYPL-009, so a
+  service and an interface of one package never share a name. A package name is
+  unique (a source package belongs to one unit, ADR-0002 §1), so the global name
+  is **unique across the system** without a check of its own. This is what makes
+  `veh.body.Doors.lock` an unambiguous system-wide address (the VSS/uProtocol
+  model). RIDL-140, the duplicate-name check of the dotted form, is retired
+  (ADR-0033 decision 6).
+- A service is **referred to as an interface is**: by its bare name in its own
+  package, by its bare name after an `import` (`import veh.body.Doors`), or by
+  its global name. Every reference to a service resolves this way — an rsdl
+  `offers` line, an rsdl `requires` line naming an inline-shape service, an rsdl
+  member or placement line naming a lone service (rsdl §3.1 to §3.5, §6, §9),
+  and a doc link or `@see` target (typl §14.5), whose members are the service's
+  members (`[Doors.lock]`). A service is not a type: written in a type position
+  it draws the error an interface draws there (§14.0).
+- **The dotted name is not accepted.** A declared name that is not one
+  `CamelCase_id` is **RIDL-142**: a dotted name (`service veh.body.doors`, the
+  form of earlier releases), or one segment that does not start with an
+  upper-case letter or holds an `_` (`service doors`). A one-segment lowercase
+  name was a valid global name before, so reading it as a declared name would
+  move its global name without a diagnostic. The diagnostic suggests a name, as
+  a fix-it: the written segments, without the leading segments they share with
+  the package name (the last segment when nothing is left), each split at `_`,
+  written with an upper-case first letter and joined — `veh.body.doors` in
+  package `veh.body` gives `Doors`, and `veh.hvac.cabin` in package
+  `veh.cluster` gives `HvacCabin`. When the result is taken — declared in the
+  package, or already suggested for an earlier RIDL-142 declaration of the
+  package, in file order and then source order — the first free name of the
+  result followed by `Service`, `Service2`, `Service3`, … is suggested, so every
+  RIDL-142 carries a fix-it (ADR-0033 decision 5). A declaration that draws
+  RIDL-142 binds nothing, so a reference to it draws the unknown-name code of
+  its slot.
 - A service is **always public**: it takes no `internal` modifier, and every
   shape it lists must be public too. Publishing an `internal` interface at a
   global address is RIDL-143, reported against the offending list element — the
@@ -1627,11 +1668,17 @@ service veh.powertrain.motor : MotorControl
   (ADR-0015 decision 14):
 
 ```ridl
-service veh.hvac.cabin {
+package veh.hvac
+
+service Cabin {
   signal  temperature : Temperature @[1s..10s]
   command setTarget(t: Temperature)
 }
 ```
+
+The inline form names its service as the list form does: the global name of this
+service is `veh.hvac.Cabin`, and its members are `veh.hvac.Cabin.temperature`
+and `veh.hvac.Cabin.setTarget`.
 
 #### Composing interfaces — numbers, flat addressing, and the rules
 
@@ -1640,13 +1687,14 @@ A service composing several interfaces names each in its list, and the list is a
 
 - **An interface's number comes from its unit's `interfaces.lock`** (§11), not
   from its place in a service's list. An inline shape is an interface too and
-  has its own entry there, keyed `service:` followed by the service's dotted
-  name. The list holds no slot and no tombstone: adding an interface to the set,
-  removing one, or reordering the list moves no wire identity, and `ridl diff`
-  reports an addition as `service_interface_added` and a removal as
-  `service_interface_removed`, both compatible. A removed interface is retired
-  in the lock — `ridl lock <pkg> --retire Name` — never in the list, and
-  `reserved` in a service's list is a parse error.
+  has its own entry there, keyed `service:` followed by the service's global
+  name (`service:veh.hvac.Cabin`). The list holds no slot and no tombstone:
+  adding an interface to the set, removing one, or reordering the list moves no
+  wire identity, and `ridl diff` reports an addition as
+  `service_interface_added` and a removal as `service_interface_removed`, both
+  compatible. A removed interface is retired in the lock —
+  `ridl lock <pkg> --retire Name` — never in the list, and `reserved` in a
+  service's list is a parse error.
 - **Ordinals stay per-interface, and a binding keys the ordinal spaces on (unit,
   interface number)** (ADR-0015 decision 17, as amended by the lock design), not
   on the interface name and not on list position. Renumbering interactions
@@ -1655,22 +1703,23 @@ A service composing several interfaces names each in its list, and the list is a
   inheritance to avoid. Appendix B already maps a SOME/IP eventgroup to an
   interface, so a multi-interface service maps to several transport-level
   groupings under one logical name, each keyed on the number.
-- **Addressing stays flat** (ADR-0015 decision 16): members remain
-  `service.member`, so every address written before composition existed stays
-  valid. A member name duplicated across a service's interfaces is a compile
-  error (RIDL-144) — `service.status` with two referents cannot be expressed.
-  The accepted cost is stated rather than discovered: **two independently
-  written interfaces that share a member name cannot be composed into one
-  service without renaming one of them.**
+- **Addressing stays flat** (ADR-0015 decision 16): a member is addressed by the
+  service and the member, `package.Name.member`, with no interface name between
+  them. A member name duplicated across a service's interfaces is a compile
+  error (RIDL-144) — `Doors.status` with two referents cannot be expressed. The
+  accepted cost is stated rather than discovered: **two independently written
+  interfaces that share a member name cannot be composed into one service
+  without renaming one of them.**
 - **The same interface named twice in one service is RIDL-145** — its own code
   rather than one RIDL-144 per member, which would bury the actual mistake; the
   duplicate listing is dropped.
 
 - **Extracting an inline shape into a named interface is breaking, by design.**
   The interface's number survives the refactor — the lock entry is renamed,
-  `ridl lock <pkg> --rename service:veh.hvac.cabin=Cabin` — but a fallible
-  return's transport identity derives from the enclosing interface name
-  (ADR-0008 decision 4), and an inline shape uses the service's dotted name
+  `ridl lock <pkg> --rename service:veh.hvac.Cabin=CabinShape` for a new
+  `interface CabinShape` that `service Cabin : CabinShape` publishes — but a
+  fallible return's transport identity derives from the enclosing interface name
+  (ADR-0008 decision 4), and an inline shape uses the service's global name
   instead — so extraction rewrites the identity of every fallible query in the
   shape, and `ridl-diff` classifies the form switch as breaking. Making that
   refactor compatible would be a wire-identity decision in its own right
@@ -1681,13 +1730,13 @@ A service composing several interfaces names each in its list, and the list is a
   packed into bus frames, Classic/CAN) or discovered (SOME/IP/DDS/uProtocol,
   Adaptive) — is a deployment matter, so the same declaration can be realized
   either way. This is the whole point of ridl being the bus SSOT:
-  `service veh.adas.cruise` can compile down to static CAN signals _or_ a
-  discovered service, no rewrite. One constraint follows from transport physics:
-  a `command`/`query` member (RPC) cannot be realized on a pure static bus —
-  buses carry dataflow, not calls — so a service deployed statically realizes
-  only its `signal`/`event` members; its control API requires the discovered
-  posture. Deriving the posture per deployment, and enforcing that constraint at
-  deploy time, are deferred: rsdl reserves both (rsdl §12, RSDL-803).
+  `service Doors` can compile down to static CAN signals _or_ a discovered
+  service, no rewrite. One constraint follows from transport physics: a
+  `command`/`query` member (RPC) cannot be realized on a pure static bus — buses
+  carry dataflow, not calls — so a service deployed statically realizes only its
+  `signal`/`event` members; its control API requires the discovered posture.
+  Deriving the posture per deployment, and enforcing that constraint at deploy
+  time, are deferred: rsdl reserves both (rsdl §12, RSDL-803).
 - **Offering and redundancy** are rsdl concerns (§14.6): a component `offers` a
   service, and exactly one component of a system offers each service (rsdl §8,
   RSDL-502). Redundancy is derived from that component's instances, never
@@ -1702,7 +1751,7 @@ A service composing several interfaces names each in its list, and the list is a
 > constraint, not a weaker contract. The group is the **provided interface**,
 > identified by its number in the unit's `interfaces.lock` (§11) — an inline
 > shape included, under its `service:` entry. The interface's name, or the
-> service's dotted name for an inline shape, is how the group is written, not
+> service's global name for an inline shape, is how the group is written, not
 > what identifies it: a rename keeps the number, and keeps the group.
 
 The rule states **production** coherence (ADR-0015 decision 9). The three rules
@@ -1779,9 +1828,9 @@ generatable from the IR alone. From one provided interface:
   (§9.3) — around the reply for a query, around acceptance for a command.
 
 The **service is the addressing unit**: it contributes the global name and the
-`service.member` addresses, never the shape of what is generated. The store and
-the dispatcher multiply with the interfaces a service publishes, not with the
-service — one store and one dispatcher per published interface, under one
+`package.Name.member` addresses, never the shape of what is generated. The store
+and the dispatcher multiply with the interfaces a service publishes, not with
+the service — one store and one dispatcher per published interface, under one
 logical name.
 
 ### 14.6 How components relate to services (forward reference)
@@ -1791,14 +1840,14 @@ _requiring_ interfaces is rsdl. In brief (full treatment in rsdl §3.2 and §8):
 `component` **offers** a service whole (implements the members of every
 interface the service lists — produces their signals/events, accepts their
 commands/queries) and **requires** each interface it consumes, one per line. An
-inline-shape service is required by its dotted name, which names its one
-interface. The verbs differ because the sides differ: the service is the unit of
-publication and addressing, the interface the unit of contract. A `requires`
-line never names a provider; the compiler resolves it to the one component that
-offers the owning service. A pure behaviour (`model`, rmdl) knows nothing of any
-of this — it is a contract-blind reaction; binding a reaction to a component's
-interface members is reserved until rmdl is scheduled (rsdl §12). This keeps the
-layers clean: ridl declares contracts, rmdl computes, rsdl connects.
+inline-shape service is required by its name, which names its one interface. The
+verbs differ because the sides differ: the service is the unit of publication
+and addressing, the interface the unit of contract. A `requires` line never
+names a provider; the compiler resolves it to the one component that offers the
+owning service. A pure behaviour (`model`, rmdl) knows nothing of any of this —
+it is a contract-blind reaction; binding a reaction to a component's interface
+members is reserved until rmdl is scheduled (rsdl §12). This keeps the layers
+clean: ridl declares contracts, rmdl computes, rsdl connects.
 
 ---
 
@@ -1926,10 +1975,11 @@ driftsys/ridl#172; the other items in that issue retain their own dispositions.
 | RIDL-414 | interface members form disconnected type-sharing groups                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | info     |
 | RIDL-416 | `interfaces.lock` in a subdirectory of a unit is not read — the unit's lock is the file beside its `ridl.toml`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | warning  |
 | RIDL-417 | `.rxdl` or `.rmdl` file is not compiled: its profile is not supported — the loader compiles `.typl`, `.ridl` and `.rsdl` files and the rxdl and rmdl profiles have no implementation; emitted by the loader on a `.rxdl` or `.rmdl` file in a package directory, on disk or as an overlay, once per file. A lone `.rxdl` or `.rmdl` entry is a load error instead                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | warning  |
-| RIDL-140 | duplicate `service` name across the workspace — the service catalog is a flat global namespace                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | error    |
+| RIDL-140 | retired (2026-11-14; ADR-0033 decision 6) — was: duplicate `service` name across the workspace; a service name is in its package's namespace, so a duplicate is TYPL-009, and two packages cannot share a name (MANI-014)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | retired  |
 | RIDL-141 | `service` names a type that is not an `interface` — and has no inline shape                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | error    |
+| RIDL-142 | `service` declared name is not one `CamelCase_id` — a dotted name (`service veh.body.doors`, the form of earlier releases) or one segment that does not start with an upper-case letter or holds an `_`; the message and a fix-it suggest the name (§14.5), and the declaration binds nothing (ADR-0033 decision 5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | error    |
 | RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | error    |
-| RIDL-144 | duplicate member name across a service's interfaces — flat addressing (§14.5) cannot give `service.member` two referents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | error    |
+| RIDL-144 | duplicate member name across a service's interfaces — flat addressing (§14.5) cannot give `Name.member` two referents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | error    |
 | RIDL-145 | the same interface named twice in one service — its own code, so the mistake is one diagnostic rather than one RIDL-144 per member; the duplicate listing holds no slot                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | error    |
 | RIDL-146 | retired by the lock (2026-09-15; ADR-0015 decision 18 as amended) — was: interface re-declared under a service-level `reserved` name; a service's list holds no tombstone                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | retired  |
 | RIDL-147 | retired by the lock (2026-09-15; ADR-0015 decision 24 as amended) — was: two shapes of one service whose interface names collide even though their references differ; a binding keys the ordinal spaces on (unit, interface number), so two names may collide                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | retired  |
@@ -1937,7 +1987,7 @@ driftsys/ridl#172; the other items in that issue retain their own dispositions.
 | RIDL-149 | two names in one scope collide after a pinned name transform — no transform is injective and no case-folding transform can be, so two names distinct in source can project to one identifier; scoped to the members of one interface, the parameters of one interaction, the fields of one struct, the members of one tuple, the arms of one union, and the values of one enum. The first four are checked under `snake_case`; a union's arms are checked under `snake_case` and `camel_case` both, because an arm reaches both namespaces and the two collision sets are incomparable; an enum's values are checked under `pascal_case` alone, because its collision set contains `snake_case`'s. The message names the transform that collided (ADR-0016 decisions 3 and 4, as amended)                                                                                                                                                                                                                                                 | error    |
 | RIDL-150 | retired (2026-10-30; ADR-0030 decision 7 as amended) — was: payload above the payload ceiling or with no finite bound, the lint `payload-above-ceiling` at `warn`; the error RIDL-157 reports the case for every kind, and the lint name stays reserved and is never reused (ADR-0024 decision 7): a `[lints]` key that names it is MANI-010 and is ignored                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | retired  |
 | RIDL-151 | payload above its declared limit or with no finite bound — a `[limits]` entry of the unit gives the interaction a limit (its `[limits.interaction]` entry, else the entry of its kind, else `default` clamped to the default ceiling of its kind), and the largest encoded size of its payload, in an encoding that any `[backend.<name>]` table of the workspace manifest enables (FlatBuffers when no table names one), is above that limit or has no finite bound; a `fixed` is sized too; a `command` or `query` checks its request and its reply against its one limit; a fallible reply is checked through both of its types; reported on the interaction. Where no entry gives a limit, RIDL-157 applies instead, so an interaction draws at most one of the two. A package that has an error that stops `ridl build` writing artifacts, or depends on a package that has one, gets neither RIDL-151 nor RIDL-152; an error in a manifest stops them only in the packages beneath that manifest (ADR-0030 decisions 12, 14 and 18) | error    |
-| RIDL-152 | a `[limits]` entry names no interaction of its unit — a `[limits.interaction]` key must be `Interface.member`, the interface name, or the last segment of the dotted name of an inline `service`, without the package, then `.`, then the member; a key may name an interface of any package of the same unit; a key that names an interface of another unit, one written `package.Interface.member`, and one whose name is shared by two shapes of the unit (reported as ambiguous) are reported on the key in the unit's `ridl.toml` (ADR-0030 decision 12)                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | error    |
+| RIDL-152 | a `[limits]` entry names no interaction of its unit — a `[limits.interaction]` key must be `Interface.member`, the interface name, or the name of an inline `service`, without the package, then `.`, then the member; a key may name an interface of any package of the same unit; a key that names an interface of another unit, one written `package.Interface.member`, and one whose name is shared by two shapes of the unit (reported as ambiguous) are reported on the key in the unit's `ridl.toml` (ADR-0030 decision 12)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | error    |
 | RIDL-153 | type too large for podbuf — a struct, tuple or union whose largest podbuf encoding, computed from its declared bounds, is above `u32::MAX` (4,294,967,295) bytes, because a `u32` offset cannot address all of it; reported on the declaration name, naming the type, or, for the argument struct a call with several parameters induces and for a tuple reply, on the interaction, naming its request or reply. Raised only when a `[backend.<name>]` table of the workspace manifest lists `podbuf` in its `encodings`. A type that has no bound only because an array or map inside it is past a descriptor limit draws RIDL-154 instead                                                                                                                                                                                                                                                                                                                                                                                               | error    |
 | RIDL-154 | array or map exceeds the podbuf descriptor limits — a field with an array or map that declares more than 65,535 elements, or whose element or entry is larger than 65,535 bytes, because the descriptor records the count and the element size as `u16`; reported on the field, naming the type and the field. Raised only when a `[backend.<name>]` table lists `podbuf` in its `encodings`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | error    |
 | RIDL-155 | deprecated field has no valid podbuf value — a non-optional struct field with a `@deprecated` doc tag, no declared init value, no derivable init value (typl §5.8) and a type that excludes 0, so the podbuf encoder has no valid value to write for it; reported on the field, naming the type and the field. Raised only when a `[backend.<name>]` table lists `podbuf` in its `encodings`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | error    |
@@ -2343,7 +2393,11 @@ definition    = [ "internal" ] ( typl_definition | interface_def )
 
 interface_def = doc_comment? "interface" CamelCase_id "{" { interaction sep? } "}" ;
 
-service_def   = doc_comment? "service" dotted_name
+service_def   = doc_comment? "service" CamelCase_id (* the declared name; the global name
+                                                        is the package, ".", the name — §14.5.
+                                                        The parser also accepts a dotted
+                                                        name, id { "." id }, so that the
+                                                        checker reports it: RIDL-142 *)
                 ( ":" service_shape { "," service_shape } [ "," ]
                                                      (* the list, a set — §14.5; commas are
                                                         REQUIRED between shapes, the one
@@ -2357,8 +2411,6 @@ service_shape = type_ref ;                          (* a composed interface — 
                                                        list is a set with no tombstone: a
                                                        removed interface is retired in
                                                        `interfaces.lock` (§11) *)
-dotted_name   = camelCase_id { "." camelCase_id } ; (* reverse-domain global name,
-                                                       every segment lowercase — §14.5 *)
 
 interaction   = signal_def | event_def | command_def | query_def | fixed_def | reserved ;
 
@@ -2563,8 +2615,8 @@ errors-as-data (no error syntax at all) and derived Stratum 2, typl vocabulary
 | **`reserved`**                       | tombstone keeping a retired interaction's ordinal slot occupied so wire identities are never reused                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | **append-only**                      | the evolution discipline implied by ordinals: new interactions at the end, deletions by tombstone, reorder = wire break                                                                                                                                                                                                                                                                                                                                                                                             |
 | **interface**                        | the abstract contract _shape_ — a reusable, identity-less group of interactions; a contract type, realized by services (`interface : service :: type : instance`)                                                                                                                                                                                                                                                                                                                                                   |
-| **service**                          | a global, named, published declaration of an interface — the SSOT catalog entry, addressed `service.member`; posture-neutral (can deploy static or discovered; deriving the posture is reserved, rsdl §12); what a component offers                                                                                                                                                                                                                                                                                 |
-| **service catalog**                  | the flat global namespace of all `service` declarations — the system-wide SSOT of contracts                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| **service**                          | a global, named, published declaration of an interface — the SSOT catalog entry, named `Name` in its package and addressed `package.Name.member`; posture-neutral (can deploy static or discovered; deriving the posture is reserved, rsdl §12); what a component offers                                                                                                                                                                                                                                            |
+| **service catalog**                  | every `service` declaration of the system, each under its global name `package.Name` — the system-wide SSOT of contracts                                                                                                                                                                                                                                                                                                                                                                                            |
 | **posture**                          | how a service is realized on the wire — static (bus signals/events, Classic) or discovered (SOME/IP/DDS/uProtocol, Adaptive); a deployment matter, not in the contract; deriving it per deployment is reserved (rsdl §12)                                                                                                                                                                                                                                                                                           |
 | **binding**                          | generated per-transport code realising a contract: validation, caching, error mapping, (de)serialization                                                                                                                                                                                                                                                                                                                                                                                                            |
 | **envelope**                         | runtime-supplied metadata on every interaction instance — timestamp + sequence number (scoped per interaction kind) — never declared, never in payloads; powers timing evaluation, dedup, loss detection, E2E counters, and replay (§3.1)                                                                                                                                                                                                                                                                           |

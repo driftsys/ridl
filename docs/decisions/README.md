@@ -47,7 +47,9 @@ other entry below is Accepted.
   scalar widening is compatible only for a reached type the consumer exclusively
   sends; received, both-direction and unreached types are breaking. Per-side
   remote contexts report scalar constraint changes at consumer interaction
-  paths.
+  paths. Amended 2026-11-14 by ADR-0033 (proposed): RIDL-142, which decision 21
+  reserved, is minted for a service name that is not one `CamelCase_id`, and
+  RIDL-140 is retired.
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
   justfile as the single definition of every gate command, and what happens when
   a tool the gate needs is absent. Not epic-scoped: it binds every contributor.
@@ -176,7 +178,10 @@ other entry below is Accepted.
   (rewritten 2026-09-13), which renumbered the sections they name and reserved
   two of the codes. Amended again 2026-09-16: decision 9's coherence group is
   corrected to be the provided interface, identified by its number in the unit's
-  `interfaces.lock` rather than by the interface name.
+  `interfaces.lock` rather than by the interface name. Amended 2026-11-14 by
+  ADR-0033 (proposed): decisions 12 and 14 name a service with one
+  `CamelCase_id`, decision 15's `service:` key holds the global name, and
+  decision 16's address is `package.Name.member`.
 
 - **ADR-0016 — Schema projection and the pinned name transform.** The four
   properties every projection from IR identity to a target's namespace must
@@ -708,6 +713,17 @@ other entry below is Accepted.
   added or removed; one `instances.lock` covers every system; E19.8 may write a
   variant as a second system. A workspace with one system is unchanged.
 
-ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
-decision") is noted as not-yet-written in the family overview, and ADR-0012
-constrains it to four family members rather than five.
+- **ADR-0033 — Service declaration names.** _Proposed._ A `service` is declared
+  with one `CamelCase` name, like an interface, and its global name is its
+  package followed by that name (driftsys/ridl#1390). The name is a symbol of
+  its package, so a clash is TYPL-009, and every reference to a service — rsdl
+  `offers`, `requires`, member and placement lines, imports and doc links —
+  resolves as an interface reference does. A member is addressed
+  `package.Name.member`. The dotted form is RIDL-142, the code ADR-0008 decision
+  21 reserved, with a suggested name as a fix-it; RIDL-140 is retired. The
+  `service:` lock key, the implicit component name and every name derived from
+  an inline shape follow the global name. Amends ADR-0015 decisions 12, 14, 15
+  and 16, and adds a dated note to ADR-0008. ADR-0001 and ADR-0003 are not
+  present in this repository; ADR-0003 ("the family decision") is noted as
+  not-yet-written in the family overview, and ADR-0012 constrains it to four
+  family members rather than five.

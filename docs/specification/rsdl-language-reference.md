@@ -96,7 +96,7 @@ The nouns, each answering one question:
 | member       | one typed interaction                                       | ridl  |
 | catalog      | a unit's interfaces, their numbers, one hash                | ridl  |
 
-**Only what is addressed has identity on the wire.** A service's dotted name and
+**Only what is addressed has identity on the wire.** A service's global name and
 a catalog do; distribution, machine, component and instance names never travel.
 They are build-time and deployment-time names, and a runtime artifact that
 carried one would couple two layers that are separated on purpose.
@@ -135,8 +135,10 @@ service declared in an `.rsdl` file is RSDL-604; the catalog is ridl's
 - **Imports** follow typl §3.2 unchanged: a single named import
   (`import veh.adas.LaneAssist`) or a fully qualified name in place. There are
   no wildcards, no relative imports and no re-exports (TYPL-003). An unused
-  import is TYPL-007. A **service** is named by its global dotted name
-  (`veh.adas.cruise`) and is never imported (ridl §14.5).
+  import is TYPL-007. A **service** is named as any other declaration is: its
+  `CamelCase` name in its own package or after an import
+  (`import veh.adas.AdaptiveCruise`), or its global name, which is its package
+  followed by that name (`veh.adas.AdaptiveCruise`, ridl §14.5).
 - **An import makes names usable and does nothing else.** It generates code for
   the importer (ADR-0002) but never wires, grants or places; only a `requires`
   line does (vocabulary V-06).
@@ -167,12 +169,12 @@ and no rsdl declaration or line admits it.
 
 **Case carries the role** (general form R7):
 
-| Spelling           | Role                                                 | Example              |
-| ------------------ | ---------------------------------------------------- | -------------------- |
-| `CamelCase`        | component, system, distribution, deployment, machine | `AdasHpc`            |
-| `camelCase`        | instance — a member of its component                 | `Cruise.primary`     |
-| `lowercase.dotted` | package, service                                     | `veh.adas.cruise`    |
-| `SCREAMING_SNAKE`  | label, tier value                                    | `ASIL_B`, `PLATFORM` |
+| Spelling           | Role                                                          | Example              |
+| ------------------ | ------------------------------------------------------------- | -------------------- |
+| `CamelCase`        | component, system, distribution, deployment, machine, service | `AdasHpc`            |
+| `camelCase`        | instance — a member of its component                          | `Cruise.primary`     |
+| `lowercase.dotted` | package                                                       | `veh.adas`           |
+| `SCREAMING_SNAKE`  | label, tier value                                             | `ASIL_B`, `PLATFORM` |
 
 The unit instance's name `Unit` (§7) is never written in source, so R7 does not
 govern it.
@@ -228,7 +230,7 @@ composite body; the external boundary is derived from its `external` components
 and machines (§13).
 
 ```rsdl
-system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }
+system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.FaultAccess }
 ```
 
 - A member line names a declared component or a lone service (§6). A line that
@@ -251,21 +253,22 @@ contract, and half a service cannot be offered.
 
 ```rsdl
 component Cruise [ instances = (primary, backup) ] {
-  offers   veh.adas.cruise
+  offers   veh.adas.AdaptiveCruise
   requires LaneAssist
 }
-component Lane    { offers veh.adas.lane }
+component Lane    { offers veh.adas.LaneKeeping }
 component Panel   { requires CruiseControl, requires LaneAssist }
 component Backend [ external ] { requires CruiseControl }
 ```
 
-- `offers` takes one service reference. A name that is not a service is
-  RSDL-310.
-- `requires` takes one interface reference. An inline-shape service's dotted
-  name is the name of its one interface (ridl §14.5, group identity), so
-  `requires veh.diag.access` is legal. A service with a list of shapes after
-  `requires` is RSDL-311, and the diagnostic lists its interfaces; a name that
-  is neither an interface nor an inline-shape service is RSDL-312.
+- `offers` takes one service reference, written as an interface reference is:
+  `Name`, `pkg.Name`, or an imported name (ridl §14.5). A name that is not a
+  service is RSDL-310.
+- `requires` takes one interface reference. An inline-shape service's name is
+  the name of its one interface (ridl §14.5, group identity), so
+  `requires veh.diag.FaultAccess` is legal. A service with a list of shapes
+  after `requires` is RSDL-311, and the diagnostic lists its interfaces; a name
+  that is neither an interface nor an inline-shape service is RSDL-312.
 - One reference per line. A second reference on the same line is a new body item
   (R8), so `requires A, B` is a parse error at `B` (FORM-102); write
   `requires A, requires B`.
@@ -286,7 +289,7 @@ A distribution is what is versioned, signed and shipped together (vocabulary
 declares no machine and no dependency; both are derived (§13).
 
 ```rsdl
-distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.access }
+distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.FaultAccess }
 distribution Hmi  [ tier = APPLICATION ] { Panel }
 ```
 
@@ -311,7 +314,7 @@ A deployment is one placement of the system. It is a top-level declaration,
 
 ```rsdl
 deployment Production for Vehicle {
-  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.access }
+  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.FaultAccess }
   machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }
   machine Cloud   [ external ] { Backend }
 }
@@ -382,22 +385,30 @@ sizing keys (§5). A line's attribute node is the line within its container
 **The reference.** A reference is a dotted name of one or more segments, and its
 role is read from case (R7), then confirmed by lookup:
 
-| Form            | Names                                         | Where legal                      |
-| --------------- | --------------------------------------------- | -------------------------------- |
-| `Name`          | a component in scope; in `for`, the system    | every body; `for`                |
-| `Name.inst`     | one declared instance of a component          | `machine`                        |
-| `pkg.Name`      | a component (or the system) by qualified name | as `Name`                        |
-| `pkg.Name.inst` | one instance, qualified                       | `machine`                        |
-| `pkg.service`   | a service by its global dotted name           | `offers`, `requires`, every body |
+| Form            | Names                                                                                | Where legal       |
+| --------------- | ------------------------------------------------------------------------------------ | ----------------- |
+| `Name`          | a component or a service in scope; in `requires`, an interface; in `for`, the system | every body; `for` |
+| `Name.inst`     | one declared instance of a component                                                 | `machine`         |
+| `pkg.Name`      | as `Name`, by qualified name                                                         | as `Name`         |
+| `pkg.Name.inst` | one instance, qualified                                                              | `machine`         |
 
-A CamelCase segment names a component (or, in `for`, the system); a camelCase
-segment after a CamelCase one names an instance; a name of lowercase segments
-only is a service, with the leading segments read as its package path where the
-lookup needs one. In `requires`, `Name` and `pkg.Name` name an interface and
-`pkg.service` names an inline-shape service (§3.2). A reference whose case says
-one role and whose lookup finds another, or nothing, draws the unknown-name code
-of its slot: RSDL-602 (`system`), RSDL-903 (`distribution`), RSDL-702
-(`machine`), RSDL-310 to RSDL-312 (`component`), RSDL-704 (`for`).
+The leading lowercase segments are the package path; the CamelCase segment names
+a declaration of that package, or of the reference's own package view when there
+is no path; a camelCase segment after a CamelCase one names an instance. Which
+declaration a CamelCase segment names is decided by lookup: components,
+services, interfaces and the system share their package's namespace (§3, ridl
+§14.5), so a name finds one declaration. A bare name binds the declaration of
+the reference's own package first, of whatever kind, and an import only when the
+package declares no such name (typl §3.2). In `offers` it must be a service; in
+a `system` or `distribution` member line, a component or a lone service (§6); in
+a placement line, a component, an instance or a lone service; in `requires`, an
+interface or an inline-shape service (§3.2). A reference whose case says one
+role and whose lookup finds another, or nothing, draws the unknown-name code of
+its slot: RSDL-602 (`system`), RSDL-903 (`distribution`), RSDL-702 (`machine`),
+RSDL-310 to RSDL-312 (`component`), RSDL-704 (`for`). A reference of lowercase
+segments only names nothing: it is the dotted service name of earlier releases,
+and the message of the slot's code says that a service is named by its CamelCase
+name (ridl §14.5, RIDL-142).
 
 ---
 
@@ -484,14 +495,16 @@ unit instance (§7) and nothing else — no `requires`, no `instances`, not
 external.
 
 ```rsdl
-system Vehicle       { Cruise, Lane, veh.diag.access }
-distribution Adas    { Cruise, Lane, veh.diag.access }
-machine AdasHpc      { Cruise.primary, Lane, veh.diag.access }
+system Vehicle       { Cruise, Lane, veh.diag.FaultAccess }
+distribution Adas    { Cruise, Lane, veh.diag.FaultAccess }
+machine AdasHpc      { Cruise.primary, Lane, veh.diag.FaultAccess }
 ```
 
-- The derived component name is the service's dotted name. It appears only in
-  those lists, in diagnostics and in the IR; nothing else ever names it, so it
-  is not an addressed identity (vocabulary V-02).
+- The derived component name is the service's global name
+  (`veh.diag.FaultAccess`); its unit instance is keyed
+  `veh.diag.FaultAccess/Unit` in `instances.lock` (§7). It appears only in those
+  lists, in diagnostics and in the IR; nothing else ever names it, so it is not
+  an addressed identity (vocabulary V-02).
 - A service name stands for a component only when **no declared component in the
   workspace** offers the service. Listing a service that a declared component
   offers is RSDL-504, and the diagnostic names the offerer.
@@ -517,7 +530,7 @@ the toolchain numbers them: the name tells a team what the copy is for, and the
 number is what a runtime checks.
 
 ```rsdl
-component Cruise [ instances = (primary, backup) ] { offers veh.adas.cruise }
+component Cruise [ instances = (primary, backup) ] { offers veh.adas.AdaptiveCruise }
 ```
 
 - **The unit instance.** A component without `instances` has exactly one
@@ -609,7 +622,7 @@ by a clause, and a service's machine is never declared — it is derived through
 resolution (§8).
 
 ```rsdl
-machine AdasHpc { Cruise.primary, Lane, veh.diag.access }
+machine AdasHpc { Cruise.primary, Lane, veh.diag.FaultAccess }
 machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }
 ```
 
@@ -749,7 +762,7 @@ per catalog, computed by ridl over the interfaces, their numbers and every type
 they reach (D-8) — embedded here as an input, never computed by rsdl. The lock
 file is `interfaces.lock`, one per unit, written by `ridl lock` alone (ridl
 §11); an inline shape is numbered from it too, under the key `service:` and the
-service's dotted name (ridl §14.5).
+service's global name (ridl §14.5).
 
 Per deployment:
 
@@ -872,8 +885,8 @@ still reported.
 
 - Name a component for the capability it runs (`Cruise`, `LaneAssistant`), an
   instance for its role (`primary`, `backup`), a machine for what it is
-  (`AdasHpc`, `Cockpit`), and a service by its dotted global name
-  (`veh.adas.cruise`).
+  (`AdasHpc`, `Cockpit`), and a service, like an interface, for the contract it
+  publishes (`AdaptiveCruise`).
 - Let a lone service stand for its component (§6). Write an explicit `component`
   when one is needed: it offers more than one service, it only consumes, it
   requires interfaces, it has instances, or it is external.
@@ -968,23 +981,23 @@ shown in any table were never allocated.
 Each code below was in force in v0.1 and is retired with the construct it
 guarded. The numbers are never reused.
 
-| Code     | v0.1 rule, in brief                                        | Reason retired                                                        |
-| -------- | ---------------------------------------------------------- | --------------------------------------------------------------------- |
-| RSDL-301 | applied name is neither a model nor a component            | application notation dropped; a component applies nothing             |
-| RSDL-302 | provided output flow with no defining equation             | no flows or equations in a component body                             |
-| RSDL-303 | provided service not fully covered by equations            | a component offers a service whole; coverage is the implementation's  |
-| RSDL-304 | applied model signature mismatches the wired signals       | no wiring; a model is rmdl's and is not applied here                  |
-| RSDL-401 | conditional or dynamic instantiation                       | instances are a static attribute (§7); nothing is instantiated        |
-| RSDL-402 | wire connects flows of differing type                      | no wires; a link is derived from `requires` (§8)                      |
-| RSDL-404 | provided output defined more than once                     | no outputs defined in source                                          |
-| RSDL-405 | kind-crossing wire other than event to command             | no wiring; event-to-command needs a model to emit                     |
-| RSDL-407 | instantaneous cycle among models within one leaf           | no models composed in a component                                     |
-| RSDL-501 | consumer source distinguishes static wire from discovery   | no posture exists to distinguish (§12)                                |
-| RSDL-503 | published service name collides                            | the name is ridl's; RIDL-140 alone reports it                         |
-| RSDL-703 | placement onto a target whose capability class cannot host | targets and capability classes replaced by named machines (§3.5)      |
-| RSDL-802 | no transport-policy entry for a (locality × kind)          | transport is configuration, not a table in the grammar (D-5)          |
-| RSDL-902 | bundle includes an instance placed on a different target   | a distribution spans machines; installation is derived (§13)          |
-| RSDL-950 | reserved resilience keyword used                           | `redundant`, `supervise`, `degraded` retired; redundancy derived (§7) |
+| Code     | v0.1 rule, in brief                                        | Reason retired                                                                          |
+| -------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| RSDL-301 | applied name is neither a model nor a component            | application notation dropped; a component applies nothing                               |
+| RSDL-302 | provided output flow with no defining equation             | no flows or equations in a component body                                               |
+| RSDL-303 | provided service not fully covered by equations            | a component offers a service whole; coverage is the implementation's                    |
+| RSDL-304 | applied model signature mismatches the wired signals       | no wiring; a model is rmdl's and is not applied here                                    |
+| RSDL-401 | conditional or dynamic instantiation                       | instances are a static attribute (§7); nothing is instantiated                          |
+| RSDL-402 | wire connects flows of differing type                      | no wires; a link is derived from `requires` (§8)                                        |
+| RSDL-404 | provided output defined more than once                     | no outputs defined in source                                                            |
+| RSDL-405 | kind-crossing wire other than event to command             | no wiring; event-to-command needs a model to emit                                       |
+| RSDL-407 | instantaneous cycle among models within one leaf           | no models composed in a component                                                       |
+| RSDL-501 | consumer source distinguishes static wire from discovery   | no posture exists to distinguish (§12)                                                  |
+| RSDL-503 | published service name collides                            | the name is ridl's and in its package's namespace; a duplicate is TYPL-009 (ridl §14.5) |
+| RSDL-703 | placement onto a target whose capability class cannot host | targets and capability classes replaced by named machines (§3.5)                        |
+| RSDL-802 | no transport-policy entry for a (locality × kind)          | transport is configuration, not a table in the grammar (D-5)                            |
+| RSDL-902 | bundle includes an instance placed on a different target   | a distribution spans machines; installation is derived (§13)                            |
+| RSDL-950 | reserved resilience keyword used                           | `redundant`, `supervise`, `degraded` retired; redundancy derived (§7)                   |
 
 ---
 
@@ -1013,8 +1026,9 @@ version adds.
 7. **Resilience realization** — open. Redundancy is derived (§7); failover,
    voting and supervision wait for the failure-management specification (ridl
    §10.4). The v0.1.0 words `redundant`, `supervise` and `degraded` are retired.
-8. **Global service catalog scoping** — unchanged. Service names stay one flat
-   global namespace (RIDL-140).
+8. **Global service catalog scoping** — answered (ADR-0033). A service's global
+   name is its package followed by its declared name, so the catalog is scoped
+   by package: a duplicate is TYPL-009 in that package, and RIDL-140 is retired.
 9. **Service-number allocation** — answered. The routing key holds a catalog, an
    interface and a member, and no service (§13). A tag-based transport that
    needs a service number reads it from its own backend key (§5).
@@ -1068,19 +1082,19 @@ interface LaneAssist {
   signal active: Engaged @[100ms..1s]
 }
 
-service veh.adas.cruise : CruiseControl
-service veh.adas.lane   : LaneAssist
+service AdaptiveCruise : CruiseControl
+service LaneKeeping    : LaneAssist
 ```
 
-`veh/diag/diag.ridl` declares one inline-shape service; its dotted name is the
-name of its one interface (§3.2):
+`veh/diag/diag.ridl` declares one inline-shape service; its name is the name of
+its one interface (§3.2):
 
 ```ridl
 package veh.diag
 
 import veh.common.FaultReport
 
-service veh.diag.access {
+service FaultAccess {
   query readFaults(): FaultReport @[..100ms]
 }
 ```
@@ -1090,16 +1104,19 @@ service veh.diag.access {
 ```rsdl
 package veh.topology
 
+import veh.adas.AdaptiveCruise
 import veh.adas.CruiseControl
 import veh.adas.LaneAssist
+import veh.adas.LaneKeeping
+import veh.diag.FaultAccess
 
 /// Adaptive cruise, two copies: one per compute node.
 component Cruise [ instances = (primary, backup), labels = (ASIL_B) ] {
-  offers   veh.adas.cruise
+  offers   AdaptiveCruise
   requires LaneAssist
 }
 
-component Lane { offers veh.adas.lane }
+component Lane { offers LaneKeeping }
 
 component Panel {
   requires CruiseControl
@@ -1109,12 +1126,12 @@ component Panel {
 /// The fleet backend. No implementation in this workspace.
 component Backend [ external ] {
   requires CruiseControl
-  requires veh.diag.access
+  requires FaultAccess
 }
 
-system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }
+system Vehicle { Cruise, Lane, Panel, Backend, FaultAccess }
 
-distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.access }
+distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, FaultAccess }
 distribution Hmi  [ tier = APPLICATION ] { Panel }
 ```
 
@@ -1124,7 +1141,7 @@ distribution Hmi  [ tier = APPLICATION ] { Panel }
 package veh.topology
 
 deployment Production for Vehicle {
-  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.access }
+  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, FaultAccess }
   machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }
   machine Cloud   [ external ] { Backend }
 }
@@ -1136,30 +1153,30 @@ deployment Production for Vehicle {
 package veh.topology
 
 deployment Bench for Vehicle {
-  machine DevBox { Cruise, Lane, Panel, veh.diag.access, Backend }
+  machine DevBox { Cruise, Lane, Panel, FaultAccess, Backend }
 }
 ```
 
 What the lowering derives, and what it reports:
 
 - **Closure**: `Cruise`, `Lane`, `Panel`, `Backend`, and the implicit component
-  `veh.diag.access` (§6). Services in the closure: `veh.adas.cruise` (offered by
-  `Cruise`), `veh.adas.lane` (`Lane`), `veh.diag.access` (its implicit
-  component). Interfaces: `CruiseControl`, `LaneAssist`, and `veh.diag.access`
-  as its own interface. Each has one owning service and one offering component
-  (§8).
+  `veh.diag.FaultAccess` (§6). Services in the closure:
+  `veh.adas.AdaptiveCruise` (offered by `Cruise`), `veh.adas.LaneKeeping`
+  (`Lane`), `veh.diag.FaultAccess` (its implicit component). Interfaces:
+  `CruiseControl`, `LaneAssist`, and `veh.diag.FaultAccess` as its own
+  interface. Each has one owning service and one offering component (§8).
 - **Instances**: `Cruise.primary`, `Cruise.backup`, `Lane.Unit`, `Panel.Unit`,
-  `Backend.Unit`, `veh.diag.access.Unit` (§7).
+  `Backend.Unit`, `veh.diag.FaultAccess.Unit` (§7).
 - **Links, Production** (§8, §10): `Cruise.primary → Lane.Unit` same machine;
   `Cruise.backup → Lane.Unit` different machine; `Panel.Unit →
   Cruise.primary`
   different machine; `Panel.Unit → Cruise.backup` same machine;
   `Panel.Unit → Lane.Unit` different machine; `Backend.Unit →
   Cruise.primary`,
-  `Backend.Unit → Cruise.backup` and `Backend.Unit →
-  veh.diag.access.Unit`
-  off-board. The three `Backend` links are the surface set (§13): the external
-  side consumes.
+  `Backend.Unit → Cruise.backup` and
+  `Backend.Unit →
+  veh.diag.FaultAccess.Unit` off-board. The three `Backend`
+  links are the surface set (§13): the external side consumes.
 - **Links, Bench**: every link is same machine; the `Backend` links stay in the
   surface set, because the flag and not the machine defines the boundary.
 - **Warnings**: RSDL-409 twice, for `Panel`'s and `Backend`'s
@@ -1169,8 +1186,8 @@ What the lowering derives, and what it reports:
   on `Panel`'s placement line in `Cockpit` either way.
 - **Regions** (§13): one, `veh`, because the three interfaces belong to one
   unit. Its interfaces are `adas.CruiseControl` and `adas.LaneAssist`, named
-  relative to the unit, and the inline shape `veh.diag.access`, which keeps its
-  full dotted name.
+  relative to the unit, and the inline shape `veh.diag.FaultAccess`, which keeps
+  its global name.
 - **Grants** (§11): `Cruise` reaches the `veh` region (for `LaneAssist`);
   `Panel` reaches `veh`; `Backend` reaches `veh`, lowered with the `external`
   flag. `Lane` requires nothing and holds no consumer grant; its write side is
@@ -1181,7 +1198,7 @@ What the lowering derives, and what it reports:
   is installed on `AdasHpc` and `Cockpit`, `Hmi` on `Cockpit`; in `Bench`, both
   on `DevBox`.
 
-Two edits that would each draw one error: listing `veh.adas.cruise` in `Vehicle`
+Two edits that would each draw one error: listing `AdaptiveCruise` in `Vehicle`
 (RSDL-504, `Cruise` offers it); writing `Cruise` in place of `Cruise.primary` on
 `AdasHpc` (RSDL-706, `Cruise.backup` is reached twice).
 
@@ -1228,10 +1245,11 @@ placement_line   = doc_comment? reference attr_block? ;
 (* ---------- References — one production, the role read from case ---------- *)
 
 reference        = qualified_id ;
-                 (* Name · Name.inst · pkg.Name · pkg.Name.inst · pkg.service — §4.
-                    A CamelCase segment names a component (the system, after `for`);
-                    a camelCase segment after it names an instance; lowercase
-                    segments only name a service. Lookup confirms the role. *)
+                 (* Name · Name.inst · pkg.Name · pkg.Name.inst — §4.
+                    Leading lowercase segments are the package path; the
+                    CamelCase segment names a component, a service, an
+                    interface, or the system after `for`, decided by lookup;
+                    a camelCase segment after it names an instance *)
 
 (* ---------- Attribute block — general form §4.2, flag and assignment forms ---------- *)
 
@@ -1268,7 +1286,7 @@ here. rsdl-specific:
 | **distribution**           | what is versioned, signed and shipped together; its installation and dependencies are derived (§3.3)                                    |
 | **external**               | a flag: on a component, no implementation exists in this system; on a machine, it lies outside the system's boundary (§3.2, §3.5)       |
 | **grant**                  | the set of catalog regions a component's requirements reach, resolved through each interface's owning service (§11)                     |
-| **implicit component**     | the single-service component a lone service stands for, named by the service's name (§6)                                                |
+| **implicit component**     | the single-service component a lone service stands for, named by the service's global name (§6)                                         |
 | **instance**               | one named copy of a component; instances share the component's offers and requires and are indistinguishable on the wire (§7)           |
 | **link**                   | one consumer instance reaching one producer instance through a `requires`, with its crossing kind (§8, §10)                             |
 | **machine**                | what software is installed on; lists the instances it hosts (§3.5)                                                                      |
