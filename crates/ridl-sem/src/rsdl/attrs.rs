@@ -349,7 +349,7 @@ fn file_stem(value: Option<ast::AttrValue>, site: Site, reporter: &mut Reporter)
             site,
             format!(
                 "`file` takes a string of lowercase letters, digits, `.`, `_` and `-` that starts \
-                 with a letter or a digit and holds no `..`, written `file = \"<stem>\"`; \
+                 and ends with a letter or a digit and holds no `..`, written `file = \"<stem>\"`; \
                  {written} is not one (rsdl reference §3.4)"
             ),
         );

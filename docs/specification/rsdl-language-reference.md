@@ -333,12 +333,12 @@ deployment Production for Vehicle {
   `com.ampere.viewif.development.deployment.binfb`. The `file` key on the
   declaration replaces the stem: `deployment Development [ file = "view-dev" ]`
   is written to `view-dev.deployment.binfb`. The value is a string of lowercase
-  letters, digits, `.`, `_` and `-` that starts with a letter or a digit and
-  holds no `..`, so every descriptor name is lowercase and stays in the output
-  directory; any other value, or the key written bare, is RSDL-710. Two
-  deployments whose stems are equal when case is ignored are RSDL-711, reported
-  on the later one; the rule is case-blind because macOS and Windows file
-  systems are. Both codes block their own deployment only (§13).
+  letters, digits, `.`, `_` and `-` that starts and ends with a letter or a
+  digit and holds no `..`, so every descriptor name is lowercase and stays in
+  the output directory; any other value, or the key written bare, is RSDL-710.
+  Two deployments whose stems are equal when case is ignored are RSDL-711,
+  reported on the later one; the rule is case-blind because macOS and Windows
+  file systems are. Both codes block their own deployment only (§13).
 
 ### 3.5 `machine`
 

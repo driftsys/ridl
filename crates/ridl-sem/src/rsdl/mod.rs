@@ -2046,7 +2046,7 @@ deployment Bench for Vehicle {
                 system.diagnostics[0].message,
                 format!(
                     "`file` takes a string of lowercase letters, digits, `.`, `_` and `-` that \
-                     starts with a letter or a digit and holds no `..`, written \
+                     starts and ends with a letter or a digit and holds no `..`, written \
                      `file = \"<stem>\"`; {written} is not one (rsdl reference §3.4)"
                 ),
                 "`{attribute}`"

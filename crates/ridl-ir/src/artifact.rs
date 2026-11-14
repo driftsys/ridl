@@ -24,9 +24,9 @@ pub fn deployment_file_stem(package: &str, name: &str, file: Option<&str>) -> St
 }
 
 /// Whether `stem` is a valid value of the `file` attribute (RSDL-710): one or
-/// more of `a`–`z`, `0`–`9`, `.`, `_` and `-`, starting with a letter or a
-/// digit, and with no `..`. The rule keeps the name lowercase and inside the
-/// output directory.
+/// more of `a`–`z`, `0`–`9`, `.`, `_` and `-`, starting and ending with a
+/// letter or a digit, and with no `..`. The rule keeps the name lowercase and
+/// inside the output directory.
 pub fn is_valid_file_stem(stem: &str) -> bool {
     let mut chars = stem.chars();
     let Some(first) = chars.next() else {
@@ -35,6 +35,7 @@ pub fn is_valid_file_stem(stem: &str) -> bool {
     (first.is_ascii_lowercase() || first.is_ascii_digit())
         && chars
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
+        && stem.ends_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
         && !stem.contains("..")
 }
 
@@ -65,6 +66,7 @@ mod tests {
         }
         for bad in [
             "", "View", "view dev", "../x", "a..b", ".hidden", "-x", "_x", "a/b", "a\\b", "é",
+            "a.", "a-", "a_",
         ] {
             assert!(!is_valid_file_stem(bad), "`{bad}` is not valid");
         }
