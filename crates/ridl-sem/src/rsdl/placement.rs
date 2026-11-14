@@ -1,8 +1,9 @@
 //! Deployments, machines and placement (rsdl reference §3.4, §3.5, §9).
 //!
 //! Every deployment is checked on its own. The name rules (RSDL-708 across
-//! the workspace, RSDL-705 within a deployment) and the `for` rule (RSDL-704)
-//! run on every deployment. The placement rules quantify over the closure
+//! the workspace, RSDL-711 for two descriptor file names equal without case,
+//! RSDL-705 within a deployment) and the `for` rule (RSDL-704) run on every
+//! deployment. The placement rules quantify over the closure
 //! (§3.1), so they run on a deployment `for` the closure's system: RSDL-702 for
 //! a line outside the closure, RSDL-706 for an instance placed twice, RSDL-707
 //! for an implemented component on an external machine, and RSDL-701 for an
@@ -19,9 +20,20 @@
 use std::collections::HashMap;
 
 use ridl_core::diag::DiagCode;
+use ridl_ir::artifact::{DEPLOYMENT_FILE_SUFFIX as DESCRIPTOR_SUFFIX, deployment_file_stem};
 
 use super::closure::{Closure, Lookup, MemberTarget, member_target};
 use super::{CheckedSystem, DeploymentDecl, ReferenceForm, Reporter, Site};
+
+/// The stem of the descriptor file `ridl build` writes for `deployment`
+/// (rsdl §3.4), which RSDL-711 compares without case.
+fn file_stem(deployment: &DeploymentDecl) -> String {
+    deployment_file_stem(
+        &deployment.package,
+        &deployment.name.name,
+        deployment.file.as_deref(),
+    )
+}
 
 /// The placement of the closure in one deployment (rsdl §9).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -79,6 +91,23 @@ pub(super) fn place(
                     first.name.name
                 ),
             );
+        } else {
+            let stem = file_stem(deployment);
+            if let Some(first) = system.deployments[..index].iter().find(|earlier| {
+                earlier.name.name != deployment.name.name
+                    && file_stem(earlier).eq_ignore_ascii_case(&stem)
+            }) {
+                check.error(
+                    DiagCode::RSDL_711,
+                    deployment.name.site,
+                    format!(
+                        "the descriptor of `{}` is written to `{stem}{}`, a file name `{}` already \
+                         takes when case is ignored — set a different `file` on one of them \
+                         (rsdl reference §3.4)",
+                        deployment.name.name, DESCRIPTOR_SUFFIX, first.name.name
+                    ),
+                );
+            }
         }
         for (position, machine) in deployment.machines.iter().enumerate() {
             if deployment.machines[..position]

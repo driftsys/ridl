@@ -1156,6 +1156,7 @@ pub mod v2 {
     }
 }
 
+pub mod artifact;
 pub mod catalog_hash;
 pub mod class;
 pub mod codegen;
@@ -3280,6 +3281,7 @@ mod system_round_trip {
                     budget: Some(4096),
                 }),
                 deprecated: Some("superseded".to_string()),
+                file: Some("veh-production".to_string()),
             }],
             doc: "Documented, see [Cruise].".to_string(),
             see: vec![doc_link()],

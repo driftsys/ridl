@@ -266,7 +266,7 @@ fn a_remote_unit_catalog_is_embedded_in_the_deployment() {
         !out.path().join("veh.common.catalog.binfb").exists(),
         "no catalog file for a remote unit"
     );
-    let bytes = std::fs::read(out.path().join("app.Bench.deployment.binfb")).unwrap();
+    let bytes = std::fs::read(out.path().join("app.bench.deployment.binfb")).unwrap();
     let view = ridl_descriptor::deployment::verify(&bytes).expect("the descriptor verifies");
     let json = ridl_descriptor::deployment::to_json(view).unwrap();
     let names: Vec<&str> = json["catalogs"]

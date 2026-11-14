@@ -165,10 +165,34 @@ error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` 
 31 │ deployment Lab for Nowhere {}
    │                    ^^^^^^^
 
-error[RSDL-708]: a deployment named `Bench` is already declared in the workspace — a deployment name is unique (rsdl reference §3.4)
-   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:35:12
+error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` the workspace's system (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:34:22
    │
-35 │ deployment Bench for Second {}
+34 │ deployment Shelf for Nowhere [ file = "Lab" ] {}
+   │                      ^^^^^^^
+
+error[RSDL-710]: `file` takes a string of lowercase letters, digits, `.`, `_` and `-` that starts with a letter or a digit and holds no `..`, written `file = "<stem>"`; `"Lab"` is not one (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:34:32
+   │
+34 │ deployment Shelf for Nowhere [ file = "Lab" ] {}
+   │                                ^^^^^^^^^^^^
+
+error[RSDL-711]: the descriptor of `Spare` is written to `rsdl.showcase.bench.deployment.binfb`, a file name `Bench` already takes when case is ignored — set a different `file` on one of them (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:38:12
+   │
+38 │ deployment Spare for Nowhere [ file = "rsdl.showcase.bench" ] {}
+   │            ^^^^^
+
+error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` the workspace's system (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:38:22
+   │
+38 │ deployment Spare for Nowhere [ file = "rsdl.showcase.bench" ] {}
+   │                      ^^^^^^^
+
+error[RSDL-708]: a deployment named `Bench` is already declared in the workspace — a deployment name is unique (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:42:12
+   │
+42 │ deployment Bench for Second {}
    │            ^^^^^
 
 error[TYPL-009]: duplicate declaration of `Flag`

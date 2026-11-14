@@ -200,13 +200,13 @@ lowered system has no field for it. A doc link in an `.rsdl` file resolves in
 the view of the package that declares the line, as in a ridl file (typl §14.5),
 and draws TYPL-401 when it does not resolve.
 
-| Declaration    | Clause       | Body holds                                            | rsdl-owned keys                                    |
-| -------------- | ------------ | ----------------------------------------------------- | -------------------------------------------------- |
-| `system`       | —            | member lines: components, lone services (§4)          | `labels`, `deprecated`; one slot reserved (§12)    |
-| `component`    | —            | `offers` and `requires` lines (§4)                    | `instances`, `external`, `labels`, `deprecated`    |
-| `distribution` | —            | member lines: components, lone services               | `tier`, `labels`, `deprecated`                     |
-| `deployment`   | `for System` | `machine` declarations                                | `depth`, `slots`, `budget`, `labels`, `deprecated` |
-| `machine`      | —            | placement lines: components, instances, lone services | `external`, `labels`, `deprecated`                 |
+| Declaration    | Clause       | Body holds                                            | rsdl-owned keys                                            |
+| -------------- | ------------ | ----------------------------------------------------- | ---------------------------------------------------------- |
+| `system`       | —            | member lines: components, lone services (§4)          | `labels`, `deprecated`; one slot reserved (§12)            |
+| `component`    | —            | `offers` and `requires` lines (§4)                    | `instances`, `external`, `labels`, `deprecated`            |
+| `distribution` | —            | member lines: components, lone services               | `tier`, `labels`, `deprecated`                             |
+| `deployment`   | `for System` | `machine` declarations                                | `depth`, `slots`, `budget`, `file`, `labels`, `deprecated` |
+| `machine`      | —            | placement lines: components, instances, lone services | `external`, `labels`, `deprecated`                         |
 
 Every declaration and every line also takes backend keys (§5), and a placement
 line also takes the three sizing keys of the `deployment` row. A key not in a
@@ -326,6 +326,19 @@ deployment Production for Vehicle {
   configuration (§10, §12).
 - The declaration and its placement lines take the three sizing keys `depth`,
   `slots` and `budget` (§5).
+- **The descriptor file name.** `ridl build --emit deployment` writes one
+  descriptor per deployment, named `<stem>.deployment.binfb`. The stem is
+  `<package>.<Name>` in lowercase: `deployment Development` in package
+  `com.ampere.viewif` is written to
+  `com.ampere.viewif.development.deployment.binfb`. The `file` key on the
+  declaration replaces the stem: `deployment Development [ file = "view-dev" ]`
+  is written to `view-dev.deployment.binfb`. The value is a string of lowercase
+  letters, digits, `.`, `_` and `-` that starts with a letter or a digit and
+  holds no `..`, so every descriptor name is lowercase and stays in the output
+  directory; any other value, or the key written bare, is RSDL-710. Two
+  deployments whose stems are equal when case is ignored are RSDL-711, reported
+  on the later one; the rule is case-blind because macOS and Windows file
+  systems are. Both codes block their own deployment only (§13).
 
 ### 3.5 `machine`
 
@@ -401,6 +414,7 @@ its consumer and what `ridl diff` does with a change to it.
 | `depth`       | `= N`, integer occurrences      | `deployment`, placement line | the ring depth of an event channel, §13            | not reported: sizing, §14                   |
 | `slots`       | `= N`, integer table entries    | `deployment`, placement line | the slot count of a command or query channel, §13  | not reported: sizing, §14                   |
 | `budget`      | `= N`, integer bytes            | `deployment`, placement line | the byte budget of a command or query channel, §13 | not reported: sizing, §14                   |
+| `file`        | `= "stem"`                      | `deployment`                 | the file name of the deployment descriptor, §3.4   | not reported: file name, §14                |
 | `labels`      | `= (LABEL, …)`                  | the five declarations        | assurance profiles (typl §14.3)                    | reported under the heading of its site, §14 |
 | `deprecated`  | `= "reason"`                    | the five declarations        | the family lint; rsdl adds no rule                 | reported under the heading of its site, §14 |
 | `backend.key` | flag or assignment              | every declaration and line   | that backend, uninterpreted                        | reported under the heading of its site, §14 |
@@ -770,6 +784,9 @@ Per deployment:
   deployment and of each placement line, as written. Their resolution per link,
   and the derived depth, belong to the codegen request
   ([codegen plugins](../design/codegen-plugins.md)).
+- **The descriptor file name** — the `file` value of the deployment, as written,
+  in `Deployment.file`; absent when the declaration does not write the key
+  (§3.4).
 - **Distribution installation and dependency** — per distribution, the machines
   hosting at least one instance of its components (installation, which differs
   per deployment); and the distributions it depends on: `A` depends on `B`, a
@@ -787,9 +804,10 @@ Per deployment:
 
 **Errors and warnings.** An error in the closure — RSDL-3xx, 4xx, 5xx, 6xx or
 9xx — blocks lowering for every deployment. An error in one deployment —
-RSDL-7xx, which includes the sizing-value rule RSDL-709 — blocks lowering for
-that deployment only. A warning (RSDL-409, RSDL-804, RSDL-805, RSDL-806,
-RSDL-807) never blocks: the facts are produced and carry the warned condition.
+RSDL-7xx, which includes the sizing-value rule RSDL-709 and the file-name rules
+RSDL-710 and RSDL-711 — blocks lowering for that deployment only. A warning
+(RSDL-409, RSDL-804, RSDL-805, RSDL-806, RSDL-807) never blocks: the facts are
+produced and carry the warned condition.
 
 ---
 
@@ -812,7 +830,10 @@ still reported.
   deployment or on a placement line, is not listed: the attribute registry
   records the three sizing keys as not reported, with the reason that a sizing
   value changes no link and no contract, and `ridl diff` reads neither
-  `Deployment.sizing` nor `Placement.sizing`.
+  `Deployment.sizing` nor `Placement.sizing`. A changed `file` is not listed
+  either: the registry records it as not reported, because the name of the
+  descriptor file changes no link and no contract, and `ridl diff` does not read
+  `Deployment.file`.
 - A change to the closure or to a component's lines — a component added to or
   removed from the system, an `offers` or `requires` line added or removed,
   `instances` changed, a component made `external`, a `labels`, `deprecated`,
@@ -914,6 +935,8 @@ shown in any table were never allocated.
 | RSDL-707 | an `external` machine lists an implemented component                                                                                                               | error                        | §9      |
 | RSDL-708 | two deployments with one name in the workspace                                                                                                                     | error                        | §3.4    |
 | RSDL-709 | a `depth`, `slots` or `budget` value that the parser reads is not an integer within its range, or the key is written bare                                          | error                        | §5      |
+| RSDL-710 | a `file` value that is not a lowercase file stem, or the key is written bare                                                                                       | error                        | §3.4    |
+| RSDL-711 | two deployments whose descriptor file names are equal when case is ignored                                                                                         | error                        | §3.4    |
 | RSDL-804 | a backend key whose namespace no configured backend claims                                                                                                         | warning                      | §5      |
 | RSDL-805 | a declared `depth` is below `ceil(max / min)` for an event a covered link consumes                                                                                 | warning                      | §5      |
 | RSDL-806 | an event whose contract bound is not derivable is consumed by a link with no declared `depth`                                                                      | warning                      | §5      |

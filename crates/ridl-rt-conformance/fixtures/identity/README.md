@@ -12,7 +12,7 @@ verified descriptor:
 identity_output=$(mktemp -d)
 trap 'rm -rf "$identity_output"' EXIT
 cargo run --locked -p ridl-cli -- build crates/ridl-rt-conformance/fixtures/identity --emit deployment --out-dir "$identity_output"
-cp "$identity_output/alpha.Bench.deployment.binfb" crates/ridl-rt-conformance/fixtures/identity/identity.deployment.binfb
+cp "$identity_output/alpha.bench.deployment.binfb" crates/ridl-rt-conformance/fixtures/identity/identity.deployment.binfb
 ```
 
 The committed `interfaces.lock` files and `instances.lock` fix the numbers.

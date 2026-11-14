@@ -747,6 +747,7 @@ ridl.ir.v2.Deployment.attributes = 4 repeated ridl.ir.v2.Attribute
 ridl.ir.v2.Deployment.deprecated = 16 optional string
 ridl.ir.v2.Deployment.doc = 11 singular string
 ridl.ir.v2.Deployment.doc_links = 12 repeated ridl.ir.v2.DocLink
+ridl.ir.v2.Deployment.file = 17 optional string
 ridl.ir.v2.Deployment.installations = 10 repeated ridl.ir.v2.Installation
 ridl.ir.v2.Deployment.labels = 3 repeated string
 ridl.ir.v2.Deployment.links = 7 repeated ridl.ir.v2.Link

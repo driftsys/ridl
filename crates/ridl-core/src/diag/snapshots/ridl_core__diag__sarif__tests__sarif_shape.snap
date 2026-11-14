@@ -1418,6 +1418,24 @@ expression: log
               }
             },
             {
+              "id": "RSDL-710",
+              "shortDescription": {
+                "text": "a `file` value that is not a lowercase file stem, or the key is written bare"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "RSDL-711",
+              "shortDescription": {
+                "text": "two deployments whose descriptor file names are equal when case is ignored"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "RSDL-804",
               "name": "unclaimed-backend-key",
               "shortDescription": {
@@ -1887,7 +1905,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 185,
+          "ruleIndex": 187,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"
