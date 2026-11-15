@@ -296,10 +296,10 @@ component made `external`, or a component moved from one distribution to another
 are listed under `composition changed` instead. A changed `labels`,
 `deprecated`, `tier` or backend key is listed under the heading of the
 declaration it is on, as a before-and-after line; a changed sizing key (`depth`,
-`slots`, `budget`) is not listed, because it changes no link and no contract.
-The compiler does not decide which placement or composition changes break an
-already deployed system, and for whom; the one exception is a changed locked
-instance number, which it reports as breaking.
+`slots`, `budget`) or `file` is not listed, because it changes no link and no
+contract. The compiler does not decide which placement or composition changes
+break an already deployed system, and for whom; the one exception is a changed
+locked instance number, which it reports as breaking.
 
 ## What is not here yet
 
