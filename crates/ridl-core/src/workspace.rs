@@ -1614,6 +1614,32 @@ impl Loader {
             // A non-UTF8 file: the diagnostic is recorded, nothing loads.
             return Ok(());
         };
+        // A manifest checks its package name (MANI-006); a bare file has no
+        // manifest, and its `package` is deliberately not held to the shape
+        // rule. Only the device-name clause is checked, because the catalog
+        // file name starts with the package name and Windows opens a device
+        // for `con.anything`. Windows ignores case, so the segment is
+        // lowercased first.
+        if let Some((declared, range)) = decls.first()
+            && !declared.is_empty()
+            && ridl_ir::artifact::is_reserved_device_name(
+                &declared
+                    .split('.')
+                    .next()
+                    .unwrap_or(declared)
+                    .to_ascii_lowercase(),
+            )
+        {
+            let file_id = self.sources.file_id(input.path(&*db), "");
+            self.diagnostics.push(error(
+                DiagCode::MANI_006,
+                file_id,
+                *range,
+                format!(
+                    "invalid package name `{declared}`; the first segment is a Windows device name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`), which would make the catalog file name reserved on Windows"
+                ),
+            ));
+        }
         let name = decls
             .first()
             .map(|(name, _)| name.clone())
@@ -2323,6 +2349,51 @@ mod tests {
             "got: {:?}",
             loaded.diagnostics
         );
+    }
+
+    /// MANI-006 in single-file mode: only the device-name clause applies, it
+    /// ignores case, and it points at the `package` declaration.
+    #[test]
+    fn a_single_file_device_name_package_is_refused_case_blind() {
+        for (declared, refused) in [
+            ("con.x", true),
+            ("CON.x", true),
+            ("Con", true),
+            ("x.con", false),
+            ("X.Con", false),
+        ] {
+            let dir = TempDir::new("device-single");
+            let source = format!("package {declared}\n");
+            let file = dir.write("sample.ridl", &source);
+            let mut db = RidlDatabase::default();
+            let loaded = load_workspace(&mut db, &file).expect("single-file mode loads");
+            let found: Vec<_> = loaded
+                .diagnostics
+                .iter()
+                .filter(|d| d.code.as_str() == "MANI-006")
+                .collect();
+            if !refused {
+                assert!(found.is_empty(), "{declared}: {:?}", loaded.diagnostics);
+                continue;
+            }
+            assert_eq!(found.len(), 1, "{declared}: {:?}", loaded.diagnostics);
+            assert!(
+                found[0].message.contains(&format!(
+                    "invalid package name `{declared}`; the first segment is a Windows device name"
+                )) && found[0].message.contains("the catalog file name"),
+                "{}",
+                found[0].message
+            );
+            let declaration = source.lines().next().unwrap();
+            assert_eq!(
+                (
+                    usize::from(found[0].primary.range.start()),
+                    usize::from(found[0].primary.range.end()),
+                ),
+                (0, declaration.len()),
+                "{declared}: reported on the declaration"
+            );
+        }
     }
 
     /// A name that merely starts with `ridl.` is not reserved: the reservation

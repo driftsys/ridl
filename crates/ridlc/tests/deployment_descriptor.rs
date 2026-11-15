@@ -314,3 +314,59 @@ fn single_file_mode_writes_no_deployment_descriptor() {
     assert_eq!(code, 0, "{stderr}");
     assert!(files_ending(out.path(), deployment::FILE_SUFFIX).is_empty());
 }
+
+/// MANI-006: a unit whose package name starts with a Windows device name stops
+/// the build, because its artifact file names would be reserved on Windows.
+#[test]
+fn a_device_name_package_stops_the_build_and_writes_no_descriptor() {
+    let package = tempfile::tempdir().unwrap();
+    std::fs::write(
+        package.path().join("lone.rsdl"),
+        LONE.replace("package solo", "package con.x"),
+    )
+    .unwrap();
+    std::fs::write(package.path().join("lamp.ridl"), documented("con.x")).unwrap();
+    std::fs::write(
+        package.path().join("ridl.toml"),
+        "[package]\nname = \"con.x\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(package.path(), out.path(), "deployment,catalog");
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("MANI-006"), "{stderr}");
+    assert!(stderr.contains("error"), "{stderr}");
+    assert!(files_ending(out.path(), ".binfb").is_empty(), "{stderr}");
+}
+
+/// A documented one-interface source, so that a catalog is written for it.
+fn documented(package: &str) -> String {
+    format!(
+        "package {package}\n\n/// A level.\ntype Level: integer [0..100]\n\n\
+         /// The lamp.\ninterface Lamp {{\n  /// The level.\n  signal level: Level @10ms\n}}\n"
+    )
+}
+
+/// The same rule applies to a single source file, which has no manifest.
+#[test]
+fn a_device_name_package_in_a_single_file_writes_no_artifact() {
+    let alone = tempfile::tempdir().unwrap();
+    let file = alone.path().join("sample.ridl");
+    std::fs::write(&file, documented("con.x")).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(&file, out.path(), "catalog");
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("MANI-006"), "{stderr}");
+    assert!(std::fs::read_dir(out.path()).unwrap().next().is_none());
+
+    // Control: the same source under a name whose device name is not first
+    // writes its catalog, so the empty output above can fail.
+    std::fs::write(&file, documented("x.con")).unwrap();
+    let control = tempfile::tempdir().unwrap();
+    let (code, stderr) = build(&file, control.path(), "catalog");
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(
+        files_ending(control.path(), ".binfb"),
+        ["x.con.catalog.binfb"]
+    );
+}

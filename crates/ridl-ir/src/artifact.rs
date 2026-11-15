@@ -1,10 +1,12 @@
 //! The file names of the artifacts a build writes per deployment (rsdl
 //! reference §3.4).
 //!
-//! The rule lives here because both its users depend on `ridl-ir`: the rsdl
+//! The rule lives here because its users depend on `ridl-ir`: the rsdl
 //! checker, which rejects two deployments whose file names are equal when case
 //! is ignored (RSDL-711), and `ridlc`, which writes the files. One function
-//! keeps the check and the write in agreement.
+//! keeps the check and the write in agreement. `ridl-core` also calls
+//! [`is_reserved_device_name`] for the package-name rule (MANI-006), because
+//! every artifact file name starts with the package name.
 
 /// The suffix of a deployment descriptor's file name, after the stem.
 pub const DEPLOYMENT_FILE_SUFFIX: &str = ".deployment.binfb";
@@ -28,9 +30,9 @@ pub fn deployment_file_stem(package: &str, name: &str, file: Option<&str>) -> St
 /// letter or a digit, and with no `..`. The part before the first `.` is not a
 /// Windows reserved device name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`,
 /// `lpt1` to `lpt9`), because Windows opens the device for `con.anything` too.
-/// The rule applies to a `file` value only. The default stem
-/// ([`deployment_file_stem`]) is lowercase and built from the package and
-/// declaration names; it gets no reserved-name check.
+/// The default stem ([`deployment_file_stem`]) starts with the package name,
+/// and a package name whose first segment is a reserved device name is
+/// MANI-006, so the default stem needs no check of its own.
 pub fn is_valid_file_stem(stem: &str) -> bool {
     let mut chars = stem.chars();
     let Some(first) = chars.next() else {
@@ -44,8 +46,10 @@ pub fn is_valid_file_stem(stem: &str) -> bool {
         && !is_reserved_device_name(stem.split('.').next().unwrap_or(stem))
 }
 
-/// Whether `name` is a Windows reserved device name, in lowercase.
-fn is_reserved_device_name(name: &str) -> bool {
+/// Whether `name` is a Windows reserved device name. The caller passes one
+/// lowercase segment with no `.`, such as the part of a file name before its
+/// first `.`; the match is exact and case-sensitive.
+pub fn is_reserved_device_name(name: &str) -> bool {
     // COM0 and LPT0 are not reserved in Microsoft's file-naming documentation.
     matches!(name, "con" | "prn" | "aux" | "nul")
         || ["com", "lpt"].iter().any(|prefix| {

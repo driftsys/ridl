@@ -727,3 +727,23 @@ fn uncommenting_the_workspace_root_table_emits_the_members_codec() {
         "the root table emits the member's descriptors"
     );
 }
+
+#[test]
+fn a_device_name_is_refused_with_the_name_rule() {
+    let tmp = TempDir::new("device-name");
+    std::fs::create_dir(tmp.path().join("demo")).expect("mkdir");
+    let stderr = assert_refused(
+        &tmp.path().join("demo"),
+        &["init", "--name", "com1"],
+        "is not a legal package name",
+        tmp.path(),
+    );
+    assert!(stderr.contains("not a Windows device name"), "{stderr}");
+    let stderr = assert_refused(
+        tmp.path(),
+        &["new", "con.x"],
+        "is not a legal package name",
+        tmp.path(),
+    );
+    assert!(stderr.contains("not a Windows device name"), "{stderr}");
+}

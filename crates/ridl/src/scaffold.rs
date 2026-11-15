@@ -194,7 +194,8 @@ fn package_name(request: &Request<'_>, target: &Path) -> Result<String, String> 
 const BACKEND_HINT: &str = "\n# Uncomment to generate the FlatBuffers codec, descriptors and interaction face:\n# [backend.rust]\n# encodings = [\"flatbuffers\"]\n";
 
 const NAME_RULE: &str = "A package name is lowercase dot-separated segments, each a letter \
-     followed by letters or digits (for example `veh.common`).";
+     followed by letters or digits, and the first segment is not a Windows device \
+     name such as `con` or `com1` (for example `veh.common`).";
 
 enum NameProblem {
     /// Not a legal package name (MANI-006).

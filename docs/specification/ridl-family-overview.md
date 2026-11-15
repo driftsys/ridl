@@ -344,7 +344,7 @@ are `1xx`.
 | MANI-003 | manifest declares neither `[package]` nor `[workspace]`                                                                                                                                | error    |
 | MANI-004 | nested workspace — a member manifest declares `[workspace]`                                                                                                                            | error    |
 | MANI-005 | unknown manifest key                                                                                                                                                                   | warning  |
-| MANI-006 | invalid package name — not lowercase dot-separated segments                                                                                                                            | error    |
+| MANI-006 | invalid package name — not lowercase dot-separated segments, or first segment is a Windows device name                                                                                 | error    |
 | MANI-007 | invalid import URL                                                                                                                                                                     | error    |
 | MANI-008 | workspace member directory is missing or has no `ridl.toml`                                                                                                                            | error    |
 | MANI-009 | invalid `[defaults]` timing value (ridl §9.1)                                                                                                                                          | error    |
