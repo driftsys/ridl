@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.20.0] (2026-11-15)
+
+### Documentation
+
+- **adr:** propose ADR-0033, several systems in one workspace ([#1398])
+  ([82551c5])
+- **roadmap:** record E6.21, several systems in one workspace ([#1396])
+  ([9404033])
+- **docs:** say that ridl diff does not list a changed deployment file key
+  ([#1395]) ([83674e5])
+
+### Features
+
+- **rsdl:** lowercase deployment descriptor file names and add the file
+  attribute ([#1391]) ([b22427f]), closes [#1389]
+
+### Bug Fixes
+
+- **ridl-core:** reject a package name whose first segment is a Windows device
+  name ([#1399]) ([23048cf]), closes [#1394]
+- **rsdl:** review follow-ups for the deployment file attribute ([#1393])
+  ([cee394a])
+
+### BREAKING CHANGES
+
+- `ridl build --emit deployment` writes the deployment descriptor under a
+  lowercase name: `<package>.<name>.deployment.binfb` in ASCII lowercase. A
+  consumer that reads `com.example.Development.deployment.binfb` now reads
+  `com.example.development.deployment.binfb`. The new `file` attribute sets the
+  name instead: `deployment Development [ file = "view-dev" ] for ViewSystem`
+  writes `view-dev.deployment.binfb`. The old name is not written as well,
+  because on macOS and Windows it is the same file. Two new errors apply:
+  RSDL-710 for an invalid `file` value, and RSDL-711 for two deployments whose
+  file names are equal when case is ignored.
+- A package name whose first segment is a Windows device name (`con`, `prn`,
+  `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`) is now MANI-006, for
+  example `con.x` or `nul`. In single-file mode the same check applies to the
+  `package` declaration in any letter case (`CON.x`). Rename such a package.
+
+[0.20.0]: https://github.com/driftsys/ridl/compare/v0.19.0...v0.20.0
+[82551c5]: https://github.com/driftsys/ridl/commit/82551c5
+[#1398]: https://github.com/driftsys/ridl/issues/1398
+[9404033]: https://github.com/driftsys/ridl/commit/9404033
+[#1396]: https://github.com/driftsys/ridl/issues/1396
+[83674e5]: https://github.com/driftsys/ridl/commit/83674e5
+[#1395]: https://github.com/driftsys/ridl/issues/1395
+[b22427f]: https://github.com/driftsys/ridl/commit/b22427f
+[#1391]: https://github.com/driftsys/ridl/issues/1391
+[#1389]: https://github.com/driftsys/ridl/issues/1389
+[23048cf]: https://github.com/driftsys/ridl/commit/23048cf
+[#1399]: https://github.com/driftsys/ridl/issues/1399
+[#1394]: https://github.com/driftsys/ridl/issues/1394
+[cee394a]: https://github.com/driftsys/ridl/commit/cee394a
+[#1393]: https://github.com/driftsys/ridl/issues/1393
+
 ## [0.19.0] (2026-11-12)
 
 ### Features
