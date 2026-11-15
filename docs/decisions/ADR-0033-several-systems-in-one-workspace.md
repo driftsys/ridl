@@ -31,10 +31,11 @@ The maintainer raised two cases on 2026-11-14 (ROADMAP E6.21):
 - a system that does not need a unit of its own.
 
 Today the workaround is a second workspace, or a unit that holds only the
-system. ADR-0002 already lets one unit hold contracts and a system (its
-alternatives section cites `examples/cabin`), so the second case is blocked by
-RSDL-601 and not by the unit model: once a second unit's packages are in the
-workspace, a second system anywhere in it is an error.
+system. ADR-0002 already lets one unit hold contracts and a system (the
+paragraph "Alternatives rejected for the unit" in its §1 cites
+`examples/cabin`), so the second case is blocked by RSDL-601 and not by the unit
+model: once a second unit's packages are in the workspace, a second system
+anywhere in it is an error.
 
 Several facts already scale to several systems without change:
 
@@ -75,21 +76,23 @@ Several facts already scale to several systems without change:
    value is a system name, bare or qualified (`veh.Vehicle`). A bare name
    matches the systems of that declared name; when it matches more than one, the
    run fails and lists the qualified names.
-   - `ridl build` and `ridlc build`: with zero or one system the flag is
-     optional; when given it must name that system. With more than one system
-     the system is the one `--system` names, or else the system of the
-     deployment `--deployment` names (deployment names are unique, decision 2);
-     with neither flag the run fails. Both flags together must agree.
+   - `ridl build` and `ridlc build`: with neither `--system` nor `--deployment`,
+     every system is checked and lowered and every system's artifacts are
+     written. `--system` narrows the build to that system. `--deployment`
+     narrows it to that deployment, and so to its system (deployment names are
+     unique, decision 2). Both flags together must agree. With one system, the
+     run is the same as today.
    - `ridl check` takes no flag and checks every system.
-   - A missing, unknown, ambiguous or disagreeing `--system` is a bad flag under
+   - An unknown, ambiguous or disagreeing `--system` is a bad flag under
      ADR-0010: exit 2, a message that lists the declared systems by qualified
      name, nothing written. It is not a diagnostic and has no code, the same as
      an unknown `--deployment` (`UnknownDeployment`) today.
-   - `--deployment` names a deployment of the selected system; its rules
-     (`select_deployment`) are otherwise unchanged, counted over the selected
-     system's deployments. _Rationale:_ ADR-0010 makes a selection a flag and a
-     wrong flag exit 2; one flag spelled the same on the three commands keeps
-     the CLI uniform.
+   - `--deployment` keeps its rules (`select_deployment`); without it, the
+     codegen request carries a deployment section only when the selected system,
+     or the workspace when no system is selected, declares exactly one
+     deployment. _Rationale:_ ADR-0010 makes a selection a flag and a wrong flag
+     exit 2; one flag spelled the same on the three commands keeps the CLI
+     uniform.
 
 4. **The IR carries one lowered system per system.** `WorkspaceOutput::system`
    becomes `systems`, a list of `ridl_ir::v2::System` ordered by qualified name,
@@ -119,9 +122,11 @@ Several facts already scale to several systems without change:
    restricts the system comparison to that name; it never restricts the contract
    comparison. Without `--system`, every system is compared. _Rationale:_ a
    report compares everything by default, and restricting the contract
-   comparison would hide a breaking change (ADR-0022 decision 9). This departs
-   from the issue's wording that `ridl diff` needs `--system` when the workspace
-   has several systems; see open question 1.
+   comparison would hide a breaking change (ADR-0022 decision 9). A side that is
+   an `.ir.json` snapshot carries no system, so, as ADR-0022 decision 9 states,
+   no system change is listed for it: its systems are not reported as added or
+   removed. This departs from the issue's wording that `ridl diff` needs
+   `--system` when the workspace has several systems; see open question 2.
 
 6. **One instance lock and the existing frozen surfaces, not one per system.**
    The workspace keeps one `instances.lock` beside the root `ridl.toml` (rsdl
@@ -130,13 +135,17 @@ Several facts already scale to several systems without change:
    the closure of any system; RSDL-314 then means "in no system". `ridl lock`
    numbers the union of the closures. The freeze surfaces (ADR-0029,
    `freeze/surfaces.toml`) are tool surfaces, not per-system ones, and none is
-   added: the `cli` dump gains `--system`, the `diagnostics` dump records
-   RSDL-601 as retired, and `accepted-sources` widens to a source with two
-   systems. Each change is additive or a retirement that ADR-0029 already
-   allows. _Rationale:_ an instance number addresses an instance of a component,
-   and a client of a shared component must address it the same way in every
-   system; per-system lock files would let two systems give one instance two
-   numbers.
+   added. The `cli` dump gains `--system`, which is additive. Retiring RSDL-601
+   removes the line `RSDL-601 error` from `freeze/diagnostics.txt`, because a
+   retired code is not declared (`crates/ridl-core/src/diag.rs`); `diagnostics`
+   has a baseline row in `freeze/surfaces.toml`, so this is a break of the
+   `diagnostics` surface and `just freeze-check` fails on it. It needs an
+   amendment of ADR-0029 under its decision 4, as RIDL-150's retirement had.
+   `accepted-sources` does not change unless a frozen copy of a source with two
+   systems is added under `freeze/` (`freeze/README.md`). _Rationale:_ an
+   instance number addresses an instance of a component, and a client of a
+   shared component must address it the same way in every system; per-system
+   lock files would let two systems give one instance two numbers.
 
 7. **E19.8 (variants) stays separate and may build on this.** A debug or staging
    variant can be written as a second system that lists the production
@@ -172,25 +181,28 @@ Several facts already scale to several systems without change:
   done criterion of E6.21.
 - A workspace with one system is unchanged in source, output and command line.
 - The book-example harness no longer depends on the one-system rule to hold one
-  `system` fence; see open question 2.
+  `system` fence; see open question 3.
 - `WorkspaceOutput` changes shape, which affects `ridl-lsp`, `ridl-mcp` and
   every caller that reads `system`.
 
 ## Open questions
 
-1. **Does `ridl diff` require `--system` with several systems, as the issue
+1. **Does `ridl build` require `--system` with several systems?** The issue
+   proposed that it does. Decision 3 writes every system instead, and lets
+   `--system` or `--deployment` narrow the build.
+2. **Does `ridl diff` require `--system` with several systems, as the issue
    says?** Recommended answer: no. Compare every system by name (decision 5),
    and let `--system` restrict the system part. A diff is a report, and
    requiring a flag would make a plain `ridl diff` fail on a valid workspace.
-2. **Does the book keep exactly one `system` fence?** ADR-0022 decision 10 rests
+3. **Does the book keep exactly one `system` fence?** ADR-0022 decision 10 rests
    on RSDL-601. Recommended answer: keep one fence as a book convention stated
    in `CONTRIBUTING.md`, since the book is one workspace and a second system
    would make every `ridl build` example in it need `--system`.
-3. **Two systems whose artifact names differ only in case** (`a.Vehicle` and
+4. **Two systems whose artifact names differ only in case** (`a.Vehicle` and
    `a.vehicle`) write the same file on macOS and Windows. Recommended answer: a
    new error, RSDL-605, case-blind like RSDL-711, reported on the later system
    and blocking that system only.
-4. **Order of `systems`.** Recommended answer: by qualified name, as decision 4
+5. **Order of `systems`.** Recommended answer: by qualified name, as decision 4
    states, so the output does not depend on the order files are read.
 
 ## Documents amended
@@ -199,15 +211,19 @@ These documents would change with the acceptance.
 
 | Document                                                                                       | Change                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/specification/rsdl-language-reference.md`](../specification/rsdl-language-reference.md) | §1.5: retitled; any number of systems, each with its own closure (decision 1). §2: the "One system per workspace" bullet removed. §3.1: closure checks per system; the RSDL-601 sentence removed. §3.4: `for` names one of the systems (decision 2). §7: one lock over the union of closures; RSDL-314 (decision 6). §13: lowering per system, closure errors block their own system (decision 4). §14: comparison by name, system added or removed (decision 5). §16 table: RSDL-601 moved to §16.3; RSDL-314 wording; RSDL-605 if open question 3 is accepted |
-| [ADR-0022](ADR-0022-rsdl-system-in-the-ir.md)                                                  | decision 2: one artifact per system. decision 9: comparison by system name. decision 10: the fence rule no longer rests on RSDL-601. Status: a paragraph for the amendment                                                                                                                                                                                                                                                                                                                                                                                      |
-| [`docs/technotes/rsdl-implementation.md`](../technotes/rsdl-implementation.md)                 | the paragraph that derives one book fence from RSDL-601; `WorkspaceOutput::systems`                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| [`docs/specification/rsdl-language-reference.md`](../specification/rsdl-language-reference.md) | §1.5: retitled; any number of systems, each with its own closure (decision 1). §2: the "One system per workspace" bullet removed. §3.1: closure checks per system; the RSDL-601 sentence removed. §3.4: `for` names one of the systems (decision 2). §7: one lock over the union of closures; RSDL-314 (decision 6). §13: lowering per system, closure errors block their own system (decision 4). §14: comparison by name, system added or removed (decision 5). §16 table: RSDL-601 moved to §16.3; RSDL-314 wording; RSDL-605 if open question 4 is accepted |
+| [ADR-0022](ADR-0022-rsdl-system-in-the-ir.md)                                                  | decision 2: one artifact per system. decision 8: a closure error blocks its own system only. decision 9: comparison by system name, the snapshot side unchanged. decision 10 (lines 223 to 225): the fence rule no longer rests on RSDL-601. Status: a paragraph for the amendment                                                                                                                                                                                                                                                                              |
+| [`docs/technotes/rsdl-implementation.md`](../technotes/rsdl-implementation.md)                 | lines 186 to 189, the paragraph that derives one book fence from RSDL-601; `WorkspaceOutput::systems`                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | [`docs/design/codegen-plugins.md`](../design/codegen-plugins.md)                               | "The selection": the deployment is chosen within the selected system; `--system`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | [`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md)                   | a descriptor is emitted for the deployments of the selected system                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | [`docs/book/rsdl.md`](../book/rsdl.md)                                                         | "The system": "declares at most one" replaced by the selection rule                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | [`docs/book/cli-reference.md`](../book/cli-reference.md)                                       | `--system` on `ridl build`, `ridlc build` and `ridl diff`; the exit-2 cases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| [ADR-0029](ADR-0029-stability-policy.md)                                                       | an amendment that allows the removal of RSDL-601 from the `diagnostics` surface under decision 4, as for RIDL-150                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| [`CONTRIBUTING.md`](../../CONTRIBUTING.md)                                                     | "Writing examples in the book": the exactly-one `system` fence rule no longer rests on RSDL-601                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| [`AGENTS.md`](../../AGENTS.md)                                                                 | the conventions bullet on book fences: the one `system` fence and RSDL-601                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| [`docs/ROADMAP.md`](../ROADMAP.md)                                                             | E19.2: "the workspace's one system" becomes the union of the systems' closures                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | [ADR-0010](ADR-0010-cli-conventions.md)                                                        | the `build` and `diff` rows of the exit-code table: a missing, unknown or ambiguous `--system` is exit 2                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| [`freeze/README.md`](../../freeze/README.md) and the dumps under `freeze/`                     | the `cli`, `diagnostics` and `accepted-sources` dumps regenerated with the implementation (decision 6)                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| [`freeze/README.md`](../../freeze/README.md) and the dumps under `freeze/`                     | the `cli` and `diagnostics` dumps regenerated with the implementation (decision 6); `accepted-sources` only if a frozen copy with two systems is added                                                                                                                                                                                                                                                                                                                                                                                                          |
 | [`docs/specification/ridl-family-overview.md`](../specification/ridl-family-overview.md)       | §5: a decision-ledger row for this record                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | [`docs/decisions/README.md`](README.md)                                                        | the entry for this record loses its _Proposed_ mark                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 
