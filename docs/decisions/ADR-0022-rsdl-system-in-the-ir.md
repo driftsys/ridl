@@ -64,9 +64,13 @@ Amended 2026-11-14 (driftsys/ridl#1389): decision 12's file name is lowercase.
 The descriptor is written to `<package>.<name>.deployment.binfb` in ASCII
 lowercase, or to `<file>.deployment.binfb` when the deployment sets the `file`
 attribute (rsdl reference §3.4; RSDL-710 rejects a stem outside
-`[a-z0-9]([a-z0-9._-]*[a-z0-9])?` or one that holds `..`). Two deployments whose
-file names are equal when case is ignored are RSDL-711. The old mixed-case name
-is not written as well: on a case-insensitive file system it is the same file.
+`[a-z0-9]([a-z0-9._-]*[a-z0-9])?`, one that holds `..`, and one whose part
+before the first `.` is a Windows reserved device name: `con`, `prn`, `aux`,
+`nul`, `com1` to `com9`, `lpt1` to `lpt9`). The lowered `System` gains
+`Deployment.file` (field 17), the stem as written, absent when the attribute is
+absent. Two deployments whose file names are equal when case is ignored are
+RSDL-711. The old mixed-case name is not written as well: on a case-insensitive
+file system it is the same file.
 
 ## Context
 
@@ -246,18 +250,19 @@ nothing.
 
 12. **The deployment descriptor is the second emitter over `System`**
     (2026-11-02, driftsys/ridl#1176). `--emit deployment` writes one FlatBuffers
-    file per lowered deployment, `<package>.<Name>.deployment.binfb`, file
-    identifier `RDLD`, with the catalog descriptor of every region embedded
-    unchanged. It is a direct projection of `System`; the only rules it adds are
-    the `offers` and `maps` lists of an instance, which it takes from the
-    codegen deployment section so that the two emitters agree. The instance
-    number comes from `instances.lock`, which replaces the hand-typed placement
-    key an earlier wording of this decision left to a runtime: `Instance`
-    carries `number` and `provisional` in the codegen deployment section and in
-    the descriptor, and `System` gains `Component.numbers`, one
-    `InstanceNumber { instance, number, provisional }` per instance. A
-    deployment that an RSDL-7xx error blocked has no file (decision 8). The
-    record is
+    file per lowered deployment, `<package>.<Name>.deployment.binfb` (amended
+    2026-11-14: the name is lowercase and the `file` attribute can replace the
+    stem; see the amendment above), file identifier `RDLD`, with the catalog
+    descriptor of every region embedded unchanged. It is a direct projection of
+    `System`; the only rules it adds are the `offers` and `maps` lists of an
+    instance, which it takes from the codegen deployment section so that the two
+    emitters agree. The instance number comes from `instances.lock`, which
+    replaces the hand-typed placement key an earlier wording of this decision
+    left to a runtime: `Instance` carries `number` and `provisional` in the
+    codegen deployment section and in the descriptor, and `System` gains
+    `Component.numbers`, one `InstanceNumber { instance, number, provisional }`
+    per instance. A deployment that an RSDL-7xx error blocked has no file
+    (decision 8). The record is
     [`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
 
 ## Consequences

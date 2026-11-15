@@ -194,6 +194,13 @@ deployment Bench for Cabin {
   reference gives their ranges and the precedence
   ([rsdl reference](../specification/rsdl-language-reference.md) §5).
 
+A `deployment` declaration also takes a `file` key, which sets the stem of its
+descriptor's file name, as in `[ file = "view-dev" ]`. A value that is not a
+valid stem is RSDL-710, and two deployments whose descriptor file names are
+equal when case is ignored are RSDL-711
+([rsdl reference](../specification/rsdl-language-reference.md) §3.4 gives the
+rule).
+
 Two mistakes are worth naming, because each blocks only its own deployment.
 Placing `ClimateControl.front` on `ZoneFront` and then reaching
 `ClimateControl.rear` twice in `Car` is RSDL-706, an instance placed twice.
@@ -263,9 +270,10 @@ Per deployment:
 
 **What an error does.** An error in the closure blocks the lowering of every
 deployment, and the build writes nothing. An RSDL-7xx error — a placement
-problem, or a sizing value out of range (RSDL-709) — blocks its own deployment
-only: the build writes the package IR and the system without that deployment,
-and still exits 1.
+problem, a sizing value out of range (RSDL-709), an invalid `file` value
+(RSDL-710) or a descriptor file name that another deployment already takes
+(RSDL-711) — blocks its own deployment only: the build writes the package IR and
+the system without that deployment, and still exits 1.
 
 ## Comparing two systems
 

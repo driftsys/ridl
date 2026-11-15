@@ -334,11 +334,16 @@ deployment Production for Vehicle {
   declaration replaces the stem: `deployment Development [ file = "view-dev" ]`
   is written to `view-dev.deployment.binfb`. The value is a string of lowercase
   letters, digits, `.`, `_` and `-` that starts and ends with a letter or a
-  digit and holds no `..`, so every descriptor name is lowercase and stays in
-  the output directory; any other value, or the key written bare, is RSDL-710.
-  Two deployments whose stems are equal when case is ignored are RSDL-711,
-  reported on the later one; the rule is case-blind because macOS and Windows
-  file systems are. Both codes block their own deployment only (§13).
+  digit, holds no `..` and whose part before the first `.` is not a Windows
+  reserved device name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to
+  `lpt9`), so a `file` value is lowercase, stays in the output directory and is
+  a valid file name on Windows; any other value, or the key written bare, is
+  RSDL-710. The default stem is lowercase and built from the package and
+  declaration names; it gets no reserved-name check. A deployment whose `file`
+  is RSDL-710 writes no descriptor and takes no part in RSDL-711. Two
+  deployments whose stems are equal when case is ignored are RSDL-711, reported
+  on the later one; the rule is case-blind because macOS and Windows file
+  systems are. Both codes block their own deployment only (§13).
 
 ### 3.5 `machine`
 
@@ -889,8 +894,9 @@ Coded `RSDL-`, same lifecycle rules as typl §16: codes are never renumbered, a
 retired code is kept in the table and never reused. Grouped by hundreds:
 
     3xx  component and instances       6xx  system and workspace
-    4xx  resolution                     7xx  deployment and machine — placement
-                                             and sizing values
+    4xx  resolution                     7xx  deployment and machine — placement,
+                                             sizing values and descriptor
+                                             file names
     5xx  services                       8xx  transport, posture, backend keys
                                              and sizing warnings
                                         9xx  distribution
