@@ -2595,7 +2595,8 @@ prints `Created workspace <name>`, and `ridl check` passes from the root and
 from inside the member.
 
 The name is the directory's basename when that is already a legal package name
-(lowercase dot-separated segments, each a letter followed by letters or digits).
+(lowercase dot-separated segments, each a letter followed by letters or digits,
+and a first segment that is not a Windows device name such as `con` or `com1`).
 The basename is taken from the path as written, so a symbolic link is not
 followed to find it. The command never rewrites a name: a basename that is not
 legal exits 2 with an error that asks for `--name`, and so does a `--name` value

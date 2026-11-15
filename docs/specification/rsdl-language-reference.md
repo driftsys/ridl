@@ -339,11 +339,12 @@ deployment Production for Vehicle {
   `lpt9`), so a `file` value is lowercase, stays in the output directory and is
   a valid file name on Windows; any other value, or the key written bare, is
   RSDL-710. The default stem is lowercase and built from the package and
-  declaration names; it gets no reserved-name check. A deployment whose `file`
-  is RSDL-710 writes no descriptor and takes no part in RSDL-711. Two
-  deployments whose stems are equal when case is ignored are RSDL-711, reported
-  on the later one; the rule is case-blind because macOS and Windows file
-  systems are. Both codes block their own deployment only (§13).
+  declaration names; it needs no reserved-name check, because a package name
+  whose first segment is a Windows reserved device name is MANI-006. A
+  deployment whose `file` is RSDL-710 writes no descriptor and takes no part in
+  RSDL-711. Two deployments whose stems are equal when case is ignored are
+  RSDL-711, reported on the later one; the rule is case-blind because macOS and
+  Windows file systems are. Both codes block their own deployment only (§13).
 
 ### 3.5 `machine`
 

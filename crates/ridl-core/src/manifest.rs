@@ -342,7 +342,7 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
                 file_id,
                 name_span.clone(),
                 format!(
-                    "invalid package name `{name}`; expected lowercase dot-separated segments (e.g. `veh.common`)"
+                    "invalid package name `{name}`; expected lowercase dot-separated segments (e.g. `veh.common`) whose first segment is not a Windows device name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`)"
                 ),
             ));
         }
@@ -1249,9 +1249,17 @@ fn check_table_keys(
 
 /// A package name is one or more lowercase dot-separated segments, each an ASCII
 /// lowercase letter followed by ASCII lowercase letters or digits (ADR-0002 §1).
-/// The empty string (a missing name) is invalid.
+/// The empty string (a missing name) is invalid, and so is a name whose first
+/// segment is a Windows reserved device name (`con`, `prn`, `aux`, `nul`,
+/// `com1` to `com9`, `lpt1` to `lpt9`): artifact file names start with the
+/// package name, and Windows opens the device for `con.anything`.
 pub fn is_valid_package_name(name: &str) -> bool {
-    !name.is_empty() && name.split('.').all(is_valid_name_segment)
+    !name.is_empty()
+        && name.split('.').all(is_valid_name_segment)
+        && !name
+            .split('.')
+            .next()
+            .is_some_and(ridl_ir::artifact::is_reserved_device_name)
 }
 
 fn is_valid_name_segment(segment: &str) -> bool {
@@ -1526,6 +1534,21 @@ x = 1
         let no_name = "[package]\nversion = \"1.0.0\"\n";
         let (_, no_name_diags) = parse(no_name);
         assert_eq!(codes(&no_name_diags), vec!["MANI-006"]);
+    }
+
+    #[test]
+    fn mani_006_rejects_a_windows_device_name_as_first_segment() {
+        for name in ["con", "nul.x", "com1.a", "lpt9", "prn", "aux.b.c", "com9"] {
+            assert!(!is_valid_package_name(name), "{name} must be rejected");
+            let text = format!("[package]\nname = \"{name}\"\nversion = \"1.0.0\"\n");
+            let (_, diags) = parse(&text);
+            assert_eq!(codes(&diags), vec!["MANI-006"], "{name}");
+        }
+        for name in [
+            "console", "com0", "com10", "x.con", "a.nul", "lpt0", "x.com1",
+        ] {
+            assert!(is_valid_package_name(name), "{name} must be accepted");
+        }
     }
 
     #[test]

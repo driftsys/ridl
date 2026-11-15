@@ -64,6 +64,13 @@ Amended 2026-11-09 by ADR-0030 decision 18: a `[limits.interaction]` value is
 valid from 0 to 65,280 for a member of any kind, so the sentence above about a
 member that is not a `fixed` no longer applies, and `ridlc` raises no MANI-022.
 
+Amended 2026-11-15 (driftsys/ridl#1394): §1's package name is also invalid
+(MANI-006) when its first segment is a Windows reserved device name: `con`,
+`prn`, `aux`, `nul`, `com1` to `com9` or `lpt1` to `lpt9`. Artifact file names
+start with the package name, and Windows opens the device for a file whose part
+before the first `.` is such a name. A segment after the first is not checked. A
+package that used such a name before this amendment must be renamed.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
