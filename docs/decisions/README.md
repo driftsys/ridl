@@ -698,6 +698,15 @@ other entry below is Accepted.
   [the codec table record](../design/ts-codec-table.md#stream-functions). Calls
   with two or more parameter streams remain outside the Rust face
   (driftsys/ridl#1224).
+- **ADR-0033 — Several systems in one workspace.** _Proposed._ RSDL-601 is
+  retired and a workspace may declare any number of systems in any package of
+  any unit; each `deployment` selects its system with `for`; `ridl build`,
+  `ridlc build` and `ridl diff` take `--system`, which a build needs (or a
+  `--deployment`) when the workspace has more than one system, and a missing or
+  unknown value is exit 2; `WorkspaceOutput` carries one lowered system per
+  system; `ridl diff` compares systems by qualified name and lists a system
+  added or removed; one `instances.lock` covers every system; E19.8 may write a
+  variant as a second system. A workspace with one system is unchanged.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
