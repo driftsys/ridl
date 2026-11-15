@@ -70,9 +70,12 @@ MANI-006. A name whose first segment is a Windows reserved device name is
 MANI-006 too: `con`, `prn`, `aux`, `nul`, `com1` to `com9` or `lpt1` to `lpt9`.
 Artifact file names start with the package name, and Windows opens the device
 for a file whose part before the first `.` is such a name. A segment after the
-first is not checked. The rule applies to the `[package]` name of a manifest and
-to the `package` declaration of a single source file built without a manifest. A
-package that used such a name before this amendment must be renamed.
+first is not checked. The rule applies to the `[package]` name of a manifest. In
+single-file mode, where a `package` declaration is not held to the shape rule,
+only the device-name clause applies to the declared name, and it ignores case
+because Windows does; the catalog file name is the one that starts with that
+package name. A package that used such a name before this amendment must be
+renamed.
 
 ## Context
 
