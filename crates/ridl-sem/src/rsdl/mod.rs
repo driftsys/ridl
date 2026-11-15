@@ -2136,8 +2136,8 @@ deployment Bench for Vehicle {
         assert_eq!(codes(&system), ["RSDL-708"]);
     }
 
-    /// rsdl §3.4: a deployment whose `file` is RSDL-710 writes no descriptor, so
-    /// RSDL-711 does not compare it, whichever of the two comes first.
+    /// rsdl §3.4: a deployment whose `file` is RSDL-710 has no known intended stem,
+    /// so RSDL-711 does not compare it, whichever of the two comes first.
     #[test]
     fn a_deployment_with_a_rejected_file_takes_no_part_in_an_rsdl_711_clash() {
         let machine = format!("{{ machine A {{ {SIZED_LINES} }} }}");
