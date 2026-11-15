@@ -330,11 +330,11 @@ An attribute key is an ordinary identifier outside its `[ ]` block: it does not
 enter the family keyword registry. Rationale: attributes are the family's
 designated cheap extension mechanism (§4.8); if every new key burned an
 identifier family-wide, extension would be expensive exactly where it should be
-cheap. `external`, `tier`, `instances`, `labels`, `deprecated`, `depth`, `slots`
-and `budget` are identifiers everywhere else. A key that is a reserved word is
-FORM-105: `init` stays reserved (it is rmdl's memory-seed keyword), so it cannot
-be a key. `require` and `ensure` are registry words because the expr core uses
-them beyond attribute position.
+cheap. `external`, `tier`, `instances`, `labels`, `deprecated`, `depth`,
+`slots`, `budget` and `file` are identifiers everywhere else. A key that is a
+reserved word is FORM-105: `init` stays reserved (it is rmdl's memory-seed
+keyword), so it cannot be a key. `require` and `ensure` are registry words
+because the expr core uses them beyond attribute position.
 
 ### 4.6 `persist` — not built
 

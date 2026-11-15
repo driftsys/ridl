@@ -270,9 +270,10 @@ Per deployment:
 
 **What an error does.** An error in the closure blocks the lowering of every
 deployment, and the build writes nothing. An RSDL-7xx error — a placement
-problem, or a sizing value out of range (RSDL-709) — blocks its own deployment
-only: the build writes the package IR and the system without that deployment,
-and still exits 1.
+problem, a sizing value out of range (RSDL-709), an invalid `file` value
+(RSDL-710) or a descriptor file name that another deployment already takes
+(RSDL-711) — blocks its own deployment only: the build writes the package IR and
+the system without that deployment, and still exits 1.
 
 ## Comparing two systems
 

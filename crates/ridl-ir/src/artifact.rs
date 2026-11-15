@@ -28,7 +28,9 @@ pub fn deployment_file_stem(package: &str, name: &str, file: Option<&str>) -> St
 /// letter or a digit, and with no `..`. The part before the first `.` is not a
 /// Windows reserved device name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`,
 /// `lpt1` to `lpt9`), because Windows opens the device for `con.anything` too.
-/// The rule keeps the name lowercase and inside the output directory.
+/// The rule applies to a `file` value only. The default stem
+/// ([`deployment_file_stem`]) is lowercase and built from the package and
+/// declaration names; it gets no reserved-name check.
 pub fn is_valid_file_stem(stem: &str) -> bool {
     let mut chars = stem.chars();
     let Some(first) = chars.next() else {
@@ -44,6 +46,7 @@ pub fn is_valid_file_stem(stem: &str) -> bool {
 
 /// Whether `name` is a Windows reserved device name, in lowercase.
 fn is_reserved_device_name(name: &str) -> bool {
+    // COM0 and LPT0 are not reserved in Microsoft's file-naming documentation.
     matches!(name, "con" | "prn" | "aux" | "nul")
         || ["com", "lpt"].iter().any(|prefix| {
             name.strip_prefix(prefix)
@@ -82,12 +85,15 @@ mod tests {
             "console",
             "com10",
             "nullx",
+            "com0",
+            "lpt0",
+            "x.con",
         ] {
             assert!(is_valid_file_stem(good), "`{good}` is valid");
         }
         for bad in [
             "", "View", "view dev", "../x", "a..b", ".hidden", "-x", "_x", "a/b", "a\\b", "é",
-            "a.", "a-", "a_", "viEw", "vieW", "con", "nul.x", "com1", "lpt9",
+            "a.", "a-", "a_", "viEw", "vieW", "con", "nul.x", "com1", "lpt9", "prn", "aux",
         ] {
             assert!(!is_valid_file_stem(bad), "`{bad}` is not valid");
         }

@@ -206,7 +206,7 @@ pub(super) fn read(
                 if value.is_none() && attribute.eq_token().is_some() => {}
             "file" => {
                 out.file = file_stem(value, site, reporter);
-                out.file_rejected = out.file.is_none();
+                out.file_rejected |= out.file.is_none();
             }
             "depth" | "slots" | "budget" => {
                 sizing_key(&key, value, site, reporter, &mut out.sizing);
@@ -354,8 +354,8 @@ fn file_stem(value: Option<ast::AttrValue>, site: Site, reporter: &mut Reporter)
             site,
             format!(
                 "`file` takes a string of lowercase letters, digits, `.`, `_` and `-` that starts \
-                 and ends with a letter or a digit, holds no `..` and does not start with a \
-                 Windows device name such as `con` or `nul` before its first `.`, written \
+                 and ends with a letter or a digit, holds no `..` and whose part before the \
+                 first `.` is not a Windows device name such as `con` or `nul`, written \
                  `file = \"<stem>\"`; {written} is not one (rsdl reference §3.4)"
             ),
         );

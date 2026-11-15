@@ -334,15 +334,16 @@ deployment Production for Vehicle {
   declaration replaces the stem: `deployment Development [ file = "view-dev" ]`
   is written to `view-dev.deployment.binfb`. The value is a string of lowercase
   letters, digits, `.`, `_` and `-` that starts and ends with a letter or a
-  digit, holds no `..` and does not start with a Windows reserved device name
-  (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`) before its
-  first `.`, so every descriptor name is lowercase, stays in the output
-  directory and is a valid file name on Windows; any other value, or the key
-  written bare, is RSDL-710. A deployment whose `file` is RSDL-710 writes no
-  descriptor and takes no part in RSDL-711. Two deployments whose stems are
-  equal when case is ignored are RSDL-711, reported on the later one; the rule
-  is case-blind because macOS and Windows file systems are. Both codes block
-  their own deployment only (§13).
+  digit, holds no `..` and whose part before the first `.` is not a Windows
+  reserved device name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to
+  `lpt9`), so a `file` value is lowercase, stays in the output directory and is
+  a valid file name on Windows; any other value, or the key written bare, is
+  RSDL-710. The default stem is lowercase and built from the package and
+  declaration names; it gets no reserved-name check. A deployment whose `file`
+  is RSDL-710 writes no descriptor and takes no part in RSDL-711. Two
+  deployments whose stems are equal when case is ignored are RSDL-711, reported
+  on the later one; the rule is case-blind because macOS and Windows file
+  systems are. Both codes block their own deployment only (§13).
 
 ### 3.5 `machine`
 

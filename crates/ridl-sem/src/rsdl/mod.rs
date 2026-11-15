@@ -493,8 +493,9 @@ pub struct DeploymentDecl {
     /// when the declaration writes a valid one. `None` means the default stem
     /// (`ridl_ir::artifact::deployment_file_stem`).
     pub file: Option<String>,
-    /// Whether the declaration wrote a `file` key that RSDL-710 rejected. Such a
-    /// deployment's descriptor is never written, so RSDL-711 does not compare it.
+    /// Whether the declaration wrote a `file` key that RSDL-710 rejected. The
+    /// intended stem of such a deployment is unknown, so RSDL-711 does not
+    /// compare it.
     pub file_rejected: bool,
     /// Whether an RSDL-7xx error was raised while reading the declaration's
     /// attribute blocks — RSDL-709 or RSDL-710 on the deployment, or RSDL-709
@@ -2067,8 +2068,8 @@ deployment Bench for Vehicle {
                 system.diagnostics[0].message,
                 format!(
                     "`file` takes a string of lowercase letters, digits, `.`, `_` and `-` that \
-                     starts and ends with a letter or a digit, holds no `..` and does not start \
-                     with a Windows device name such as `con` or `nul` before its first `.`, \
+                     starts and ends with a letter or a digit, holds no `..` and whose part before \
+                     the first `.` is not a Windows device name such as `con` or `nul`, \
                      written `file = \"<stem>\"`; {written} is not one (rsdl reference §3.4)"
                 ),
                 "`{attribute}`"
@@ -2146,6 +2147,23 @@ deployment Bench for Vehicle {
             let text = format!("{SIZED}{first} {machine}\n{second} {machine}\n");
             let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
             assert_eq!(codes(&system), ["RSDL-710"], "`{first}` then `{second}`");
+        }
+    }
+
+    /// RSDL-711 skips a deployment whose `file` RSDL-710 rejected, not one that
+    /// has another RSDL-7xx error: a deployment with `slots = 0` still holds its
+    /// default stem.
+    #[test]
+    fn a_deployment_with_another_error_still_joins_an_rsdl_711_clash() {
+        let machine = format!("{{ machine A {{ {SIZED_LINES} }} }}");
+        let sized = "deployment Bench for Vehicle [ slots = 0 ]";
+        let named = "deployment Lab for Vehicle [ file = \"veh.topology.bench\" ]";
+        for (first, second) in [(sized, named), (named, sized)] {
+            let text = format!("{SIZED}{first} {machine}\n{second} {machine}\n");
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            let mut found = codes(&system);
+            found.sort_unstable();
+            assert_eq!(found, ["RSDL-709", "RSDL-711"], "`{first}` then `{second}`");
         }
     }
 
