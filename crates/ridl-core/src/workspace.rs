@@ -1614,6 +1614,26 @@ impl Loader {
             // A non-UTF8 file: the diagnostic is recorded, nothing loads.
             return Ok(());
         };
+        // A manifest checks its package name (MANI-006); a bare file has no
+        // manifest, so the one part of that rule that decides an artifact
+        // file name is checked on the declaration. Artifact names start with
+        // the package name, and Windows opens a device for `con.anything`.
+        if let Some((declared, range)) = decls.first()
+            && !declared.is_empty()
+            && ridl_ir::artifact::is_reserved_device_name(
+                declared.split('.').next().unwrap_or(declared),
+            )
+        {
+            let file_id = self.sources.file_id(input.path(&*db), "");
+            self.diagnostics.push(error(
+                DiagCode::MANI_006,
+                file_id,
+                *range,
+                format!(
+                    "invalid package name `{declared}`; the first segment is a Windows device name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`), which would make every artifact file name reserved on Windows"
+                ),
+            ));
+        }
         let name = decls
             .first()
             .map(|(name, _)| name.clone())

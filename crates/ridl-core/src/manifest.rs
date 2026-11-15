@@ -1544,6 +1544,12 @@ x = 1
             let (_, diags) = parse(&text);
             assert_eq!(codes(&diags), vec!["MANI-006"], "{name}");
         }
+        let (_, diags) = parse("[package]\nname = \"con.x\"\nversion = \"1.0.0\"\n");
+        assert!(
+            diags[0].message.contains("not a Windows device name"),
+            "{}",
+            diags[0].message
+        );
         for name in [
             "console", "com0", "com10", "x.con", "a.nul", "lpt0", "x.com1",
         ] {

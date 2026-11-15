@@ -2596,14 +2596,15 @@ from inside the member.
 
 The name is the directory's basename when that is already a legal package name
 (lowercase dot-separated segments, each a letter followed by letters or digits,
-and a first segment that is not a Windows device name such as `con` or `com1`).
-The basename is taken from the path as written, so a symbolic link is not
-followed to find it. The command never rewrites a name: a basename that is not
-legal exits 2 with an error that asks for `--name`, and so does a `--name` value
-that is not legal. A name with a reserved word as a segment, such as `type` or
-`veh.signal`, is also refused, because a source file that declares it does not
-parse. With `--workspace`, `--name` names the member and the root directory
-keeps its own name.
+and a first segment that is not a Windows device name such as `con` or `com1`;
+the same rule covers the `package` declaration of a single file built with
+`ridl build`). The basename is taken from the path as written, so a symbolic
+link is not followed to find it. The command never rewrites a name: a basename
+that is not legal exits 2 with an error that asks for `--name`, and so does a
+`--name` value that is not legal. A name with a reserved word as a segment, such
+as `type` or `veh.signal`, is also refused, because a source file that declares
+it does not parse. With `--workspace`, `--name` names the member and the root
+directory keeps its own name.
 
 **Exit codes.** 0 when the files are written. 2, with an `error:` line on stderr
 and nothing written, when a target file already exists, the path is not a

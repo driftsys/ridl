@@ -1484,8 +1484,9 @@ diag_codes! {
         MANI_005 = "MANI-005", Warning,
             "unknown manifest key", lint = "unknown-manifest-key";
 
-        /// The package name is not lowercase dot-separated segments, or its first
-        /// segment is a Windows device name (ADR-0002 §1).
+        /// The package name is not lowercase dot-separated segments (each
+        /// `[a-z][a-z0-9]*`), or its first segment is a Windows device name
+        /// (ADR-0002 §1).
         MANI_006 = "MANI-006", Error,
             "invalid package name";
 
