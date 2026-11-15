@@ -322,6 +322,7 @@ fn deployment_decl(
         attrs: read.attrs,
         sizing: read.sizing,
         file: read.file,
+        file_rejected: read.file_rejected,
         has_errors,
         doc: docs::scan(&decl.doc_comments()),
         links: Vec::new(),

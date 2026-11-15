@@ -13,7 +13,7 @@
 //! rsdl §13 blocks lowering for one deployment on an RSDL-7xx error and for
 //! every deployment on any other. [`DeploymentPlacement::has_errors`] records
 //! the first kind per deployment — raised here, or by the attribute reader
-//! (RSDL-709, carried in `DeploymentDecl::has_errors`) — and also a deployment
+//! (RSDL-709 or RSDL-710, carried in `DeploymentDecl::has_errors`) — and also a deployment
 //! whose closure was never placed even though no RSDL-7xx error was raised for
 //! it; `CheckedSystem::closure_has_errors` records the second.
 
@@ -91,10 +91,15 @@ pub(super) fn place(
                     first.name.name
                 ),
             );
-        } else {
+        } else if !deployment.file_rejected {
+            // A deployment whose `file` RSDL-710 rejected writes no descriptor,
+            // so it neither clashes nor is clashed with. Other errors do not
+            // skip the comparison: such a deployment is blocked, but its
+            // default stem is still the name it would take.
             let stem = file_stem(deployment);
             if let Some(first) = system.deployments[..index].iter().find(|earlier| {
-                earlier.name.name != deployment.name.name
+                !earlier.file_rejected
+                    && earlier.name.name != deployment.name.name
                     && file_stem(earlier).eq_ignore_ascii_case(&stem)
             }) {
                 check.error(

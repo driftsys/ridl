@@ -1357,8 +1357,10 @@ diag_codes! {
              range, or the key is written bare";
 
         /// A `file` value that is not a string of lowercase letters, digits,
-        /// `.`, `_` and `-` starting with a letter or a digit and holding no
-        /// `..`, or the key written bare (rsdl §3.4, §16.1). Error, scoped to
+        /// `.`, `_` and `-` starting and ending with a letter or a digit,
+        /// holding no `..` and not starting with a Windows reserved device name
+        /// (`con`, `prn`, `aux`, `nul`, `com1` to `com9`, `lpt1` to `lpt9`)
+        /// before its first `.`, or the key written bare (rsdl §3.4, §16.1). Error, scoped to
         /// its deployment (rsdl §13). Raised by the rsdl attribute reader.
         RSDL_710 = "RSDL-710", Error,
             "a `file` value that is not a lowercase file stem, or the key is written bare";

@@ -25,8 +25,10 @@ pub fn deployment_file_stem(package: &str, name: &str, file: Option<&str>) -> St
 
 /// Whether `stem` is a valid value of the `file` attribute (RSDL-710): one or
 /// more of `a`–`z`, `0`–`9`, `.`, `_` and `-`, starting and ending with a
-/// letter or a digit, and with no `..`. The rule keeps the name lowercase and
-/// inside the output directory.
+/// letter or a digit, and with no `..`. The part before the first `.` is not a
+/// Windows reserved device name (`con`, `prn`, `aux`, `nul`, `com1` to `com9`,
+/// `lpt1` to `lpt9`), because Windows opens the device for `con.anything` too.
+/// The rule keeps the name lowercase and inside the output directory.
 pub fn is_valid_file_stem(stem: &str) -> bool {
     let mut chars = stem.chars();
     let Some(first) = chars.next() else {
@@ -37,6 +39,16 @@ pub fn is_valid_file_stem(stem: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-'))
         && stem.ends_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit())
         && !stem.contains("..")
+        && !is_reserved_device_name(stem.split('.').next().unwrap_or(stem))
+}
+
+/// Whether `name` is a Windows reserved device name, in lowercase.
+fn is_reserved_device_name(name: &str) -> bool {
+    matches!(name, "con" | "prn" | "aux" | "nul")
+        || ["com", "lpt"].iter().any(|prefix| {
+            name.strip_prefix(prefix)
+                .is_some_and(|rest| matches!(rest.as_bytes(), [b'1'..=b'9']))
+        })
 }
 
 #[cfg(test)]
@@ -61,12 +73,21 @@ mod tests {
 
     #[test]
     fn a_valid_stem_is_lowercase_and_stays_in_the_directory() {
-        for good in ["view-dev", "a", "0", "veh.cabin.bench", "a_b-c.9"] {
+        for good in [
+            "view-dev",
+            "a",
+            "0",
+            "veh.cabin.bench",
+            "a_b-c.9",
+            "console",
+            "com10",
+            "nullx",
+        ] {
             assert!(is_valid_file_stem(good), "`{good}` is valid");
         }
         for bad in [
             "", "View", "view dev", "../x", "a..b", ".hidden", "-x", "_x", "a/b", "a\\b", "é",
-            "a.", "a-", "a_",
+            "a.", "a-", "a_", "viEw", "vieW", "con", "nul.x", "com1", "lpt9",
         ] {
             assert!(!is_valid_file_stem(bad), "`{bad}` is not valid");
         }

@@ -282,16 +282,17 @@ own it.
 
 As built, the registry holds `require` and `ensure` (ridl), `instances`,
 `external`, `tier`, `labels`, `deprecated`, the sizing keys `depth`, `slots` and
-`budget` (rsdl), and the backend pattern `namespace.key` (a backend that claims
-the namespace through `[backend.<name>]` in the manifest, ADR-0012 decision 8).
-Their placement:
+`budget`, and `file` (rsdl), and the backend pattern `namespace.key` (a backend
+that claims the namespace through `[backend.<name>]` in the manifest, ADR-0012
+decision 8). Their placement:
 
 - `require` is legal on `command` and `query` only; `ensure` on `query` only. A
   `signal`, an `event` and a `fixed` take no attribute (RIDL-301 for a predicate
   on a signal or event, RIDL-106 for any attribute block on a `fixed`).
 - `labels` and `deprecated` are legal on the rsdl declarations only.
 - `instances`, `external` and `tier` are legal on the rsdl declaration their row
-  names; the sizing keys on a `deployment` and a placement line.
+  names; the sizing keys on a `deployment` and a placement line; `file` on a
+  `deployment` only.
 
 **Not attribute keys.** `default`, `init`, `persist` and `invariant` are not
 keys: they have no machine consumer, so by §4.1 they are not attributes, and
