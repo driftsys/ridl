@@ -398,6 +398,8 @@ TYPL-009.
 | family overview §5, §6                                                              | decision ledger row; rsdl §17 item 8 answered                                                              |
 | ADR-0015 decisions 12, 14, 15, 16                                                   | dated amendment notes                                                                                      |
 | ADR-0008 decisions 6, 13, 21, Consequences                                          | dated note: RIDL-142 minted, RIDL-140 retired                                                              |
+| ADR-0022 decision 4                                                                 | dated note: no case rule for the implicit component; an inline shape and an interface cannot share a name  |
+| ADR-0016 decision 8                                                                 | dated note: the service catalog is not a flat global namespace                                             |
 | the book: getting started, rsdl, CLI reference, documenting, stability              | the new form in every example; a migration section in the stability chapter                                |
 
 ## References
