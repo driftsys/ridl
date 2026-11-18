@@ -186,10 +186,9 @@ const ALLOWED: &[Allowed] = &[
     Allowed {
         path: "crates/ridl-core/src/package.rs",
         lines: 1,
-        why: "`package_names` collects the names a type reference can bind to. \
-              Services are omitted on purpose: a service is not a type. \
-              Services share the package declaration namespace and the \
-              resolver rejects a service/type name collision with TYPL-009",
+        why: "`package_names` collects every declaration name of the \
+              package, a service's declared name included, so that a local \
+              declaration shadows an import of the same name",
     },
     Allowed {
         path: "crates/ridl-descriptor/src/generated.rs",
