@@ -1,5 +1,5 @@
 // Containers left without a name: an interface, a service in each of its two
-// forms. A service is published at its dotted global name, so the empty
+// forms. A service is published at its global name, so the empty
 // address must not reach the catalog.
 
 package app

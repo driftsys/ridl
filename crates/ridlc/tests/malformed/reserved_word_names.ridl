@@ -21,7 +21,7 @@ interface Shape {
   signal survivor : Speed @10ms
 }
 
-service veh.a.b {
+service VehAB {
   signal states : Speed @10ms
   signal survivor : Speed @10ms
 }

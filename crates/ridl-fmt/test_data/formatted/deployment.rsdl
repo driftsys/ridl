@@ -4,7 +4,7 @@ deployment Production for Vehicle {
   machine AdasHpc [ labels = (ASIL_B) ] {
     Cruise.primary
     Lane
-    veh.diag.access
+    veh.diag.Access
   }
   machine Cockpit {
     Cruise.backup

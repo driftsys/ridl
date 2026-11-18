@@ -54,6 +54,12 @@ pub enum Item<'a> {
     Service(&'a v2::Service),
 }
 impl Item<'_> {
+    pub fn canonical_name(&self, package: &str) -> String {
+        match self {
+            Self::Service(service) => service.name.clone(),
+            _ => format!("{package}.{}", self.name()),
+        }
+    }
     pub fn name(&self) -> &str {
         match self {
             Self::Decl(d) => &d.name,
@@ -115,12 +121,17 @@ pub fn packages(snap: &Snapshot) -> String {
     names.join(", ")
 }
 fn declarations(package: &v2::Package) -> impl Iterator<Item = Item<'_>> {
-    package.decls.iter().map(Item::Decl).chain(
-        package
-            .shapes()
-            .filter(|shape| !shape.is_inline())
-            .map(|shape| Item::Interface(shape.interface)),
-    )
+    package
+        .decls
+        .iter()
+        .map(Item::Decl)
+        .chain(
+            package
+                .shapes()
+                .filter(|shape| !shape.is_inline())
+                .map(|shape| Item::Interface(shape.interface)),
+        )
+        .chain(package.services.iter().map(Item::Service))
 }
 fn in_package<'a>(snap: &'a Snapshot, package: &str, name: &str) -> Option<Found<'a>> {
     let (ir, resolution) = if package == "ridl.std" {
@@ -136,7 +147,10 @@ fn in_package<'a>(snap: &'a Snapshot, package: &str, name: &str) -> Option<Found
             Some(&snap.output.resolutions[i]),
         )
     };
-    let item = declarations(ir).find(|i| i.name() == name)?;
+    let item = declarations(ir).find(|item| match item {
+        Item::Service(service) => service.name == format!("{package}.{name}"),
+        _ => item.name() == name,
+    })?;
     let symbol = resolution
         .and_then(|r| r.symbols.get(name))
         .filter(|s| s.package == package);
@@ -154,7 +168,7 @@ fn unknown(snap: &Snapshot, name: &str) -> ToolError {
         .iter()
         .map(|c| &c.ir)
         .chain(std::iter::once(&snap.output.std_ir))
-        .flat_map(|p| declarations(p).map(|d| format!("{}.{}", p.name, d.name())))
+        .flat_map(|p| declarations(p).map(|d| d.canonical_name(&p.name)))
         .filter(|canonical| canonical.to_lowercase().contains(&name.to_lowercase()))
         .collect();
     suggestions.sort();
@@ -226,7 +240,7 @@ pub fn find<'a>(
     }
     let mut names: Vec<_> = matches
         .iter()
-        .map(|f| format!("{}.{}", f.package, f.item.name()))
+        .map(|f| f.item.canonical_name(&f.package))
         .collect();
     names.sort();
     Err(ToolError::Request(format!(
@@ -258,10 +272,13 @@ pub fn resolve(snap: &Snapshot, input: &NameInput) -> Result<ResolveOutput, Tool
             },
             d.visibility,
         ),
-        Item::Service(_) => unreachable!("find does not return services"),
+        Item::Service(_) => ("service", v2::Visibility::Public as i32),
     };
     Ok(ResolveOutput {
-        name: found.item.name().into(),
+        name: found.symbol.map_or_else(
+            || found.item.name().to_string(),
+            |symbol| symbol.name.clone(),
+        ),
         package: found.package.clone(),
         kind: kind.into(),
         visibility: if visibility == v2::Visibility::Internal as i32 {
@@ -279,8 +296,13 @@ pub fn describe_type(snap: &Snapshot, input: &NameInput) -> Result<DescribeOutpu
     let found = find(snap, &input.name, input.from.as_deref())?;
     let Item::Decl(decl) = found.item else {
         return Err(ToolError::Request(format!(
-            "`{}` is an interface; use ridl_list_interactions",
-            input.name
+            "`{}` is {}; use ridl_list_interactions",
+            input.name,
+            if matches!(found.item, Item::Service(_)) {
+                "a service"
+            } else {
+                "an interface"
+            }
         )));
     };
     Ok(DescribeOutput {
@@ -295,19 +317,54 @@ pub fn list_interactions(
     input: &NameInput,
 ) -> Result<InteractionsOutput, ToolError> {
     let found = find(snap, &input.name, input.from.as_deref())?;
-    let Item::Interface(interface) = found.item else {
-        return Err(ToolError::Request(format!(
-            "`{}` is not an interface; use ridl_describe_type",
-            input.name
-        )));
+    let interface = match found.item {
+        Item::Interface(interface) => interface,
+        Item::Service(service) => {
+            if let Some(interface) = service.shapes.iter().find_map(|shape| match &shape.kind {
+                Some(v2::service_shape::Kind::Inline(interface)) => Some(interface),
+                _ => None,
+            }) {
+                interface
+            } else {
+                let names: Vec<_> = service
+                    .shapes
+                    .iter()
+                    .filter_map(|shape| match &shape.kind {
+                        Some(v2::service_shape::Kind::InterfaceRef(name)) => {
+                            Some(if name.contains('.') {
+                                name.clone()
+                            } else {
+                                format!("{}.{}", found.package, name)
+                            })
+                        }
+                        _ => None,
+                    })
+                    .collect();
+                return Err(ToolError::Request(format!(
+                    "`{}` is a list-form service; use ridl_list_interactions on its interfaces: {}",
+                    input.name,
+                    names.join(", ")
+                )));
+            }
+        }
+        Item::Decl(_) => {
+            return Err(ToolError::Request(format!(
+                "`{}` is not an interface; use ridl_describe_type",
+                input.name
+            )));
+        }
+    };
+    let (doc, labels, deprecated) = match found.item {
+        Item::Service(service) => (&service.doc, &service.labels, &service.deprecated),
+        _ => (&interface.doc, &interface.labels, &interface.deprecated),
     };
     Ok(InteractionsOutput {
         interface: InterfaceHeader {
-            name: interface.name.clone(),
+            name: found.item.name().to_string(),
             package: found.package.clone(),
-            doc: interface.doc.clone(),
-            labels: interface.labels.clone(),
-            deprecated: interface.deprecated.clone(),
+            doc: doc.clone(),
+            labels: labels.clone(),
+            deprecated: deprecated.clone(),
             number: interface.number,
             provisional: interface.provisional,
         },
@@ -341,6 +398,136 @@ mod tests {
             _ => panic!("request error"),
         }
     }
+    #[test]
+    fn service_aliases_and_ambiguity_preserve_canonical_names() {
+        let copy = crate::snapshot::tests::TempWorkspace::copy("ws");
+        std::fs::write(
+            copy.0.join("ridl.toml"),
+            "[workspace]\nmembers = [\"a\", \"b\", \"c\"]\n",
+        )
+        .unwrap();
+        std::fs::create_dir(copy.0.join("c")).unwrap();
+        std::fs::write(
+            copy.0.join("c/ridl.toml"),
+            "[package]\nname = \"fx.c\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            copy.0.join("c/c.ridl"),
+            "package fx.c\nimport fx.b.Diag as FaultAccess\nservice Diag {}\n",
+        )
+        .unwrap();
+        let snap = snapshot(copy.0.to_str().unwrap(), &[]).unwrap();
+        assert_eq!(snap.status().errors, 0);
+        let out = resolve(&snap, &input("FaultAccess", Some("fx.c"))).unwrap();
+        assert_eq!(out.name, "Diag");
+        assert_eq!(out.alias.as_deref(), Some("FaultAccess"));
+        assert_eq!(out.package, "fx.b");
+        let interactions = list_interactions(&snap, &input("FaultAccess", Some("fx.c"))).unwrap();
+        assert_eq!(interactions.interactions[0]["name"], "readSpeed");
+        let error = message(resolve(&snap, &input("Diag", None)).unwrap_err());
+        assert_eq!(
+            error,
+            "`Diag` is ambiguous: fx.b.Diag, fx.c.Diag; pass `pkg.Name` or `from` to choose one"
+        );
+    }
+
+    #[test]
+    fn list_service_errors_name_interfaces_in_the_declaring_package() {
+        let path = format!("{}/a/a.ridl", fixture("ws"));
+        let source = std::fs::read_to_string(&path).unwrap() + "\ninterface Status {}\n";
+        let snap = snapshot(
+            &fixture("ws"),
+            &[crate::types::OverlayInput { path, source }],
+        )
+        .unwrap();
+        assert_eq!(snap.status().errors, 0);
+        let error = message(
+            list_interactions(&snap, &input("fx.b.StatusService", Some("fx.a"))).unwrap_err(),
+        );
+        assert!(error.ends_with("interfaces: fx.b.Status"), "{error}");
+        let suggested = error.rsplit_once("interfaces: ").unwrap().1;
+        let out = list_interactions(&snap, &input(suggested, Some("fx.a"))).unwrap();
+        assert_eq!(out.interface.package, "fx.b");
+        assert_eq!(out.interactions.len(), 5);
+    }
+
+    #[test]
+    fn inline_service_header_keeps_service_documentation() {
+        let path = format!("{}/b/b.ridl", fixture("ws"));
+        let source = std::fs::read_to_string(&path).unwrap().replace("service Diag", "/// Diagnostic access.\n/// @labels PRIVATE\n/// @deprecated \"Use the replacement.\"\nservice Diag");
+        let snap = snapshot(
+            &fixture("ws"),
+            &[crate::types::OverlayInput { path, source }],
+        )
+        .unwrap();
+        assert_eq!(snap.status().errors, 0);
+        let header = list_interactions(&snap, &input("Diag", None))
+            .unwrap()
+            .interface;
+        assert_eq!(header.doc, "Diagnostic access.");
+        assert_eq!(header.labels, ["PRIVATE"]);
+        assert_eq!(header.deprecated.as_deref(), Some("Use the replacement."));
+        assert!(header.number > 0);
+        assert!(header.provisional);
+    }
+
+    #[test]
+    fn services_resolve_by_declared_name_and_package_join() {
+        let snap = snap();
+        for (name, from) in [
+            ("StatusService", None),
+            ("fx.b.StatusService", None),
+            ("StatusService", Some("fx.b")),
+            ("Diag", Some("fx.b")),
+        ] {
+            let out = resolve(&snap, &input(name, from)).unwrap();
+            assert_eq!(out.kind, "service");
+            assert_eq!(out.package, "fx.b");
+            assert_eq!(out.visibility, "public");
+            let declared = if name == "Diag" {
+                "Diag"
+            } else {
+                "StatusService"
+            };
+            assert_eq!(out.name, declared);
+            assert_eq!(
+                serde_json::to_value(out.location).unwrap(),
+                crate::snapshot::tests::name_location(
+                    "b/b.ridl",
+                    &format!("service {declared}"),
+                    declared
+                )
+            );
+        }
+        let error = message(resolve(&snap, &input("statusservice", None)).unwrap_err());
+        assert!(error.contains("fx.b.StatusService"), "{error}");
+        assert!(!error.contains("fx.b.fx.b"), "{error}");
+    }
+
+    #[test]
+    fn inline_service_lists_interactions_and_list_service_names_its_interfaces() {
+        let snap = snap();
+        for (name, from) in [("fx.b.Diag", None), ("Diag", Some("fx.b"))] {
+            let out = list_interactions(&snap, &input(name, from)).unwrap();
+            let header = &out.interface;
+            assert_eq!(header.name, "fx.b.Diag");
+            assert_eq!(header.package, "fx.b");
+            assert_eq!(out.interactions.len(), 1);
+            assert_eq!(out.interactions[0]["name"], "readSpeed");
+            assert!(out.interactions[0].get("queryDef").is_some());
+            assert!(out.location.is_some());
+        }
+        let error = message(list_interactions(&snap, &input("StatusService", None)).unwrap_err());
+        assert!(error.contains("list-form service"), "{error}");
+        assert!(error.contains("Status"), "{error}");
+        for name in ["StatusService", "Diag"] {
+            let error = message(describe_type(&snap, &input(name, None)).unwrap_err());
+            assert!(error.contains("service"), "{error}");
+            assert!(error.contains("ridl_list_interactions"), "{error}");
+        }
+    }
+
     #[test]
     fn an_unknown_name_with_no_close_match() {
         let error = resolve(&snap(), &input("Zzzqqq", None)).err().unwrap();

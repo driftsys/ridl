@@ -4,12 +4,12 @@ import veh.climate.Seats
 
 /// Runs the climate loop. Two copies, one per zone controller.
 component ClimateControl [ instances = (front, rear) ] {
-  offers veh.climate.control
+  offers veh.climate.Control
   requires Seats
 }
 
 component SeatHeating {
-  offers veh.climate.seats
+  offers veh.climate.SeatsService
 }
 
 component Dashboard {
@@ -20,7 +20,7 @@ component Dashboard {
 /// The phone app. No implementation in this workspace.
 component PhoneApp [ external ] {
   requires Climate
-  requires veh.climate.diag
+  requires veh.climate.Diag
 }
 
 system Cabin {
@@ -28,5 +28,5 @@ system Cabin {
   SeatHeating
   Dashboard
   PhoneApp
-  veh.climate.diag
+  veh.climate.Diag
 }

@@ -31,6 +31,11 @@ the `unit` of the interface's IR package, and its interface names are catalog
 names (`cluster.SpeedDisplay`), so a unit with several source packages has one
 region.
 
+Amended 2026-11-18 by [ADR-0034](ADR-0034-service-declaration-names.md)
+decisions 2 and 8: decision 4 no longer tells an implicit component from a
+declared one by case, and a service and an interface of one package cannot share
+a name (see the note under decision 4).
+
 It does not restate the rsdl language reference: §13 lists the facts the
 lowering produces and §14 states the headings: placement changed and composition
 changed carry no verdict, and instance number changed is breaking. This record
@@ -140,6 +145,15 @@ nothing.
    `service:` prefix. A body line of a `system` or a `distribution` is a
    `MemberLine`, not a `Member`: in ridl a member is one typed interaction of an
    interface.
+
+   **Amendment (2026-11-18, ADR-0034 decisions 2 and 8).** A service is declared
+   with one `CamelCase` name, so the implicit component of a service is named by
+   the service's global name, `pkg.Name`, as a declared component is, and case
+   no longer tells the two apart: `Component.implicit` does. A service is a
+   symbol of its package, so an inline shape and an interface of one package
+   cannot share a name (TYPL-009). The `inline` flag on `InterfaceRef` and
+   `RegionInterface` stays, with the lock's `service:` prefix, because it tells
+   an inline shape from a declared interface without a lookup.
 
 5. **The routing key is (catalog, interface number, member ordinal), and a
    `reserved` tombstone has no route.** ridl §11 counts a tombstone in the

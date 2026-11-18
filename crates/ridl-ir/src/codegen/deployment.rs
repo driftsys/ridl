@@ -358,7 +358,7 @@ fn inline_of(system: &v2::System, route: &v2::Route) -> bool {
 ///
 /// The interface is found in the package the route names as its catalog, by
 /// its identity name alone — the interface's own name, or the owning
-/// service's dotted name for an inline shape. That name is unique within a
+/// service's global name for an inline shape. That name is unique within a
 /// catalog, so it is the whole key. The interface number is deliberately not
 /// part of it: a package set whose numbers differ from the lowered system's,
 /// which a stale or differently locked package gives, would then match
@@ -483,7 +483,7 @@ mod tests {
 
     const CATALOG: &str = "veh.cabin";
     const INTERFACE: &str = "Climate";
-    const SERVICE: &str = "veh.cabin.climate";
+    const SERVICE: &str = "veh.cabin.Climate";
     const PROVIDER: &str = "veh.cabin.Provider";
     const DASH: &str = "veh.cabin.Dash";
     const LOGGER: &str = "veh.cabin.Logger";
@@ -2009,10 +2009,10 @@ mod tests {
     }
 
     #[test]
-    fn an_inline_service_shape_is_matched_by_its_dotted_name() {
+    fn an_inline_service_shape_is_matched_by_its_global_name() {
         // The interface moves into the service's inline shape, where
         // `Interface.name` is empty and the identity name is the service's
-        // dotted name (ridl §14.5).
+        // global name (ridl §14.5).
         let mut package = package();
         let mut interface = package.interfaces.remove(0);
         interface.name = String::new();
@@ -2068,7 +2068,7 @@ mod tests {
     // cannot show that a channel lists the links of its own interface only.
 
     const HORN: &str = "Horn";
-    const HORN_SERVICE: &str = "veh.cabin.horn";
+    const HORN_SERVICE: &str = "veh.cabin.Horn";
     const PANEL: &str = "veh.cabin.Panel";
     const TELEMETRY: &str = "veh.cabin.Telemetry";
     /// The ordinal of `Climate.setLevel`, the command member of the
@@ -2765,7 +2765,7 @@ mod tests {
                     inline: true,
                     number: 1,
                     provisional: false,
-                    service: "veh.aaa.climate".to_string(),
+                    service: "veh.aaa.Climate".to_string(),
                 }],
                 hash: vec![9; 32],
             },
@@ -2789,7 +2789,7 @@ mod tests {
     fn what_an_instance_offers_is_in_region_order_then_interface_number_order() {
         const AUX: &str = "Aux";
         const AUX_CATALOG: &str = "veh.zzz";
-        const AUX_SERVICE: &str = "veh.zzz.aux";
+        const AUX_SERVICE: &str = "veh.zzz.Aux";
 
         let package = two_interface_package();
         let mut system = two_interface_system();

@@ -212,13 +212,15 @@ mod tests {
         system
     }
 
-    /// Two lone services whose names differ by a trailing `.x`: the key text
-    /// `veh.cruise.x/Unit` is below `veh.cruise/Unit`.
+    /// Two lone services where one name is the start of the other: the key
+    /// text `veh.topology.Cruise/Unit` is below `veh.topology.CruiseX/Unit`,
+    /// because `/` sorts before every letter.
     fn two_lone_services() -> CheckedSystem {
         let services = "package veh.topology\n\
-                        service veh.cruise { signal a: boolean @[100ms..1s] }\n\
-                        service veh.cruise.x { signal b: boolean @[100ms..1s] }\n";
-        let system = "package veh.topology\nsystem S { veh.cruise, veh.cruise.x }\n";
+                        service Cruise { signal a: boolean @[100ms..1s] }\n\
+                        service CruiseX { signal b: boolean @[100ms..1s] }\n";
+        let system =
+            "package veh.topology\nsystem S { veh.topology.CruiseX, veh.topology.Cruise }\n";
         let system = check_topology(&[
             ("veh/topology/services.ridl", services),
             ("veh/topology/system.rsdl", system),
@@ -230,7 +232,7 @@ mod tests {
     /// `SIZED_CLOSURE` with a `system` member that names nothing (RSDL-602).
     fn closure_with_an_error() -> CheckedSystem {
         let text = SIZED_CLOSURE.replace(
-            "{ Lane, Panel, Backend, Pair, veh.diag.access }",
+            "{ Lane, Panel, Backend, Pair, veh.diag.FaultAccess }",
             "{ Lane, Missing }",
         );
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
@@ -267,7 +269,7 @@ mod tests {
                 .map(|(k, n, _)| (k.as_str(), *n))
                 .collect::<Vec<_>>(),
             [
-                ("veh.diag.access/Unit", 1),
+                ("veh.diag.FaultAccess/Unit", 1),
                 ("veh.topology.Backend/Unit", 2),
                 ("veh.topology.Lane/Unit", 3),
                 ("veh.topology.Pair/backup", 4),
@@ -287,7 +289,10 @@ mod tests {
             numbering.numbers[&key("veh.topology.Pair/primary")],
             (4, false)
         );
-        assert_eq!(numbering.numbers[&key("veh.diag.access/Unit")], (10, true));
+        assert_eq!(
+            numbering.numbers[&key("veh.diag.FaultAccess/Unit")],
+            (10, true)
+        );
         assert_eq!(
             numbering.numbers[&key("veh.topology.Panel/Unit")],
             (14, true)
@@ -306,8 +311,8 @@ mod tests {
     #[test]
     fn the_provisional_order_is_the_key_text() {
         let numbering = number_instances(&two_lone_services(), None);
-        assert_eq!(numbering.numbers[&key("veh.cruise.x/Unit")].0, 1);
-        assert_eq!(numbering.numbers[&key("veh.cruise/Unit")].0, 2);
+        assert_eq!(numbering.numbers[&key("veh.topology.Cruise/Unit")].0, 1);
+        assert_eq!(numbering.numbers[&key("veh.topology.CruiseX/Unit")].0, 2);
     }
 
     #[test]

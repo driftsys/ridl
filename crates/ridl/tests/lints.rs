@@ -576,13 +576,13 @@ fn member_build_exits_1_when_another_member_leaves_out_a_deployment() {
         "demo/lane.ridl",
         "package veh.demo\n\ntype Flag: boolean\n\n\
          interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
-         service veh.demo.lane : LaneAssist\n",
+         service LaneService : LaneAssist\n",
     );
     // `Panel` is not placed in `Bad`: RSDL-701 blocks that deployment only.
     dir.write(
         "demo/topology.rsdl",
         "package veh.demo\n\n\
-         component Lane { offers veh.demo.lane }\n\
+         component Lane { offers LaneService }\n\
          component Panel { requires LaneAssist }\n\
          system Vehicle { Lane, Panel }\n\
          deployment Good for Vehicle { machine A { Lane, Panel } }\n\

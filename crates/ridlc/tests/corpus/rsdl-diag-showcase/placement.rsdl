@@ -16,7 +16,7 @@ deployment Road for Showcase [ slots = 0 ] {
   // RSDL-701 (§9): `Rear.Unit` is placed on no machine of `Road`.
 }
 
-// The consumer links of `rsdl.showcase.alerts` in `Bench` (attributes.rsdl).
+// The consumer links of `AlertsService` in `Bench` (attributes.rsdl).
 // RSDL-805, a warning (§5): `Dash [ depth = 2 ]` is below the contract bound
 // 10 of `Alerts.honked`; the declared value is the link's depth for the
 // half-open `Alerts.released` too, so `Dash` draws no RSDL-806.
@@ -24,7 +24,7 @@ deployment Road for Showcase [ slots = 0 ] {
 // and the depth of its link to the half-open `Alerts.released` cannot be
 // derived; its link to `Alerts.honked` takes the contract bound and draws
 // nothing. `Road` places both too, but an RSDL-7xx error blocks it (§13).
-component Siren { offers rsdl.showcase.alerts }
+component Siren { offers AlertsService }
 component Dash { requires Alerts }
 
 // RSDL-704 (§3.4): `Nowhere` names no declared system.

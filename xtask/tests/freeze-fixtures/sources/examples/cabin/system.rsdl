@@ -4,7 +4,7 @@ package veh.cabin
 system Vehicle { Climate, Panel, Telemetry }
 
 /// Provides the cabin's one service.
-component Climate   { offers veh.cabin.control }
+component Climate   { offers veh.cabin.Control }
 /// Consumes the cabin interface and the horn interface.
 component Panel     { requires Cabin
                       requires Horn }

@@ -153,7 +153,7 @@ mod tests {
                 "Cruise",
                 &[("primary", 1, false), ("backup", 2, false)],
             ),
-            ("", "veh.ego.status", &[("Unit", 3, true)]),
+            ("", "veh.ego.Status", &[("Unit", 3, true)]),
         ]))
         .unwrap()
         .rust_source;

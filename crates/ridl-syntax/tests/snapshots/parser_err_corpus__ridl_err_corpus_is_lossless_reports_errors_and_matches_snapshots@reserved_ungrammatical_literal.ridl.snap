@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_err_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/err/reserved_ungrammatical_literal.ridl
 ---
-SourceFile@0..567
+SourceFile@0..559
   LineComment@0..78 "// The tombstone gram ..."
   Whitespace@78..79 "\n"
   LineComment@79..157 "// cites typl §7.4), ..."
@@ -73,63 +73,59 @@ SourceFile@0..567
     Whitespace@437..438 "\n"
     RBrace@438..439 "}"
   Whitespace@439..441 "\n\n"
-  ServiceDef@441..566
+  ServiceDef@441..558
     ServiceKw@441..448 "service"
     Whitespace@448..449 " "
-    DottedName@449..463
-      Ident@449..452 "veh"
-      Dot@452..453 "."
-      Ident@453..456 "err"
-      Dot@456..457 "."
-      Ident@457..463 "status"
-    Whitespace@463..464 " "
-    LBrace@464..465 "{"
-    Whitespace@465..468 "\n  "
-    SignalDef@468..501
-      SignalKw@468..474 "signal"
-      Whitespace@474..475 " "
-      Name@475..487
-        Ident@475..487 "currentSpeed"
+    DottedName@449..455
+      Ident@449..455 "Status"
+    Whitespace@455..456 " "
+    LBrace@456..457 "{"
+    Whitespace@457..460 "\n  "
+    SignalDef@460..493
+      SignalKw@460..466 "signal"
+      Whitespace@466..467 " "
+      Name@467..479
+        Ident@467..479 "currentSpeed"
+      Whitespace@479..480 " "
+      Colon@480..481 ":"
+      Whitespace@481..482 " "
+      PathType@482..487
+        QualifiedName@482..487
+          Ident@482..487 "Speed"
       Whitespace@487..488 " "
-      Colon@488..489 ":"
-      Whitespace@489..490 " "
-      PathType@490..495
-        QualifiedName@490..495
-          Ident@490..495 "Speed"
-      Whitespace@495..496 " "
-      Timing@496..501
-        At@496..497 "@"
-        Duration@497..501 "10ms"
-    Whitespace@501..504 "\n  "
-    ReservedEntry@504..516
-      ReservedKw@504..512 "reserved"
-      Whitespace@512..513 " "
-      ErrorNode@513..516
-        FloatNumber@513..516 "2.5"
-    Whitespace@516..519 "\n  "
-    EventDef@519..564
-      EventKw@519..524 "event"
-      Whitespace@524..525 " "
-      Name@525..535
-        Ident@525..535 "doorOpened"
-      Whitespace@535..536 " "
-      Colon@536..537 ":"
-      Whitespace@537..538 " "
-      PathType@538..549
-        QualifiedName@538..549
-          Ident@538..549 "DoorPayload"
-      Whitespace@549..550 " "
-      Timing@550..564
-        At@550..551 "@"
-        LBracket@551..552 "["
-        TimingRange@552..563
-          Duration@552..556 "50ms"
-          DotDot@556..558 ".."
-          Duration@558..563 "500ms"
-        RBracket@563..564 "]"
-    Whitespace@564..565 "\n"
-    RBrace@565..566 "}"
-  Whitespace@566..567 "\n"
+      Timing@488..493
+        At@488..489 "@"
+        Duration@489..493 "10ms"
+    Whitespace@493..496 "\n  "
+    ReservedEntry@496..508
+      ReservedKw@496..504 "reserved"
+      Whitespace@504..505 " "
+      ErrorNode@505..508
+        FloatNumber@505..508 "2.5"
+    Whitespace@508..511 "\n  "
+    EventDef@511..556
+      EventKw@511..516 "event"
+      Whitespace@516..517 " "
+      Name@517..527
+        Ident@517..527 "doorOpened"
+      Whitespace@527..528 " "
+      Colon@528..529 ":"
+      Whitespace@529..530 " "
+      PathType@530..541
+        QualifiedName@530..541
+          Ident@530..541 "DoorPayload"
+      Whitespace@541..542 " "
+      Timing@542..556
+        At@542..543 "@"
+        LBracket@543..544 "["
+        TimingRange@544..555
+          Duration@544..548 "50ms"
+          DotDot@548..550 ".."
+          Duration@550..555 "500ms"
+        RBracket@555..556 "]"
+    Whitespace@556..557 "\n"
+    RBrace@557..558 "}"
+  Whitespace@558..559 "\n"
 errors:
   FORM-102 377..389 a `reserved` tombstone takes a retired member name or a retired integer value, not a string literal
-  FORM-102 513..516 a `reserved` tombstone takes a retired member name or a retired integer value, not a floating-point literal
+  FORM-102 505..508 a `reserved` tombstone takes a retired member name or a retired integer value, not a floating-point literal

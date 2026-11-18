@@ -36,8 +36,9 @@
 //! - at the top level → the four rsdl declaration keywords;
 //! - at the start of a component line → `offers` and `requires`; in a
 //!   deployment body → `machine`;
-//! - after `offers` → every service of the catalog; after `requires` → the
-//!   interfaces the package sees, the interfaces of the other packages of the
+//! - after `offers` → every service of the catalog, by its bare name or import
+//!   alias when in scope, otherwise by its qualified name; after `requires` →
+//!   the interfaces the package sees, the interfaces of the other packages of the
 //!   workspace by their qualified names, and the services with an inline shape;
 //! - on a member line of a `system` or a `distribution` → the components and
 //!   the services no component offers (RSDL-504); on the placement line of a
@@ -145,7 +146,7 @@ fn doc_completion(
     let cursor = doc::in_doc_comment(source, offset)?;
     Some(if cursor.at_line_start_at {
         sorted(keyword_completions(DOC_TAGS))
-    } else if let Some(prefix) = cursor.after_open_bracket {
+    } else if let Some(prefix) = cursor.link_prefix {
         doc_link_completions(db, ws, std, pkg, packages, &prefix)
     } else {
         Vec::new()
@@ -213,7 +214,7 @@ pub fn rsdl_completion(
         RsdlSlot::TopLevel => return keywords(RSDL_DEFINITION_KEYWORDS),
         RsdlSlot::ComponentLine => return keywords(COMPONENT_LINE_KEYWORDS),
         RsdlSlot::DeploymentLine => return keywords(DEPLOYMENT_LINE_KEYWORDS),
-        RsdlSlot::Offers => service_items(db, ws, std, |_, _| true),
+        RsdlSlot::Offers => service_items(db, ws, std, pkg, written, |_, _| true),
         RsdlSlot::Requires => {
             let resolution = resolve_package(db, ws, pkg, std);
             let mut items: Vec<lt::CompletionItem> = resolution
@@ -237,7 +238,9 @@ pub fn rsdl_completion(
                 packages,
                 &resolution.symbols,
             ));
-            items.extend(service_items(db, ws, std, |_, entry| entry.inline));
+            items.extend(service_items(db, ws, std, pkg, written, |_, entry| {
+                entry.inline
+            }));
             items
         }
         RsdlSlot::For => {
@@ -294,7 +297,7 @@ pub fn rsdl_completion(
                 .flat_map(|lines| lines.offers.iter().flatten())
                 .map(String::as_str)
                 .collect();
-            items.extend(service_items(db, ws, std, |name, _| {
+            items.extend(service_items(db, ws, std, pkg, written, |name, _| {
                 !offered.contains(name)
             }));
             items
@@ -351,18 +354,68 @@ fn service_items(
     db: &dyn salsa::Database,
     ws: Workspace,
     std: Package,
+    pkg: Package,
+    written: &str,
     keep: impl Fn(&str, &ridl_core::package::CatalogEntry) -> bool,
 ) -> Vec<lt::CompletionItem> {
+    let system = check_system(db, ws, std);
+    let local_names: HashSet<&str> = system
+        .components
+        .iter()
+        .map(|decl| (&decl.package, &decl.name))
+        .chain(
+            system
+                .systems
+                .iter()
+                .map(|decl| (&decl.package, &decl.name)),
+        )
+        .chain(
+            system
+                .distributions
+                .iter()
+                .map(|decl| (&decl.package, &decl.name)),
+        )
+        .chain(
+            system
+                .deployments
+                .iter()
+                .map(|decl| (&decl.package, &decl.name)),
+        )
+        .filter(|(package, _)| *package == pkg.name(db))
+        .map(|(_, name)| name.name.as_str())
+        .collect();
+    let resolution = resolve_package(db, ws, pkg, std);
     service_catalog(db, ws, std)
         .entries
         .iter()
         .filter(|(name, entry)| keep(name, entry))
-        .map(|(name, entry)| {
-            item(
-                name,
-                lt::CompletionItemKind::MODULE,
-                format!("service of {}", entry.package),
-            )
+        .flat_map(|(global, entry)| {
+            let visible: Vec<_> = resolution
+                .symbols
+                .iter()
+                .filter(|(name, symbol)| {
+                    !local_names.contains(name.as_str())
+                        && symbol.kind == SymbolKind::Service
+                        && format!("{}.{}", symbol.package, symbol.name) == *global
+                })
+                .map(|(name, _)| name.as_str())
+                .collect();
+            let names = if written.starts_with(&format!("{}.", entry.package)) || visible.is_empty()
+            {
+                vec![global.as_str()]
+            } else {
+                visible
+            };
+            names
+                .into_iter()
+                .map(|name| {
+                    item(
+                        name,
+                        lt::CompletionItemKind::MODULE,
+                        format!("service {global}"),
+                    )
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
 }
@@ -703,6 +756,7 @@ fn is_import(node: SyntaxNode) -> bool {
 }
 
 /// The visible named types plus the primitives, for a type/backing position.
+/// A constant and a service are left out: neither is a type.
 fn type_completions(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -714,7 +768,8 @@ fn type_completions(
     let mut items: Vec<lt::CompletionItem> = resolution
         .symbols
         .iter()
-        .filter(|(_, symbol)| symbol.kind != SymbolKind::Const)
+        // A constant and a service are not types (ridl §14.0, §14.5).
+        .filter(|(_, symbol)| !matches!(symbol.kind, SymbolKind::Const | SymbolKind::Service))
         .map(|(name, symbol)| {
             documented(
                 item(
@@ -964,7 +1019,7 @@ fn type_kind(kind: SymbolKind) -> lt::CompletionItemKind {
         SymbolKind::Enum | SymbolKind::EnumSet => lt::CompletionItemKind::ENUM,
         SymbolKind::Union => lt::CompletionItemKind::INTERFACE,
         SymbolKind::Const => lt::CompletionItemKind::CONSTANT,
-        SymbolKind::Interface => lt::CompletionItemKind::INTERFACE,
+        SymbolKind::Interface | SymbolKind::Service => lt::CompletionItemKind::INTERFACE,
     }
 }
 

@@ -18,8 +18,9 @@ use rowan::{TextSize, TokenAtOffset};
 pub(crate) struct DocCursor {
     /// The text between the last unclosed `[` of the cursor's line and the
     /// cursor, with a leading backtick dropped — the partial link target
-    /// (`""`, `"Ge"`, `"veh.common."`). `None` when no link is open.
-    pub after_open_bracket: Option<String>,
+    /// (`""`, `"Ge"`, `"veh.common."`), or the bare partial target after
+    /// `@see `. `None` when the cursor is not completing a link target.
+    pub link_prefix: Option<String>,
     /// Whether the cursor's line, after its comment marker, holds exactly an
     /// `@` and a partial tag word up to the cursor (`@`, `@se`).
     pub at_line_start_at: bool,
@@ -73,12 +74,23 @@ pub(crate) fn in_doc_comment(file: &SourceFile, offset: TextSize) -> Option<DocC
     let at_line_start_at = trimmed
         .strip_prefix('@')
         .is_some_and(|word| word.chars().all(|c| c.is_ascii_alphabetic()));
-    let after_open_bracket = content
+    let link_prefix = content
         .rfind('[')
         .filter(|&open| !content[open + 1..].contains(']'))
-        .map(|open| content[open + 1..].trim_start_matches('`').to_string());
+        .map(|open| content[open + 1..].trim_start_matches('`').to_string())
+        .or_else(|| {
+            let rest = trimmed.strip_prefix("@see")?;
+            if !rest.starts_with(char::is_whitespace) {
+                return None;
+            }
+            let target = rest.trim_start();
+            target
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '.'))
+                .then(|| target.to_string())
+        });
     Some(DocCursor {
-        after_open_bracket,
+        link_prefix,
         at_line_start_at,
     })
 }
@@ -165,13 +177,13 @@ mod tests {
         assert_eq!(
             cursor(text, "[veh.co"),
             Some(DocCursor {
-                after_open_bracket: Some("veh.co".to_string()),
+                link_prefix: Some("veh.co".to_string()),
                 at_line_start_at: false,
             })
         );
         let text = "package demo\n/// See [`Sp\ntype T : integer\n";
         assert_eq!(
-            cursor(text, "[`Sp").and_then(|c| c.after_open_bracket),
+            cursor(text, "[`Sp").and_then(|c| c.link_prefix),
             Some("Sp".to_string()),
             "a leading backtick is dropped"
         );
@@ -180,10 +192,7 @@ mod tests {
     #[test]
     fn a_closed_bracket_opens_no_link() {
         let text = "package demo\n/// See [A] and\ntype T : integer\n";
-        assert_eq!(
-            cursor(text, "[A] and").and_then(|c| c.after_open_bracket),
-            None
-        );
+        assert_eq!(cursor(text, "[A] and").and_then(|c| c.link_prefix), None);
     }
 
     #[test]

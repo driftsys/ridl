@@ -6,6 +6,10 @@ shows. The measuring code is in
 [`bench/encodings/`](../../bench/encodings/README.md); the tracking issue is
 driftsys/ridl#1117.
 
+The tables use the current service names, `veh.cluster.Wheels` and
+`veh.cluster.HvacCabin`. The measurements retain the results of the runs
+identified below; changing the names did not rerun those measurements.
+
 ## Purpose
 
 When a system sends many signal updates, the codec is part of the CPU load. The
@@ -408,13 +412,13 @@ Encoded size in bytes of one payload value.
 | veh.cluster.WheelHistory.wheelTemp      | 24          | 5         | 16        |
 | veh.cluster.WheelHistory.wheelSlipRate  | 24          | 5         | 16        |
 | veh.cluster.WheelSummary.wheelHealth    | 24          | 2         | 16        |
-| veh.cluster.wheels.ticks                | 24          | 2         | 16        |
+| veh.cluster.Wheels.ticks                | 24          | 2         | 16        |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
-| veh.hvac.cabin.cabinTemp                | 24          | 5         | 16        |
-| veh.hvac.cabin.targetTemp               | 24          | 5         | 16        |
-| veh.hvac.cabin.blowerDuty               | 24          | 5         | 16        |
-| veh.hvac.cabin.fanLevel                 | 24          | 2         | 16        |
-| veh.hvac.cabin.compressorLoad           | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.cabinTemp         | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.targetTemp        | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.blowerDuty        | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.fanLevel          | 24          | 2         | 16        |
+| veh.cluster.HvacCabin.compressorLoad    | 24          | 5         | 16        |
 | veh.cabin.Cabin.temperature             | 24          | 2         | 16        |
 | veh.cabin.Horn.active                   | 32          | 2         | 16        |
 | bench.stress.Stress.longString          | 544         | 515       | 529       |
@@ -443,13 +447,13 @@ Heap allocations of one encode / verify / decode.
 | veh.cluster.WheelHistory.wheelTemp      | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelSummary.wheelHealth    | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.cluster.wheels.ticks                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.Wheels.ticks                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built   | not built   |
-| veh.hvac.cabin.cabinTemp                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.targetTemp               | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.blowerDuty               | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.fanLevel                 | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.compressorLoad           | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.cabinTemp         | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.targetTemp        | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.blowerDuty        | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.fanLevel          | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.compressorLoad    | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cabin.Cabin.temperature             | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cabin.Horn.active                   | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | bench.stress.Stress.longString          | 0 / 0 / 1   | 0 / 0 / 1   | 0 / 0 / 1   |
@@ -481,13 +485,13 @@ the sum. † spread above 10 %: the figure is not stable.
 | veh.cluster.WheelHistory.wheelTemp      | 35.5 (33.7 to 54.1; 58 %) †          | 29.8 (29.4 to 41.1; 39 %) †             | 19.5 (19.2 to 27.1; 41 %) †          |
 | veh.cluster.WheelHistory.wheelSlipRate  | 34.9 (34.0 to 41.2; 21 %) †          | 29.9 (29.4 to 34.0; 15 %) †             | 19.5 (19.2 to 33.4; 73 %) †          |
 | veh.cluster.WheelSummary.wheelHealth    | 30.1 (29.5 to 33.8; 14 %) †          | 19.5 (19.4 to 21.6; 12 %) †             | 8.9 (8.8 to 9.2; 5 %)                |
-| veh.cluster.wheels.ticks                | 29.8 (28.2 to 34.1; 20 %) †          | 19.5 (19.4 to 23.6; 22 %) †             | 8.9 (8.8 to 9.9; 12 %) †             |
+| veh.cluster.Wheels.ticks                | 29.8 (28.2 to 34.1; 20 %) †          | 19.5 (19.4 to 23.6; 22 %) †             | 8.9 (8.8 to 9.9; 12 %) †             |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                            | not built                               | not built                            |
-| veh.hvac.cabin.cabinTemp                | 34.8 (33.6 to 37.2; 10 %) †          | 29.5 (29.3 to 30.9; 5 %)                | 19.3 (19.2 to 19.7; 3 %)             |
-| veh.hvac.cabin.targetTemp               | 34.7 (33.7 to 39.1; 15 %) †          | 29.7 (29.4 to 33.7; 14 %) †             | 19.3 (19.2 to 20.3; 5 %) †           |
-| veh.hvac.cabin.blowerDuty               | 34.8 (33.9 to 37.3; 10 %) †          | 29.7 (29.4 to 31.2; 6 %)                | 19.4 (19.2 to 20.4; 6 %)             |
-| veh.hvac.cabin.fanLevel                 | 29.8 (26.0 to 33.0; 23 %) †          | 19.5 (19.4 to 21.9; 13 %) †             | 8.8 (8.7 to 8.9; 2 %)                |
-| veh.hvac.cabin.compressorLoad           | 34.8 (34.1 to 38.5; 13 %) †          | 29.7 (29.5 to 31.5; 7 %) †              | 19.4 (19.3 to 20.8; 8 %)             |
+| veh.cluster.HvacCabin.cabinTemp         | 34.8 (33.6 to 37.2; 10 %) †          | 29.5 (29.3 to 30.9; 5 %)                | 19.3 (19.2 to 19.7; 3 %)             |
+| veh.cluster.HvacCabin.targetTemp        | 34.7 (33.7 to 39.1; 15 %) †          | 29.7 (29.4 to 33.7; 14 %) †             | 19.3 (19.2 to 20.3; 5 %) †           |
+| veh.cluster.HvacCabin.blowerDuty        | 34.8 (33.9 to 37.3; 10 %) †          | 29.7 (29.4 to 31.2; 6 %)                | 19.4 (19.2 to 20.4; 6 %)             |
+| veh.cluster.HvacCabin.fanLevel          | 29.8 (26.0 to 33.0; 23 %) †          | 19.5 (19.4 to 21.9; 13 %) †             | 8.8 (8.7 to 8.9; 2 %)                |
+| veh.cluster.HvacCabin.compressorLoad    | 34.8 (34.1 to 38.5; 13 %) †          | 29.7 (29.5 to 31.5; 7 %) †              | 19.4 (19.3 to 20.8; 8 %)             |
 | veh.cabin.Cabin.temperature             | 30.2 (27.0 to 35.7; 29 %) †          | 20.5 (20.3 to 24.5; 20 %) †             | 8.9 (8.8 to 9.7; 10 %) †             |
 | veh.cabin.Horn.active                   | 31.5 (30.4 to 33.9; 11 %) †          | 21.2 (20.5 to 23.2; 13 %) †             | 9.5 (9.4 to 10.5; 11 %) †            |
 | bench.stress.Stress.longString          | 157.6 (151.0 to 188.5; 24 %) †       | 149.5 (142.1 to 200.9; 39 %) †          | 162.1 (157.1 to 180.9; 15 %) †       |
@@ -517,13 +521,13 @@ median time of one update (the headline figure).
 | veh.cluster.WheelHistory.wheelTemp      | 0.0142      | 0.0119    | 0.0078    |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0.0140      | 0.0120    | 0.0078    |
 | veh.cluster.WheelSummary.wheelHealth    | 0.0120      | 0.0078    | 0.0035    |
-| veh.cluster.wheels.ticks                | 0.0119      | 0.0078    | 0.0036    |
+| veh.cluster.Wheels.ticks                | 0.0119      | 0.0078    | 0.0036    |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
-| veh.hvac.cabin.cabinTemp                | 0.0139      | 0.0118    | 0.0077    |
-| veh.hvac.cabin.targetTemp               | 0.0139      | 0.0119    | 0.0077    |
-| veh.hvac.cabin.blowerDuty               | 0.0139      | 0.0119    | 0.0078    |
-| veh.hvac.cabin.fanLevel                 | 0.0119      | 0.0078    | 0.0035    |
-| veh.hvac.cabin.compressorLoad           | 0.0139      | 0.0119    | 0.0078    |
+| veh.cluster.HvacCabin.cabinTemp         | 0.0139      | 0.0118    | 0.0077    |
+| veh.cluster.HvacCabin.targetTemp        | 0.0139      | 0.0119    | 0.0077    |
+| veh.cluster.HvacCabin.blowerDuty        | 0.0139      | 0.0119    | 0.0078    |
+| veh.cluster.HvacCabin.fanLevel          | 0.0119      | 0.0078    | 0.0035    |
+| veh.cluster.HvacCabin.compressorLoad    | 0.0139      | 0.0119    | 0.0078    |
 | veh.cabin.Cabin.temperature             | 0.0121      | 0.0082    | 0.0036    |
 | veh.cabin.Horn.active                   | 0.0126      | 0.0085    | 0.0038    |
 | bench.stress.Stress.longString          | 0.0630      | 0.0598    | 0.0649    |
@@ -555,13 +559,13 @@ not-built cell has no ratio and is marked.
 | veh.cluster.WheelHistory.wheelTemp      | 1.50                       | 0.31                  | 1.82                       | 1.53                  | 1.82                      | 1.53                 |
 | veh.cluster.WheelHistory.wheelSlipRate  | 1.50                       | 0.31                  | 1.79                       | 1.54                  | 1.79                      | 1.54                 |
 | veh.cluster.WheelSummary.wheelHealth    | 1.50                       | 0.12                  | 3.40                       | 2.21                  | 3.40                      | 2.21                 |
-| veh.cluster.wheels.ticks                | 1.50                       | 0.12                  | 3.36                       | 2.20                  | 3.36                      | 2.20                 |
+| veh.cluster.Wheels.ticks                | 1.50                       | 0.12                  | 3.36                       | 2.20                  | 3.36                      | 2.20                 |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                  | not built             | not built                  | not built             | not built                 | not built            |
-| veh.hvac.cabin.cabinTemp                | 1.50                       | 0.31                  | 1.81                       | 1.53                  | 1.81                      | 1.53                 |
-| veh.hvac.cabin.targetTemp               | 1.50                       | 0.31                  | 1.80                       | 1.54                  | 1.80                      | 1.54                 |
-| veh.hvac.cabin.blowerDuty               | 1.50                       | 0.31                  | 1.79                       | 1.53                  | 1.79                      | 1.53                 |
-| veh.hvac.cabin.fanLevel                 | 1.50                       | 0.12                  | 3.39                       | 2.22                  | 3.39                      | 2.22                 |
-| veh.hvac.cabin.compressorLoad           | 1.50                       | 0.31                  | 1.79                       | 1.53                  | 1.79                      | 1.53                 |
+| veh.cluster.HvacCabin.cabinTemp         | 1.50                       | 0.31                  | 1.81                       | 1.53                  | 1.81                      | 1.53                 |
+| veh.cluster.HvacCabin.targetTemp        | 1.50                       | 0.31                  | 1.80                       | 1.54                  | 1.80                      | 1.54                 |
+| veh.cluster.HvacCabin.blowerDuty        | 1.50                       | 0.31                  | 1.79                       | 1.53                  | 1.79                      | 1.53                 |
+| veh.cluster.HvacCabin.fanLevel          | 1.50                       | 0.12                  | 3.39                       | 2.22                  | 3.39                      | 2.22                 |
+| veh.cluster.HvacCabin.compressorLoad    | 1.50                       | 0.31                  | 1.79                       | 1.53                  | 1.79                      | 1.53                 |
 | veh.cabin.Cabin.temperature             | 1.50                       | 0.12                  | 3.39                       | 2.31                  | 3.39                      | 2.31                 |
 | veh.cabin.Horn.active                   | 2.00                       | 0.12                  | 3.31                       | 2.24                  | 3.31                      | 2.24                 |
 | bench.stress.Stress.longString          | 1.03                       | 0.97                  | 0.97                       | 0.92                  | 0.97                      | 0.92                 |
@@ -593,13 +597,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 19.4 (18.0 to 32.8; 76 %) †       | 9.1 (8.8 to 10.6; 19 %) †            | 6.2 (6.1 to 9.5; 55 %) †          |
 | veh.cluster.WheelHistory.wheelSlipRate  | 18.7 (18.0 to 20.9; 15 %) †       | 9.1 (8.8 to 9.8; 11 %) †             | 6.5 (6.4 to 7.6; 19 %) †          |
 | veh.cluster.WheelSummary.wheelHealth    | 18.5 (18.3 to 21.4; 17 %) †       | 6.4 (6.4 to 7.2; 13 %) †             | 6.1 (6.1 to 6.4; 5 %)             |
-| veh.cluster.wheels.ticks                | 18.5 (17.7 to 21.4; 20 %) †       | 6.4 (6.4 to 8.8; 39 %) †             | 6.2 (6.1 to 6.6; 9 %)             |
+| veh.cluster.Wheels.ticks                | 18.5 (17.7 to 21.4; 20 %) †       | 6.4 (6.4 to 8.8; 39 %) †             | 6.2 (6.1 to 6.6; 9 %)             |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                         | not built                            | not built                         |
-| veh.hvac.cabin.cabinTemp                | 18.9 (17.8 to 20.1; 12 %) †       | 9.0 (8.9 to 9.4; 6 %)                | 6.1 (6.1 to 6.4; 4 %)             |
-| veh.hvac.cabin.targetTemp               | 18.8 (17.9 to 20.4; 13 %) †       | 9.0 (8.9 to 10.4; 17 %) †            | 6.2 (6.1 to 6.4; 4 %)             |
-| veh.hvac.cabin.blowerDuty               | 18.7 (17.9 to 19.8; 10 %) †       | 9.0 (8.9 to 9.6; 8 %)                | 6.4 (6.4 to 6.7; 5 %)             |
-| veh.hvac.cabin.fanLevel                 | 18.5 (18.1 to 21.4; 18 %) †       | 6.4 (6.4 to 7.4; 15 %) †             | 6.1 (6.1 to 6.2; 2 %)             |
-| veh.hvac.cabin.compressorLoad           | 18.7 (18.1 to 20.0; 10 %) †       | 9.0 (8.9 to 9.9; 11 %) †             | 6.5 (6.4 to 6.8; 6 %)             |
+| veh.cluster.HvacCabin.cabinTemp         | 18.9 (17.8 to 20.1; 12 %) †       | 9.0 (8.9 to 9.4; 6 %)                | 6.1 (6.1 to 6.4; 4 %)             |
+| veh.cluster.HvacCabin.targetTemp        | 18.8 (17.9 to 20.4; 13 %) †       | 9.0 (8.9 to 10.4; 17 %) †            | 6.2 (6.1 to 6.4; 4 %)             |
+| veh.cluster.HvacCabin.blowerDuty        | 18.7 (17.9 to 19.8; 10 %) †       | 9.0 (8.9 to 9.6; 8 %)                | 6.4 (6.4 to 6.7; 5 %)             |
+| veh.cluster.HvacCabin.fanLevel          | 18.5 (18.1 to 21.4; 18 %) †       | 6.4 (6.4 to 7.4; 15 %) †             | 6.1 (6.1 to 6.2; 2 %)             |
+| veh.cluster.HvacCabin.compressorLoad    | 18.7 (18.1 to 20.0; 10 %) †       | 9.0 (8.9 to 9.9; 11 %) †             | 6.5 (6.4 to 6.8; 6 %)             |
 | veh.cabin.Cabin.temperature             | 18.7 (18.6 to 23.9; 28 %) †       | 6.8 (6.7 to 8.4; 25 %) †             | 6.2 (6.1 to 6.6; 7 %)             |
 | veh.cabin.Horn.active                   | 18.8 (18.1 to 20.1; 11 %) †       | 6.9 (6.4 to 8.4; 29 %) †             | 6.2 (6.1 to 6.5; 6 %)             |
 | bench.stress.Stress.longString          | 36.9 (35.2 to 45.5; 28 %) †       | 18.0 (17.8 to 28.6; 59 %) †          | 33.4 (33.1 to 39.7; 20 %) †       |
@@ -631,13 +635,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 13.4 (13.1 to 17.6; 34 %) †       | 15.1 (14.9 to 21.8; 45 %) †             | 12.1 (12.0 to 16.1; 34 %) †       |
 | veh.cluster.WheelHistory.wheelSlipRate  | 13.5 (13.3 to 16.8; 26 %) †       | 15.2 (15.0 to 17.6; 17 %) †             | 11.9 (11.8 to 24.4; 106 %) †      |
 | veh.cluster.WheelSummary.wheelHealth    | 8.3 (8.0 to 9.1; 13 %) †          | 7.3 (7.2 to 8.5; 18 %) †                | 2.1 (2.1 to 2.2; 6 %)             |
-| veh.cluster.wheels.ticks                | 8.1 (7.3 to 8.6; 16 %) †          | 7.2 (7.2 to 8.2; 14 %) †                | 2.1 (2.1 to 2.6; 21 %) †          |
+| veh.cluster.Wheels.ticks                | 8.1 (7.3 to 8.6; 16 %) †          | 7.2 (7.2 to 8.2; 14 %) †                | 2.1 (2.1 to 2.6; 21 %) †          |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                         | not built                               | not built                         |
-| veh.hvac.cabin.cabinTemp                | 13.2 (13.1 to 14.3; 9 %)          | 15.0 (14.9 to 15.6; 5 %)                | 12.0 (12.0 to 12.2; 2 %)          |
-| veh.hvac.cabin.targetTemp               | 13.2 (13.1 to 14.2; 8 %)          | 15.1 (15.0 to 17.4; 16 %) †             | 12.1 (12.0 to 12.5; 4 %)          |
-| veh.hvac.cabin.blowerDuty               | 13.4 (13.3 to 14.2; 7 %)          | 15.1 (15.0 to 15.7; 5 %)                | 11.9 (11.8 to 12.6; 7 %)          |
-| veh.hvac.cabin.fanLevel                 | 8.1 (4.8 to 8.4; 44 %) †          | 7.2 (7.2 to 8.4; 17 %) †                | 2.1 (2.1 to 2.2; 3 %)             |
-| veh.hvac.cabin.compressorLoad           | 13.4 (13.3 to 15.4; 16 %) †       | 15.1 (15.0 to 15.6; 4 %)                | 11.9 (11.8 to 12.8; 9 %)          |
+| veh.cluster.HvacCabin.cabinTemp         | 13.2 (13.1 to 14.3; 9 %)          | 15.0 (14.9 to 15.6; 5 %)                | 12.0 (12.0 to 12.2; 2 %)          |
+| veh.cluster.HvacCabin.targetTemp        | 13.2 (13.1 to 14.2; 8 %)          | 15.1 (15.0 to 17.4; 16 %) †             | 12.1 (12.0 to 12.5; 4 %)          |
+| veh.cluster.HvacCabin.blowerDuty        | 13.4 (13.3 to 14.2; 7 %)          | 15.1 (15.0 to 15.7; 5 %)                | 11.9 (11.8 to 12.6; 7 %)          |
+| veh.cluster.HvacCabin.fanLevel          | 8.1 (4.8 to 8.4; 44 %) †          | 7.2 (7.2 to 8.4; 17 %) †                | 2.1 (2.1 to 2.2; 3 %)             |
+| veh.cluster.HvacCabin.compressorLoad    | 13.4 (13.3 to 15.4; 16 %) †       | 15.1 (15.0 to 15.6; 4 %)                | 11.9 (11.8 to 12.8; 9 %)          |
 | veh.cabin.Cabin.temperature             | 8.2 (5.2 to 8.4; 39 %) †          | 7.6 (7.5 to 9.3; 24 %) †                | 2.2 (2.1 to 2.5; 15 %) †          |
 | veh.cabin.Horn.active                   | 9.7 (9.4 to 10.3; 9 %)            | 7.3 (7.2 to 7.7; 7 %)                   | 2.1 (2.1 to 2.7; 29 %) †          |
 | bench.stress.Stress.longString          | 60.2 (58.5 to 66.1; 13 %) †       | 64.6 (62.6 to 81.3; 29 %) †             | 72.9 (72.3 to 79.3; 10 %)         |
@@ -669,13 +673,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 2.7 (2.7 to 3.7; 41 %) †          | 5.6 (5.6 to 8.7; 56 %) †           | 1.1 (1.1 to 1.6; 38 %) †          |
 | veh.cluster.WheelHistory.wheelSlipRate  | 2.7 (2.7 to 3.6; 35 %) †          | 5.6 (5.6 to 6.6; 18 %) †           | 1.1 (1.1 to 1.4; 27 %) †          |
 | veh.cluster.WheelSummary.wheelHealth    | 3.2 (3.2 to 3.3; 3 %)             | 5.9 (5.8 to 6.0; 3 %)              | 0.6 (0.6 to 0.6; 4 %)             |
-| veh.cluster.wheels.ticks                | 3.2 (3.2 to 4.0; 27 %) †          | 5.9 (5.8 to 6.6; 13 %) †           | 0.6 (0.6 to 0.7; 17 %) †          |
+| veh.cluster.Wheels.ticks                | 3.2 (3.2 to 4.0; 27 %) †          | 5.9 (5.8 to 6.6; 13 %) †           | 0.6 (0.6 to 0.7; 17 %) †          |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                         | not built                          | not built                         |
-| veh.hvac.cabin.cabinTemp                | 2.7 (2.7 to 2.8; 7 %)             | 5.6 (5.6 to 5.8; 4 %)              | 1.1 (1.1 to 1.1; 3 %)             |
-| veh.hvac.cabin.targetTemp               | 2.7 (2.7 to 4.4; 65 %) †          | 5.6 (5.6 to 5.9; 5 %)              | 1.1 (1.1 to 1.4; 28 %) †          |
-| veh.hvac.cabin.blowerDuty               | 2.7 (2.7 to 3.2; 21 %) †          | 5.6 (5.6 to 5.9; 5 %)              | 1.1 (1.1 to 1.1; 4 %)             |
-| veh.hvac.cabin.fanLevel                 | 3.2 (3.2 to 3.3; 4 %)             | 5.9 (5.8 to 6.1; 5 %)              | 0.5 (0.5 to 0.5; 2 %)             |
-| veh.hvac.cabin.compressorLoad           | 2.7 (2.7 to 3.1; 16 %) †          | 5.6 (5.6 to 6.0; 8 %)              | 1.1 (1.1 to 1.2; 4 %)             |
+| veh.cluster.HvacCabin.cabinTemp         | 2.7 (2.7 to 2.8; 7 %)             | 5.6 (5.6 to 5.8; 4 %)              | 1.1 (1.1 to 1.1; 3 %)             |
+| veh.cluster.HvacCabin.targetTemp        | 2.7 (2.7 to 4.4; 65 %) †          | 5.6 (5.6 to 5.9; 5 %)              | 1.1 (1.1 to 1.4; 28 %) †          |
+| veh.cluster.HvacCabin.blowerDuty        | 2.7 (2.7 to 3.2; 21 %) †          | 5.6 (5.6 to 5.9; 5 %)              | 1.1 (1.1 to 1.1; 4 %)             |
+| veh.cluster.HvacCabin.fanLevel          | 3.2 (3.2 to 3.3; 4 %)             | 5.9 (5.8 to 6.1; 5 %)              | 0.5 (0.5 to 0.5; 2 %)             |
+| veh.cluster.HvacCabin.compressorLoad    | 2.7 (2.7 to 3.1; 16 %) †          | 5.6 (5.6 to 6.0; 8 %)              | 1.1 (1.1 to 1.2; 4 %)             |
 | veh.cabin.Cabin.temperature             | 3.2 (3.2 to 3.5; 9 %)             | 6.2 (6.1 to 6.8; 10 %) †           | 0.5 (0.5 to 0.7; 27 %) †          |
 | veh.cabin.Horn.active                   | 3.0 (2.9 to 3.5; 20 %) †          | 7.0 (6.9 to 7.1; 3 %)              | 1.2 (1.2 to 1.3; 10 %) †          |
 | bench.stress.Stress.longString          | 60.4 (57.3 to 76.9; 32 %) †       | 66.9 (61.6 to 91.1; 44 %) †        | 55.9 (51.8 to 61.9; 18 %) †       |
@@ -724,13 +728,13 @@ an encoding add up to its derived load of one update.
 | veh.cluster.WheelHistory.wheelTemp      | 0.0078              | 0.0036         | 0.0025         | 0.0053              | 0.0060         | 0.0049         | 0.0011              | 0.0022         | 0.0005         |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0.0075              | 0.0037         | 0.0026         | 0.0054              | 0.0061         | 0.0048         | 0.0011              | 0.0023         | 0.0004         |
 | veh.cluster.WheelSummary.wheelHealth    | 0.0074              | 0.0026         | 0.0025         | 0.0033              | 0.0029         | 0.0009         | 0.0013              | 0.0023         | 0.0002         |
-| veh.cluster.wheels.ticks                | 0.0074              | 0.0026         | 0.0025         | 0.0033              | 0.0029         | 0.0009         | 0.0013              | 0.0024         | 0.0002         |
+| veh.cluster.Wheels.ticks                | 0.0074              | 0.0026         | 0.0025         | 0.0033              | 0.0029         | 0.0009         | 0.0013              | 0.0024         | 0.0002         |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built           | not built      | not built      | not built           | not built      | not built      | not built           | not built      | not built      |
-| veh.hvac.cabin.cabinTemp                | 0.0076              | 0.0036         | 0.0025         | 0.0053              | 0.0060         | 0.0048         | 0.0011              | 0.0022         | 0.0004         |
-| veh.hvac.cabin.targetTemp               | 0.0075              | 0.0036         | 0.0025         | 0.0053              | 0.0060         | 0.0048         | 0.0011              | 0.0023         | 0.0004         |
-| veh.hvac.cabin.blowerDuty               | 0.0075              | 0.0036         | 0.0026         | 0.0054              | 0.0060         | 0.0048         | 0.0011              | 0.0022         | 0.0004         |
-| veh.hvac.cabin.fanLevel                 | 0.0074              | 0.0026         | 0.0025         | 0.0032              | 0.0029         | 0.0009         | 0.0013              | 0.0023         | 0.0002         |
-| veh.hvac.cabin.compressorLoad           | 0.0075              | 0.0036         | 0.0026         | 0.0054              | 0.0060         | 0.0048         | 0.0011              | 0.0022         | 0.0004         |
+| veh.cluster.HvacCabin.cabinTemp         | 0.0076              | 0.0036         | 0.0025         | 0.0053              | 0.0060         | 0.0048         | 0.0011              | 0.0022         | 0.0004         |
+| veh.cluster.HvacCabin.targetTemp        | 0.0075              | 0.0036         | 0.0025         | 0.0053              | 0.0060         | 0.0048         | 0.0011              | 0.0023         | 0.0004         |
+| veh.cluster.HvacCabin.blowerDuty        | 0.0075              | 0.0036         | 0.0026         | 0.0054              | 0.0060         | 0.0048         | 0.0011              | 0.0022         | 0.0004         |
+| veh.cluster.HvacCabin.fanLevel          | 0.0074              | 0.0026         | 0.0025         | 0.0032              | 0.0029         | 0.0009         | 0.0013              | 0.0023         | 0.0002         |
+| veh.cluster.HvacCabin.compressorLoad    | 0.0075              | 0.0036         | 0.0026         | 0.0054              | 0.0060         | 0.0048         | 0.0011              | 0.0022         | 0.0004         |
 | veh.cabin.Cabin.temperature             | 0.0075              | 0.0027         | 0.0025         | 0.0033              | 0.0030         | 0.0009         | 0.0013              | 0.0025         | 0.0002         |
 | veh.cabin.Horn.active                   | 0.0075              | 0.0028         | 0.0025         | 0.0039              | 0.0029         | 0.0009         | 0.0012              | 0.0028         | 0.0005         |
 | bench.stress.Stress.longString          | 0.0148              | 0.0072         | 0.0134         | 0.0241              | 0.0259         | 0.0292         | 0.0242              | 0.0267         | 0.0223         |
@@ -763,13 +767,13 @@ a ratio whose podbuf time is under 10 ns is not comparable.
 | veh.cluster.WheelHistory.wheelTemp      | 3.14                         | 1.47                    | 1.10                         | 1.24                    | 2.34                         | 4.89                    |
 | veh.cluster.WheelHistory.wheelSlipRate  | 2.89                         | 1.41                    | 1.13                         | 1.27                    | 2.45                         | 5.16                    |
 | veh.cluster.WheelSummary.wheelHealth    | 3.02                         | 1.05                    | 3.90                         | 3.39                    | 5.51                         | 10.09                   |
-| veh.cluster.wheels.ticks                | 3.00                         | 1.04                    | 3.81                         | 3.38                    | 5.52                         | 10.11                   |
+| veh.cluster.Wheels.ticks                | 3.00                         | 1.04                    | 3.81                         | 3.38                    | 5.52                         | 10.11                   |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                    | not built               | not built                    | not built               | not built                    | not built               |
-| veh.hvac.cabin.cabinTemp                | 3.08                         | 1.46                    | 1.10                         | 1.24                    | 2.46                         | 5.16                    |
-| veh.hvac.cabin.targetTemp               | 3.05                         | 1.46                    | 1.10                         | 1.25                    | 2.47                         | 5.17                    |
-| veh.hvac.cabin.blowerDuty               | 2.91                         | 1.40                    | 1.13                         | 1.27                    | 2.46                         | 5.17                    |
-| veh.hvac.cabin.fanLevel                 | 3.01                         | 1.05                    | 3.81                         | 3.38                    | 6.23                         | 11.42                   |
-| veh.hvac.cabin.compressorLoad           | 2.89                         | 1.40                    | 1.13                         | 1.27                    | 2.41                         | 5.05                    |
+| veh.cluster.HvacCabin.cabinTemp         | 3.08                         | 1.46                    | 1.10                         | 1.24                    | 2.46                         | 5.16                    |
+| veh.cluster.HvacCabin.targetTemp        | 3.05                         | 1.46                    | 1.10                         | 1.25                    | 2.47                         | 5.17                    |
+| veh.cluster.HvacCabin.blowerDuty        | 2.91                         | 1.40                    | 1.13                         | 1.27                    | 2.46                         | 5.17                    |
+| veh.cluster.HvacCabin.fanLevel          | 3.01                         | 1.05                    | 3.81                         | 3.38                    | 6.23                         | 11.42                   |
+| veh.cluster.HvacCabin.compressorLoad    | 2.89                         | 1.40                    | 1.13                         | 1.27                    | 2.41                         | 5.05                    |
 | veh.cabin.Cabin.temperature             | 3.03                         | 1.09                    | 3.80                         | 3.51                    | 5.89                         | 11.31                   |
 | veh.cabin.Horn.active                   | 3.05                         | 1.13                    | 4.52                         | 3.40                    | 2.49                         | 5.89                    |
 | bench.stress.Stress.longString          | 1.11                         | 0.54                    | 0.83                         | 0.89                    | 1.08                         | 1.20                    |
@@ -814,24 +818,24 @@ figure, and their difference.
 | veh.cluster.WheelSummary.wheelHealth   | FlatBuffers | 1.0750  | 0.0120    | 1.0630     |
 | veh.cluster.WheelSummary.wheelHealth   | proto3      | 1.5880  | 0.0078    | 1.5802     |
 | veh.cluster.WheelSummary.wheelHealth   | podbuf      | 1.8453  | 0.0035    | 1.8418     |
-| veh.cluster.wheels.ticks               | FlatBuffers | 1.0346  | 0.0119    | 1.0227     |
-| veh.cluster.wheels.ticks               | proto3      | 1.5690  | 0.0078    | 1.5612     |
-| veh.cluster.wheels.ticks               | podbuf      | 1.7563  | 0.0036    | 1.7527     |
-| veh.hvac.cabin.cabinTemp               | FlatBuffers | 0.9994  | 0.0139    | 0.9855     |
-| veh.hvac.cabin.cabinTemp               | proto3      | 1.2443  | 0.0118    | 1.2325     |
-| veh.hvac.cabin.cabinTemp               | podbuf      | 1.9576  | 0.0077    | 1.9498     |
-| veh.hvac.cabin.targetTemp              | FlatBuffers | 1.0556  | 0.0139    | 1.0417     |
-| veh.hvac.cabin.targetTemp              | proto3      | 1.0750  | 0.0119    | 1.0631     |
-| veh.hvac.cabin.targetTemp              | podbuf      | 1.2784  | 0.0077    | 1.2707     |
-| veh.hvac.cabin.blowerDuty              | FlatBuffers | 1.2605  | 0.0139    | 1.2466     |
-| veh.hvac.cabin.blowerDuty              | proto3      | 2.0936  | 0.0119    | 2.0817     |
-| veh.hvac.cabin.blowerDuty              | podbuf      | 1.1951  | 0.0078    | 1.1873     |
-| veh.hvac.cabin.fanLevel                | FlatBuffers | 1.2031  | 0.0119    | 1.1912     |
-| veh.hvac.cabin.fanLevel                | proto3      | 4.5069  | 0.0078    | 4.4991     |
-| veh.hvac.cabin.fanLevel                | podbuf      | 4.3525  | 0.0035    | 4.3490     |
-| veh.hvac.cabin.compressorLoad          | FlatBuffers | 1.0510  | 0.0139    | 1.0371     |
-| veh.hvac.cabin.compressorLoad          | proto3      | 1.0878  | 0.0119    | 1.0759     |
-| veh.hvac.cabin.compressorLoad          | podbuf      | 1.2639  | 0.0078    | 1.2561     |
+| veh.cluster.Wheels.ticks               | FlatBuffers | 1.0346  | 0.0119    | 1.0227     |
+| veh.cluster.Wheels.ticks               | proto3      | 1.5690  | 0.0078    | 1.5612     |
+| veh.cluster.Wheels.ticks               | podbuf      | 1.7563  | 0.0036    | 1.7527     |
+| veh.cluster.HvacCabin.cabinTemp        | FlatBuffers | 0.9994  | 0.0139    | 0.9855     |
+| veh.cluster.HvacCabin.cabinTemp        | proto3      | 1.2443  | 0.0118    | 1.2325     |
+| veh.cluster.HvacCabin.cabinTemp        | podbuf      | 1.9576  | 0.0077    | 1.9498     |
+| veh.cluster.HvacCabin.targetTemp       | FlatBuffers | 1.0556  | 0.0139    | 1.0417     |
+| veh.cluster.HvacCabin.targetTemp       | proto3      | 1.0750  | 0.0119    | 1.0631     |
+| veh.cluster.HvacCabin.targetTemp       | podbuf      | 1.2784  | 0.0077    | 1.2707     |
+| veh.cluster.HvacCabin.blowerDuty       | FlatBuffers | 1.2605  | 0.0139    | 1.2466     |
+| veh.cluster.HvacCabin.blowerDuty       | proto3      | 2.0936  | 0.0119    | 2.0817     |
+| veh.cluster.HvacCabin.blowerDuty       | podbuf      | 1.1951  | 0.0078    | 1.1873     |
+| veh.cluster.HvacCabin.fanLevel         | FlatBuffers | 1.2031  | 0.0119    | 1.1912     |
+| veh.cluster.HvacCabin.fanLevel         | proto3      | 4.5069  | 0.0078    | 4.4991     |
+| veh.cluster.HvacCabin.fanLevel         | podbuf      | 4.3525  | 0.0035    | 4.3490     |
+| veh.cluster.HvacCabin.compressorLoad   | FlatBuffers | 1.0510  | 0.0139    | 1.0371     |
+| veh.cluster.HvacCabin.compressorLoad   | proto3      | 1.0878  | 0.0119    | 1.0759     |
+| veh.cluster.HvacCabin.compressorLoad   | podbuf      | 1.2639  | 0.0078    | 1.2561     |
 | veh.cabin.Cabin.temperature            | FlatBuffers | 1.0042  | 0.0121    | 0.9921     |
 | veh.cabin.Cabin.temperature            | proto3      | 1.3739  | 0.0082    | 1.3657     |
 | veh.cabin.Cabin.temperature            | podbuf      | 1.1114  | 0.0036    | 1.1079     |
@@ -920,16 +924,17 @@ Each core was measured once, so each table is a snapshot of one run.
 - **Load.** The codec-only load at 4 000 updates per second is a small fraction
   of one core for the signal payloads: 0.042 % to 0.181 % on the A55 core and
   0.013 % to 0.061 % on the A76 core. The largest load among the signal payloads
-  is FlatBuffers on `veh.hvac.cabin.compressorLoad` on the A55 core (0.181 %,
-  451.9 ns per update) and FlatBuffers on `veh.hvac.cabin.cabinTemp` on the A76
-  core (0.061 %, 153.3 ns per update). The largest load of any cell is the
-  proto3 encoding of `bigMap`: 628.0 % of the A55 core and 184.8 % of the A76
-  core; the FlatBuffers cell of `bigMap` is 291.8 % and 106.6 %. A derived load
-  above 100 % means that one update takes longer than the 250 us between two
-  updates, so one core cannot run 4 000 such updates per second. Other cells
-  above 10 %: on the A55 core 10 more cells (proto3 `map`; `bigItemList`,
-  `deepNested` in all three encodings; `bigSamples` in FlatBuffers and proto3;
-  podbuf `bigMap`), on the A76 core proto3 `bigItemList` and `bigSamples`.
+  is FlatBuffers on `veh.cluster.HvacCabin.compressorLoad` on the A55 core
+  (0.181 %, 451.9 ns per update) and FlatBuffers on
+  `veh.cluster.HvacCabin.cabinTemp` on the A76 core (0.061 %, 153.3 ns per
+  update). The largest load of any cell is the proto3 encoding of `bigMap`:
+  628.0 % of the A55 core and 184.8 % of the A76 core; the FlatBuffers cell of
+  `bigMap` is 291.8 % and 106.6 %. A derived load above 100 % means that one
+  update takes longer than the 250 us between two updates, so one core cannot
+  run 4 000 such updates per second. Other cells above 10 %: on the A55 core 10
+  more cells (proto3 `map`; `bigItemList`, `deepNested` in all three encodings;
+  `bigSamples` in FlatBuffers and proto3; podbuf `bigMap`), on the A76 core
+  proto3 `bigItemList` and `bigSamples`.
 - **Paced against derived.** The paced figure is above the derived figure in 79
   of the 81 cells of each run. The two exceptions are FlatBuffers and proto3 on
   `bigMap`, where the derived figure is above 100 % and the paced figure is 98.4
@@ -954,11 +959,11 @@ Each core was measured once, so each table is a snapshot of one run.
   The time per update in the tables lets a reader compute a burst of
   back-to-back updates. Worked example, derived and not measured: the heaviest
   signal payload on the A55 core is FlatBuffers on
-  `veh.hvac.cabin.compressorLoad`, 451.9 ns per update; 200 updates cost 200 x
-  451.9 ns = 90.4 us of CPU time, which is 0.90 % of the 10 ms window. This
-  assumes that every update costs what the warm, repeated update of the bench
-  costs; it does not include the transport, queueing, cold caches or a lower
-  core frequency.
+  `veh.cluster.HvacCabin.compressorLoad`, 451.9 ns per update; 200 updates cost
+  200 x 451.9 ns = 90.4 us of CPU time, which is 0.90 % of the 10 ms window.
+  This assumes that every update costs what the warm, repeated update of the
+  bench costs; it does not include the transport, queueing, cold caches or a
+  lower core frequency.
 
 ### What the split into operations shows, and what it does not
 
@@ -1053,7 +1058,7 @@ Cortex-A55 (cpu2), podbuf, median time in ns (before, after):
 
 | Payload                         | Encode before | Encode after | Verify before | Verify after | Decode before | Decode after | Sum before | Sum after | Sum change |
 | ------------------------------- | ------------- | ------------ | ------------- | ------------ | ------------- | ------------ | ---------- | --------- | ---------- |
-| veh.hvac.cabin.cabinTemp        | 75.7          | 75.1         | 228.5         | 203.5        | 37.2          | 15.5         | 341.3      | 294.2     | -14 %      |
+| veh.cluster.HvacCabin.cabinTemp | 75.7          | 75.1         | 228.5         | 203.5        | 37.2          | 15.5         | 341.3      | 294.2     | -14 %      |
 | veh.cabin.Horn.active           | 72.2          | 71.2         | 29.9          | 25.5         | 16.1          | 16.1         | 118.3      | 112.7     | -5 %       |
 | bench.stress.Stress.longString  | 998.8         | 997.2        | 785.2         | 758.0        | 407.0         | 387.6        | 2191.0     | 2142.8    | -2 %       |
 | bench.stress.Stress.itemList    | 1984.5        | 2021.8       | 3010.9        | 2422.8       | 3928.6        | 3451.2       | 8924.0     | 7895.8    | -12 %      |
@@ -1067,7 +1072,7 @@ Cortex-A76 (cpu6), podbuf, median time in ns (before, after):
 
 | Payload                         | Encode before | Encode after | Verify before | Verify after | Decode before | Decode after | Sum before | Sum after | Sum change |
 | ------------------------------- | ------------- | ------------ | ------------- | ------------ | ------------- | ------------ | ---------- | --------- | ---------- |
-| veh.hvac.cabin.cabinTemp        | 23.4          | 23.6         | 68.8          | 58.3         | 13.2          | 4.7*         | 105.4      | 86.6      | -18 %      |
+| veh.cluster.HvacCabin.cabinTemp | 23.4          | 23.6         | 68.8          | 58.3         | 13.2          | 4.7*         | 105.4      | 86.6      | -18 %      |
 | veh.cabin.Horn.active           | 23.7          | 23.5         | 8.7*          | 8.2*         | 6.1*          | 6.2*         | 38.4       | 37.9      | -1 %       |
 | bench.stress.Stress.longString  | 386.2         | 385.2        | 281.7         | 273.6        | 120.9         | 115.7        | 788.8      | 774.5     | -2 %       |
 | bench.stress.Stress.itemList    | 671.9         | 669.0        | 1031.0        | 843.1        | 1260.3        | 1114.9       | 2963.3     | 2627.0    | -11 %      |
@@ -1085,9 +1090,9 @@ What the tables show:
   integer, so verify has no per-element range to check, and its time no longer
   follows the 1 500 elements. The encode and the decode of this payload also
   fall (A55: 14 277 to 9 287 ns and 27 672 to 14 347 ns).
-- On the signal that holds a 4-byte value (`veh.hvac.cabin.cabinTemp`) the sum
-  falls by 14 % on the A55 core and by 18 % on the A76 core, mostly in verify
-  and decode; encode does not change. The row with a 1-byte value
+- On the signal that holds a 4-byte value (`veh.cluster.HvacCabin.cabinTemp`)
+  the sum falls by 14 % on the A55 core and by 18 % on the A76 core, mostly in
+  verify and decode; encode does not change. The row with a 1-byte value
   (`veh.cabin.Horn.active`) falls by 5 % and 1 %; its A76 verify and decode are
   below 10 ns.
 - On the list and map payloads (`itemList`, `map`, `bigItemList`, `bigMap`) the
@@ -1216,13 +1221,13 @@ Encoded size in bytes of one payload value.
 | veh.cluster.WheelHistory.wheelTemp      | 24          | 5         | 16        |
 | veh.cluster.WheelHistory.wheelSlipRate  | 24          | 5         | 16        |
 | veh.cluster.WheelSummary.wheelHealth    | 24          | 2         | 16        |
-| veh.cluster.wheels.ticks                | 24          | 2         | 16        |
+| veh.cluster.Wheels.ticks                | 24          | 2         | 16        |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
-| veh.hvac.cabin.cabinTemp                | 24          | 5         | 16        |
-| veh.hvac.cabin.targetTemp               | 24          | 5         | 16        |
-| veh.hvac.cabin.blowerDuty               | 24          | 5         | 16        |
-| veh.hvac.cabin.fanLevel                 | 24          | 2         | 16        |
-| veh.hvac.cabin.compressorLoad           | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.cabinTemp         | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.targetTemp        | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.blowerDuty        | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.fanLevel          | 24          | 2         | 16        |
+| veh.cluster.HvacCabin.compressorLoad    | 24          | 5         | 16        |
 | veh.cabin.Cabin.temperature             | 24          | 2         | 16        |
 | veh.cabin.Horn.active                   | 32          | 2         | 16        |
 | bench.stress.Stress.longString          | 544         | 515       | 529       |
@@ -1251,13 +1256,13 @@ Heap allocations of one encode / verify / decode.
 | veh.cluster.WheelHistory.wheelTemp      | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelSummary.wheelHealth    | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.cluster.wheels.ticks                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.Wheels.ticks                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built   | not built   |
-| veh.hvac.cabin.cabinTemp                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.targetTemp               | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.blowerDuty               | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.fanLevel                 | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.compressorLoad           | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.cabinTemp         | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.targetTemp        | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.blowerDuty        | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.fanLevel          | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.compressorLoad    | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cabin.Cabin.temperature             | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cabin.Horn.active                   | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | bench.stress.Stress.longString          | 0 / 0 / 1   | 0 / 0 / 1   | 0 / 0 / 1   |
@@ -1289,13 +1294,13 @@ the sum. † spread above 10 %: the figure is not stable.
 | veh.cluster.WheelHistory.wheelTemp      | 449.6 (449.1 to 450.5; 0 %)          | 386.2 (386.1 to 386.8; 0 %)             | 294.1 (293.9 to 294.4; 0 %)       |
 | veh.cluster.WheelHistory.wheelSlipRate  | 451.8 (451.3 to 453.3; 0 %)          | 386.0 (385.9 to 386.5; 0 %)             | 295.7 (295.6 to 296.5; 0 %)       |
 | veh.cluster.WheelSummary.wheelHealth    | 261.3 (260.8 to 263.1; 1 %)          | 230.7 (230.7 to 230.9; 0 %)             | 105.7 (105.2 to 106.5; 1 %)       |
-| veh.cluster.wheels.ticks                | 261.3 (260.7 to 262.5; 1 %)          | 230.7 (230.7 to 230.9; 0 %)             | 105.7 (105.3 to 106.3; 1 %)       |
+| veh.cluster.Wheels.ticks                | 261.3 (260.7 to 262.5; 1 %)          | 230.7 (230.7 to 230.9; 0 %)             | 105.7 (105.3 to 106.3; 1 %)       |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                            | not built                               | not built                         |
-| veh.hvac.cabin.cabinTemp                | 449.7 (449.2 to 450.5; 0 %)          | 386.2 (386.1 to 386.9; 0 %)             | 294.2 (293.9 to 294.7; 0 %)       |
-| veh.hvac.cabin.targetTemp               | 449.8 (449.1 to 450.6; 0 %)          | 386.2 (386.1 to 386.4; 0 %)             | 294.1 (293.9 to 294.9; 0 %)       |
-| veh.hvac.cabin.blowerDuty               | 451.8 (451.3 to 453.2; 0 %)          | 386.0 (385.9 to 386.3; 0 %)             | 295.8 (295.5 to 296.4; 0 %)       |
-| veh.hvac.cabin.fanLevel                 | 261.4 (261.0 to 262.9; 1 %)          | 230.7 (230.7 to 230.9; 0 %)             | 105.9 (105.2 to 106.6; 1 %)       |
-| veh.hvac.cabin.compressorLoad           | 451.9 (451.3 to 453.3; 0 %)          | 386.0 (385.9 to 386.4; 0 %)             | 295.8 (295.5 to 296.2; 0 %)       |
+| veh.cluster.HvacCabin.cabinTemp         | 449.7 (449.2 to 450.5; 0 %)          | 386.2 (386.1 to 386.9; 0 %)             | 294.2 (293.9 to 294.7; 0 %)       |
+| veh.cluster.HvacCabin.targetTemp        | 449.8 (449.1 to 450.6; 0 %)          | 386.2 (386.1 to 386.4; 0 %)             | 294.1 (293.9 to 294.9; 0 %)       |
+| veh.cluster.HvacCabin.blowerDuty        | 451.8 (451.3 to 453.2; 0 %)          | 386.0 (385.9 to 386.3; 0 %)             | 295.8 (295.5 to 296.4; 0 %)       |
+| veh.cluster.HvacCabin.fanLevel          | 261.4 (261.0 to 262.9; 1 %)          | 230.7 (230.7 to 230.9; 0 %)             | 105.9 (105.2 to 106.6; 1 %)       |
+| veh.cluster.HvacCabin.compressorLoad    | 451.9 (451.3 to 453.3; 0 %)          | 386.0 (385.9 to 386.4; 0 %)             | 295.8 (295.5 to 296.2; 0 %)       |
 | veh.cabin.Cabin.temperature             | 260.9 (260.6 to 261.6; 0 %)          | 237.5 (237.2 to 237.9; 0 %)             | 104.8 (104.6 to 105.6; 1 %)       |
 | veh.cabin.Horn.active                   | 281.5 (277.8 to 286.2; 3 %)          | 225.5 (225.3 to 225.8; 0 %)             | 112.7 (112.6 to 113.3; 1 %)       |
 | bench.stress.Stress.longString          | 2059.0 (2056.4 to 2063.9; 0 %)       | 1458.1 (1454.2 to 1463.4; 1 %)          | 2142.8 (2141.4 to 2145.2; 0 %)    |
@@ -1325,13 +1330,13 @@ median time of one update (the headline figure).
 | veh.cluster.WheelHistory.wheelTemp      | 0.1798      | 0.1545    | 0.1176    |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0.1807      | 0.1544    | 0.1183    |
 | veh.cluster.WheelSummary.wheelHealth    | 0.1045      | 0.0923    | 0.0423    |
-| veh.cluster.wheels.ticks                | 0.1045      | 0.0923    | 0.0423    |
+| veh.cluster.Wheels.ticks                | 0.1045      | 0.0923    | 0.0423    |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
-| veh.hvac.cabin.cabinTemp                | 0.1799      | 0.1545    | 0.1177    |
-| veh.hvac.cabin.targetTemp               | 0.1799      | 0.1545    | 0.1176    |
-| veh.hvac.cabin.blowerDuty               | 0.1807      | 0.1544    | 0.1183    |
-| veh.hvac.cabin.fanLevel                 | 0.1046      | 0.0923    | 0.0424    |
-| veh.hvac.cabin.compressorLoad           | 0.1807      | 0.1544    | 0.1183    |
+| veh.cluster.HvacCabin.cabinTemp         | 0.1799      | 0.1545    | 0.1177    |
+| veh.cluster.HvacCabin.targetTemp        | 0.1799      | 0.1545    | 0.1176    |
+| veh.cluster.HvacCabin.blowerDuty        | 0.1807      | 0.1544    | 0.1183    |
+| veh.cluster.HvacCabin.fanLevel          | 0.1046      | 0.0923    | 0.0424    |
+| veh.cluster.HvacCabin.compressorLoad    | 0.1807      | 0.1544    | 0.1183    |
 | veh.cabin.Cabin.temperature             | 0.1044      | 0.0950    | 0.0419    |
 | veh.cabin.Horn.active                   | 0.1126      | 0.0902    | 0.0451    |
 | bench.stress.Stress.longString          | 0.8236      | 0.5832    | 0.8571    |
@@ -1363,13 +1368,13 @@ not-built cell has no ratio and is marked.
 | veh.cluster.WheelHistory.wheelTemp      | 1.50                       | 0.31                  | 1.53                       | 1.31                  | 1.53                      | 1.31                 |
 | veh.cluster.WheelHistory.wheelSlipRate  | 1.50                       | 0.31                  | 1.53                       | 1.31                  | 1.53                      | 1.31                 |
 | veh.cluster.WheelSummary.wheelHealth    | 1.50                       | 0.12                  | 2.47                       | 2.18                  | 2.47                      | 2.18                 |
-| veh.cluster.wheels.ticks                | 1.50                       | 0.12                  | 2.47                       | 2.18                  | 2.47                      | 2.18                 |
+| veh.cluster.Wheels.ticks                | 1.50                       | 0.12                  | 2.47                       | 2.18                  | 2.47                      | 2.18                 |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                  | not built             | not built                  | not built             | not built                 | not built            |
-| veh.hvac.cabin.cabinTemp                | 1.50                       | 0.31                  | 1.53                       | 1.31                  | 1.53                      | 1.31                 |
-| veh.hvac.cabin.targetTemp               | 1.50                       | 0.31                  | 1.53                       | 1.31                  | 1.53                      | 1.31                 |
-| veh.hvac.cabin.blowerDuty               | 1.50                       | 0.31                  | 1.53                       | 1.30                  | 1.53                      | 1.30                 |
-| veh.hvac.cabin.fanLevel                 | 1.50                       | 0.12                  | 2.47                       | 2.18                  | 2.47                      | 2.18                 |
-| veh.hvac.cabin.compressorLoad           | 1.50                       | 0.31                  | 1.53                       | 1.31                  | 1.53                      | 1.31                 |
+| veh.cluster.HvacCabin.cabinTemp         | 1.50                       | 0.31                  | 1.53                       | 1.31                  | 1.53                      | 1.31                 |
+| veh.cluster.HvacCabin.targetTemp        | 1.50                       | 0.31                  | 1.53                       | 1.31                  | 1.53                      | 1.31                 |
+| veh.cluster.HvacCabin.blowerDuty        | 1.50                       | 0.31                  | 1.53                       | 1.30                  | 1.53                      | 1.30                 |
+| veh.cluster.HvacCabin.fanLevel          | 1.50                       | 0.12                  | 2.47                       | 2.18                  | 2.47                      | 2.18                 |
+| veh.cluster.HvacCabin.compressorLoad    | 1.50                       | 0.31                  | 1.53                       | 1.31                  | 1.53                      | 1.31                 |
 | veh.cabin.Cabin.temperature             | 1.50                       | 0.12                  | 2.49                       | 2.27                  | 2.49                      | 2.27                 |
 | veh.cabin.Horn.active                   | 2.00                       | 0.12                  | 2.50                       | 2.00                  | 2.50                      | 2.00                 |
 | bench.stress.Stress.longString          | 1.03                       | 0.97                  | 0.96                       | 0.68                  | 0.96                      | 0.68                 |
@@ -1401,13 +1406,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 181.2 (180.7 to 181.8; 1 %)       | 76.0 (76.0 to 76.1; 0 %)             | 75.0 (74.9 to 75.3; 1 %)          |
 | veh.cluster.WheelHistory.wheelSlipRate  | 181.2 (180.7 to 182.4; 1 %)       | 76.0 (76.0 to 76.0; 0 %)             | 75.0 (74.9 to 75.5; 1 %)          |
 | veh.cluster.WheelSummary.wheelHealth    | 177.5 (177.1 to 179.2; 1 %)       | 84.8 (84.8 to 85.0; 0 %)             | 73.0 (72.5 to 73.8; 2 %)          |
-| veh.cluster.wheels.ticks                | 177.6 (177.0 to 178.6; 1 %)       | 84.8 (84.8 to 84.9; 0 %)             | 73.0 (72.6 to 73.5; 1 %)          |
+| veh.cluster.Wheels.ticks                | 177.6 (177.0 to 178.6; 1 %)       | 84.8 (84.8 to 84.9; 0 %)             | 73.0 (72.6 to 73.5; 1 %)          |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                         | not built                            | not built                         |
-| veh.hvac.cabin.cabinTemp                | 181.3 (180.8 to 181.8; 1 %)       | 76.0 (76.0 to 76.4; 1 %)             | 75.1 (74.9 to 75.5; 1 %)          |
-| veh.hvac.cabin.targetTemp               | 181.3 (180.7 to 182.0; 1 %)       | 76.0 (76.0 to 76.0; 0 %)             | 75.0 (74.9 to 75.6; 1 %)          |
-| veh.hvac.cabin.blowerDuty               | 181.1 (180.7 to 182.3; 1 %)       | 76.0 (76.0 to 76.1; 0 %)             | 75.1 (74.9 to 75.6; 1 %)          |
-| veh.hvac.cabin.fanLevel                 | 177.6 (177.2 to 179.1; 1 %)       | 84.8 (84.8 to 84.9; 0 %)             | 73.2 (72.5 to 73.8; 2 %)          |
-| veh.hvac.cabin.compressorLoad           | 181.2 (180.7 to 182.5; 1 %)       | 76.0 (76.0 to 76.1; 0 %)             | 75.1 (74.9 to 75.4; 1 %)          |
+| veh.cluster.HvacCabin.cabinTemp         | 181.3 (180.8 to 181.8; 1 %)       | 76.0 (76.0 to 76.4; 1 %)             | 75.1 (74.9 to 75.5; 1 %)          |
+| veh.cluster.HvacCabin.targetTemp        | 181.3 (180.7 to 182.0; 1 %)       | 76.0 (76.0 to 76.0; 0 %)             | 75.0 (74.9 to 75.6; 1 %)          |
+| veh.cluster.HvacCabin.blowerDuty        | 181.1 (180.7 to 182.3; 1 %)       | 76.0 (76.0 to 76.1; 0 %)             | 75.1 (74.9 to 75.6; 1 %)          |
+| veh.cluster.HvacCabin.fanLevel          | 177.6 (177.2 to 179.1; 1 %)       | 84.8 (84.8 to 84.9; 0 %)             | 73.2 (72.5 to 73.8; 2 %)          |
+| veh.cluster.HvacCabin.compressorLoad    | 181.2 (180.7 to 182.5; 1 %)       | 76.0 (76.0 to 76.1; 0 %)             | 75.1 (74.9 to 75.4; 1 %)          |
 | veh.cabin.Cabin.temperature             | 176.6 (176.3 to 177.3; 1 %)       | 86.1 (85.8 to 86.4; 1 %)             | 71.5 (71.3 to 72.3; 1 %)          |
 | veh.cabin.Horn.active                   | 191.0 (187.5 to 195.5; 4 %)       | 76.0 (76.0 to 76.0; 0 %)             | 71.2 (71.0 to 71.7; 1 %)          |
 | bench.stress.Stress.longString          | 924.1 (922.4 to 926.5; 0 %)       | 232.1 (230.6 to 234.4; 2 %)          | 997.2 (996.7 to 997.9; 0 %)       |
@@ -1439,13 +1444,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 227.4 (227.4 to 227.5; 0 %)          | 245.9 (245.8 to 246.3; 0 %)             | 203.5 (203.5 to 203.6; 0 %)       |
 | veh.cluster.WheelHistory.wheelSlipRate  | 229.6 (229.6 to 229.8; 0 %)          | 245.7 (245.7 to 246.1; 0 %)             | 205.2 (205.2 to 205.4; 0 %)       |
 | veh.cluster.WheelSummary.wheelHealth    | 48.2 (48.2 to 48.3; 0 %)             | 76.5 (76.5 to 76.6; 0 %)                | 25.5 (25.5 to 25.5; 0 %)          |
-| veh.cluster.wheels.ticks                | 48.2 (48.2 to 48.3; 0 %)             | 76.5 (76.5 to 76.6; 0 %)                | 25.5 (25.5 to 25.5; 0 %)          |
+| veh.cluster.Wheels.ticks                | 48.2 (48.2 to 48.3; 0 %)             | 76.5 (76.5 to 76.6; 0 %)                | 25.5 (25.5 to 25.5; 0 %)          |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                            | not built                               | not built                         |
-| veh.hvac.cabin.cabinTemp                | 227.4 (227.4 to 227.6; 0 %)          | 245.9 (245.8 to 246.1; 0 %)             | 203.5 (203.5 to 203.6; 0 %)       |
-| veh.hvac.cabin.targetTemp               | 227.4 (227.4 to 227.5; 0 %)          | 245.9 (245.8 to 246.0; 0 %)             | 203.5 (203.5 to 203.7; 0 %)       |
-| veh.hvac.cabin.blowerDuty               | 229.6 (229.6 to 229.7; 0 %)          | 245.7 (245.7 to 245.8; 0 %)             | 205.2 (205.2 to 205.2; 0 %)       |
-| veh.hvac.cabin.fanLevel                 | 48.2 (48.2 to 48.3; 0 %)             | 76.5 (76.5 to 76.7; 0 %)                | 25.5 (25.5 to 25.6; 0 %)          |
-| veh.hvac.cabin.compressorLoad           | 229.6 (229.6 to 229.8; 0 %)          | 245.7 (245.6 to 245.9; 0 %)             | 205.2 (205.2 to 205.3; 0 %)       |
+| veh.cluster.HvacCabin.cabinTemp         | 227.4 (227.4 to 227.6; 0 %)          | 245.9 (245.8 to 246.1; 0 %)             | 203.5 (203.5 to 203.6; 0 %)       |
+| veh.cluster.HvacCabin.targetTemp        | 227.4 (227.4 to 227.5; 0 %)          | 245.9 (245.8 to 246.0; 0 %)             | 203.5 (203.5 to 203.7; 0 %)       |
+| veh.cluster.HvacCabin.blowerDuty        | 229.6 (229.6 to 229.7; 0 %)          | 245.7 (245.7 to 245.8; 0 %)             | 205.2 (205.2 to 205.2; 0 %)       |
+| veh.cluster.HvacCabin.fanLevel          | 48.2 (48.2 to 48.3; 0 %)             | 76.5 (76.5 to 76.7; 0 %)                | 25.5 (25.5 to 25.6; 0 %)          |
+| veh.cluster.HvacCabin.compressorLoad    | 229.6 (229.6 to 229.8; 0 %)          | 245.7 (245.6 to 245.9; 0 %)             | 205.2 (205.2 to 205.3; 0 %)       |
 | veh.cabin.Cabin.temperature             | 48.8 (48.8 to 48.8; 0 %)             | 78.7 (78.7 to 78.9; 0 %)                | 26.1 (26.1 to 26.1; 0 %)          |
 | veh.cabin.Horn.active                   | 50.5 (50.5 to 50.5; 0 %)             | 76.9 (76.7 to 77.0; 0 %)                | 25.5 (25.5 to 25.5; 0 %)          |
 | bench.stress.Stress.longString          | 669.2 (668.8 to 670.0; 0 %)          | 708.6 (707.3 to 709.9; 0 %)             | 758.0 (757.5 to 758.7; 0 %)       |
@@ -1477,13 +1482,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 41.0 (41.0 to 41.2; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
 | veh.cluster.WheelHistory.wheelSlipRate  | 41.1 (41.0 to 41.1; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
 | veh.cluster.WheelSummary.wheelHealth    | 35.5 (35.5 to 35.6; 0 %)          | 69.3 (69.3 to 69.4; 0 %)          | 7.2 (7.2 to 7.2; 0 %)             |
-| veh.cluster.wheels.ticks                | 35.5 (35.5 to 35.6; 0 %)          | 69.3 (69.3 to 69.4; 0 %)          | 7.2 (7.2 to 7.2; 0 %)             |
+| veh.cluster.Wheels.ticks                | 35.5 (35.5 to 35.6; 0 %)          | 69.3 (69.3 to 69.4; 0 %)          | 7.2 (7.2 to 7.2; 0 %)             |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                         | not built                         | not built                         |
-| veh.hvac.cabin.cabinTemp                | 41.1 (41.0 to 41.1; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
-| veh.hvac.cabin.targetTemp               | 41.1 (41.0 to 41.2; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
-| veh.hvac.cabin.blowerDuty               | 41.1 (41.0 to 41.1; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
-| veh.hvac.cabin.fanLevel                 | 35.5 (35.5 to 35.6; 0 %)          | 69.3 (69.3 to 69.3; 0 %)          | 7.2 (7.2 to 7.2; 0 %)             |
-| veh.hvac.cabin.compressorLoad           | 41.1 (41.0 to 41.1; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
+| veh.cluster.HvacCabin.cabinTemp         | 41.1 (41.0 to 41.1; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
+| veh.cluster.HvacCabin.targetTemp        | 41.1 (41.0 to 41.2; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
+| veh.cluster.HvacCabin.blowerDuty        | 41.1 (41.0 to 41.1; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
+| veh.cluster.HvacCabin.fanLevel          | 35.5 (35.5 to 35.6; 0 %)          | 69.3 (69.3 to 69.3; 0 %)          | 7.2 (7.2 to 7.2; 0 %)             |
+| veh.cluster.HvacCabin.compressorLoad    | 41.1 (41.0 to 41.1; 0 %)          | 64.3 (64.3 to 64.4; 0 %)          | 15.5 (15.5 to 15.5; 0 %)          |
 | veh.cabin.Cabin.temperature             | 35.5 (35.5 to 35.5; 0 %)          | 72.6 (72.6 to 72.7; 0 %)          | 7.2 (7.2 to 7.2; 0 %)             |
 | veh.cabin.Horn.active                   | 40.1 (39.9 to 40.3; 1 %)          | 72.6 (72.6 to 72.7; 0 %)          | 16.1 (16.1 to 16.1; 0 %)          |
 | bench.stress.Stress.longString          | 465.8 (465.2 to 467.4; 0 %)       | 517.4 (516.3 to 519.1; 1 %)       | 387.6 (387.2 to 388.7; 0 %)       |
@@ -1532,13 +1537,13 @@ an encoding add up to its derived load of one update.
 | veh.cluster.WheelHistory.wheelTemp      | 0.0725              | 0.0304         | 0.0300         | 0.0910              | 0.0984         | 0.0814         | 0.0164              | 0.0257         | 0.0062         |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0.0725              | 0.0304         | 0.0300         | 0.0918              | 0.0983         | 0.0821         | 0.0164              | 0.0257         | 0.0062         |
 | veh.cluster.WheelSummary.wheelHealth    | 0.0710              | 0.0339         | 0.0292         | 0.0193              | 0.0306         | 0.0102         | 0.0142              | 0.0277         | 0.0029         |
-| veh.cluster.wheels.ticks                | 0.0710              | 0.0339         | 0.0292         | 0.0193              | 0.0306         | 0.0102         | 0.0142              | 0.0277         | 0.0029         |
+| veh.cluster.Wheels.ticks                | 0.0710              | 0.0339         | 0.0292         | 0.0193              | 0.0306         | 0.0102         | 0.0142              | 0.0277         | 0.0029         |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built           | not built      | not built      | not built           | not built      | not built      | not built           | not built      | not built      |
-| veh.hvac.cabin.cabinTemp                | 0.0725              | 0.0304         | 0.0300         | 0.0910              | 0.0984         | 0.0814         | 0.0164              | 0.0257         | 0.0062         |
-| veh.hvac.cabin.targetTemp               | 0.0725              | 0.0304         | 0.0300         | 0.0910              | 0.0983         | 0.0814         | 0.0164              | 0.0257         | 0.0062         |
-| veh.hvac.cabin.blowerDuty               | 0.0725              | 0.0304         | 0.0301         | 0.0918              | 0.0983         | 0.0821         | 0.0164              | 0.0257         | 0.0062         |
-| veh.hvac.cabin.fanLevel                 | 0.0711              | 0.0339         | 0.0293         | 0.0193              | 0.0306         | 0.0102         | 0.0142              | 0.0277         | 0.0029         |
-| veh.hvac.cabin.compressorLoad           | 0.0725              | 0.0304         | 0.0300         | 0.0918              | 0.0983         | 0.0821         | 0.0164              | 0.0257         | 0.0062         |
+| veh.cluster.HvacCabin.cabinTemp         | 0.0725              | 0.0304         | 0.0300         | 0.0910              | 0.0984         | 0.0814         | 0.0164              | 0.0257         | 0.0062         |
+| veh.cluster.HvacCabin.targetTemp        | 0.0725              | 0.0304         | 0.0300         | 0.0910              | 0.0983         | 0.0814         | 0.0164              | 0.0257         | 0.0062         |
+| veh.cluster.HvacCabin.blowerDuty        | 0.0725              | 0.0304         | 0.0301         | 0.0918              | 0.0983         | 0.0821         | 0.0164              | 0.0257         | 0.0062         |
+| veh.cluster.HvacCabin.fanLevel          | 0.0711              | 0.0339         | 0.0293         | 0.0193              | 0.0306         | 0.0102         | 0.0142              | 0.0277         | 0.0029         |
+| veh.cluster.HvacCabin.compressorLoad    | 0.0725              | 0.0304         | 0.0300         | 0.0918              | 0.0983         | 0.0821         | 0.0164              | 0.0257         | 0.0062         |
 | veh.cabin.Cabin.temperature             | 0.0707              | 0.0344         | 0.0286         | 0.0195              | 0.0315         | 0.0104         | 0.0142              | 0.0291         | 0.0029         |
 | veh.cabin.Horn.active                   | 0.0764              | 0.0304         | 0.0285         | 0.0202              | 0.0308         | 0.0102         | 0.0160              | 0.0291         | 0.0064         |
 | bench.stress.Stress.longString          | 0.3696              | 0.0928         | 0.3989         | 0.2677              | 0.2834         | 0.3032         | 0.1863              | 0.2069         | 0.1551         |
@@ -1571,13 +1576,13 @@ a ratio whose podbuf time is under 10 ns is not comparable.
 | veh.cluster.WheelHistory.wheelTemp      | 2.42                         | 1.01                    | 1.12                         | 1.21                    | 2.64                         | 4.14                    |
 | veh.cluster.WheelHistory.wheelSlipRate  | 2.42                         | 1.01                    | 1.12                         | 1.20                    | 2.64                         | 4.14                    |
 | veh.cluster.WheelSummary.wheelHealth    | 2.43                         | 1.16                    | 1.89                         | 3.00                    | 4.92                         | 9.62                    |
-| veh.cluster.wheels.ticks                | 2.43                         | 1.16                    | 1.89                         | 3.00                    | 4.93                         | 9.62                    |
+| veh.cluster.Wheels.ticks                | 2.43                         | 1.16                    | 1.89                         | 3.00                    | 4.93                         | 9.62                    |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                    | not built               | not built                    | not built               | not built                    | not built               |
-| veh.hvac.cabin.cabinTemp                | 2.41                         | 1.01                    | 1.12                         | 1.21                    | 2.64                         | 4.14                    |
-| veh.hvac.cabin.targetTemp               | 2.42                         | 1.01                    | 1.12                         | 1.21                    | 2.64                         | 4.14                    |
-| veh.hvac.cabin.blowerDuty               | 2.41                         | 1.01                    | 1.12                         | 1.20                    | 2.64                         | 4.14                    |
-| veh.hvac.cabin.fanLevel                 | 2.43                         | 1.16                    | 1.89                         | 3.00                    | 4.92                         | 9.62                    |
-| veh.hvac.cabin.compressorLoad           | 2.41                         | 1.01                    | 1.12                         | 1.20                    | 2.64                         | 4.14                    |
+| veh.cluster.HvacCabin.cabinTemp         | 2.41                         | 1.01                    | 1.12                         | 1.21                    | 2.64                         | 4.14                    |
+| veh.cluster.HvacCabin.targetTemp        | 2.42                         | 1.01                    | 1.12                         | 1.21                    | 2.64                         | 4.14                    |
+| veh.cluster.HvacCabin.blowerDuty        | 2.41                         | 1.01                    | 1.12                         | 1.20                    | 2.64                         | 4.14                    |
+| veh.cluster.HvacCabin.fanLevel          | 2.43                         | 1.16                    | 1.89                         | 3.00                    | 4.92                         | 9.62                    |
+| veh.cluster.HvacCabin.compressorLoad    | 2.41                         | 1.01                    | 1.12                         | 1.20                    | 2.64                         | 4.14                    |
 | veh.cabin.Cabin.temperature             | 2.47                         | 1.20                    | 1.87                         | 3.02                    | 4.92                         | 10.08                   |
 | veh.cabin.Horn.active                   | 2.68                         | 1.07                    | 1.98                         | 3.01                    | 2.49                         | 4.52                    |
 | bench.stress.Stress.longString          | 0.93                         | 0.23                    | 0.88                         | 0.93                    | 1.20                         | 1.33                    |
@@ -1622,24 +1627,24 @@ figure, and their difference.
 | veh.cluster.WheelSummary.wheelHealth   | FlatBuffers | 9.0357  | 0.1045    | 8.9311     |
 | veh.cluster.WheelSummary.wheelHealth   | proto3      | 9.2599  | 0.0923    | 9.1676     |
 | veh.cluster.WheelSummary.wheelHealth   | podbuf      | 8.8938  | 0.0423    | 8.8515     |
-| veh.cluster.wheels.ticks               | FlatBuffers | 10.0353 | 0.1045    | 9.9308     |
-| veh.cluster.wheels.ticks               | proto3      | 9.8397  | 0.0923    | 9.7475     |
-| veh.cluster.wheels.ticks               | podbuf      | 9.3654  | 0.0423    | 9.3232     |
-| veh.hvac.cabin.cabinTemp               | FlatBuffers | 10.3066 | 0.1799    | 10.1267    |
-| veh.hvac.cabin.cabinTemp               | proto3      | 10.1798 | 0.1545    | 10.0253    |
-| veh.hvac.cabin.cabinTemp               | podbuf      | 9.5523  | 0.1177    | 9.4346     |
-| veh.hvac.cabin.targetTemp              | FlatBuffers | 11.5923 | 0.1799    | 11.4124    |
-| veh.hvac.cabin.targetTemp              | proto3      | 11.6098 | 0.1545    | 11.4553    |
-| veh.hvac.cabin.targetTemp              | podbuf      | 10.6491 | 0.1176    | 10.5315    |
-| veh.hvac.cabin.blowerDuty              | FlatBuffers | 9.7570  | 0.1807    | 9.5763     |
-| veh.hvac.cabin.blowerDuty              | proto3      | 9.7749  | 0.1544    | 9.6205     |
-| veh.hvac.cabin.blowerDuty              | podbuf      | 9.5958  | 0.1183    | 9.4774     |
-| veh.hvac.cabin.fanLevel                | FlatBuffers | 9.4500  | 0.1046    | 9.3455     |
-| veh.hvac.cabin.fanLevel                | proto3      | 9.3779  | 0.0923    | 9.2856     |
-| veh.hvac.cabin.fanLevel                | podbuf      | 8.6035  | 0.0424    | 8.5611     |
-| veh.hvac.cabin.compressorLoad          | FlatBuffers | 11.6476 | 0.1807    | 11.4668    |
-| veh.hvac.cabin.compressorLoad          | proto3      | 11.6080 | 0.1544    | 11.4536    |
-| veh.hvac.cabin.compressorLoad          | podbuf      | 10.2380 | 0.1183    | 10.1197    |
+| veh.cluster.Wheels.ticks               | FlatBuffers | 10.0353 | 0.1045    | 9.9308     |
+| veh.cluster.Wheels.ticks               | proto3      | 9.8397  | 0.0923    | 9.7475     |
+| veh.cluster.Wheels.ticks               | podbuf      | 9.3654  | 0.0423    | 9.3232     |
+| veh.cluster.HvacCabin.cabinTemp        | FlatBuffers | 10.3066 | 0.1799    | 10.1267    |
+| veh.cluster.HvacCabin.cabinTemp        | proto3      | 10.1798 | 0.1545    | 10.0253    |
+| veh.cluster.HvacCabin.cabinTemp        | podbuf      | 9.5523  | 0.1177    | 9.4346     |
+| veh.cluster.HvacCabin.targetTemp       | FlatBuffers | 11.5923 | 0.1799    | 11.4124    |
+| veh.cluster.HvacCabin.targetTemp       | proto3      | 11.6098 | 0.1545    | 11.4553    |
+| veh.cluster.HvacCabin.targetTemp       | podbuf      | 10.6491 | 0.1176    | 10.5315    |
+| veh.cluster.HvacCabin.blowerDuty       | FlatBuffers | 9.7570  | 0.1807    | 9.5763     |
+| veh.cluster.HvacCabin.blowerDuty       | proto3      | 9.7749  | 0.1544    | 9.6205     |
+| veh.cluster.HvacCabin.blowerDuty       | podbuf      | 9.5958  | 0.1183    | 9.4774     |
+| veh.cluster.HvacCabin.fanLevel         | FlatBuffers | 9.4500  | 0.1046    | 9.3455     |
+| veh.cluster.HvacCabin.fanLevel         | proto3      | 9.3779  | 0.0923    | 9.2856     |
+| veh.cluster.HvacCabin.fanLevel         | podbuf      | 8.6035  | 0.0424    | 8.5611     |
+| veh.cluster.HvacCabin.compressorLoad   | FlatBuffers | 11.6476 | 0.1807    | 11.4668    |
+| veh.cluster.HvacCabin.compressorLoad   | proto3      | 11.6080 | 0.1544    | 11.4536    |
+| veh.cluster.HvacCabin.compressorLoad   | podbuf      | 10.2380 | 0.1183    | 10.1197    |
 | veh.cabin.Cabin.temperature            | FlatBuffers | 9.6481  | 0.1044    | 9.5437     |
 | veh.cabin.Cabin.temperature            | proto3      | 9.9673  | 0.0950    | 9.8723     |
 | veh.cabin.Cabin.temperature            | podbuf      | 9.6728  | 0.0419    | 9.6309     |
@@ -1775,13 +1780,13 @@ Encoded size in bytes of one payload value.
 | veh.cluster.WheelHistory.wheelTemp      | 24          | 5         | 16        |
 | veh.cluster.WheelHistory.wheelSlipRate  | 24          | 5         | 16        |
 | veh.cluster.WheelSummary.wheelHealth    | 24          | 2         | 16        |
-| veh.cluster.wheels.ticks                | 24          | 2         | 16        |
+| veh.cluster.Wheels.ticks                | 24          | 2         | 16        |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
-| veh.hvac.cabin.cabinTemp                | 24          | 5         | 16        |
-| veh.hvac.cabin.targetTemp               | 24          | 5         | 16        |
-| veh.hvac.cabin.blowerDuty               | 24          | 5         | 16        |
-| veh.hvac.cabin.fanLevel                 | 24          | 2         | 16        |
-| veh.hvac.cabin.compressorLoad           | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.cabinTemp         | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.targetTemp        | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.blowerDuty        | 24          | 5         | 16        |
+| veh.cluster.HvacCabin.fanLevel          | 24          | 2         | 16        |
+| veh.cluster.HvacCabin.compressorLoad    | 24          | 5         | 16        |
 | veh.cabin.Cabin.temperature             | 24          | 2         | 16        |
 | veh.cabin.Horn.active                   | 32          | 2         | 16        |
 | bench.stress.Stress.longString          | 544         | 515       | 529       |
@@ -1810,13 +1815,13 @@ Heap allocations of one encode / verify / decode.
 | veh.cluster.WheelHistory.wheelTemp      | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelSummary.wheelHealth    | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.cluster.wheels.ticks                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.Wheels.ticks                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built   | not built   |
-| veh.hvac.cabin.cabinTemp                | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.targetTemp               | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.blowerDuty               | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.fanLevel                 | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
-| veh.hvac.cabin.compressorLoad           | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.cabinTemp         | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.targetTemp        | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.blowerDuty        | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.fanLevel          | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
+| veh.cluster.HvacCabin.compressorLoad    | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cabin.Cabin.temperature             | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | veh.cabin.Horn.active                   | 0 / 0 / 0   | 0 / 0 / 0   | 0 / 0 / 0   |
 | bench.stress.Stress.longString          | 0 / 0 / 1   | 0 / 0 / 1   | 0 / 0 / 1   |
@@ -1848,13 +1853,13 @@ the sum. † spread above 10 %: the figure is not stable.
 | veh.cluster.WheelHistory.wheelTemp      | 153.2 (151.3 to 154.0; 2 %)          | 120.8 (120.0 to 123.4; 3 %)          | 86.6 (86.3 to 87.2; 1 %)          |
 | veh.cluster.WheelHistory.wheelSlipRate  | 152.2 (151.1 to 153.9; 2 %)          | 119.8 (118.8 to 121.2; 2 %)          | 86.8 (84.6 to 88.3; 4 %)          |
 | veh.cluster.WheelSummary.wheelHealth    | 100.2 (99.8 to 100.8; 1 %)           | 82.6 (82.4 to 83.2; 1 %)             | 33.8 (33.5 to 34.1; 2 %)          |
-| veh.cluster.wheels.ticks                | 100.2 (99.8 to 100.9; 1 %)           | 82.6 (82.4 to 83.3; 1 %)             | 33.8 (33.4 to 34.0; 2 %)          |
+| veh.cluster.Wheels.ticks                | 100.2 (99.8 to 100.9; 1 %)           | 82.6 (82.4 to 83.3; 1 %)             | 33.8 (33.4 to 34.0; 2 %)          |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                            | not built                            | not built                         |
-| veh.hvac.cabin.cabinTemp                | 153.3 (152.1 to 153.9; 1 %)          | 120.9 (119.8 to 123.9; 3 %)          | 86.6 (86.2 to 87.5; 1 %)          |
-| veh.hvac.cabin.targetTemp               | 152.8 (152.0 to 155.1; 2 %)          | 120.7 (119.8 to 122.5; 2 %)          | 86.7 (86.3 to 87.4; 1 %)          |
-| veh.hvac.cabin.blowerDuty               | 152.2 (151.5 to 153.4; 1 %)          | 120.0 (117.9 to 121.5; 3 %)          | 85.8 (84.6 to 88.1; 4 %)          |
-| veh.hvac.cabin.fanLevel                 | 100.2 (99.8 to 101.1; 1 %)           | 82.6 (82.4 to 83.3; 1 %)             | 33.8 (33.5 to 34.2; 2 %)          |
-| veh.hvac.cabin.compressorLoad           | 152.2 (151.3 to 153.0; 1 %)          | 119.8 (119.0 to 121.2; 2 %)          | 85.3 (84.5 to 88.3; 4 %)          |
+| veh.cluster.HvacCabin.cabinTemp         | 153.3 (152.1 to 153.9; 1 %)          | 120.9 (119.8 to 123.9; 3 %)          | 86.6 (86.2 to 87.5; 1 %)          |
+| veh.cluster.HvacCabin.targetTemp        | 152.8 (152.0 to 155.1; 2 %)          | 120.7 (119.8 to 122.5; 2 %)          | 86.7 (86.3 to 87.4; 1 %)          |
+| veh.cluster.HvacCabin.blowerDuty        | 152.2 (151.5 to 153.4; 1 %)          | 120.0 (117.9 to 121.5; 3 %)          | 85.8 (84.6 to 88.1; 4 %)          |
+| veh.cluster.HvacCabin.fanLevel          | 100.2 (99.8 to 101.1; 1 %)           | 82.6 (82.4 to 83.3; 1 %)             | 33.8 (33.5 to 34.2; 2 %)          |
+| veh.cluster.HvacCabin.compressorLoad    | 152.2 (151.3 to 153.0; 1 %)          | 119.8 (119.0 to 121.2; 2 %)          | 85.3 (84.5 to 88.3; 4 %)          |
 | veh.cabin.Cabin.temperature             | 101.4 (100.6 to 102.7; 2 %)          | 84.6 (83.9 to 85.2; 2 %)             | 33.8 (33.6 to 34.2; 2 %)          |
 | veh.cabin.Horn.active                   | 109.9 (108.8 to 110.9; 2 %)          | 101.2 (100.3 to 102.4; 2 %)          | 37.9 (36.9 to 38.0; 3 %)          |
 | bench.stress.Stress.longString          | 717.6 (713.1 to 726.2; 2 %)          | 436.4 (434.0 to 439.9; 1 %)          | 774.5 (771.6 to 777.1; 1 %)       |
@@ -1884,13 +1889,13 @@ median time of one update (the headline figure).
 | veh.cluster.WheelHistory.wheelTemp      | 0.0613      | 0.0483    | 0.0346    |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0.0609      | 0.0479    | 0.0347    |
 | veh.cluster.WheelSummary.wheelHealth    | 0.0401      | 0.0330    | 0.0135    |
-| veh.cluster.wheels.ticks                | 0.0401      | 0.0331    | 0.0135    |
+| veh.cluster.Wheels.ticks                | 0.0401      | 0.0331    | 0.0135    |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built   | not built | not built |
-| veh.hvac.cabin.cabinTemp                | 0.0613      | 0.0483    | 0.0346    |
-| veh.hvac.cabin.targetTemp               | 0.0611      | 0.0483    | 0.0347    |
-| veh.hvac.cabin.blowerDuty               | 0.0609      | 0.0480    | 0.0343    |
-| veh.hvac.cabin.fanLevel                 | 0.0401      | 0.0331    | 0.0135    |
-| veh.hvac.cabin.compressorLoad           | 0.0609      | 0.0479    | 0.0341    |
+| veh.cluster.HvacCabin.cabinTemp         | 0.0613      | 0.0483    | 0.0346    |
+| veh.cluster.HvacCabin.targetTemp        | 0.0611      | 0.0483    | 0.0347    |
+| veh.cluster.HvacCabin.blowerDuty        | 0.0609      | 0.0480    | 0.0343    |
+| veh.cluster.HvacCabin.fanLevel          | 0.0401      | 0.0331    | 0.0135    |
+| veh.cluster.HvacCabin.compressorLoad    | 0.0609      | 0.0479    | 0.0341    |
 | veh.cabin.Cabin.temperature             | 0.0406      | 0.0338    | 0.0135    |
 | veh.cabin.Horn.active                   | 0.0440      | 0.0405    | 0.0152    |
 | bench.stress.Stress.longString          | 0.2870      | 0.1746    | 0.3098    |
@@ -1922,13 +1927,13 @@ not-built cell has no ratio and is marked.
 | veh.cluster.WheelHistory.wheelTemp      | 1.50                       | 0.31                  | 1.77                       | 1.39                  | 1.77                      | 1.39                 |
 | veh.cluster.WheelHistory.wheelSlipRate  | 1.50                       | 0.31                  | 1.75                       | 1.38                  | 1.75                      | 1.38                 |
 | veh.cluster.WheelSummary.wheelHealth    | 1.50                       | 0.12                  | 2.97                       | 2.44                  | 2.97                      | 2.44                 |
-| veh.cluster.wheels.ticks                | 1.50                       | 0.12                  | 2.97                       | 2.44                  | 2.97                      | 2.44                 |
+| veh.cluster.Wheels.ticks                | 1.50                       | 0.12                  | 2.97                       | 2.44                  | 2.97                      | 2.44                 |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                  | not built             | not built                  | not built             | not built                 | not built            |
-| veh.hvac.cabin.cabinTemp                | 1.50                       | 0.31                  | 1.77                       | 1.40                  | 1.77                      | 1.40                 |
-| veh.hvac.cabin.targetTemp               | 1.50                       | 0.31                  | 1.76                       | 1.39                  | 1.76                      | 1.39                 |
-| veh.hvac.cabin.blowerDuty               | 1.50                       | 0.31                  | 1.77                       | 1.40                  | 1.77                      | 1.40                 |
-| veh.hvac.cabin.fanLevel                 | 1.50                       | 0.12                  | 2.97                       | 2.45                  | 2.97                      | 2.45                 |
-| veh.hvac.cabin.compressorLoad           | 1.50                       | 0.31                  | 1.79                       | 1.41                  | 1.79                      | 1.41                 |
+| veh.cluster.HvacCabin.cabinTemp         | 1.50                       | 0.31                  | 1.77                       | 1.40                  | 1.77                      | 1.40                 |
+| veh.cluster.HvacCabin.targetTemp        | 1.50                       | 0.31                  | 1.76                       | 1.39                  | 1.76                      | 1.39                 |
+| veh.cluster.HvacCabin.blowerDuty        | 1.50                       | 0.31                  | 1.77                       | 1.40                  | 1.77                      | 1.40                 |
+| veh.cluster.HvacCabin.fanLevel          | 1.50                       | 0.12                  | 2.97                       | 2.45                  | 2.97                      | 2.45                 |
+| veh.cluster.HvacCabin.compressorLoad    | 1.50                       | 0.31                  | 1.79                       | 1.41                  | 1.79                      | 1.41                 |
 | veh.cabin.Cabin.temperature             | 1.50                       | 0.12                  | 3.00                       | 2.50                  | 3.00                      | 2.50                 |
 | veh.cabin.Horn.active                   | 2.00                       | 0.12                  | 2.90                       | 2.67                  | 2.90                      | 2.67                 |
 | bench.stress.Stress.longString          | 1.03                       | 0.97                  | 0.93                       | 0.56                  | 0.93                      | 0.56                 |
@@ -1960,13 +1965,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 69.0 (68.3 to 69.3; 2 %)       | 25.4 (25.2 to 25.8; 2 %)          | 23.6 (23.5 to 24.0; 2 %)       |
 | veh.cluster.WheelHistory.wheelSlipRate  | 68.7 (68.2 to 70.4; 3 %)       | 25.4 (25.2 to 25.6; 2 %)          | 23.6 (23.5 to 24.0; 3 %)       |
 | veh.cluster.WheelSummary.wheelHealth    | 70.7 (70.3 to 71.0; 1 %)       | 27.3 (27.2 to 27.8; 2 %)          | 23.4 (23.2 to 23.6; 2 %)       |
-| veh.cluster.wheels.ticks                | 70.7 (70.3 to 71.1; 1 %)       | 27.3 (27.2 to 27.8; 2 %)          | 23.5 (23.2 to 23.5; 1 %)       |
+| veh.cluster.Wheels.ticks                | 70.7 (70.3 to 71.1; 1 %)       | 27.3 (27.2 to 27.8; 2 %)          | 23.5 (23.2 to 23.5; 1 %)       |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                      | not built                         | not built                      |
-| veh.hvac.cabin.cabinTemp                | 69.0 (68.5 to 69.3; 1 %)       | 25.4 (25.2 to 26.1; 4 %)          | 23.6 (23.4 to 24.2; 3 %)       |
-| veh.hvac.cabin.targetTemp               | 68.7 (68.4 to 70.5; 3 %)       | 25.3 (25.2 to 25.7; 2 %)          | 23.6 (23.5 to 24.0; 2 %)       |
-| veh.hvac.cabin.blowerDuty               | 68.8 (68.4 to 69.6; 2 %)       | 25.6 (25.1 to 25.8; 3 %)          | 23.6 (23.5 to 23.9; 2 %)       |
-| veh.hvac.cabin.fanLevel                 | 70.6 (70.3 to 71.3; 1 %)       | 27.3 (27.2 to 27.8; 2 %)          | 23.5 (23.3 to 23.7; 2 %)       |
-| veh.hvac.cabin.compressorLoad           | 68.8 (68.2 to 69.4; 2 %)       | 25.4 (25.2 to 25.7; 2 %)          | 23.6 (23.5 to 24.0; 2 %)       |
+| veh.cluster.HvacCabin.cabinTemp         | 69.0 (68.5 to 69.3; 1 %)       | 25.4 (25.2 to 26.1; 4 %)          | 23.6 (23.4 to 24.2; 3 %)       |
+| veh.cluster.HvacCabin.targetTemp        | 68.7 (68.4 to 70.5; 3 %)       | 25.3 (25.2 to 25.7; 2 %)          | 23.6 (23.5 to 24.0; 2 %)       |
+| veh.cluster.HvacCabin.blowerDuty        | 68.8 (68.4 to 69.6; 2 %)       | 25.6 (25.1 to 25.8; 3 %)          | 23.6 (23.5 to 23.9; 2 %)       |
+| veh.cluster.HvacCabin.fanLevel          | 70.6 (70.3 to 71.3; 1 %)       | 27.3 (27.2 to 27.8; 2 %)          | 23.5 (23.3 to 23.7; 2 %)       |
+| veh.cluster.HvacCabin.compressorLoad    | 68.8 (68.2 to 69.4; 2 %)       | 25.4 (25.2 to 25.7; 2 %)          | 23.6 (23.5 to 24.0; 2 %)       |
 | veh.cabin.Cabin.temperature             | 71.7 (71.0 to 72.7; 2 %)       | 35.3 (35.1 to 35.4; 1 %)          | 23.5 (23.4 to 23.8; 2 %)       |
 | veh.cabin.Horn.active                   | 77.3 (76.3 to 78.2; 2 %)       | 50.5 (49.9 to 51.4; 3 %)          | 23.5 (22.7 to 23.6; 4 %)       |
 | bench.stress.Stress.longString          | 358.0 (355.4 to 364.1; 2 %)    | 59.3 (58.8 to 59.8; 2 %)          | 385.2 (384.4 to 386.0; 0 %)    |
@@ -1998,13 +2003,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 69.9 (68.7 to 70.3; 2 %)             | 71.5 (71.1 to 73.5; 3 %)             | 58.3 (58.1 to 58.5; 1 %)       |
 | veh.cluster.WheelHistory.wheelSlipRate  | 69.1 (68.7 to 69.2; 1 %)             | 70.6 (70.0 to 71.6; 2 %)             | 58.5 (56.5 to 59.5; 5 %)       |
 | veh.cluster.WheelSummary.wheelHealth    | 16.2 (16.2 to 16.3; 0 %)             | 22.1 (22.0 to 22.2; 1 %)             | 8.3 (8.2 to 8.4; 2 %)          |
-| veh.cluster.wheels.ticks                | 16.2 (16.2 to 16.3; 0 %)             | 22.1 (22.0 to 22.2; 1 %)             | 8.3 (8.2 to 8.4; 3 %)          |
+| veh.cluster.Wheels.ticks                | 16.2 (16.2 to 16.3; 0 %)             | 22.1 (22.0 to 22.2; 1 %)             | 8.3 (8.2 to 8.4; 3 %)          |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                            | not built                            | not built                      |
-| veh.hvac.cabin.cabinTemp                | 69.9 (69.3 to 70.2; 1 %)             | 71.5 (70.8 to 73.7; 4 %)             | 58.3 (58.1 to 58.6; 1 %)       |
-| veh.hvac.cabin.targetTemp               | 69.8 (69.3 to 70.2; 1 %)             | 71.5 (70.7 to 72.7; 3 %)             | 58.3 (58.1 to 58.7; 1 %)       |
-| veh.hvac.cabin.blowerDuty               | 69.1 (68.9 to 69.5; 1 %)             | 70.6 (69.3 to 71.7; 3 %)             | 57.5 (56.4 to 59.5; 5 %)       |
-| veh.hvac.cabin.fanLevel                 | 16.2 (16.2 to 16.2; 0 %)             | 22.1 (22.0 to 22.2; 1 %)             | 8.3 (8.2 to 8.4; 2 %)          |
-| veh.hvac.cabin.compressorLoad           | 69.1 (68.8 to 69.2; 1 %)             | 70.6 (70.1 to 71.5; 2 %)             | 57.0 (56.4 to 59.6; 6 %)       |
+| veh.cluster.HvacCabin.cabinTemp         | 69.9 (69.3 to 70.2; 1 %)             | 71.5 (70.8 to 73.7; 4 %)             | 58.3 (58.1 to 58.6; 1 %)       |
+| veh.cluster.HvacCabin.targetTemp        | 69.8 (69.3 to 70.2; 1 %)             | 71.5 (70.7 to 72.7; 3 %)             | 58.3 (58.1 to 58.7; 1 %)       |
+| veh.cluster.HvacCabin.blowerDuty        | 69.1 (68.9 to 69.5; 1 %)             | 70.6 (69.3 to 71.7; 3 %)             | 57.5 (56.4 to 59.5; 5 %)       |
+| veh.cluster.HvacCabin.fanLevel          | 16.2 (16.2 to 16.2; 0 %)             | 22.1 (22.0 to 22.2; 1 %)             | 8.3 (8.2 to 8.4; 2 %)          |
+| veh.cluster.HvacCabin.compressorLoad    | 69.1 (68.8 to 69.2; 1 %)             | 70.6 (70.1 to 71.5; 2 %)             | 57.0 (56.4 to 59.6; 6 %)       |
 | veh.cabin.Cabin.temperature             | 16.3 (16.3 to 16.4; 1 %)             | 22.4 (22.1 to 22.5; 2 %)             | 8.3 (8.3 to 8.4; 1 %)          |
 | veh.cabin.Horn.active                   | 17.2 (17.2 to 17.2; 0 %)             | 22.8 (22.7 to 23.1; 2 %)             | 8.2 (8.2 to 8.3; 1 %)          |
 | bench.stress.Stress.longString          | 225.2 (223.6 to 227.1; 2 %)          | 235.3 (234.0 to 237.7; 2 %)          | 273.6 (272.6 to 274.4; 1 %)    |
@@ -2036,13 +2041,13 @@ stable.
 | veh.cluster.WheelHistory.wheelTemp      | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.7 to 24.1; 2 %)          | 4.7 (4.7 to 4.7; 1 %)          |
 | veh.cluster.WheelHistory.wheelSlipRate  | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.7 to 24.0; 2 %)          | 4.7 (4.7 to 4.7; 1 %)          |
 | veh.cluster.WheelSummary.wheelHealth    | 13.3 (13.3 to 13.5; 1 %)       | 33.2 (33.2 to 33.3; 0 %)          | 2.0 (2.0 to 2.0; 0 %)          |
-| veh.cluster.wheels.ticks                | 13.3 (13.3 to 13.5; 2 %)       | 33.3 (33.2 to 33.3; 0 %)          | 2.0 (2.0 to 2.0; 0 %)          |
+| veh.cluster.Wheels.ticks                | 13.3 (13.3 to 13.5; 2 %)       | 33.3 (33.2 to 33.3; 0 %)          | 2.0 (2.0 to 2.0; 0 %)          |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                      | not built                         | not built                      |
-| veh.hvac.cabin.cabinTemp                | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.8 to 24.1; 1 %)          | 4.7 (4.7 to 4.7; 1 %)          |
-| veh.hvac.cabin.targetTemp               | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.8 to 24.1; 1 %)          | 4.7 (4.7 to 4.7; 1 %)          |
-| veh.hvac.cabin.blowerDuty               | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.6 to 24.0; 2 %)          | 4.7 (4.7 to 4.7; 1 %)          |
-| veh.hvac.cabin.fanLevel                 | 13.3 (13.3 to 13.5; 2 %)       | 33.3 (33.2 to 33.3; 0 %)          | 2.0 (2.0 to 2.0; 0 %)          |
-| veh.hvac.cabin.compressorLoad           | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.7 to 24.0; 1 %)          | 4.7 (4.7 to 4.7; 1 %)          |
+| veh.cluster.HvacCabin.cabinTemp         | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.8 to 24.1; 1 %)          | 4.7 (4.7 to 4.7; 1 %)          |
+| veh.cluster.HvacCabin.targetTemp        | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.8 to 24.1; 1 %)          | 4.7 (4.7 to 4.7; 1 %)          |
+| veh.cluster.HvacCabin.blowerDuty        | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.6 to 24.0; 2 %)          | 4.7 (4.7 to 4.7; 1 %)          |
+| veh.cluster.HvacCabin.fanLevel          | 13.3 (13.3 to 13.5; 2 %)       | 33.3 (33.2 to 33.3; 0 %)          | 2.0 (2.0 to 2.0; 0 %)          |
+| veh.cluster.HvacCabin.compressorLoad    | 14.4 (14.3 to 14.4; 0 %)       | 23.9 (23.7 to 24.0; 1 %)          | 4.7 (4.7 to 4.7; 1 %)          |
 | veh.cabin.Cabin.temperature             | 13.4 (13.4 to 13.6; 2 %)       | 26.9 (26.7 to 27.2; 2 %)          | 2.0 (2.0 to 2.0; 1 %)          |
 | veh.cabin.Horn.active                   | 15.4 (15.3 to 15.4; 1 %)       | 27.9 (27.7 to 27.9; 1 %)          | 6.2 (6.1 to 6.2; 2 %)          |
 | bench.stress.Stress.longString          | 134.4 (134.1 to 135.0; 1 %)    | 141.9 (141.1 to 142.3; 1 %)       | 115.7 (114.6 to 116.6; 2 %)    |
@@ -2091,13 +2096,13 @@ an encoding add up to its derived load of one update.
 | veh.cluster.WheelHistory.wheelTemp      | 0.0276              | 0.0101         | 0.0095         | 0.0279              | 0.0286         | 0.0233         | 0.0057              | 0.0096         | 0.0019         |
 | veh.cluster.WheelHistory.wheelSlipRate  | 0.0275              | 0.0102         | 0.0094         | 0.0276              | 0.0282         | 0.0234         | 0.0057              | 0.0095         | 0.0019         |
 | veh.cluster.WheelSummary.wheelHealth    | 0.0283              | 0.0109         | 0.0094         | 0.0065              | 0.0088         | 0.0033         | 0.0053              | 0.0133         | 0.0008         |
-| veh.cluster.wheels.ticks                | 0.0283              | 0.0109         | 0.0094         | 0.0065              | 0.0088         | 0.0033         | 0.0053              | 0.0133         | 0.0008         |
+| veh.cluster.Wheels.ticks                | 0.0283              | 0.0109         | 0.0094         | 0.0065              | 0.0088         | 0.0033         | 0.0053              | 0.0133         | 0.0008         |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built           | not built      | not built      | not built           | not built      | not built      | not built           | not built      | not built      |
-| veh.hvac.cabin.cabinTemp                | 0.0276              | 0.0102         | 0.0095         | 0.0280              | 0.0286         | 0.0233         | 0.0057              | 0.0096         | 0.0019         |
-| veh.hvac.cabin.targetTemp               | 0.0275              | 0.0101         | 0.0095         | 0.0279              | 0.0286         | 0.0233         | 0.0057              | 0.0096         | 0.0019         |
-| veh.hvac.cabin.blowerDuty               | 0.0275              | 0.0102         | 0.0094         | 0.0276              | 0.0282         | 0.0230         | 0.0057              | 0.0096         | 0.0019         |
-| veh.hvac.cabin.fanLevel                 | 0.0283              | 0.0109         | 0.0094         | 0.0065              | 0.0089         | 0.0033         | 0.0053              | 0.0133         | 0.0008         |
-| veh.hvac.cabin.compressorLoad           | 0.0275              | 0.0101         | 0.0094         | 0.0276              | 0.0282         | 0.0228         | 0.0057              | 0.0096         | 0.0019         |
+| veh.cluster.HvacCabin.cabinTemp         | 0.0276              | 0.0102         | 0.0095         | 0.0280              | 0.0286         | 0.0233         | 0.0057              | 0.0096         | 0.0019         |
+| veh.cluster.HvacCabin.targetTemp        | 0.0275              | 0.0101         | 0.0095         | 0.0279              | 0.0286         | 0.0233         | 0.0057              | 0.0096         | 0.0019         |
+| veh.cluster.HvacCabin.blowerDuty        | 0.0275              | 0.0102         | 0.0094         | 0.0276              | 0.0282         | 0.0230         | 0.0057              | 0.0096         | 0.0019         |
+| veh.cluster.HvacCabin.fanLevel          | 0.0283              | 0.0109         | 0.0094         | 0.0065              | 0.0089         | 0.0033         | 0.0053              | 0.0133         | 0.0008         |
+| veh.cluster.HvacCabin.compressorLoad    | 0.0275              | 0.0101         | 0.0094         | 0.0276              | 0.0282         | 0.0228         | 0.0057              | 0.0096         | 0.0019         |
 | veh.cabin.Cabin.temperature             | 0.0287              | 0.0141         | 0.0094         | 0.0065              | 0.0090         | 0.0033         | 0.0054              | 0.0108         | 0.0008         |
 | veh.cabin.Horn.active                   | 0.0309              | 0.0202         | 0.0094         | 0.0069              | 0.0091         | 0.0033         | 0.0061              | 0.0111         | 0.0025         |
 | bench.stress.Stress.longString          | 0.1432              | 0.0237         | 0.1541         | 0.0901              | 0.0941         | 0.1094         | 0.0538              | 0.0567         | 0.0463         |
@@ -2130,13 +2135,13 @@ a ratio whose podbuf time is under 10 ns is not comparable.
 | veh.cluster.WheelHistory.wheelTemp      | 2.92                         | 1.07                    | 1.20                         | 1.23                    | 3.04                         | 5.06                    |
 | veh.cluster.WheelHistory.wheelSlipRate  | 2.91                         | 1.07                    | 1.18                         | 1.21                    | 3.07                         | 5.11                    |
 | veh.cluster.WheelSummary.wheelHealth    | 3.01                         | 1.16                    | 1.96                         | 2.66                    | 6.53                         | 16.27                   |
-| veh.cluster.wheels.ticks                | 3.01                         | 1.16                    | 1.96                         | 2.66                    | 6.52                         | 16.28                   |
+| veh.cluster.Wheels.ticks                | 3.01                         | 1.16                    | 1.96                         | 2.66                    | 6.52                         | 16.28                   |
 | veh.cluster.WheelDiagnostics.wheelTicks | not built                    | not built               | not built                    | not built               | not built                    | not built               |
-| veh.hvac.cabin.cabinTemp                | 2.92                         | 1.08                    | 1.20                         | 1.23                    | 3.04                         | 5.06                    |
-| veh.hvac.cabin.targetTemp               | 2.91                         | 1.07                    | 1.20                         | 1.23                    | 3.04                         | 5.07                    |
-| veh.hvac.cabin.blowerDuty               | 2.92                         | 1.08                    | 1.20                         | 1.23                    | 3.07                         | 5.12                    |
-| veh.hvac.cabin.fanLevel                 | 3.01                         | 1.16                    | 1.96                         | 2.67                    | 6.52                         | 16.27                   |
-| veh.hvac.cabin.compressorLoad           | 2.91                         | 1.07                    | 1.21                         | 1.24                    | 3.07                         | 5.11                    |
+| veh.cluster.HvacCabin.cabinTemp         | 2.92                         | 1.08                    | 1.20                         | 1.23                    | 3.04                         | 5.06                    |
+| veh.cluster.HvacCabin.targetTemp        | 2.91                         | 1.07                    | 1.20                         | 1.23                    | 3.04                         | 5.07                    |
+| veh.cluster.HvacCabin.blowerDuty        | 2.92                         | 1.08                    | 1.20                         | 1.23                    | 3.07                         | 5.12                    |
+| veh.cluster.HvacCabin.fanLevel          | 3.01                         | 1.16                    | 1.96                         | 2.67                    | 6.52                         | 16.27                   |
+| veh.cluster.HvacCabin.compressorLoad    | 2.91                         | 1.07                    | 1.21                         | 1.24                    | 3.07                         | 5.11                    |
 | veh.cabin.Cabin.temperature             | 3.06                         | 1.50                    | 1.96                         | 2.69                    | 6.74                         | 13.52                   |
 | veh.cabin.Horn.active                   | 3.29                         | 2.15                    | 2.09                         | 2.77                    | 2.49                         | 4.50                    |
 | bench.stress.Stress.longString          | 0.93                         | 0.15                    | 0.82                         | 0.86                    | 1.16                         | 1.23                    |
@@ -2181,24 +2186,24 @@ figure, and their difference.
 | veh.cluster.WheelSummary.wheelHealth   | FlatBuffers | 2.0635  | 0.0401    | 2.0234     |
 | veh.cluster.WheelSummary.wheelHealth   | proto3      | 2.0421  | 0.0330    | 2.0091     |
 | veh.cluster.WheelSummary.wheelHealth   | podbuf      | 1.9845  | 0.0135    | 1.9710     |
-| veh.cluster.wheels.ticks               | FlatBuffers | 2.0517  | 0.0401    | 2.0117     |
-| veh.cluster.wheels.ticks               | proto3      | 2.0414  | 0.0331    | 2.0083     |
-| veh.cluster.wheels.ticks               | podbuf      | 1.9901  | 0.0135    | 1.9766     |
-| veh.hvac.cabin.cabinTemp               | FlatBuffers | 2.1494  | 0.0613    | 2.0880     |
-| veh.hvac.cabin.cabinTemp               | proto3      | 2.1104  | 0.0483    | 2.0621     |
-| veh.hvac.cabin.cabinTemp               | podbuf      | 2.0171  | 0.0346    | 1.9824     |
-| veh.hvac.cabin.targetTemp              | FlatBuffers | 2.1540  | 0.0611    | 2.0928     |
-| veh.hvac.cabin.targetTemp              | proto3      | 2.1407  | 0.0483    | 2.0924     |
-| veh.hvac.cabin.targetTemp              | podbuf      | 2.0442  | 0.0347    | 2.0096     |
-| veh.hvac.cabin.blowerDuty              | FlatBuffers | 2.1504  | 0.0609    | 2.0895     |
-| veh.hvac.cabin.blowerDuty              | proto3      | 2.1409  | 0.0480    | 2.0928     |
-| veh.hvac.cabin.blowerDuty              | podbuf      | 1.9881  | 0.0343    | 1.9538     |
-| veh.hvac.cabin.fanLevel                | FlatBuffers | 2.0501  | 0.0401    | 2.0101     |
-| veh.hvac.cabin.fanLevel                | proto3      | 2.0495  | 0.0331    | 2.0164     |
-| veh.hvac.cabin.fanLevel                | podbuf      | 2.1140  | 0.0135    | 2.1005     |
-| veh.hvac.cabin.compressorLoad          | FlatBuffers | 2.1526  | 0.0609    | 2.0917     |
-| veh.hvac.cabin.compressorLoad          | proto3      | 2.1561  | 0.0479    | 2.1082     |
-| veh.hvac.cabin.compressorLoad          | podbuf      | 2.0606  | 0.0341    | 2.0265     |
+| veh.cluster.Wheels.ticks               | FlatBuffers | 2.0517  | 0.0401    | 2.0117     |
+| veh.cluster.Wheels.ticks               | proto3      | 2.0414  | 0.0331    | 2.0083     |
+| veh.cluster.Wheels.ticks               | podbuf      | 1.9901  | 0.0135    | 1.9766     |
+| veh.cluster.HvacCabin.cabinTemp        | FlatBuffers | 2.1494  | 0.0613    | 2.0880     |
+| veh.cluster.HvacCabin.cabinTemp        | proto3      | 2.1104  | 0.0483    | 2.0621     |
+| veh.cluster.HvacCabin.cabinTemp        | podbuf      | 2.0171  | 0.0346    | 1.9824     |
+| veh.cluster.HvacCabin.targetTemp       | FlatBuffers | 2.1540  | 0.0611    | 2.0928     |
+| veh.cluster.HvacCabin.targetTemp       | proto3      | 2.1407  | 0.0483    | 2.0924     |
+| veh.cluster.HvacCabin.targetTemp       | podbuf      | 2.0442  | 0.0347    | 2.0096     |
+| veh.cluster.HvacCabin.blowerDuty       | FlatBuffers | 2.1504  | 0.0609    | 2.0895     |
+| veh.cluster.HvacCabin.blowerDuty       | proto3      | 2.1409  | 0.0480    | 2.0928     |
+| veh.cluster.HvacCabin.blowerDuty       | podbuf      | 1.9881  | 0.0343    | 1.9538     |
+| veh.cluster.HvacCabin.fanLevel         | FlatBuffers | 2.0501  | 0.0401    | 2.0101     |
+| veh.cluster.HvacCabin.fanLevel         | proto3      | 2.0495  | 0.0331    | 2.0164     |
+| veh.cluster.HvacCabin.fanLevel         | podbuf      | 2.1140  | 0.0135    | 2.1005     |
+| veh.cluster.HvacCabin.compressorLoad   | FlatBuffers | 2.1526  | 0.0609    | 2.0917     |
+| veh.cluster.HvacCabin.compressorLoad   | proto3      | 2.1561  | 0.0479    | 2.1082     |
+| veh.cluster.HvacCabin.compressorLoad   | podbuf      | 2.0606  | 0.0341    | 2.0265     |
 | veh.cabin.Cabin.temperature            | FlatBuffers | 2.1982  | 0.0406    | 2.1576     |
 | veh.cabin.Cabin.temperature            | proto3      | 2.1529  | 0.0338    | 2.1190     |
 | veh.cabin.Cabin.temperature            | podbuf      | 2.0552  | 0.0135    | 2.0417     |

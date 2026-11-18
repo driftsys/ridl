@@ -97,8 +97,8 @@ const NAMELESS_INTERACTIONS: &[&str] = &[
     "interface I {\n  query (): Speed\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  fixed : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
-    "service veh.a.b {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
-    "service veh.a.b {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+    "service VehAB {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+    "service VehAB {\n  signal states : Speed @10ms\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  command setGear(states: Speed)\n  signal after : Speed @10ms\n}\n",
 ];
 
@@ -141,7 +141,7 @@ fn no_nameless_interaction_reaches_the_ir_through_compile() {
 }
 
 /// A service the parser recovered without a name does not lower. A service is
-/// published at its dotted global name, so an empty `Service.name` would
+/// published at its global name, so an empty `Service.name` would
 /// publish at the empty address — the Rust backend emits the catalog as
 /// `("", "Service")`, from source the parser already rejected. Both service
 /// forms reach it, and FORM-101 is the only diagnostic either raises.

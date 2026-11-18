@@ -17,8 +17,8 @@ not repeat. Built by driftsys/ridl#668 and #677.
 | `ridl_check`             | none; or, instead of `path`, `{source, profile}`                                         | `{diagnostics, workspace}`; in source mode `{diagnostics}`                   |
 | `ridl_explain`           | `code`: a diagnostic code or a diff category word; no path                               | a diagnostic entry or a diff category entry                                  |
 | `ridl_resolve`           | `name`; optional `from`                                                                  | package, kind, visibility, location, and `alias` when one was used           |
-| `ridl_describe_type`     | `name`; optional `from`                                                                  | the IR `Decl` of a declaration that is not an interface                      |
-| `ridl_list_interactions` | `interface`; optional `from`                                                             | the interface header and its interactions in source order                    |
+| `ridl_describe_type`     | `name`; optional `from`                                                                  | the IR `Decl` of a declaration that is not an interface or service           |
+| `ridl_list_interactions` | `interface`; optional `from`                                                             | the interface or inline service header and its interactions in source order  |
 | `ridl_references`        | `name`; optional `from`                                                                  | each declaration, interaction or component that uses the target              |
 | `ridl_dependencies`      | optional `package`                                                                       | each package's imports, dependencies and dependents                          |
 | `ridl_metrics`           | none; takes `path` only                                                                  | package fan-in, fan-out, instability and interface cohesion groups           |
@@ -47,8 +47,9 @@ not repeat. Built by driftsys/ridl#668 and #677.
   1-based `{line, column}`, end exclusive, the shape of `span` in
   `ridl check --format json`. Its range is the declared name (`Symbol.range`). A
   declaration that is not a symbol (an interaction, a field) reports its
-  enclosing package-level declaration. A service, a component and a standard
-  declaration have a null location.
+  enclosing package-level declaration. A service resolves to its declared-name
+  location. A component and a standard declaration have a null location; service
+  referrers in `ridl_references` also retain their null location.
 
 ## 3. The tools in detail
 
@@ -58,20 +59,21 @@ The behaviour that is not in the README:
   protobuf JSON form (the pbjson serde impls in `ridl-ir`, the form `.ir.json`
   snapshots use), so a field the IR gains later appears with no change to the
   tool.
-- **`ridl_list_interactions`** returns each interaction as the IR `Decl`, whose
-  kind is one of `signal`, `event`, `command`, `query`, `fixed`, or a `reserved`
-  tombstone.
-- **`ridl_references`** resolves the target as `ridl_resolve` does, to a
-  canonical `pkg.Name`. It walks the canonical JSON of every declaration, every
-  interface and every service of every workspace package, and collects each
-  string that is a type reference. The IR writes a reference in the same package
-  as a bare `Name` and a reference across packages as `pkg.Name`, so a bare
-  reference is qualified with its own package before the comparison. Results are
-  reported once for each (declaration, interaction) pair. `ridl.std` is not
-  walked: a standard type cannot refer to a workspace type. `kind` is
-  `declaration` (a package-level declaration other than an interface),
-  `interface`, `service` or `component`. A reference inside a service reports
-  the service's name as its declaration.
+- **`ridl_list_interactions`** looks up an inline service by joining its package
+  and declared name to the IR global name. The accepted declarations and results
+  are specified in the README's
+  [`ridl_list_interactions`](../../crates/ridl-mcp/README.md#ridl_list_interactions)
+  section; service resolution and type-description contracts are in
+  [`ridl_resolve`](../../crates/ridl-mcp/README.md#ridl_resolve) and
+  [`ridl_describe_type`](../../crates/ridl-mcp/README.md#ridl_describe_type).
+- **`ridl_references`** walks the canonical JSON of every declaration, interface
+  and service of every workspace package, and collects each string that is a
+  type reference. The IR writes a reference in the same package as a bare `Name`
+  and a reference across packages as `pkg.Name`, so a bare reference is
+  qualified with its own package before the comparison. A standard type cannot
+  refer to a workspace type, which is why `ridl.std` is not walked. The lookup,
+  result and service-target contracts are specified in the README's
+  [`ridl_references`](../../crates/ridl-mcp/README.md#ridl_references) section.
 - **rsdl component uses.** `ridl_references` and `ridl_dependencies` also read
   the lowered system, `WorkspaceOutput.system`, because components exist only
   there. For each component whose `package` is not empty, each `Require` whose
@@ -232,9 +234,11 @@ forms); an overlay outside the workspace or not a source file; a name with no
 match (the message lists up to 10 declared canonical names that contain it,
 ignoring case, sorted, and ends after the name when there are none); a bare name
 with several matches (every canonical name, and that `pkg.Name` or `from`
-selects one); `ridl_describe_type` given an interface; `ridl_list_interactions`
-given a declaration that is not an interface (the message points to
-`ridl_describe_type`); a `from` or `ridl_dependencies` `package` that names no
+selects one); `ridl_describe_type` given an interface or service;
+`ridl_list_interactions` given a list-form service (the message lists its
+interfaces to query separately), or a declaration that is neither an interface
+nor a service (the message points to `ridl_describe_type`); inline-shape
+services are accepted; a `from` or `ridl_dependencies` `package` that names no
 workspace package (the message lists the packages); a declaration with no kind
 (the message advises `ridl_check`); an unknown code or category (the five
 namespaces, and that diff category words are accepted); a `ridl_diff`

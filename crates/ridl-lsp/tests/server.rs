@@ -1326,6 +1326,35 @@ fn completion_after_colon_offers_types_and_primitives() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// A service is not a type, so a field type position does not offer one.
+#[test]
+fn completion_in_a_type_position_does_not_offer_a_service() {
+    let uri =
+        path_to_uri("/ridl-lsp-complete/no-service.ridl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // `struct Holder { item: }` on line 3; a cursor at column 22 sits just
+    // past `: `.
+    let text = "package demo\ninterface I {}\nservice Doors : I\nstruct Holder { item: }\n";
+    did_open(&client, &uri, text);
+    let items = complete_at(&client, 10, uri.clone(), pos(3, 22));
+    let offered = labels(&items);
+
+    assert!(
+        offered.contains(&"integer"),
+        "a primitive offered: {offered:?}"
+    );
+    assert!(
+        !offered.contains(&"Doors"),
+        "a service offered: {offered:?}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// (b) Completion after `import` offers the known package names, and after a
 /// completed package path offers that package's public symbols.
 #[test]
@@ -2141,9 +2170,9 @@ interface VehicleStatus {\n\
 \x20 fixed softwareVersion : Version\n\
 }\n\
 \n\
-service veh.adas.cruise : VehicleStatus\n\
+service Cruise : VehicleStatus\n\
 \n\
-service veh.hvac.cabin {\n\
+service Cabin {\n\
 \x20 signal temperature : Speed @[1s..10s]\n\
 \x20 command setTarget(t: Speed)\n\
 }\n";
@@ -2492,10 +2521,13 @@ fn hover_on_a_service_shows_its_interface_and_the_posture_note() {
         &client,
         10,
         contract.clone(),
-        find_pos(RIDL_CONTRACT, "veh.adas.cruise", 0),
+        pos_in(RIDL_CONTRACT, "service Cruise", 0, 8),
     );
     assert!(value.contains("service"), "kind: {value}");
-    assert!(value.contains("veh.adas.cruise"), "service name: {value}");
+    assert!(
+        value.contains("veh.cluster.Cruise"),
+        "service name: {value}"
+    );
     assert!(value.contains("VehicleStatus"), "interface shape: {value}");
     assert!(
         value.contains("deriving the posture per deployment is reserved (rsdl §12)"),
@@ -2507,7 +2539,7 @@ fn hover_on_a_service_shows_its_interface_and_the_posture_note() {
         &client,
         12,
         contract,
-        find_pos(RIDL_CONTRACT, "veh.hvac.cabin", 0),
+        pos_in(RIDL_CONTRACT, "service Cabin", 0, 8),
     );
     assert!(inline.contains("inline"), "inline shape: {inline}");
     assert!(
@@ -2520,7 +2552,7 @@ fn hover_on_a_service_shows_its_interface_and_the_posture_note() {
 }
 
 /// Hover on an interaction inside a service's *inline* shape works, and names
-/// the interaction under the service's dotted global name.
+/// the interaction under the service's global name.
 ///
 /// The shape holding it is not in `Package.interfaces` — it lives inside
 /// `Service.shape` — so the lookup behind this hover walks `Package::shapes()`.
@@ -2540,8 +2572,8 @@ fn hover_on_an_interaction_inside_an_inline_service_shape_names_the_service() {
         find_pos(RIDL_CONTRACT, "temperature", 0),
     );
     assert!(
-        signal.contains("signal veh.hvac.cabin.temperature"),
-        "the owner is the service's dotted name, not the empty inline shape \
+        signal.contains("signal veh.cluster.Cabin.temperature"),
+        "the owner is the service's global name, not the empty inline shape \
          name: {signal}",
     );
     assert!(
@@ -2558,7 +2590,7 @@ fn hover_on_an_interaction_inside_an_inline_service_shape_names_the_service() {
         find_pos(RIDL_CONTRACT, "setTarget", 0),
     );
     assert!(
-        command.contains("command veh.hvac.cabin.setTarget"),
+        command.contains("command veh.cluster.Cabin.setTarget"),
         "the owner: {command}",
     );
     assert!(command.contains("#2"), "ordinal: {command}");
@@ -2752,7 +2784,7 @@ interface HealthBlock {\n\
 \x20 signal alive : Flag @[1s..10s]\n\
 }\n\
 \n\
-service veh.body.doors : DoorControl, HealthBlock\n";
+service Doors : DoorControl, HealthBlock\n";
 
 /// Writes the composed-service fixture as a one-member workspace.
 fn write_composed_workspace(dir: &TempDir) -> lt::Uri {
@@ -2778,7 +2810,7 @@ fn hover_and_goto_follow_a_composed_services_shape_list() {
         &client,
         10,
         contract.clone(),
-        find_pos(RIDL_COMPOSED, "veh.body.doors", 0),
+        pos_in(RIDL_COMPOSED, "service Doors", 0, 8),
     );
     assert!(
         value.contains("DoorControl"),
@@ -2920,11 +2952,11 @@ interface LaneAssist {\n\
 \x20 signal active: Flag @[100ms..1s]\n\
 }\n\
 \n\
-service veh.adas.cruise : CruiseControl\n\
+service Pacing : CruiseControl\n\
 \n\
-service veh.adas.lane : LaneAssist\n\
+service Keeping : LaneAssist\n\
 \n\
-service veh.adas.access {\n\
+service Access {\n\
 \x20 signal alive: Flag @[1s..10s]\n\
 }\n";
 
@@ -2939,26 +2971,26 @@ import veh.adas.LaneAssist\n\
 \n\
 /// A component.\n\
 component Cruise [ instances = (primary, backup) ] {\n\
-\x20 offers veh.adas.cruise\n\
+\x20 offers veh.adas.Pacing\n\
 \x20 requires LaneAssist\n\
 }\n\
 \n\
 /// A component.\n\
-component Lane { offers veh.adas.lane }\n\
+component Lane { offers veh.adas.Keeping }\n\
 \n\
 /// A component.\n\
-component Panel { requires veh.adas.LaneAssist, requires veh.adas.access }\n\
+component Panel { requires veh.adas.LaneAssist, requires veh.adas.Access }\n\
 \n\
 /// The system.\n\
-system Vehicle { Cruise, Lane, Panel, veh.adas.access }\n\
+system Vehicle { Cruise, Lane, Panel, veh.adas.Access }\n\
 \n\
 /// The distribution.\n\
-distribution Adas { veh.adas.access, Cruise, Lane, Panel }\n\
+distribution Adas { veh.adas.Access, Cruise, Lane, Panel }\n\
 \n\
 /// The deployment.\n\
 deployment Production for Vehicle {\n\
 \x20 /// A machine.\n\
-\x20 machine Hpc { Cruise.primary, Lane, veh.adas.access }\n\
+\x20 machine Hpc { Cruise.primary, Lane, veh.adas.Access }\n\
 \x20 /// A machine.\n\
 \x20 machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }\n\
 }\n";
@@ -3023,8 +3055,8 @@ fn an_rsdl_file_publishes_the_system_checks_and_rsdl_804() {
     // A system member line naming nothing is RSDL-602 (rsdl reference §3.1),
     // which only the system query raises.
     let edited = RSDL_SYSTEM.replace(
-        "Panel, veh.adas.access }",
-        "Panel, veh.adas.access, Missing }",
+        "Panel, veh.adas.Access }",
+        "Panel, veh.adas.Access, Missing }",
     );
     did_open(&client, &system, &edited);
     let opened = next_publish(&client, &system);
@@ -3059,7 +3091,7 @@ fn goto_definition_follows_each_rsdl_reference_form() {
         ),
         (
             "a component in a distribution member line",
-            pos_in(RSDL_SYSTEM, "access, Cruise", 0, 9),
+            pos_in(RSDL_SYSTEM, "Access, Cruise", 0, 9),
             &system,
             range_of(RSDL_SYSTEM, "Cruise", 0),
         ),
@@ -3083,9 +3115,9 @@ fn goto_definition_follows_each_rsdl_reference_form() {
         ),
         (
             "a service on an `offers` line",
-            pos_in(RSDL_SYSTEM, "offers veh.adas.cruise", 0, 12),
+            pos_in(RSDL_SYSTEM, "offers veh.adas.Pacing", 0, 12),
             &contracts,
-            range_of(RSDL_CONTRACTS, "veh.adas.cruise", 0),
+            range_of(RSDL_CONTRACTS, "Pacing", 0),
         ),
         (
             "a bare interface on a `requires` line",
@@ -3101,15 +3133,15 @@ fn goto_definition_follows_each_rsdl_reference_form() {
         ),
         (
             "an inline-shape service on a `requires` line",
-            pos_in(RSDL_SYSTEM, "requires veh.adas.access", 0, 12),
+            pos_in(RSDL_SYSTEM, "requires veh.adas.Access", 0, 12),
             &contracts,
-            range_of(RSDL_CONTRACTS, "veh.adas.access", 0),
+            range_of(RSDL_CONTRACTS, "Access", 0),
         ),
         (
             "a lone service in a placement line",
-            pos_in(RSDL_SYSTEM, "Lane, veh.adas.access }", 0, 8),
+            pos_in(RSDL_SYSTEM, "Lane, veh.adas.Access }", 0, 8),
             &contracts,
-            range_of(RSDL_CONTRACTS, "veh.adas.access", 0),
+            range_of(RSDL_CONTRACTS, "Access", 0),
         ),
     ];
     for (id, (what, cursor, uri, declaration)) in (10..).zip(cases) {
@@ -3138,8 +3170,8 @@ fn goto_definition_follows_no_rsdl_reference_the_checker_rejects() {
     let (client, server) = start(uri_of(dir.path()));
 
     let edited = RSDL_SYSTEM.replace(
-        "system Vehicle { Cruise, Lane, Panel, veh.adas.access }",
-        "system Vehicle { Cruise.primary, Lane, Panel, veh.adas.access, veh.adas.cruise }",
+        "system Vehicle { Cruise, Lane, Panel, veh.adas.Access }",
+        "system Vehicle { Cruise.primary, Lane, Panel, veh.adas.Access, veh.adas.Pacing }",
     );
     did_open(&client, &system, &edited);
     let cases = [
@@ -3149,7 +3181,7 @@ fn goto_definition_follows_no_rsdl_reference_the_checker_rejects() {
         ),
         (
             "a service its component offers, in a system member line",
-            pos_in(&edited, "access, veh.adas.cruise", 0, 12),
+            pos_in(&edited, "Access, veh.adas.Pacing", 0, 12),
         ),
     ];
     for (id, (what, cursor)) in (10..).zip(cases) {
@@ -3182,7 +3214,7 @@ fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
             &[
                 "component veh.topology.Cruise",
                 "**Instances:** `primary`, `backup`",
-                "**Offers:** `veh.adas.cruise`",
+                "**Offers:** `veh.adas.Pacing`",
                 "**Requires:** `LaneAssist`",
             ],
         ),
@@ -3198,7 +3230,7 @@ fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
             5,
             &[
                 "system veh.topology.Vehicle",
-                "**Members:** `Cruise`, `Lane`, `Panel`, `veh.adas.access`",
+                "**Members:** `Cruise`, `Lane`, `Panel`, `veh.adas.Access`",
             ],
         ),
         (
@@ -3209,16 +3241,16 @@ fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
         ),
         (
             14,
-            "requires veh.adas.access",
+            "requires veh.adas.Access",
             12,
-            &["service veh.adas.access { … }", "**Shape:** inline"],
+            &["service veh.adas.Access { … }", "**Shape:** inline"],
         ),
         (
             15,
-            "offers veh.adas.cruise",
+            "offers veh.adas.Pacing",
             12,
             &[
-                "service veh.adas.cruise : CruiseControl",
+                "service veh.adas.Pacing : CruiseControl",
                 "deriving the posture per deployment is reserved (rsdl §12)",
             ],
         ),
@@ -3284,10 +3316,10 @@ fn find_references_follows_rsdl_references() {
         at(&system, RSDL_SYSTEM, "primary", 0),
         at(&system, RSDL_SYSTEM, "primary", 1),
     ];
-    // `veh.adas.access`: the declaration in the contracts, then the
+    // `veh.adas.Access`: the declaration in the contracts, then the
     // `requires` line of `Panel` and the three member lines.
-    let mut access = vec![at(&contracts, RSDL_CONTRACTS, "veh.adas.access", 0)];
-    access.extend((0..4).map(|occurrence| at(&system, RSDL_SYSTEM, "veh.adas.access", occurrence)));
+    let mut access = vec![at(&contracts, RSDL_CONTRACTS, "Access", 0)];
+    access.extend((0..4).map(|occurrence| at(&system, RSDL_SYSTEM, "veh.adas.Access", occurrence)));
     // `LaneAssist`: the declaration and the service of the contracts, and
     // both `requires` lines, a qualified one whole, as the ridl navigation
     // reports a qualified reference.
@@ -3327,7 +3359,7 @@ fn find_references_follows_rsdl_references() {
         ),
         (
             "a lone service in a placement line",
-            pos_in(RSDL_SYSTEM, "Lane, veh.adas.access }", 0, 8),
+            pos_in(RSDL_SYSTEM, "Lane, veh.adas.Access }", 0, 8),
             access,
         ),
         (
@@ -3408,17 +3440,17 @@ import veh.adas.LaneAssist\n\
 import veh.adas.Flag\n\
 \n\
 component Cruise [ instances = (primary, backup) ] {\n\
-\x20 offers veh.adas.cruise\n\
+\x20 offers veh.adas.Pacing\n\
 \x20 requires LaneAssist\n\
 \x20 \n\
 }\n\
 \n\
-component Lane { offers veh.adas.lane }\n\
+component Lane { offers veh.adas.Keeping }\n\
 \n\
-system Vehicle { Cruise, Lane, veh.adas.access,  }\n\
+system Vehicle { Cruise, Lane, veh.adas.Access,  }\n\
 \n\
 deployment Production for Vehicle {\n\
-\x20 machine Hpc { Cruise.primary, Lane, veh.adas.access,  }\n\
+\x20 machine Hpc { Cruise.primary, Lane, veh.adas.Access,  }\n\
 \x20 \n\
 }\n\
 \n";
@@ -3437,7 +3469,7 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
     let (client, server) = start(uri_of(dir.path()));
     did_open(&client, &system, RSDL_COMPLETION);
     let text = RSDL_COMPLETION;
-    let services = ["veh.adas.access", "veh.adas.cruise", "veh.adas.lane"];
+    let services = ["veh.adas.Access", "veh.adas.Pacing", "veh.adas.Keeping"];
 
     // (what the cursor is on, cursor, offered labels, labels not offered).
     let cases: [(&str, lt::Position, Vec<&str>, Vec<&str>); 8] = [
@@ -3462,31 +3494,31 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
         (
             "after `requires`",
             pos_after(text, "requires ", 0),
-            vec!["LaneAssist", "veh.adas.access"],
+            vec!["LaneAssist", "veh.adas.Access"],
             vec![
                 "Cruise",
                 "requires",
-                "veh.adas.cruise",
-                "veh.adas.lane",
+                "veh.adas.Pacing",
+                "veh.adas.Keeping",
                 "Flag",
                 "CruiseControl",
             ],
         ),
         (
             "a system member line",
-            pos_after(text, "veh.adas.access, ", 0),
-            vec!["Cruise", "Lane", "veh.adas.access"],
-            vec!["Cruise.primary", "Vehicle", "veh.adas.lane", "type"],
+            pos_after(text, "veh.adas.Access, ", 0),
+            vec!["Cruise", "Lane", "veh.adas.Access"],
+            vec!["Cruise.primary", "Vehicle", "veh.adas.Keeping", "type"],
         ),
         (
             "a placement line",
-            pos_after(text, "veh.adas.access, ", 1),
+            pos_after(text, "veh.adas.Access, ", 1),
             vec![
                 "Cruise",
                 "Cruise.primary",
                 "Cruise.backup",
                 "Lane",
-                "veh.adas.access",
+                "veh.adas.Access",
             ],
             vec!["Vehicle", "type"],
         ),
@@ -3494,7 +3526,7 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
             "after `for`",
             pos_after(text, "for ", 0),
             vec!["Vehicle"],
-            vec!["Cruise", "veh.adas.access"],
+            vec!["Cruise", "veh.adas.Access"],
         ),
         (
             "an empty line of a deployment body",
@@ -3517,8 +3549,8 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
     // A partly written dotted reference is replaced whole: the item's edit
     // starts where the reference does.
     let partial = text.replace(
-        "veh.adas.access,  }\n\x20 \n",
-        "veh.adas.access, veh.adas.a }\n\x20 \n",
+        "veh.adas.Access,  }\n\x20 \n",
+        "veh.adas.Access, veh.adas.a }\n\x20 \n",
     );
     did_open(&client, &system, &partial);
     let cursor = pos_after(&partial, "veh.adas.a ", 0);
@@ -3526,14 +3558,14 @@ fn completion_in_an_rsdl_file_offers_what_the_slot_admits() {
     let items = complete_at(&client, 30, system.clone(), cursor);
     let item = items
         .iter()
-        .find(|item| item.label == "veh.adas.access")
+        .find(|item| item.label == "veh.adas.Access")
         .unwrap_or_else(|| panic!("the service is offered: {:?}", labels(&items)));
     let Some(lt::CompletionTextEdit::Edit(edit)) = &item.text_edit else {
         panic!("the item carries a text edit: {item:?}");
     };
     let start = range_of(&partial, "veh.adas.a ", 0).start;
     assert_eq!(edit.range, lt::Range::new(start, cursor));
-    assert_eq!(edit.new_text, "veh.adas.access");
+    assert_eq!(edit.new_text, "veh.adas.Access");
 
     shut_down(&client, 31);
     server.join().expect("thread joins").expect("clean exit");
@@ -3552,10 +3584,10 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
     // completed and replaced from its start.
     let partials = [
         (
-            "{ offers veh.adas.lane }",
+            "{ offers veh.adas.Keeping }",
             "{ offers veh.ad }",
             "veh.ad",
-            "veh.adas.lane",
+            "veh.adas.Keeping",
         ),
         (
             "requires LaneAssist",
@@ -3585,8 +3617,8 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
     // `veh.topology.Cr` on a placement line: the own-package component is
     // offered, matched by its qualified name, and written qualified.
     let text = RSDL_COMPLETION.replace(
-        "veh.adas.access,  }\n\x20 \n",
-        "veh.adas.access, veh.topology.Cr }\n\x20 \n",
+        "veh.adas.Access,  }\n\x20 \n",
+        "veh.adas.Access, veh.topology.Cr }\n\x20 \n",
     );
     did_open(&client, &system, &text);
     let start = find_pos(&text, "veh.topology.Cr", 0);
@@ -3606,8 +3638,8 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
     // A bare reference with a dot, `Cruise.pr`, stays bare: the instance is
     // matched and written by its label.
     let text = RSDL_COMPLETION.replace(
-        "veh.adas.access,  }\n\x20 \n",
-        "veh.adas.access, Cruise.pr }\n\x20 \n",
+        "veh.adas.Access,  }\n\x20 \n",
+        "veh.adas.Access, Cruise.pr }\n\x20 \n",
     );
     did_open(&client, &system, &text);
     let start = find_pos(&text, "Cruise.pr", 0);
@@ -3629,8 +3661,8 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
     // `string.Cr`, whose first segment is a keyword, from `string`.
     for (id, written) in (23..).zip(["veh.offers.Cr", "veh.offers", "string.Cr"]) {
         let text = RSDL_COMPLETION.replace(
-            "veh.adas.access,  }\n\x20 \n",
-            &format!("veh.adas.access, {written} }}\n\x20 \n"),
+            "veh.adas.Access,  }\n\x20 \n",
+            &format!("veh.adas.Access, {written} }}\n\x20 \n"),
         );
         did_open(&client, &system, &text);
         let needle = format!("{written} }}");
@@ -3652,7 +3684,7 @@ fn rsdl_completion_keeps_the_keyword_and_the_qualifier() {
 }
 
 /// prepareRename in an `.rsdl` file answers the name segment of a component,
-/// an instance or a system under the cursor, and nothing on a service.
+/// an instance, a system or a service under the cursor.
 #[test]
 fn prepare_rename_in_an_rsdl_file_answers_the_rsdl_name() {
     let dir = TempDir::new("rsdl-prepare-rename");
@@ -3691,8 +3723,8 @@ fn prepare_rename_in_an_rsdl_file_answers_the_rsdl_name() {
         ),
         (
             "a service on an `offers` line",
-            pos_in(RSDL_SYSTEM, "offers veh.adas.cruise", 0, 12),
-            None,
+            pos_in(RSDL_SYSTEM, "offers veh.adas.Pacing", 0, 12),
+            Some(range_of(RSDL_SYSTEM, "Pacing", 0)),
         ),
     ];
     for (id, (what, cursor, expected)) in (10..).zip(cases) {
@@ -3711,8 +3743,7 @@ fn prepare_rename_in_an_rsdl_file_answers_the_rsdl_name() {
 /// Rename in an `.rsdl` file rewrites an rsdl declaration's name and the name
 /// segment of every reference the checker binds to it, and the import lines
 /// that bind it. A new name that breaks the case convention, that is
-/// reserved, or that a declaration of the package already holds is refused,
-/// and so is a service.
+/// reserved, or that a declaration of the package already holds is refused.
 #[test]
 fn rename_in_an_rsdl_file_rewrites_the_rsdl_references() {
     let dir = TempDir::new("rsdl-rename");
@@ -3831,8 +3862,8 @@ distribution Spare { Cruise, veh.topology.Lane }\n";
             "backup",
         ),
         (
-            "a service",
-            pos_in(RSDL_SYSTEM, "offers veh.adas.cruise", 0, 12),
+            "a service name that is not CamelCase",
+            pos_in(RSDL_SYSTEM, "offers veh.adas.Pacing", 0, 12),
             "veh.adas.speed",
         ),
     ];
@@ -3860,7 +3891,7 @@ fn rsdl_completion_offers_no_reference_where_none_can_be_written() {
 
     let edited = RSDL_COMPLETION
         .replace(
-            "component Lane { offers veh.adas.lane }",
+            "component Lane { offers veh.adas.Keeping }",
             "component Lane { offers }",
         )
         .replace(
@@ -3868,8 +3899,8 @@ fn rsdl_completion_offers_no_reference_where_none_can_be_written() {
             "system Vehicle { // a note\n  Cruise,",
         )
         .replace(
-            "veh.adas.access,  }\n\ndeployment",
-            "veh.adas.access, /* a block */ }\n\ndeployment",
+            "veh.adas.Access,  }\n\ndeployment",
+            "veh.adas.Access, /* a block */ }\n\ndeployment",
         )
         .replace(
             "package veh.topology\n",
@@ -4317,7 +4348,7 @@ fn import_completion_outside_rsdl_offers_no_rsdl_declaration() {
 /// `for` reference; renaming to the same name; the refusals, each with its
 /// reason. A name that a declaration of an affected package holds, or that an
 /// import there binds, is a collision. An rsdl reference the checker binds to
-/// nothing, an inline-shape service, and the name of a distribution, a
+/// nothing, and the name of a distribution, a
 /// deployment or a machine are not renamed. A declared interface is renamed
 /// by the ridl rename. A reference written through an alias keeps the alias.
 #[test]
@@ -4418,23 +4449,19 @@ fn rsdl_rename_covers_systems_refusals_and_interfaces() {
     assert!(message.contains("lowerCamelCase"), "{message}");
 
     // Not renameable from an `.rsdl` file: an rsdl reference the checker binds
-    // to nothing (a typl type on a member line), an inline-shape service, and
+    // to nothing (a typl type on a member line), and
     // the names of a distribution, a deployment and a machine.
     let text = RSDL_SYSTEM
         .replace(
             "import veh.adas.LaneAssist\n",
             "import veh.adas.LaneAssist\nimport veh.adas.Flag\n",
         )
-        .replace("Panel, veh.adas.access }", "Panel, veh.adas.access, Flag }");
+        .replace("Panel, veh.adas.Access }", "Panel, veh.adas.Access, Flag }");
     did_open(&client, &system, &text);
     let refused = [
         (
             "a reference bound to nothing",
-            pos_in(&text, "access, Flag", 0, 9),
-        ),
-        (
-            "an inline-shape service",
-            pos_in(&text, "requires veh.adas.access", 0, 12),
+            pos_in(&text, "Access, Flag", 0, 9),
         ),
         ("a distribution", pos_in(&text, "distribution Adas", 0, 14)),
         (
@@ -4516,16 +4543,16 @@ fn rsdl_rename_spans_slots_and_fallbacks() {
             "import veh.adas.LaneAssist\nimport veh.adas.Flag\n",
         )
         .replace(
-            "/// A component.\ncomponent Lane { offers veh.adas.lane }",
-            "/// Keeps [LaneAssist].\ncomponent Lane { offers veh.adas.lane, offers Flag, requires Flag }",
+            "/// A component.\ncomponent Lane { offers veh.adas.Keeping }",
+            "/// Keeps [LaneAssist].\ncomponent Lane { offers veh.adas.Keeping, offers Flag, requires Flag }",
         )
         .replace(
-            "distribution Adas { veh.adas.access, Cruise, Lane, Panel }",
-            "distribution Adas { veh.adas.access, Cruise, Lane, Panel, Flag }",
+            "distribution Adas { veh.adas.Access, Cruise, Lane, Panel }",
+            "distribution Adas { veh.adas.Access, Cruise, Lane, Panel, Flag }",
         )
         .replace(
-            "machine Hpc { Cruise.primary, Lane, veh.adas.access }",
-            "machine Hpc { Cruise.primary, Lane, veh.adas.access, Flag }",
+            "machine Hpc { Cruise.primary, Lane, veh.adas.Access }",
+            "machine Hpc { Cruise.primary, Lane, veh.adas.Access, Flag }",
         )
         .replace("Cruise.backup", "veh.topology.Cruise.backup")
         + "\ndeployment Test for Flag {}\n";
@@ -4594,7 +4621,7 @@ fn rsdl_rename_spans_slots_and_fallbacks() {
             "a distribution member line",
             pos_in(&text, "Panel, Flag }", 0, 8),
         ),
-        ("a placement line", pos_in(&text, "access, Flag }", 0, 9)),
+        ("a placement line", pos_in(&text, "Access, Flag }", 0, 9)),
         ("the `for` reference", pos_in(&text, "for Flag", 0, 5)),
         ("the end of a reference", pos_after(&text, "offers Flag", 0)),
     ];
@@ -4606,7 +4633,7 @@ fn rsdl_rename_spans_slots_and_fallbacks() {
     // `system.rsdl`, is on that file's import line, which the typl rename
     // handles.
     let reference = text
-        .find("veh.adas.access, Flag }")
+        .find("veh.adas.Access, Flag }")
         .expect("the placement reference");
     let header = "package veh.extra\n\n// ";
     let import = "import veh.adas.";
@@ -4739,40 +4766,22 @@ fn a_malformed_instance_lock_is_published_under_the_lock_files_uri() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
-// --- the service catalog (issue #386) --------------------------------------
+// --- the service namespace (ADR-0034) --------------------------------------
 
-/// The first member of the catalog fixture: it declares the service `x.s`.
-const CATALOG_A: &str =
-    "package a\n/// An interface.\ninterface I {}\n/// A service.\nservice x.s : I\n";
+/// A package whose service and interface share a name: a service is a symbol
+/// of its package, so the clash is TYPL-009.
+const CATALOG_CLASH: &str = "package a\n/// An interface.\ninterface Face {}\n\
+                             /// A service.\nservice Face : Face\n";
 
-/// The second member of the catalog fixture: it declares `x.s` again, which
-/// the flat global service namespace refuses (RIDL-140).
-const CATALOG_B: &str =
-    "package b\n/// An interface.\ninterface J {}\n/// A service.\nservice x.s : J\n";
-
-/// The `interfaces.lock` that `ridl lock` writes for [`CATALOG_A`].
-const CATALOG_LOCK: &str =
-    "# interfaces.lock — written by ridl lock; do not edit by hand.\nnext 2\nI 1\n";
-
-/// Writes the catalog fixture as a two-member workspace, with an
-/// `interfaces.lock` beside the first member when `lock` is set, and returns
-/// the `(a, b, lock)` file URIs.
-fn write_catalog_workspace(dir: &TempDir, lock: bool) -> (lt::Uri, lt::Uri, lt::Uri) {
-    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
-    for member in ["a", "b"] {
-        std::fs::create_dir_all(dir.path().join(member)).expect("create the member directory");
-        dir.write(
-            &format!("{member}/ridl.toml"),
-            &format!("[package]\nname = \"{member}\"\nversion = \"1.0.0\"\n"),
-        );
-    }
-    let a = dir.write("a/a.ridl", CATALOG_A);
-    let b = dir.write("b/b.ridl", CATALOG_B);
-    let lock_path = dir.path().join("a/interfaces.lock");
-    if lock {
-        dir.write("a/interfaces.lock", CATALOG_LOCK);
-    }
-    (uri_of(&a), uri_of(&b), uri_of(&lock_path))
+/// Writes [`CATALOG_CLASH`] as a one-member workspace and returns its file URI.
+fn write_catalog_workspace(dir: &TempDir) -> lt::Uri {
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
+    std::fs::create_dir_all(dir.path().join("a")).expect("create the member directory");
+    dir.write(
+        "a/ridl.toml",
+        "[package]\nname = \"a\"\nversion = \"1.0.0\"\n",
+    );
+    uri_of(&dir.write("a/a.ridl", CATALOG_CLASH))
 }
 
 /// Sends a hover request as a marker and returns the last
@@ -4807,51 +4816,24 @@ fn publishes_before_answer(
     }
 }
 
-/// Asserts that the catalog fixture publishes RIDL-140 on the second
-/// declaration of `x.s`, labelled at the first, and nothing on any other file.
-fn assert_ridl_140_on_b(lock: bool) {
+/// A service named like an interface of its package publishes TYPL-009 on the
+/// service's name and nothing else.
+#[test]
+fn a_service_and_an_interface_of_one_name_publish_typl_009() {
     let dir = TempDir::new("catalog");
-    let (a, b, _lock) = write_catalog_workspace(&dir, lock);
+    let a = write_catalog_workspace(&dir);
     let (client, server) = start(uri_of(dir.path()));
 
     let published = publishes_before_answer(&client, 2);
-    let on_b = published
-        .get(b.as_str())
-        .unwrap_or_else(|| panic!("nothing published on b.ridl: {published:?}"));
-    assert_eq!(codes(on_b), vec!["RIDL-140"]);
-    assert_eq!(on_b[0].range, range_of(CATALOG_B, "x.s", 0));
-    assert_eq!(on_b[0].severity, Some(lt::DiagnosticSeverity::ERROR));
-    let related = on_b[0]
-        .related_information
-        .as_ref()
-        .expect("the first declaration is labelled");
-    assert_eq!(related.len(), 1);
-    assert_eq!(related[0].location.uri.as_str(), a.as_str());
-    assert_eq!(related[0].location.range, range_of(CATALOG_A, "x.s", 0));
-    for (uri, diagnostics) in &published {
-        if uri != b.as_str() {
-            assert_eq!(diagnostics, &Vec::new(), "{uri} publishes nothing");
-        }
-    }
+    let on_a = published
+        .get(a.as_str())
+        .unwrap_or_else(|| panic!("nothing published on a.ridl: {published:?}"));
+    assert_eq!(codes(on_a), vec!["TYPL-009"]);
+    assert_eq!(on_a[0].range, range_of(CATALOG_CLASH, "Face", 1));
+    assert_eq!(on_a[0].severity, Some(lt::DiagnosticSeverity::ERROR));
 
     shut_down(&client, 3);
     server.join().expect("thread joins").expect("clean exit");
-}
-
-/// A service name declared in two workspace members publishes RIDL-140, as
-/// `ridl check` reports it: the service catalog is a workspace-wide pass the
-/// server runs beside the rsdl system query.
-#[test]
-fn a_duplicate_service_name_publishes_ridl_140() {
-    assert_ridl_140_on_b(false);
-}
-
-/// A lock file is not one of the files the workspace-wide passes index, so a
-/// package with an `interfaces.lock` does not shift where RIDL-140 lands in a
-/// later package.
-#[test]
-fn a_lock_in_an_earlier_package_does_not_move_ridl_140() {
-    assert_ridl_140_on_b(true);
 }
 
 /// Opens a standalone overlay from `text` and returns the server's answer to
@@ -5025,7 +5007,7 @@ fn formatting_replaces_the_document_with_the_ridl_fmt_rendering() {
         &client,
         18,
         &rsdl,
-        "package solo\ncomponent Door { offers solo.door }\n",
+        "package solo\ncomponent Door { offers solo.Door }\n",
         tabs(),
     )
     .expect("a valid rsdl document");
@@ -5033,7 +5015,7 @@ fn formatting_replaces_the_document_with_the_ridl_fmt_rendering() {
         edits,
         vec![lt::TextEdit {
             range: range((0, 0), (2, 0)),
-            new_text: "package solo\n\ncomponent Door {\n  offers solo.door\n}\n".to_string(),
+            new_text: "package solo\n\ncomponent Door {\n  offers solo.Door\n}\n".to_string(),
         }]
     );
 
@@ -7424,4 +7406,543 @@ fn an_edit_of_the_file_that_carries_a_loader_error_lets_the_size_pass_run() {
 
     shut_down(&client, 2);
     server.join().expect("thread joins").expect("clean exit");
+}
+
+const SERVICE_NAMES: &str = "package veh.adas\n\
+type Level: integer\n\
+interface CruiseControl { signal level: Level @1s }\n\
+service AdaptiveCruise: CruiseControl\n\
+service LaneKeeping: CruiseControl\n\
+service Inline { signal level: Level @1s }\n\
+/// See [AdaptiveCruise.level] and [Inline.level].\n\
+type Reading: integer\n";
+const SERVICE_USES: &str = "package veh.topology\n\
+import veh.adas.AdaptiveCruise\n\
+import veh.adas.Inline as FaultAccess\n\
+/// See [AdaptiveCruise] and [veh.adas.AdaptiveCruise.level].\n\
+component Provider { offers AdaptiveCruise }\n\
+component Consumer { requires FaultAccess }\n\
+system Vehicle { Provider, Consumer, FaultAccess }\n\
+distribution Group { FaultAccess }\n\
+deployment Production for Vehicle { machine Host { FaultAccess } }\n";
+
+fn write_service_workspace(dir: &TempDir) -> (lt::Uri, lt::Uri) {
+    let (contracts, system) = write_rsdl_workspace(dir);
+    dir.write("adas/adas.ridl", SERVICE_NAMES);
+    dir.write("topology/system.rsdl", SERVICE_USES);
+    (contracts, system)
+}
+
+#[test]
+fn service_declaration_supports_definition_references_and_prepare_rename() {
+    let dir = TempDir::new("service-declaration");
+    let (contracts, system) = write_service_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    let cursor = find_pos(SERVICE_NAMES, "AdaptiveCruise", 0);
+    let location = scalar_location(definition_at(&client, 10, contracts.clone(), cursor));
+    assert_eq!(location.uri, contracts);
+    assert_eq!(location.range, range_of(SERVICE_NAMES, "AdaptiveCruise", 0));
+    assert_eq!(
+        prepare_rename_at(&client, 11, contracts.clone(), cursor),
+        Some(lt::PrepareRenameResponse::Range(location.range))
+    );
+    let refs = references_at(&client, 12, contracts.clone(), cursor, true).unwrap();
+    assert!(refs.contains(&location));
+    assert!(
+        refs.iter()
+            .any(|r| r.uri == system && r.range == range_of(SERVICE_USES, "AdaptiveCruise", 3)),
+        "{refs:?}"
+    );
+    shut_down(&client, 13);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn service_doc_member_definition_finds_listed_and_inline_interactions() {
+    let dir = TempDir::new("service-member-definition");
+    let (contracts, _) = write_service_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    for (id, link, occurrence) in [(10, "[AdaptiveCruise.level]", 0), (11, "[Inline.level]", 1)] {
+        let location = scalar_location(definition_at(
+            &client,
+            id,
+            contracts.clone(),
+            pos_in(SERVICE_NAMES, link, 0, 2),
+        ));
+        assert_eq!(location.uri, contracts);
+        assert_eq!(location.range, range_of(SERVICE_NAMES, "level", occurrence));
+    }
+    shut_down(&client, 12);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn rename_of_a_service_rewrites_the_declaration_imports_offers_and_doc_links() {
+    let dir = TempDir::new("service-rename");
+    let (contracts, system) = write_service_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    let expected_contracts = [0, 1].map(|n| range_of(SERVICE_NAMES, "AdaptiveCruise", n));
+    let expected_system = [0, 1, 2, 3].map(|n| range_of(SERVICE_USES, "AdaptiveCruise", n));
+    for (id, uri, cursor) in [
+        (
+            10,
+            system.clone(),
+            pos_in(SERVICE_USES, "offers AdaptiveCruise", 0, 9),
+        ),
+        (
+            11,
+            contracts.clone(),
+            find_pos(SERVICE_NAMES, "AdaptiveCruise", 0),
+        ),
+        (
+            12,
+            system.clone(),
+            pos_in(SERVICE_USES, "import veh.adas.AdaptiveCruise", 0, 18),
+        ),
+        (
+            13,
+            system.clone(),
+            pos_in(SERVICE_USES, "[AdaptiveCruise]", 0, 2),
+        ),
+    ] {
+        assert!(prepare_rename_at(&client, id + 20, uri.clone(), cursor).is_some());
+        let edit = rename_at(&client, id, uri, cursor, "Cruising");
+        for (file, expected) in [
+            (&contracts, expected_contracts.as_slice()),
+            (&system, expected_system.as_slice()),
+        ] {
+            let edits = edits_for(&edit, file);
+            assert_eq!(edits.len(), expected.len(), "{edits:?}");
+            for expected in expected {
+                assert!(
+                    edits
+                        .iter()
+                        .any(|e| e.range == *expected && e.new_text == "Cruising"),
+                    "{edits:?}"
+                );
+            }
+        }
+    }
+    // An alias stays intact in requires, member and placement slots.
+    for (id, needle) in [
+        (50, "requires FaultAccess"),
+        (51, "Consumer, FaultAccess"),
+        (52, "Group { FaultAccess"),
+        (53, "Host { FaultAccess"),
+    ] {
+        let cursor = pos_after(SERVICE_USES, needle, 0);
+        let edit = rename_at(&client, id, system.clone(), cursor, "Diagnostics");
+        let edits = edits_for(&edit, &system);
+        assert_eq!(edits.len(), 1, "alias uses stay intact: {edits:?}");
+        assert_eq!(edits[0].range, range_of(SERVICE_USES, "Inline", 0));
+        assert!(
+            edits_for(&edit, &contracts)
+                .iter()
+                .any(|e| e.range == range_of(SERVICE_NAMES, "Inline", 0))
+        );
+    }
+    shut_down(&client, 60);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn completion_after_offers_lists_services_in_scope_bare_and_qualified() {
+    let dir = TempDir::new("service-completion");
+    let (_, system) = write_service_workspace(&dir);
+    let text = "package veh.adas\ncomponent Local { offers  }\n";
+    let local = uri_of(&dir.write("adas/local.rsdl", text));
+    let (client, server) = start(uri_of(dir.path()));
+    for (id, prefix, expected) in [
+        (
+            10,
+            "offers ",
+            vec!["AdaptiveCruise", "FaultAccess", "veh.adas.LaneKeeping"],
+        ),
+        (
+            11,
+            "offers veh.adas.",
+            vec![
+                "veh.adas.AdaptiveCruise",
+                "veh.adas.Inline",
+                "veh.adas.LaneKeeping",
+            ],
+        ),
+        (
+            12,
+            "requires ",
+            vec!["FaultAccess", "veh.adas.CruiseControl"],
+        ),
+    ] {
+        let text = format!("{SERVICE_USES}\ncomponent Extra {{ {prefix} }}\n");
+        did_open(&client, &system, &text);
+        let items = complete_at(
+            &client,
+            id,
+            system.clone(),
+            pos_after(
+                &text,
+                prefix,
+                usize::from(prefix == "offers " || prefix == "requires "),
+            ),
+        );
+        let got = labels(&items);
+        for name in expected {
+            assert!(got.contains(&name), "missing {name}: {got:?}");
+        }
+        if prefix == "requires " {
+            assert!(!got.contains(&"AdaptiveCruise"));
+        }
+    }
+    did_open(&client, &local, text);
+    let items = complete_at(&client, 14, local, pos_after(text, "offers ", 0));
+    let got = labels(&items);
+    assert!(got.contains(&"AdaptiveCruise"), "{got:?}");
+    // A service in scope by its bare name is not offered a second time under
+    // its global name.
+    assert!(!got.contains(&"veh.adas.AdaptiveCruise"), "{got:?}");
+    shut_down(&client, 15);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn definition_on_an_offers_line_goes_to_the_service_declaration() {
+    let dir = TempDir::new("service-offers-definition");
+    let (contracts, system) = write_service_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    let location = scalar_location(definition_at(
+        &client,
+        10,
+        system,
+        pos_in(SERVICE_USES, "offers AdaptiveCruise", 0, 9),
+    ));
+    assert_eq!(location.uri, contracts);
+    assert_eq!(location.range, range_of(SERVICE_NAMES, "AdaptiveCruise", 0));
+    shut_down(&client, 11);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn hover_on_a_service_name_renders_its_global_name() {
+    let dir = TempDir::new("service-hover-name");
+    let (contracts, _) = write_service_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    let hover = hover_at(
+        &client,
+        10,
+        contracts,
+        find_pos(SERVICE_NAMES, "AdaptiveCruise", 0),
+    )
+    .unwrap();
+    let lt::HoverContents::Markup(markup) = hover.contents else {
+        panic!("markdown hover")
+    };
+    assert!(
+        markup
+            .value
+            .contains("service veh.adas.AdaptiveCruise : CruiseControl"),
+        "{}",
+        markup.value
+    );
+    shut_down(&client, 11);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn ridl_142_offers_the_suggested_name_as_a_quick_fix() {
+    let dir = TempDir::new("service-quick-fix");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.body\"\nversion = \"1.0.0\"\n",
+    );
+    let text = "package veh.body\ninterface DoorControl {}\nservice veh.body.doors : DoorControl\n";
+    let file = uri_of(&dir.write("body.ridl", text));
+    let (client, server) = start(uri_of(dir.path()));
+    let published = next_publish(&client, &file);
+    let diagnostic = published
+        .diagnostics
+        .iter()
+        .find(|d| d.code == Some(lt::NumberOrString::String("RIDL-142".into())))
+        .expect("RIDL-142");
+    assert_eq!(diagnostic.range, range_of(text, "veh.body.doors", 0));
+    let actions = code_actions_at(&client, 10, &file, diagnostic.range);
+    let action = actions
+        .iter()
+        .find(|a| a.title == "rename the service to `Doors`")
+        .expect("the suggested name is a quick fix");
+    assert_eq!(action.kind, Some(lt::CodeActionKind::QUICKFIX));
+    let edit = single_edit(action, &file);
+    assert_eq!(edit.range, diagnostic.range);
+    assert_eq!(edit.new_text, "Doors");
+    shut_down(&client, 11);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn service_rename_respects_rsdl_binding_and_namespace_collisions() {
+    let dir = TempDir::new("service-rename-binding");
+    let (contracts, system) = write_service_workspace(&dir);
+    let text = SERVICE_USES
+        .replace(
+            "Provider, Consumer, FaultAccess",
+            "Provider, Consumer, Inline",
+        )
+        .replace(
+            "import veh.adas.Inline as FaultAccess",
+            "import veh.adas.Inline as FaultAccess\nimport veh.adas.Inline\ncomponent Inline {}",
+        );
+    dir.write("topology/system.rsdl", &text);
+    dir.write(
+        "adas/local.rsdl",
+        "package veh.adas\ncomponent Occupied {}\n",
+    );
+    let (client, server) = start(uri_of(dir.path()));
+    let edit = rename_at(
+        &client,
+        10,
+        contracts.clone(),
+        find_pos(SERVICE_NAMES, "Inline", 0),
+        "Diagnostics",
+    );
+    let edits = edits_for(&edit, &system);
+    assert_eq!(
+        edits.len(),
+        2,
+        "only the two imports, not the component member: {edits:?}"
+    );
+    for occurrence in [0, 1] {
+        let range = range_of(&text, "Inline", occurrence);
+        assert!(
+            edits
+                .iter()
+                .any(|edit| edit.range == range && edit.new_text == "Diagnostics"),
+            "import {occurrence} at {range:?}: {edits:?}"
+        );
+    }
+    let declaration_edits = edits_for(&edit, &contracts);
+    assert_eq!(declaration_edits.len(), 2, "{declaration_edits:?}");
+    for occurrence in [0, 1] {
+        let range = range_of(SERVICE_NAMES, "Inline", occurrence);
+        assert!(
+            declaration_edits
+                .iter()
+                .any(|edit| edit.range == range && edit.new_text == "Diagnostics"),
+            "{range:?}: {declaration_edits:?}"
+        );
+    }
+    for (id, new_name) in [(11, "Occupied"), (12, "Provider"), (13, "lowercase")] {
+        let cursor = find_pos(SERVICE_NAMES, "AdaptiveCruise", 0);
+        let result = rename_raw(&client, id, contracts.clone(), cursor, new_name);
+        assert!(
+            result.response_result.is_err(),
+            "must refuse {new_name}: {result:?}"
+        );
+    }
+    shut_down(&client, 14);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn service_member_definition_and_hover_follow_an_imported_interface() {
+    let dir = TempDir::new("service-member-cross-package");
+    let (contracts, system) = write_service_workspace(&dir);
+    let text = "package veh.topology\nimport veh.adas.CruiseControl as Control\nservice Published: Control\n/// See [Published.level].\ntype Reading: integer\n";
+    let other = uri_of(&dir.write("topology/other.ridl", text));
+    let (client, server) = start(uri_of(dir.path()));
+    let location = scalar_location(definition_at(
+        &client,
+        10,
+        other.clone(),
+        pos_in(text, "[Published.level]", 0, 12),
+    ));
+    assert_eq!(location.uri, contracts);
+    assert_eq!(location.range, range_of(SERVICE_NAMES, "level", 0));
+    let hover = hover_at(&client, 11, other, pos_in(text, "[Published.level]", 0, 12)).unwrap();
+    let lt::HoverContents::Markup(markup) = hover.contents else {
+        panic!("markdown hover")
+    };
+    assert!(
+        markup.value.contains("signal CruiseControl.level : Level"),
+        "{}",
+        markup.value
+    );
+    let hover = hover_at(
+        &client,
+        12,
+        system,
+        pos_in(SERVICE_USES, "[AdaptiveCruise]", 0, 3),
+    )
+    .unwrap();
+    let lt::HoverContents::Markup(markup) = hover.contents else {
+        panic!("markdown hover")
+    };
+    assert!(
+        markup
+            .value
+            .contains("service veh.adas.AdaptiveCruise : CruiseControl")
+    );
+    shut_down(&client, 13);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn service_completion_qualifies_imports_shadowed_by_rsdl_declarations() {
+    let dir = TempDir::new("service-completion-shadow");
+    let (_, system) = write_service_workspace(&dir);
+    let text = "package veh.topology\nimport veh.adas.Inline\ncomponent Inline {}\ncomponent Consumer { offers  }\n";
+    dir.write("topology/system.rsdl", text);
+    let (client, server) = start(uri_of(dir.path()));
+    for (id, slot) in [(10, "offers"), (11, "requires")] {
+        let text = text.replace("offers", slot);
+        did_open(&client, &system, &text);
+        let items = complete_at(
+            &client,
+            id,
+            system.clone(),
+            pos_after(&text, &format!("{slot} "), 0),
+        );
+        let names = labels(&items);
+        assert!(names.contains(&"veh.adas.Inline"), "{names:?}");
+        assert!(!names.contains(&"Inline"), "{names:?}");
+    }
+    shut_down(&client, 12);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn service_rename_preserves_an_explicit_alias_equal_to_the_old_name() {
+    let dir = TempDir::new("service-same-alias");
+    let (contracts, system) = write_service_workspace(&dir);
+    let text = SERVICE_USES.replace(
+        "import veh.adas.AdaptiveCruise\n",
+        "import veh.adas.AdaptiveCruise as AdaptiveCruise\n",
+    );
+    dir.write("topology/system.rsdl", &text);
+    let (client, server) = start(uri_of(dir.path()));
+    let edit = rename_at(
+        &client,
+        10,
+        contracts.clone(),
+        find_pos(SERVICE_NAMES, "AdaptiveCruise", 0),
+        "Cruising",
+    );
+    let edits = edits_for(&edit, &system);
+    let expected = [
+        range_of(&text, "AdaptiveCruise", 0),
+        range_of(&text, "AdaptiveCruise", 3),
+    ];
+    assert_eq!(
+        edits.len(),
+        expected.len(),
+        "only the import path and qualified doc link: {edits:?}"
+    );
+    for range in expected {
+        assert!(
+            edits
+                .iter()
+                .any(|edit| edit.range == range && edit.new_text == "Cruising")
+        );
+    }
+    let declaration_edits = edits_for(&edit, &contracts);
+    assert_eq!(declaration_edits.len(), 2);
+    for occurrence in [0, 1] {
+        let range = range_of(SERVICE_NAMES, "AdaptiveCruise", occurrence);
+        assert!(
+            declaration_edits
+                .iter()
+                .any(|edit| edit.range == range && edit.new_text == "Cruising"),
+            "{range:?}: {declaration_edits:?}"
+        );
+    }
+    shut_down(&client, 11);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn service_imports_support_hover_definition_and_references_in_both_profiles() {
+    let dir = TempDir::new("service-import-navigation");
+    let (contracts, system) = write_service_workspace(&dir);
+    let extra_text = "package veh.adas\nimport veh.adas.AdaptiveCruise as Imported\n";
+    let extra = uri_of(&dir.write("adas/import.ridl", extra_text));
+    let (client, server) = start(uri_of(dir.path()));
+    let expected = range_of(SERVICE_NAMES, "AdaptiveCruise", 0);
+    for (id, uri, text) in [(10, system, SERVICE_USES), (20, extra, extra_text)] {
+        let cursor = pos_in(text, "import veh.adas.AdaptiveCruise", 0, 18);
+        let hover = hover_at(&client, id, uri.clone(), cursor).expect("service import hover");
+        let lt::HoverContents::Markup(markup) = hover.contents else {
+            panic!("markdown hover")
+        };
+        assert!(
+            markup
+                .value
+                .contains("service veh.adas.AdaptiveCruise : CruiseControl"),
+            "{}",
+            markup.value
+        );
+        let location = scalar_location(definition_at(&client, id + 1, uri.clone(), cursor));
+        assert_eq!(location.uri, contracts);
+        assert_eq!(location.range, expected);
+        let references = references_at(&client, id + 2, uri.clone(), cursor, true).unwrap();
+        assert!(
+            references
+                .iter()
+                .any(|r| r.uri == uri && r.range == range_of(text, "AdaptiveCruise", 0)),
+            "{references:?}"
+        );
+    }
+    shut_down(&client, 30);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn service_member_link_references_use_only_the_service_segment() {
+    let dir = TempDir::new("service-member-references");
+    let (contracts, _) = write_service_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    let declaration = references_at(
+        &client,
+        10,
+        contracts.clone(),
+        find_pos(SERVICE_NAMES, "AdaptiveCruise", 0),
+        true,
+    )
+    .unwrap();
+    let references = references_at(
+        &client,
+        11,
+        contracts.clone(),
+        pos_in(SERVICE_NAMES, "[AdaptiveCruise.level]", 0, 2),
+        true,
+    );
+    assert_eq!(references, Some(declaration));
+    assert_eq!(
+        references_at(
+            &client,
+            12,
+            contracts,
+            pos_in(SERVICE_NAMES, "[AdaptiveCruise.level]", 0, 17),
+            true
+        ),
+        None
+    );
+    shut_down(&client, 13);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn service_see_completion_offers_declarations_and_members() {
+    let dir = TempDir::new("service-see-completion");
+    let (contracts, _) = write_service_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    for (id, prefix, expected) in [
+        (10, "@see ", "Inline"),
+        (11, "@see Inline.", "level"),
+        (12, "@see AdaptiveCruise.", "level"),
+    ] {
+        let text = format!("{SERVICE_NAMES}\n/// {prefix}\ntype Extra: integer\n");
+        did_open(&client, &contracts, &text);
+        let items = complete_at(&client, id, contracts.clone(), pos_after(&text, prefix, 0));
+        assert!(labels(&items).contains(&expected), "{items:?}");
+    }
+    shut_down(&client, 13);
+    server.join().unwrap().unwrap();
 }

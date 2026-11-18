@@ -655,7 +655,7 @@ interface Panel {
 }
 
 /// The service.
-service veh.sized.panel: Panel
+service PanelService: Panel
 ",
     );
     write(
@@ -666,7 +666,7 @@ service veh.sized.panel: Panel
 system Car { Head, Near, Far }
 
 /// The provider.
-component Head { offers veh.sized.panel }
+component Head { offers veh.sized.PanelService }
 /// A consumer with no placement key.
 component Near { requires Panel }
 /// A consumer whose placement line declares `slots`.

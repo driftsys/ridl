@@ -78,6 +78,15 @@ pub(super) fn check_declaration_names(
                     Declaration::Interface(interface) => {
                         (declared_name(interface), name_range(interface))
                     }
+                    Declaration::Service(service) => (
+                        service
+                            .declared_name()
+                            .map(|token| token.text().to_string()),
+                        service
+                            .declared_name()
+                            .map(|token| token.text_range())
+                            .unwrap_or_default(),
+                    ),
                 };
                 let Some(name) = name else {
                     continue;
@@ -421,19 +430,14 @@ fn read_reference(reference: &ast::Reference, file: InputFile) -> Option<Referen
 /// segments before the first upper-case one are the package path, that
 /// segment names a component (or the system, or an interface), and one
 /// camelCase segment after it names an instance. A reference of lowercase
-/// segments only is a service.
+/// segments only names nothing: a package is not a declaration, and the old
+/// dotted spelling of a service is read here as unreadable (ADR-0034).
 fn form_of(segments: &[String]) -> ReferenceForm {
     let Some(first_upper) = segments
         .iter()
         .position(|segment| segment.starts_with(|c: char| c.is_ascii_uppercase()))
     else {
-        return if segments.iter().all(|segment| is_lowercase_segment(segment)) {
-            ReferenceForm::Service {
-                name: segments.join("."),
-            }
-        } else {
-            ReferenceForm::Unreadable
-        };
+        return ReferenceForm::Unreadable;
     };
     let (package, rest) = segments.split_at(first_upper);
     if !package.iter().all(|segment| is_lowercase_segment(segment)) {
@@ -482,7 +486,7 @@ mod tests {
         }
     }
 
-    /// The five rows of the rsdl §4 reference table, read by case.
+    /// The rows of the rsdl §4 reference table, read by case.
     #[test]
     fn a_reference_reads_its_role_from_case() {
         assert_eq!(form("Cruise"), declared(None, "Cruise"));
@@ -496,11 +500,17 @@ mod tests {
             instance(Some("veh.topology"), "Cruise", "primary")
         );
         assert_eq!(
-            form("veh.diag.access"),
-            ReferenceForm::Service {
-                name: "veh.diag.access".to_string()
-            }
+            form("veh.diag.FaultAccess"),
+            declared(Some("veh.diag"), "FaultAccess")
         );
+    }
+
+    /// A reference of lowercase segments only names nothing: a package is not a
+    /// declaration, and the dotted spelling of a service is gone (ADR-0034).
+    #[test]
+    fn a_lowercase_only_reference_is_unreadable() {
+        assert_eq!(form("veh.diag.legacy"), ReferenceForm::Unreadable);
+        assert_eq!(form("access"), ReferenceForm::Unreadable);
     }
 
     /// `Cruise.Unit` reads as an instance, so RSDL-307 can report it (rsdl §7);

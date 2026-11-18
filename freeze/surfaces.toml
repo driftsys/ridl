@@ -36,16 +36,8 @@ name = "msrv"
 baseline = "016167c90fe1418df512a60330e70b35a55c4a7b"
 
 [[surface]]
-name = "wire"
-baseline = "a583fff24f655a4e0302995bc69a339ad4d4698b"
-
-[[surface]]
 name = "codegen-protocol"
 baseline = "4a6098f88f840445808e34a42b4335c2340e9e64"
-
-[[surface]]
-name = "generated-crate"
-baseline = "a583fff24f655a4e0302995bc69a339ad4d4698b"
 
 [[surface]]
 name = "runtime-crates"
@@ -54,14 +46,6 @@ baseline = "457a5ff4e2d24b34015f87d6444d8ed9efe5ba9e"
 [[surface]]
 name = "keywords"
 baseline = "v0.10.0"
-
-[[surface]]
-name = "accepted-sources"
-baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
-
-[[surface]]
-name = "diagnostics"
-baseline = "202fc03e47d4a47f5c64f12a8f5f8bd7f2ebebb5"
 
 [[surface]]
 name = "manifest"

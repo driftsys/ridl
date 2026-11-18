@@ -100,7 +100,7 @@ table Member {
 
 table Interface {
   // The catalog name: the source package path relative to the unit plus the
-  // interface name, or the service's full dotted name for an inline shape.
+  // interface name, or the service's global name for an inline shape.
   name: string (required);
   // The interface number, copied from the IR's Interface.number, which
   // ridl-sem folds from interfaces.lock (rsdl note D-7). Never 0.

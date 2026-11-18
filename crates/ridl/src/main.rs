@@ -2874,7 +2874,7 @@ fn load_snapshots(
 /// (ridl §14.0, §14.5); the two are indexed together through
 /// `SourceFile::shapes`, because a diff path names either one the same way. A
 /// named-form service is indexed as well: its shape-list elements under the
-/// interface names its diff paths carry, and the service's dotted name as the
+/// interface names its diff paths carry, and the service's global name as the
 /// fallback for an element that is gone. A struct or union body is indexed
 /// separately, from `SourceFile::definitions` (see [`Self::build`]).
 #[derive(Default)]
@@ -2892,7 +2892,7 @@ struct DeclIndex {
     /// `(package, container)` to the container's declared name. This is the
     /// fallback for a removed member, whose own declaration no longer exists
     /// in the source being checked. A service — inline or named-form — is
-    /// keyed by its dotted name, exactly as its diff paths are.
+    /// keyed by its global name, exactly as its diff paths are.
     shapes: BTreeMap<(String, String), (String, TextRange)>,
     /// The package each indexed directory declares, by the directory's path
     /// as [`directory_of`] spells it. A unit's `interfaces.lock` sits in the
@@ -2934,11 +2934,11 @@ impl DeclIndex {
             // Every interface shape, `interface` declarations and services'
             // inline shapes alike (`SourceFile::shapes`). A service's inline
             // shape is an interface body in every way that matters to wire
-            // identity, and the diff paths it produces are keyed by the service
-            // name — so it earns a fallback entry exactly as a named interface
+            // identity, and the diff paths it produces are keyed by the service's
+            // global name — so it earns a fallback entry exactly as a named interface
             // does, or a removal from it renders with no span at all.
             for shape in source.shapes() {
-                let Some(name) = shape.identity() else {
+                let Some(name) = shape.identity(&package) else {
                     continue;
                 };
                 let Some(range) = shape.identity_range() else {
@@ -2954,7 +2954,7 @@ impl DeclIndex {
             // only inline-form services, so without this pass a service-level
             // diff path found nothing and rendered detached. Each listed
             // reference is indexed under its final segment, and the service's
-            // dotted name is the fallback for one that is gone from the
+            // global name is the fallback for one that is gone from the
             // source.
             for service in source
                 .services()
@@ -2963,10 +2963,10 @@ impl DeclIndex {
                 let Some(dotted) = service.name() else {
                     continue;
                 };
-                let name = dotted.text();
-                if name.is_empty() {
+                let Some(declared) = service.declared_name() else {
                     continue;
-                }
+                };
+                let name = format!("{package}.{}", declared.text());
                 index.shapes.insert(
                     (package.clone(), name.clone()),
                     (path.clone(), dotted.syntax().text_range()),
@@ -3143,7 +3143,7 @@ impl DeclIndex {
     }
 
     /// The span of a shape's declared name — an `interface` declaration's
-    /// name, or a service's dotted name for its inline shape — or a detached
+    /// name, or a service's declared name for its inline shape — or a detached
     /// span when the source does not declare it.
     fn shape_span(&self, package: &str, shape: &str, sources: &mut SourceMap) -> Span {
         let Some((path, range)) = self.shapes.get(&(package.to_string(), shape.to_string())) else {
@@ -3450,6 +3450,123 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Historical IR can hold two shapes under one name even though current
+    /// source declarations cannot. Search both for the retired interaction.
+    #[test]
+    fn historical_same_name_shapes_find_the_tombstone_in_either_shape() {
+        use ridl_ir::v2;
+
+        let tombstone = v2::Decl {
+            ordinal: 2,
+            kind: Some(v2::decl::Kind::ReservedSlot(v2::Reserved {
+                ordinal: 2,
+                name: Some("doorClosed".into()),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        for in_service in [false, true] {
+            let published = [v2::Package {
+                name: "veh.cluster".into(),
+                interfaces: vec![v2::Interface {
+                    name: "doors".into(),
+                    interactions: if in_service {
+                        vec![]
+                    } else {
+                        vec![tombstone.clone()]
+                    },
+                    ..Default::default()
+                }],
+                services: vec![v2::Service {
+                    name: "doors".into(),
+                    shapes: vec![v2::ServiceShape {
+                        kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
+                            interactions: if in_service {
+                                vec![tombstone.clone()]
+                            } else {
+                                vec![]
+                            },
+                            ..Default::default()
+                        })),
+                    }],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }];
+            let path = "veh.cluster/doors/doorClosed";
+            assert_eq!(
+                published_ordinal(&published, path),
+                Some(2),
+                "in service: {in_service}"
+            );
+            assert!(
+                published_reserves(&published, path),
+                "in service: {in_service}"
+            );
+        }
+    }
+
+    /// The diff uses global service names; the source writes only the declared
+    /// name. Both listed references and the declaration fallback need that key.
+    #[test]
+    fn named_service_diff_paths_render_at_the_declaration_and_references() {
+        const BEFORE: &str =
+            "package veh.cluster\ninterface I {}\ninterface J {}\nservice Doors : I, J\n";
+        const AFTER: &str =
+            "package veh.cluster\ninterface I {}\ninterface J {}\nservice Doors : I\n";
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cluster.ridl");
+        let before = ridlc::compile("cluster.ridl", BEFORE);
+        let after = ridlc::compile("cluster.ridl", AFTER);
+        for output in [&before, &after] {
+            assert!(
+                !output
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.severity == Severity::Error),
+                "{}",
+                render(&output.diagnostics, &output.sources)
+            );
+        }
+        let report = ridl_diff::diff_packages(&before.package, &after.package);
+        let removal = report
+            .changes
+            .iter()
+            .find(|change| change.category == ridl_diff::Category::ServiceInterfaceRemoved)
+            .expect("the diff records the removed reference");
+        assert_eq!(removal.path, "veh.cluster/veh.cluster.Doors/J");
+
+        // The old source still has the reference; the new source falls back
+        // to the declaration. Pin the range as well as the rendered line.
+        for (source, selected, column) in [(BEFORE, "J", 20), (AFTER, "Doors", 9)] {
+            std::fs::write(&path, source).unwrap();
+            let index = DeclIndex::build(&path);
+            let mut sources = SourceMap::default();
+            let span = index.span_of(&removal.path, &mut sources);
+            assert_ne!(span.file, FileId::DETACHED);
+            assert_eq!(
+                &source[std::ops::Range::<usize>::from(span.range)],
+                selected
+            );
+            let rendered = render(
+                &[Diagnostic {
+                    code: DiagCode(""),
+                    severity: Severity::Info,
+                    message: removal.path.clone(),
+                    primary: span,
+                    labels: Vec::new(),
+                    fixits: Vec::new(),
+                }],
+                &sources,
+            );
+            assert!(
+                rendered.contains(&format!("cluster.ridl:4:{column}")),
+                "{rendered}"
+            );
+            assert!(rendered.contains("service Doors : I"), "{rendered}");
+        }
+    }
 
     #[test]
     fn a_fresh_provisional_number_does_not_keep_a_published_identity() {

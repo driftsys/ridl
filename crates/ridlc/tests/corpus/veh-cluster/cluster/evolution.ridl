@@ -28,7 +28,7 @@ interface WheelHistory {
 }
 
 /// The same two forms inside a service's inline shape.
-service veh.cluster.wheels {
+service Wheels {
   signal ticks : FanLevel @[100ms..1s]
   reserved legacyTicks
   reserved 3

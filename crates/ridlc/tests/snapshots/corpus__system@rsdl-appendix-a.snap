@@ -42,7 +42,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "since": []
     },
     {
-      "component": "veh.diag.access",
+      "component": "veh.diag.Access",
       "attributes": [],
       "doc": "",
       "links": [],
@@ -62,7 +62,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ],
       "offers": [
         {
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "attributes": [],
           "doc": "",
           "links": [],
@@ -77,7 +77,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.LaneAssist",
             "inline": false
           },
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "producer": "veh.topology.Lane",
           "attributes": [],
           "doc": "",
@@ -117,7 +117,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ],
       "offers": [
         {
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "attributes": [],
           "doc": "",
           "links": [],
@@ -156,7 +156,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producer": "veh.topology.Cruise",
           "attributes": [],
           "doc": "",
@@ -170,7 +170,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.LaneAssist",
             "inline": false
           },
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "producer": "veh.topology.Lane",
           "attributes": [],
           "doc": "",
@@ -209,7 +209,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producer": "veh.topology.Cruise",
           "attributes": [],
           "doc": "",
@@ -220,11 +220,11 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "interface": {
             "catalog": "veh",
-            "name": "veh.diag.access",
+            "name": "veh.diag.Access",
             "inline": true
           },
-          "service": "veh.diag.access",
-          "producer": "veh.diag.access",
+          "service": "veh.diag.Access",
+          "producer": "veh.diag.Access",
           "attributes": [],
           "doc": "",
           "links": [],
@@ -247,7 +247,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ]
     },
     {
-      "name": "veh.diag.access",
+      "name": "veh.diag.Access",
       "package": "",
       "implicit": true,
       "external": false,
@@ -256,7 +256,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ],
       "offers": [
         {
-          "service": "veh.diag.access",
+          "service": "veh.diag.Access",
           "attributes": [],
           "doc": "",
           "links": [],
@@ -282,7 +282,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "producers": [
     {
-      "service": "veh.adas.cruise",
+      "service": "veh.adas.Cruise",
       "component": "veh.topology.Cruise",
       "instances": [
         "primary",
@@ -291,7 +291,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "notYetRealizable": true
     },
     {
-      "service": "veh.adas.lane",
+      "service": "veh.adas.Lane",
       "component": "veh.topology.Lane",
       "instances": [
         "Unit"
@@ -299,8 +299,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "notYetRealizable": false
     },
     {
-      "service": "veh.diag.access",
-      "component": "veh.diag.access",
+      "service": "veh.diag.Access",
+      "component": "veh.diag.Access",
       "instances": [
         "Unit"
       ],
@@ -335,7 +335,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       ]
     },
     {
-      "component": "veh.diag.access",
+      "component": "veh.diag.Access",
       "external": false,
       "regions": []
     }
@@ -349,24 +349,24 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "inline": false,
           "number": 1,
           "provisional": true,
-          "service": "veh.adas.cruise"
+          "service": "veh.adas.Cruise"
         },
         {
           "name": "adas.LaneAssist",
           "inline": false,
           "number": 2,
           "provisional": true,
-          "service": "veh.adas.lane"
+          "service": "veh.adas.Lane"
         },
         {
-          "name": "veh.diag.access",
+          "name": "veh.diag.Access",
           "inline": true,
           "number": 3,
           "provisional": true,
-          "service": "veh.diag.access"
+          "service": "veh.diag.Access"
         }
       ],
-      "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo="
+      "hash": "44KXTttHtFkzD1NjuwAVBtIeuU38hSXKwBqI3Rud95E="
     }
   ],
   "distributions": [
@@ -391,7 +391,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "since": []
         },
         {
-          "component": "veh.diag.access",
+          "component": "veh.diag.Access",
           "attributes": [],
           "doc": "",
           "links": [],
@@ -483,7 +483,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "attributes": []
         },
         {
-          "component": "veh.diag.access",
+          "component": "veh.diag.Access",
           "instance": "Unit",
           "machine": "DevBox",
           "attributes": []
@@ -496,7 +496,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.LaneAssist",
             "inline": false
           },
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "consumer": {
             "component": "veh.topology.Cruise",
             "instance": "primary",
@@ -515,7 +515,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.LaneAssist",
             "inline": false
           },
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "consumer": {
             "component": "veh.topology.Cruise",
             "instance": "backup",
@@ -534,7 +534,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Panel",
             "instance": "Unit",
@@ -553,7 +553,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Panel",
             "instance": "Unit",
@@ -572,7 +572,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.LaneAssist",
             "inline": false
           },
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "consumer": {
             "component": "veh.topology.Panel",
             "instance": "Unit",
@@ -591,7 +591,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Backend",
             "instance": "Unit",
@@ -610,7 +610,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Backend",
             "instance": "Unit",
@@ -626,17 +626,17 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "interface": {
             "catalog": "veh",
-            "name": "veh.diag.access",
+            "name": "veh.diag.Access",
             "inline": true
           },
-          "service": "veh.diag.access",
+          "service": "veh.diag.Access",
           "consumer": {
             "component": "veh.topology.Backend",
             "instance": "Unit",
             "machine": "DevBox"
           },
           "producer": {
-            "component": "veh.diag.access",
+            "component": "veh.diag.Access",
             "instance": "Unit",
             "machine": "DevBox"
           },
@@ -650,7 +650,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "memberOrdinal": 1,
           "interface": "adas.CruiseControl",
           "member": "engaged",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -670,7 +670,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "memberOrdinal": 2,
           "interface": "adas.CruiseControl",
           "member": "target",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -690,7 +690,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "memberOrdinal": 3,
           "interface": "adas.CruiseControl",
           "member": "setLever",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -710,7 +710,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "memberOrdinal": 1,
           "interface": "adas.LaneAssist",
           "member": "active",
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "producers": [
             {
               "component": "veh.topology.Lane",
@@ -723,12 +723,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "catalog": "veh",
           "interfaceNumber": 3,
           "memberOrdinal": 1,
-          "interface": "veh.diag.access",
+          "interface": "veh.diag.Access",
           "member": "readFaults",
-          "service": "veh.diag.access",
+          "service": "veh.diag.Access",
           "producers": [
             {
-              "component": "veh.diag.access",
+              "component": "veh.diag.Access",
               "instance": "Unit",
               "machine": "DevBox"
             }
@@ -743,7 +743,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "name": "adas.CruiseControl",
               "inline": false
             },
-            "service": "veh.adas.cruise",
+            "service": "veh.adas.Cruise",
             "consumer": {
               "component": "veh.topology.Backend",
               "instance": "Unit",
@@ -765,7 +765,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "name": "adas.CruiseControl",
               "inline": false
             },
-            "service": "veh.adas.cruise",
+            "service": "veh.adas.Cruise",
             "consumer": {
               "component": "veh.topology.Backend",
               "instance": "Unit",
@@ -784,17 +784,17 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "link": {
             "interface": {
               "catalog": "veh",
-              "name": "veh.diag.access",
+              "name": "veh.diag.Access",
               "inline": true
             },
-            "service": "veh.diag.access",
+            "service": "veh.diag.Access",
             "consumer": {
               "component": "veh.topology.Backend",
               "instance": "Unit",
               "machine": "DevBox"
             },
             "producer": {
-              "component": "veh.diag.access",
+              "component": "veh.diag.Access",
               "instance": "Unit",
               "machine": "DevBox"
             },
@@ -910,7 +910,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "attributes": []
         },
         {
-          "component": "veh.diag.access",
+          "component": "veh.diag.Access",
           "instance": "Unit",
           "machine": "AdasHpc",
           "attributes": []
@@ -923,7 +923,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.LaneAssist",
             "inline": false
           },
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "consumer": {
             "component": "veh.topology.Cruise",
             "instance": "primary",
@@ -942,7 +942,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.LaneAssist",
             "inline": false
           },
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "consumer": {
             "component": "veh.topology.Cruise",
             "instance": "backup",
@@ -961,7 +961,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Panel",
             "instance": "Unit",
@@ -980,7 +980,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Panel",
             "instance": "Unit",
@@ -999,7 +999,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.LaneAssist",
             "inline": false
           },
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "consumer": {
             "component": "veh.topology.Panel",
             "instance": "Unit",
@@ -1018,7 +1018,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Backend",
             "instance": "Unit",
@@ -1037,7 +1037,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             "name": "adas.CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Backend",
             "instance": "Unit",
@@ -1053,17 +1053,17 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         {
           "interface": {
             "catalog": "veh",
-            "name": "veh.diag.access",
+            "name": "veh.diag.Access",
             "inline": true
           },
-          "service": "veh.diag.access",
+          "service": "veh.diag.Access",
           "consumer": {
             "component": "veh.topology.Backend",
             "instance": "Unit",
             "machine": "Cloud"
           },
           "producer": {
-            "component": "veh.diag.access",
+            "component": "veh.diag.Access",
             "instance": "Unit",
             "machine": "AdasHpc"
           },
@@ -1077,7 +1077,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "memberOrdinal": 1,
           "interface": "adas.CruiseControl",
           "member": "engaged",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -1097,7 +1097,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "memberOrdinal": 2,
           "interface": "adas.CruiseControl",
           "member": "target",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -1117,7 +1117,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "memberOrdinal": 3,
           "interface": "adas.CruiseControl",
           "member": "setLever",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -1137,7 +1137,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "memberOrdinal": 1,
           "interface": "adas.LaneAssist",
           "member": "active",
-          "service": "veh.adas.lane",
+          "service": "veh.adas.Lane",
           "producers": [
             {
               "component": "veh.topology.Lane",
@@ -1150,12 +1150,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "catalog": "veh",
           "interfaceNumber": 3,
           "memberOrdinal": 1,
-          "interface": "veh.diag.access",
+          "interface": "veh.diag.Access",
           "member": "readFaults",
-          "service": "veh.diag.access",
+          "service": "veh.diag.Access",
           "producers": [
             {
-              "component": "veh.diag.access",
+              "component": "veh.diag.Access",
               "instance": "Unit",
               "machine": "AdasHpc"
             }
@@ -1170,7 +1170,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "name": "adas.CruiseControl",
               "inline": false
             },
-            "service": "veh.adas.cruise",
+            "service": "veh.adas.Cruise",
             "consumer": {
               "component": "veh.topology.Backend",
               "instance": "Unit",
@@ -1192,7 +1192,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
               "name": "adas.CruiseControl",
               "inline": false
             },
-            "service": "veh.adas.cruise",
+            "service": "veh.adas.Cruise",
             "consumer": {
               "component": "veh.topology.Backend",
               "instance": "Unit",
@@ -1211,17 +1211,17 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "link": {
             "interface": {
               "catalog": "veh",
-              "name": "veh.diag.access",
+              "name": "veh.diag.Access",
               "inline": true
             },
-            "service": "veh.diag.access",
+            "service": "veh.diag.Access",
             "consumer": {
               "component": "veh.topology.Backend",
               "instance": "Unit",
               "machine": "Cloud"
             },
             "producer": {
-              "component": "veh.diag.access",
+              "component": "veh.diag.Access",
               "instance": "Unit",
               "machine": "AdasHpc"
             },

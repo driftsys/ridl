@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/ok/rsdl_appendix_a_bench.rsdl
 ---
-SourceFile@0..162
+SourceFile@0..167
   LineComment@0..39 "// rsdl reference App ..."
   Whitespace@39..40 "\n"
   PackageDecl@40..60
@@ -14,7 +14,7 @@ SourceFile@0..162
       Dot@51..52 "."
       Ident@52..60 "topology"
   Whitespace@60..62 "\n\n"
-  DeploymentDef@62..161
+  DeploymentDef@62..166
     DeploymentKw@62..72 "deployment"
     Whitespace@72..73 " "
     Name@73..78
@@ -28,7 +28,7 @@ SourceFile@0..162
     Whitespace@90..91 " "
     LBrace@91..92 "{"
     Whitespace@92..95 "\n  "
-    MachineDef@95..159
+    MachineDef@95..164
       MachineKw@95..102 "machine"
       Whitespace@102..103 " "
       Name@103..109
@@ -54,23 +54,23 @@ SourceFile@0..162
             Ident@126..131 "Panel"
       Comma@131..132 ","
       Whitespace@132..133 " "
-      MemberLine@133..148
-        Reference@133..148
-          QualifiedName@133..148
+      MemberLine@133..153
+        Reference@133..153
+          QualifiedName@133..153
             Ident@133..136 "veh"
             Dot@136..137 "."
             Ident@137..141 "diag"
             Dot@141..142 "."
-            Ident@142..148 "access"
-      Comma@148..149 ","
-      Whitespace@149..150 " "
-      MemberLine@150..157
-        Reference@150..157
-          QualifiedName@150..157
-            Ident@150..157 "Backend"
-      Whitespace@157..158 " "
-      RBrace@158..159 "}"
-    Whitespace@159..160 "\n"
-    RBrace@160..161 "}"
-  Whitespace@161..162 "\n"
+            Ident@142..153 "FaultAccess"
+      Comma@153..154 ","
+      Whitespace@154..155 " "
+      MemberLine@155..162
+        Reference@155..162
+          QualifiedName@155..162
+            Ident@155..162 "Backend"
+      Whitespace@162..163 " "
+      RBrace@163..164 "}"
+    Whitespace@164..165 "\n"
+    RBrace@165..166 "}"
+  Whitespace@166..167 "\n"
 errors: none

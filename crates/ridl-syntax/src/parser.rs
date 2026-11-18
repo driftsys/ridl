@@ -1224,7 +1224,8 @@ impl<'a> Parser<'a> {
 
     /// `ServiceDef = 'service' DottedName (':' shapes (',' shapes)* ','? |
     /// '{' (inline_members ','?)* '}')` — the global published declaration of
-    /// one or more interfaces (ridl reference §14.5, ADR-0015 decision 12).
+    /// one or more interfaces (ridl reference §14.5, ADR-0015 decision 12),
+    /// named by one `CamelCase` identifier (ADR-0034).
     /// The named form carries a comma-separated shape list after `:`; the
     /// inline form carries an interaction body reusing
     /// [`Parser::interface_body`], so the checker runs the same structural pass
@@ -1287,9 +1288,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// `DottedName = 'ident' ('.' 'ident')*` — a dotted global service name
-    /// (`veh.adas.cruise`, ADR-0002 §1). Each segment is a plain identifier;
-    /// a trailing `.` with no segment after it is FORM-101.
+    /// `DottedName = 'ident' ('.' 'ident')*` — the name of a service. The
+    /// declared name is one `CamelCase` identifier (`Doors`); the dotted
+    /// spelling (`veh.adas.cruise`) is still parsed so that the checker
+    /// reports it (RIDL-142). Each segment is a plain identifier; a trailing
+    /// `.` with no segment after it is FORM-101.
     fn dotted_name(&mut self) {
         self.start(SyntaxKind::DottedName);
         if self.at(SyntaxKind::Ident) {
@@ -2894,7 +2897,7 @@ mod tests {
     // declaration, with the rsdl declaration after it still parsed.
     #[test]
     fn rsdl_profile_parses_its_declarations_and_rejects_the_others() {
-        let clean = "package p\nsystem Vehicle { Cruise, veh.diag.access }\n";
+        let clean = "package p\nsystem Vehicle { Cruise, veh.diag.FaultAccess }\n";
         assert_eq!(parse(clean, Profile::Rsdl).errors(), &[]);
 
         for foreign in [
@@ -2902,7 +2905,7 @@ mod tests {
             "internal type Speed: km/h",
             "struct S { a: integer [0..1] }",
             "interface I { signal s: S @10ms }",
-            "service veh.a.b : I",
+            "service VehAB : I",
         ] {
             let input = format!("package p\n{foreign}\nsystem Vehicle {{ Cruise }}\n");
             let parsed = parse(&input, Profile::Rsdl);
@@ -3193,7 +3196,7 @@ interface I {{
             ),
             (
                 Profile::Ridl,
-                "service p.svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
+                "service Svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
             ),
         ];
         for (profile, shape) in bodies {
@@ -3267,7 +3270,7 @@ interface I {{
             ),
             (
                 Profile::Ridl,
-                "service p.svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
+                "service Svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
             ),
         ];
         for (profile, shape) in bodies {
@@ -3304,7 +3307,7 @@ interface I {{
     /// no connection to the mistake.
     #[test]
     fn a_missing_comma_ends_the_shape_list_at_the_next_identifier() {
-        let input = "package p\nservice p.svc : DoorControl\nStruct Foo {\n  a : X\n}\n";
+        let input = "package p\nservice Svc : DoorControl\nStruct Foo {\n  a : X\n}\n";
         let parsed = parse(input, Profile::Ridl);
         assert_eq!(
             parsed.syntax().text().to_string(),
@@ -3343,7 +3346,7 @@ interface I {{
     /// stray keyword is reported, and nothing after it joins the list.
     #[test]
     fn a_shape_list_admits_a_trailing_comma_and_ends_before_reserved() {
-        let input = "package p\nservice p.svc : DoorControl, MotorControl,\n";
+        let input = "package p\nservice Svc : DoorControl, MotorControl,\n";
         let parsed = parse(input, Profile::Ridl);
         assert!(
             parsed.errors().is_empty(),
@@ -3355,7 +3358,7 @@ interface I {{
             [SyntaxKind::PathType, SyntaxKind::PathType]
         );
 
-        let input = "package p\nservice p.svc : DoorControl, reserved LegacyDiag, MotorControl,\n";
+        let input = "package p\nservice Svc : DoorControl, reserved LegacyDiag, MotorControl,\n";
         let parsed = parse(input, Profile::Ridl);
         assert!(
             !parsed.errors().is_empty(),

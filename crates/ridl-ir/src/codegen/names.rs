@@ -31,7 +31,7 @@ pub(crate) fn dotted_name(dotted: &str) -> v1::DottedName {
 }
 
 /// The wire backends' `type_name`: one CamelCase identifier from a dotted
-/// address, `corpus.baseline.hvac` giving `CorpusBaselineHvac`. ADR-0016 does
+/// address, `corpus.baseline.Hvac` giving `CorpusBaselineHvac`. ADR-0016 does
 /// not pin it, and `camel_case` does not compute it — it splits on
 /// underscores, not on dots (design note §9 item 3).
 pub(crate) fn joined_camel(dotted: &str) -> String {

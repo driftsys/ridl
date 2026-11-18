@@ -136,7 +136,7 @@ fn the_model_is_positionally_aligned_with_the_ir_it_was_lowered_from() {
 /// projection does not cover is silent otherwise — the model keeps the
 /// tuple, and only the join between them is lost. The corpus is the input
 /// because it holds the names a hand-built fixture does not: a service's
-/// dotted identity, an inline shape, a retired slot (driftsys/ridl#713).
+/// global identity, an inline shape, a retired slot (driftsys/ridl#713).
 #[test]
 fn every_named_induced_tuple_in_the_corpus_has_a_flatbuffers_table() {
     let mut checked = 0usize;
@@ -802,14 +802,14 @@ fn the_cabin_deployment_section_is_rendered_end_to_end() {
             "number": 1,
             "inline": false,
             "provisional": true,
-            "service": "veh.cabin.control"
+            "service": "veh.cabin.Control"
           },
           {
             "name": "Horn",
             "number": 2,
             "inline": false,
             "provisional": true,
-            "service": "veh.cabin.control"
+            "service": "veh.cabin.Control"
           }
         ]
       }

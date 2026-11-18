@@ -1698,7 +1698,7 @@ fn a_service_removed_is_breaking() {
     assert_row(&old, &new, Category::DeclRemoved, Verdict::Breaking);
 }
 
-/// The classifier resolves a member path under a service's dotted name into
+/// The classifier resolves a member path under a service's global name into
 /// the service's inline shape. That shape is not in `Package.interfaces`, so
 /// `find_interface` walks `Package::shapes()`; without it the append guard
 /// cannot see which slot the new interaction took, and every append inside an
@@ -1706,12 +1706,12 @@ fn a_service_removed_is_breaking() {
 #[test]
 fn an_interaction_appended_inside_an_inline_shape_is_compatible() {
     let old = service_pkg(vec![service_inline(
-        "veh.hvac.cabin",
+        "veh.hvac.Cabin",
         v2::Visibility::Public,
         vec![signal("a", 1, "T")],
     )]);
     let new = service_pkg(vec![service_inline(
-        "veh.hvac.cabin",
+        "veh.hvac.Cabin",
         v2::Visibility::Public,
         vec![signal("a", 1, "T"), event("b", 2, "U")],
     )]);
@@ -1728,12 +1728,12 @@ fn an_interaction_appended_inside_an_inline_shape_is_compatible() {
 #[test]
 fn an_ordinal_reused_inside_an_inline_shape_is_breaking() {
     let old = service_pkg(vec![service_inline(
-        "veh.hvac.cabin",
+        "veh.hvac.Cabin",
         v2::Visibility::Public,
         vec![signal("a", 1, "T"), signal("b", 2, "T")],
     )]);
     let new = service_pkg(vec![service_inline(
-        "veh.hvac.cabin",
+        "veh.hvac.Cabin",
         v2::Visibility::Public,
         vec![signal("a", 1, "T"), event("c", 2, "U")],
     )]);
@@ -1748,12 +1748,12 @@ fn an_ordinal_reused_inside_an_inline_shape_is_breaking() {
 fn widening_an_inline_shape_service_reads_the_services_own_visibility() {
     let interactions = vec![signal("a", 1, "T")];
     let old = service_pkg(vec![service_inline(
-        "veh.hvac.cabin",
+        "veh.hvac.Cabin",
         v2::Visibility::Internal,
         interactions.clone(),
     )]);
     let new = service_pkg(vec![service_inline(
-        "veh.hvac.cabin",
+        "veh.hvac.Cabin",
         v2::Visibility::Public,
         interactions,
     )]);
@@ -1925,12 +1925,12 @@ fn a_retargeted_reference_with_the_same_final_name_is_a_removal_plus_an_addition
 #[test]
 fn a_service_form_switch_stays_service_changed_and_breaking() {
     let old = service_pkg(vec![service_inline(
-        "veh.hvac.cabin",
+        "veh.hvac.Cabin",
         v2::Visibility::Public,
         vec![signal("a", 1, "T")],
     )]);
     let new = service_pkg(vec![service_shapes(
-        "veh.hvac.cabin",
+        "veh.hvac.Cabin",
         vec![ref_slot("Cabin")],
     )]);
     assert_row(&old, &new, Category::ServiceChanged, Verdict::Breaking);
@@ -3831,7 +3831,7 @@ mod constraint_direction {
         after.name = "dep".into();
         let mut local = decl_pkg(vec![]);
         local.services.push(v2::Service {
-            name: "veh.cluster.readings".into(),
+            name: "veh.cluster.Readings".into(),
             shapes: vec![v2::ServiceShape {
                 kind: Some(v2::service_shape::Kind::Inline(interface(
                     "",
@@ -3845,7 +3845,7 @@ mod constraint_direction {
                 .unwrap();
         assert_eq!(report.changes.len(), 1, "{report:?}");
         let change = row(&report, Category::ConstraintChanged);
-        assert_eq!(change.path, "veh.cluster/veh.cluster.readings/read");
+        assert_eq!(change.path, "veh.cluster/veh.cluster.Readings/read");
         assert_eq!(change.verdict, Verdict::Breaking);
     }
 

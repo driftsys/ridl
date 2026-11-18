@@ -719,7 +719,7 @@ fn contracts_inside_a_service_with_an_inline_shape_are_reported() {
         "app.ridl",
         "package app\n\
 type Speed : km/h [0.0..250.0 step 0.5]\n\
-service app.cruise {\n\
+service Cruise {\n\
   command overshoot(desired: Speed) [ require desired > 300.0 ] @[..50ms]\n\
   query peek(): Speed [ ensure result >= 0.0 ] @[..50ms]\n\
 }\n",
@@ -756,7 +756,7 @@ type Speed : km/h [0.0..250.0 step 0.5]\n\
 interface Cruise {\n\
   command overshoot(desired: Speed) [ require desired > 300.0 ] @[..50ms]\n\
 }\n\
-service app.cruise : Cruise\n",
+service CruiseService : Cruise\n",
     );
     let (code, stdout, stderr) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
     assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
@@ -1343,14 +1343,14 @@ fn the_shipped_multi_member_corpus_evaluates_its_cross_package_clauses() {
                 // A `ridl.std.Duration` parameter, from Appendix A verbatim.
                 "VehicleStatus.getAverageSpeed.require[0]",
                 // A `veh.common.Temperature` parameter inside an inline shape.
-                "veh.hvac.cabin.setTarget.require[0]",
+                "veh.cluster.HvacCabin.setTarget.require[0]",
             ],
         ),
         (
             "services-workspace",
             // A `fleet.contracts.DoorId` parameter inside an inline shape in a
             // package that owns none of its vocabulary.
-            vec!["fleet.vehicle.mirrors.readFold.require[0]"],
+            vec!["fleet.vehicle.Mirrors.readFold.require[0]"],
         ),
     ] {
         let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))

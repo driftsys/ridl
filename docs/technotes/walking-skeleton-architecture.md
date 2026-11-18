@@ -113,14 +113,18 @@ crate the workspace holds — see `AGENTS.md` for that.
   its own `[imports]`, never the workspace `[imports]`; a qualified reference
   and a doc link apply the same visibility as an import) plus cycle detection,
   and applies the first-wins duplicate tiebreak — every later duplicate is
-  TYPL-009 (ADR-0007 decision 6). `check` lowers each resolved package to IR v2,
-  lowering only the resolver's first-wins winner. Supporting modules: `scalar`
-  (exact `BigRational` arithmetic for ranges, steps, and wire-width derivation —
-  no `f32`/`f64` anywhere), `ucum` (the UCUM term grammar over a curated atom
-  table, ADR-0007 decision 8), `init` (init-value derivation), `docs`
-  (doc-comment handling), and `testgen` (proptest strategies and
-  boundary/violation corpora derived from checked ranges, behind the `testgen`
-  feature).
+  TYPL-009 (ADR-0007 decision 6). A `service` declared with one `CamelCase` name
+  is a symbol of its package, so it takes part in that tiebreak; its global
+  name, the package name followed by the declared name, is the key of the
+  workspace service catalog (`service_catalog` in `ridl-core`), which reports
+  nothing, and the dotted form is RIDL-142 (ADR-0034). `check` lowers each
+  resolved package to IR v2, lowering only the resolver's first-wins winner.
+  Supporting modules: `scalar` (exact `BigRational` arithmetic for ranges,
+  steps, and wire-width derivation — no `f32`/`f64` anywhere), `ucum` (the UCUM
+  term grammar over a curated atom table, ADR-0007 decision 8), `init`
+  (init-value derivation), `docs` (doc-comment handling), and `testgen`
+  (proptest strategies and boundary/violation corpora derived from checked
+  ranges, behind the `testgen` feature).
 
   E2 added four modules here and grew `check` and `resolve` to the interaction
   surface. `timing` resolves every signal and event to concrete microsecond

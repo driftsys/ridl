@@ -9,24 +9,26 @@ in a separate package.
 
 What the entry exercises that `veh-cluster` does not:
 
-- **A cross-package service.** `service fleet.vehicle.doors.front : DoorControl`
+- **A cross-package service.** `service DoorsFront : DoorControl`
   names an interface that lives in the sibling member. The checker must resolve
   the imported name before it can tell the service names an interface at all;
   an unresolved name would surface as RIDL-141 ("names a type that is not an
   interface"), so a clean compile here is the evidence that the cross-package
   path works.
-- **One shape, several services.** `doors.front` and `doors.rear` are two
+- **One shape, several services.** `DoorsFront` and `DoorsRear` are two
   system-wide addresses realizing the identical contract — the redundancy /
   variant case §14.5 calls out.
 - **An inline shape that owns none of its vocabulary.** Every payload,
-  parameter and return type in `fleet.vehicle.mirrors` is a cross-package
+  parameter and return type in `fleet.vehicle.Mirrors` is a cross-package
   reference. This is the inline-shape blind spot crossed with the cross-package
   reference path: both the IR and the generated TypeScript must canonicalize
   the references from inside `Service.shape`, not only from inside
   `Package.interfaces`.
 - **Contracts inside an inline shape**, including an `ensure` over `result`.
 - **A service composing two interfaces** (ADR-0015 decision 12).
-  `fleet.vehicle.cockpit` lists `DoorControl` and `Telemetry` — the
+  `fleet.vehicle.Cockpit` lists `DoorControl` and `TelemetryContract` (the
+  imported `Telemetry` interface under an alias, because a service named
+  `Telemetry` in the same package would hide it) — the
   clean-compile case of the list, with each reference canonicalized on its
   own. `a_composed_service_compiles_and_round_trips_through_the_ir`
   in `corpus.rs` drives the same entry through both interchange encodings.
@@ -36,14 +38,14 @@ What the entry exercises that `veh-cluster` does not:
   spelled differently depending on where the arms live:
 
       same-package   DoorControl#4:DoorReport|DoorFault
-      cross-package  fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
+      cross-package  fleet.vehicle.Mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
 
   A registry keys a wire contract on that string, so both belong in the golden
-  record. `fleet.contracts` holds the bare one; `fleet.vehicle.mirrors` holds
+  record. `fleet.contracts` holds the bare one; `fleet.vehicle.Mirrors` holds
   the qualified one.
 - **An import alias is canonicalized away.** `readLegacyDoor` writes
   `DoorReport | LegacyFault`, and the identity reads
-  `fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault`.
+  `fleet.vehicle.Mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault`.
   A consumer must not be able to change a wire identity by renaming its own
   import, and nothing recorded that guarantee before. This is why `legacy/`
   exists at all: two packages exporting `DoorFault` make the alias *required*

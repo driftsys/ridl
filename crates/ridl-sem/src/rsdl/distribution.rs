@@ -75,9 +75,10 @@ pub(super) fn distribute(
                     format!(
                         "`{}` is not a component of the closure of `{}` — a distribution lists \
                          closure components and the lone services the system lists (rsdl \
-                         reference §3.3)",
+                         reference §3.3){}",
                         reference.text(),
-                        system.systems[0].name.name
+                        system.systems[0].name.name,
+                        super::old_service_hint(reference)
                     ),
                 );
                 continue;

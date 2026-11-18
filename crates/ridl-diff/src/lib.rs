@@ -966,7 +966,7 @@ pub fn category_word(category: Category) -> &'static str {
 /// the wire, visible in source" is for a change that exits 0 but that a
 /// consumer sees in its source — an interface renamed on its number changes
 /// the generated identity-table names in both wire backends, and an interface
-/// leaving a service's set stops the `service.member` addresses of that
+/// leaving a service's set stops the `Service.member` addresses of that
 /// interface resolving under the service. "compatible on the wire, may change
 /// the catalog hash" is for a change that exits 0 but can change the catalog
 /// hash, which a generated face compares with its peer's — a number `ridl

@@ -19,12 +19,12 @@ and §14.5 needs both service forms exercised.
 ## What the entry covers
 
 - **Both service forms.** Two named-reference services over one interface shape
-  (`veh.cluster.status` and `veh.cluster.standby` both realize `VehicleStatus`)
-  and one inline shape (`veh.hvac.cabin`).
+  (`veh.cluster.Status` and `veh.cluster.Standby` both realize `VehicleStatus`)
+  and one inline shape (`veh.cluster.HvacCabin`).
 - **The inline shape carries the whole surface.** A service's inline shape is
   an `Interface` stored under `Service.shape`, outside `Package.interfaces`, so
   a consumer that walks `package.interfaces` alone skips it silently — the
-  shape of five separate E2 defects. `veh.hvac.cabin` therefore holds all five
+  shape of five separate E2 defects. `veh.cluster.HvacCabin` therefore holds all five
   interaction kinds, every timing mode, contracts including one that reads
   `result`, an inline `T | E` fallible return, streams in both positions, a
   `reserved` tombstone, a deprecated member, and both `fixed` forms. The IR,
@@ -49,9 +49,9 @@ and §14.5 needs both service forms exercised.
   enum access, tuple-field access and duration comparison come from Appendix A
   and the inline shape; conjunction, arithmetic over a parameter, arithmetic
   over `result`, and a reference to a declared `const` (`MAX_FAN`) are the three
-  members appended at the end of `veh.hvac.cabin`. They are appended rather than
+  members appended at the end of `veh.cluster.HvacCabin`. They are appended rather than
   inserted so the ordinals above — and the synthesized transport identity
-  `veh.hvac.cabin#13` — do not move.
+  `veh.cluster.HvacCabin#13` — do not move.
 
   _What this entry does not isolate._ Appendix A's
   `require position != GearPosition.PARK` references an **imported** name from a
@@ -257,11 +257,11 @@ of interface bodies, when a service's inline shape lives outside it. All six
 are closed. The structural repair is a single walk on each side —
 `ridl_ir::v2::Package::shapes` and `ridl_syntax::ast::SourceFile::shapes` —
 which yields a named interface and a service's inline shape alike, carrying the
-identity name (the interface's own, or the service's dotted one) so no consumer
+identity name (the interface's own, or the service's global one) so no consumer
 reads the inline shape's empty `Interface.name`, and the owning `Service` so no
 consumer reads its unspecified `Interface.visibility` either (see the section
 above). `DeclIndex` now walks `SourceFile::shapes()` and the inline-shape
-warning spans the service's dotted name;
+warning spans the service's declared name;
 `inline_shape_removal_spans_the_service_name` pins that.
 
 ### A non-integer `reserved` literal destroyed the retired identity — fixed

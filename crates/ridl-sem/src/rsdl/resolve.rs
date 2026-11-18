@@ -27,7 +27,7 @@ pub struct ResolvedRequire {
     pub line: usize,
     /// The required interface.
     pub interface: InterfaceId,
-    /// The dotted name of its owning service.
+    /// The global name of its owning service.
     pub service: String,
     /// The offering component, as an index into `Closure::components`.
     pub producer: usize,

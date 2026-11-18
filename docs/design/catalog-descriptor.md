@@ -164,11 +164,11 @@ the order given. It returns `Result<Vec<u8>, LowerError>`.
   `com.example.hmi.cluster` in the unit `com.example.hmi`, and the short name
   for an interface of the root source package. Two source packages of one unit
   can therefore declare the same short name.
-- **An inline service shape** is an interface under the service's full dotted
-  name, with no unit-relative prefix.
+- **An inline service shape** is an interface under the service's global name,
+  with no unit-relative prefix.
 - **The retired list** is the unit's: the `Package.retired` entries of every
   source package of the unit, copied as name and number and spelled as the lock
-  spells them (`cluster.Old`, `Old`, `service:veh.x`), so an engine can refuse a
+  spells them (`cluster.Old`, `Old`, `service:veh.X`), so an engine can refuse a
   peer that still speaks a retired interface. The IR spelling and the anchor
   package that carries an entry which names no source package of the unit are
   stated in ridl reference §11.

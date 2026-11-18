@@ -2,6 +2,6 @@ package veh.diag
 
 import veh.common.FaultReport
 
-service veh.diag.access {
+service Access {
   query readFaults(): FaultReport @[..100ms]
 }

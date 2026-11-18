@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_err_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/err/rsdl_one_reference_per_line.rsdl
 ---
-SourceFile@0..184
+SourceFile@0..191
   PackageDecl@0..20
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -35,7 +35,7 @@ SourceFile@0..184
     Whitespace@140..141 " "
     RBrace@141..142 "}"
   Whitespace@142..144 "\n\n"
-  ComponentDef@144..183
+  ComponentDef@144..190
     ComponentKw@144..153 "component"
     Whitespace@153..154 " "
     Name@154..158
@@ -43,18 +43,18 @@ SourceFile@0..184
     Whitespace@158..159 " "
     LBrace@159..160 "{"
     Whitespace@160..161 " "
-    ComponentLine@161..181
+    ComponentLine@161..188
       OffersKw@161..167 "offers"
       Whitespace@167..168 " "
-      Reference@168..181
-        QualifiedName@168..181
+      Reference@168..188
+        QualifiedName@168..188
           Ident@168..171 "veh"
           Dot@171..172 "."
           Ident@172..176 "adas"
           Dot@176..177 "."
-          Ident@177..181 "lane"
-    Whitespace@181..182 " "
-    RBrace@182..183 "}"
-  Whitespace@183..184 "\n"
+          Ident@177..188 "LaneKeeping"
+    Whitespace@188..189 " "
+    RBrace@189..190 "}"
+  Whitespace@190..191 "\n"
 errors:
   FORM-102 130..140 `LaneAssist` is a second reference — a component line takes one reference, so write its own `offers` or `requires` before it (rsdl reference §3.2)

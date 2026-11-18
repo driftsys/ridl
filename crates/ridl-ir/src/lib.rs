@@ -754,7 +754,7 @@ pub mod v2 {
 
     impl Component {
         /// The name every reference to this component uses: `pkg.Name` for a
-        /// declared component, the service's dotted name for an implicit one.
+        /// declared component, the service's global name for an implicit one.
         pub fn qualified_name(&self) -> String {
             qualified(&self.package, &self.name)
         }
@@ -789,9 +789,9 @@ pub mod v2 {
     ///
     /// - [`Interface::name`] is `""` for an inline shape, so [`Self::name`]
     ///   carries the **identity** name instead — the interface's own name, or
-    ///   the owning service's dotted global name. That is the name the diff
-    ///   paths, the observer-stub scoping, and both backends' identity fields
-    ///   already use.
+    ///   the owning service's global name (the package, `.` and the declared
+    ///   name). That is the name the diff paths, the observer-stub scoping,
+    ///   and both backends' identity fields already use.
     /// - [`Interface::visibility`] is `VISIBILITY_UNSPECIFIED` for an inline
     ///   shape; the owning [`Service`] carries the authoritative one, which
     ///   [`Self::visibility`] reads.
@@ -801,8 +801,9 @@ pub mod v2 {
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct InterfaceShape<'a> {
         /// The name this shape is known by outside the package: an
-        /// `interface` declaration's own name, or the owning service's dotted
-        /// global name. Never `Interface::name` for an inline shape.
+        /// `interface` declaration's own name, or the owning service's global
+        /// name: the package, `.` and the declared name. Never `Interface::name`
+        /// for an inline shape.
         pub name: &'a str,
         /// The interface body — its interactions and its doc envelope.
         pub interface: &'a Interface,
@@ -1355,10 +1356,10 @@ mod v2_round_trip {
             family: v2::Family::Dispatch as i32,
         };
 
-        // service veh.adas.status : VehicleStatus — one named reference in
+        // service Status : VehicleStatus — one named reference in
         // the service's set (ADR-0015 decision 12).
         let status_service = v2::Service {
-            name: "veh.adas.status".to_string(),
+            name: "veh.adas.Status".to_string(),
             visibility: v2::Visibility::Public as i32,
             doc: String::new(),
             labels: Vec::new(),
@@ -1372,10 +1373,10 @@ mod v2_round_trip {
             see: Vec::new(),
             since: Vec::new(),
         };
-        // service veh.adas.logs { … } — the inline shape as the one entry,
+        // service Logs { … } — the inline shape as the one entry,
         // Interface.name == "" (ridl §14.5).
         let logs_service = v2::Service {
-            name: "veh.adas.logs".to_string(),
+            name: "veh.adas.Logs".to_string(),
             visibility: v2::Visibility::Public as i32,
             doc: String::new(),
             labels: Vec::new(),
@@ -1746,7 +1747,7 @@ mod v2_round_trip {
             .first()
             .and_then(|slot| slot.kind.as_ref())
         else {
-            panic!("veh.adas.logs must decode as an inline shape");
+            panic!("veh.adas.Logs must decode as an inline shape");
         };
         assert_eq!(inline.name, "", "an inline shape carries no name");
         let references: Vec<&str> = decoded.services[0]
@@ -1868,7 +1869,7 @@ mod v2_round_trip {
         let Some(v2::service_shape::Kind::Inline(inline)) =
             package.services[1].shapes[0].kind.as_mut()
         else {
-            panic!("veh.adas.logs holds an inline shape in slot 1");
+            panic!("veh.adas.Logs holds an inline shape in slot 1");
         };
         inline.number = 5;
         package.retired = vec![
@@ -1877,7 +1878,7 @@ mod v2_round_trip {
                 number: 2,
             },
             v2::RetiredInterface {
-                name: "service:veh.hvac.cabin".to_string(),
+                name: "service:veh.hvac.Cabin".to_string(),
                 number: 3,
             },
         ];
@@ -1899,7 +1900,7 @@ mod v2_round_trip {
             r#""provisional": true"#,
             r#""number": 5"#,
             r#""name": "LaneAssist""#,
-            r#""name": "service:veh.hvac.cabin""#,
+            r#""name": "service:veh.hvac.Cabin""#,
         ] {
             assert!(
                 json.contains(needle),
@@ -2127,19 +2128,19 @@ mod v2_round_trip {
             .collect();
         assert_eq!(
             walk,
-            [("VehicleStatus", false, 6), ("veh.adas.logs", true, 1)],
+            [("VehicleStatus", false, 6), ("veh.adas.Logs", true, 1)],
             "the named interface, then the inline shape under the service's \
-             dotted name",
+             global name",
         );
 
         // The fixture's third shape-bearing declaration is `service
-        // veh.adas.status : VehicleStatus`, which names an interface already in
+        // Status : VehicleStatus`, which names an interface already in
         // the walk. Yielding it too would visit `VehicleStatus` twice.
         assert_eq!(package.services.len(), 2, "one reference form, one inline");
         assert!(
             !package
                 .shapes()
-                .any(|shape| shape.name == "veh.adas.status"),
+                .any(|shape| shape.name == "veh.adas.Status"),
             "a service naming an interface contributes no shape of its own",
         );
     }
@@ -2206,7 +2207,7 @@ mod v2_round_trip {
             .shapes()
             .find(|shape| shape.is_inline())
             .expect("the fixture has an inline shape");
-        assert_eq!(package.catalog_name(&inline), "veh.adas.logs");
+        assert_eq!(package.catalog_name(&inline), "veh.adas.Logs");
         let named = package
             .shapes()
             .find(|shape| !shape.is_inline())
@@ -2285,7 +2286,7 @@ mod v2_round_trip {
         );
         assert_eq!(
             inline.service.expect("an inline shape has an owner").name,
-            "veh.adas.logs",
+            "veh.adas.Logs",
         );
         assert_eq!(
             inline.visibility(),
@@ -3059,8 +3060,8 @@ mod system_round_trip {
     }
 
     /// A reduced rsdl reference Appendix A: `Cruise` with two instances
-    /// offering `veh.adas.cruise` and requiring `LaneAssist`, the implicit
-    /// component of `veh.diag.access`, one distribution and one deployment.
+    /// offering `veh.adas.Cruise` and requiring `LaneAssist`, the implicit
+    /// component of `veh.diag.Access`, one distribution and one deployment.
     /// Every message of `system.proto` appears at least once, with every
     /// scalar set to a value other than its default — a flag and a nested-list
     /// attribute value included — so a round trip that drops a field is
@@ -3076,10 +3077,10 @@ mod system_round_trip {
 
     fn fixture() -> v2::System {
         let link = v2::Link {
-            interface: interface("veh.diag", "veh.diag.access", true),
-            service: "veh.diag.access".to_string(),
+            interface: interface("veh.diag", "veh.diag.Access", true),
+            service: "veh.diag.Access".to_string(),
             consumer: Some(endpoint("veh.topology.Backend", "Unit", "Cloud")),
-            producer: Some(endpoint("veh.diag.access", "Unit", "AdasHpc")),
+            producer: Some(endpoint("veh.diag.Access", "Unit", "AdasHpc")),
             crossing: v2::Crossing::OffBoard as i32,
         };
         v2::System {
@@ -3097,7 +3098,7 @@ mod system_round_trip {
                     since: vec!["1.2".to_string()],
                 },
                 v2::MemberLine {
-                    component: "veh.diag.access".to_string(),
+                    component: "veh.diag.Access".to_string(),
                     attributes: vec![],
                     doc: "Documented, see [Cruise].".to_string(),
                     links: vec![doc_link()],
@@ -3125,7 +3126,7 @@ mod system_round_trip {
                         },
                     ],
                     offers: vec![v2::Offer {
-                        service: "veh.adas.cruise".to_string(),
+                        service: "veh.adas.Cruise".to_string(),
                         attributes: vec![attribute("someip", "serviceId", Some(scalar("4097")))],
                         doc: "Documented, see [Cruise].".to_string(),
                         links: vec![doc_link()],
@@ -3134,7 +3135,7 @@ mod system_round_trip {
                     }],
                     requires: vec![v2::Require {
                         interface: interface("veh.adas", "LaneAssist", false),
-                        service: "veh.adas.lane".to_string(),
+                        service: "veh.adas.Lane".to_string(),
                         producer: "veh.topology.Lane".to_string(),
                         attributes: vec![attribute(
                             "linux",
@@ -3155,7 +3156,7 @@ mod system_round_trip {
                     deprecated: Some("superseded".to_string()),
                 },
                 v2::Component {
-                    name: "veh.diag.access".to_string(),
+                    name: "veh.diag.Access".to_string(),
                     package: String::new(),
                     implicit: true,
                     external: false,
@@ -3166,7 +3167,7 @@ mod system_round_trip {
                         provisional: false,
                     }],
                     offers: vec![v2::Offer {
-                        service: "veh.diag.access".to_string(),
+                        service: "veh.diag.Access".to_string(),
                         attributes: vec![],
                         doc: "Documented, see [Cruise].".to_string(),
                         links: vec![doc_link()],
@@ -3184,7 +3185,7 @@ mod system_round_trip {
                 },
             ],
             producers: vec![v2::Producer {
-                service: "veh.adas.cruise".to_string(),
+                service: "veh.adas.Cruise".to_string(),
                 component: "veh.topology.Cruise".to_string(),
                 instances: vec!["primary".to_string(), "backup".to_string()],
                 not_yet_realizable: true,
@@ -3198,11 +3199,11 @@ mod system_round_trip {
                 catalog: "veh.diag".to_string(),
                 hash: vec![0xab; 32],
                 interfaces: vec![v2::RegionInterface {
-                    name: "veh.diag.access".to_string(),
+                    name: "veh.diag.Access".to_string(),
                     inline: true,
                     number: 2,
                     provisional: true,
-                    service: "veh.diag.access".to_string(),
+                    service: "veh.diag.Access".to_string(),
                 }],
             }],
             distributions: vec![v2::Distribution {
@@ -3260,7 +3261,7 @@ mod system_round_trip {
                     member_ordinal: 1,
                     interface: "LaneAssist".to_string(),
                     member: "active".to_string(),
-                    service: "veh.adas.lane".to_string(),
+                    service: "veh.adas.Lane".to_string(),
                     producers: vec![endpoint("veh.topology.Lane", "Unit", "AdasHpc")],
                 }],
                 surface: vec![v2::Surface {
@@ -3382,7 +3383,7 @@ mod system_round_trip {
         let system = fixture();
         assert_eq!(system.qualified_name(), "veh.topology.Vehicle");
         assert_eq!(system.components[0].qualified_name(), "veh.topology.Cruise");
-        assert_eq!(system.components[1].qualified_name(), "veh.diag.access");
+        assert_eq!(system.components[1].qualified_name(), "veh.diag.Access");
         assert_eq!(
             system.distributions[0].qualified_name(),
             "veh.topology.Adas"

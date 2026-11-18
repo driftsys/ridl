@@ -37,7 +37,7 @@ a check in another:
   `Shelf`, and RSDL-711 on `Spare`, whose `file` takes the descriptor file name
   of `Bench`. `Bench`, in `attributes.rsdl`, places every closure instance
   once, so it draws none of them. The depth rules of §5 are read over the links
-  of `Bench`: `Siren` offers `rsdl.showcase.alerts`, whose two events
+  of `Bench`: `Siren` offers `rsdl.showcase.AlertsService`, whose two events
   (`contracts.ridl`) `Dash` consumes with `depth = 2`, the RSDL-805 warning,
   and `Driver` (`resolution.rsdl`) consumes with no `depth`, the RSDL-806
   warning for the half-open event.

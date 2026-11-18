@@ -148,7 +148,7 @@ pub(crate) fn classify_in(
         // decision 19 as amended on 2026-09-15). The routing key does not
         // contain the service, so an interface joining or leaving the set
         // moves no wire identity: both directions are compatible. A removal
-        // is still visible in source — the `service.member` addresses of that
+        // is still visible in source — the `Service.member` addresses of that
         // interface stop resolving under the service — which is what the text
         // report's heading says of it.
         Category::ServiceInterfaceAdded | Category::ServiceInterfaceRemoved => Verdict::Compatible,
@@ -1030,7 +1030,7 @@ pub(crate) fn find_decl<'a>(package: &'a v2::Package, name: &str) -> Option<&'a 
 }
 
 /// The shape a name refers to — a top-level interface, or the inline shape of
-/// a service, which the walk descends into under the service's own dotted
+/// a service, which the walk descends into under the service's own global
 /// name. `Package::shapes` keys both on exactly that identity, so one lookup
 /// covers them.
 fn find_shape<'a>(package: &'a v2::Package, name: &str) -> Option<v2::InterfaceShape<'a>> {
@@ -1515,7 +1515,7 @@ pub fn explain(category: Category) -> &'static str {
             "A service switched between the named list and an inline shape.\n",
             "  breaking    always — extraction rewrites the transport identity of every\n",
             "              fallible query in the shape: an inline shape derives it from\n",
-            "              the service's dotted name, a named interface from its own name\n",
+            "              the service's global name, a named interface from its own name\n",
             "              (ADR-0008 d4, ADR-0015 d15). A changed list is not this\n",
             "              category: it is read as a set by the service_interface_*\n",
             "              rows (ADR-0015 d19, as amended 2026-09-15)"
@@ -1532,7 +1532,7 @@ pub fn explain(category: Category) -> &'static str {
             "  compatible  always — on the wire: the routing key does not contain the\n",
             "              service, so no identity moves, and a split into two services\n",
             "              is a removal plus an addition. Visible in source: the\n",
-            "              service.member addresses of that interface stop resolving\n",
+            "              Service.member addresses of that interface stop resolving\n",
             "              under this service, which is why the text report lists it\n",
             "              under the heading \"compatible on the wire, visible in\n",
             "              source\". A consumer that loses its only provider is a\n",

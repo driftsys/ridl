@@ -750,6 +750,10 @@ struct Loader {
     /// Source package name to the unit that claimed it and that unit's
     /// manifest directory.
     claims: BTreeMap<String, (String, PathBuf)>,
+    /// Source package name to the directory whose files were loaded as that
+    /// package. A second directory of the same unit that gives the same name
+    /// (`a.b/` and `a/b/`) is MANI-023 and is not loaded.
+    package_dirs: BTreeMap<String, PathBuf>,
     overlays: Vec<(PathBuf, Overlay, bool)>,
     sources: SourceMap,
     diagnostics: Vec<Diagnostic>,
@@ -1111,7 +1115,8 @@ impl Loader {
     /// listed twice in `[workspace] members` reaches this function once: the
     /// `members` loop skips its later listings. Two
     /// directories of one unit that give one package name (`a.b/` and
-    /// `a/b/`) are not MANI-014: both are loaded.
+    /// `a/b/`) are not MANI-014: they are MANI-023, and the directory reached
+    /// second in walk order is not loaded.
     fn load_package_tree(
         &mut self,
         db: &mut RidlDatabase,
@@ -1183,8 +1188,8 @@ impl Loader {
         if !source_files.is_empty() {
             match self.claims.get(name) {
                 // The directory comparison keeps a same-unit collision out of
-                // MANI-014: two directories of one unit can give one package
-                // name (`a.b/` and `a/b/`), and both are loaded, as today.
+                // MANI-014: two directories of one unit that give one package
+                // name (`a.b/` and `a/b/`) are MANI-023, below.
                 Some((first, first_dir)) if normalize(first_dir) != normalize(unit_dir) => {
                     claimed_elsewhere = true;
                     // Every unit whose tree is loaded has its entry,
@@ -1204,6 +1209,23 @@ impl Loader {
                 _ => {
                     self.claims
                         .insert(name.to_string(), (unit.to_string(), unit_dir.to_path_buf()));
+                    if let Some(first_dir) = self.package_dirs.get(name) {
+                        claimed_elsewhere = true;
+                        let (file, name_range) = self.unit_name_spans[unit];
+                        self.diagnostics.push(error(
+                            DiagCode::MANI_023,
+                            file,
+                            name_range,
+                            format!(
+                                "the directories `{}` and `{}` of unit `{unit}` both give the package name `{name}`; the second is not loaded. Rename one of the directories",
+                                first_dir.display(),
+                                dir.display()
+                            ),
+                        ));
+                    } else {
+                        self.package_dirs
+                            .insert(name.to_string(), dir.to_path_buf());
+                    }
                 }
             }
         }
@@ -3372,7 +3394,7 @@ mod tests {
 # interfaces.lock — written by ridl lock; do not edit by hand.
 next 3
 Cabin 1
-service:veh.common.climate 2
+service:veh.common.Climate 2
 ";
 
     /// A well-formed `interfaces.lock` beside the sources rides on the
@@ -3404,7 +3426,7 @@ service:veh.common.climate 2
         assert_eq!(lock.lock.entries.len(), 2);
         assert_eq!(
             lock.lock.entries[1].key,
-            crate::interface_lock::LockKey::Service("veh.common.climate".to_string())
+            crate::interface_lock::LockKey::Service("veh.common.Climate".to_string())
         );
     }
 
@@ -4929,11 +4951,11 @@ service:veh.common.climate 2
     }
 
     /// Two directories of one unit, `a.b/` and `a/b/`, both give the package
-    /// name `x.a.b`. The claim is the unit's own, so it is not MANI-014. The
-    /// current behaviour loads both directories silently; no diagnostic is
-    /// dedicated to this collision yet.
+    /// name `x.a.b`. The claim is the unit's own, so it is not MANI-014: it is
+    /// MANI-023, once, and the second directory in walk order is not loaded,
+    /// so the unit holds one package `x.a.b`, the one of `a/b/`.
     #[test]
-    fn two_directories_of_one_unit_naming_one_package_are_not_mani_014() {
+    fn two_directories_of_one_unit_naming_one_package_are_mani_023() {
         let dir = TempDir::new("one-unit-one-name");
         dir.write("ridl.toml", "[workspace]\nmembers = [\"x\"]\n");
         dir.write(
@@ -4946,6 +4968,42 @@ service:veh.common.climate 2
         let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
         let codes = codes(&loaded.diagnostics);
         assert!(!codes.contains(&"MANI-014"), "{codes:?}");
+        assert_eq!(
+            codes.iter().filter(|c| **c == "MANI-023").count(),
+            1,
+            "{codes:?}"
+        );
+        let diag = loaded
+            .diagnostics
+            .iter()
+            .find(|d| d.code == DiagCode::MANI_023)
+            .expect("MANI-023 is reported");
+        let manifest = loaded.sources.path(diag.primary.file).unwrap();
+        assert!(manifest.ends_with("x/ridl.toml"), "{manifest}");
+        let text = loaded.sources.text(diag.primary.file).unwrap();
+        let range = diag.primary.range;
+        assert_eq!(
+            text[usize::from(range.start())..usize::from(range.end())].trim_matches('"'),
+            "x",
+            "reported on the unit's `[package] name`"
+        );
+        let sep = std::path::MAIN_SEPARATOR;
+        for directory in [format!("x{sep}a.b"), format!("x{sep}a{sep}b")] {
+            assert!(
+                diag.message.contains(&directory),
+                "`{directory}` in {}",
+                diag.message
+            );
+        }
+        let named: Vec<_> = loaded
+            .workspace
+            .packages(&db)
+            .iter()
+            .filter(|p| p.name(&db) == "x.a.b")
+            .collect();
+        assert_eq!(named.len(), 1);
+        let file = named[0].files(&db)[0];
+        assert!(file.path(&db).ends_with("a/b/q.ridl"), "{}", file.path(&db));
     }
 
     #[test]

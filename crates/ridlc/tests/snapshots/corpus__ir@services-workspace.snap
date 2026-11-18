@@ -485,7 +485,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   "interfaces": [],
   "services": [
     {
-      "name": "fleet.vehicle.doors.front",
+      "name": "fleet.vehicle.DoorsFront",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "Two services over one imported shape: the front and rear door controllers\nare separate system-wide addresses realizing the same contract.",
       "labels": [],
@@ -499,7 +499,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       ]
     },
     {
-      "name": "fleet.vehicle.doors.rear",
+      "name": "fleet.vehicle.DoorsRear",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],
@@ -513,7 +513,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       ]
     },
     {
-      "name": "fleet.vehicle.telemetry",
+      "name": "fleet.vehicle.Telemetry",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "A second imported shape.",
       "labels": [],
@@ -527,7 +527,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       ]
     },
     {
-      "name": "fleet.vehicle.cockpit",
+      "name": "fleet.vehicle.Cockpit",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "One address composing both shapes (ADR-0015 decision 12): the interface\nstays the generation unit, the service the addressing unit, so this\ndeclaration generates nothing new — it gives the two contracts one more\nglobal name.",
       "labels": [],
@@ -544,7 +544,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       ]
     },
     {
-      "name": "fleet.vehicle.mirrors",
+      "name": "fleet.vehicle.Mirrors",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "An inline shape in a package that owns none of its vocabulary: every\npayload, parameter and return type here is a cross-package reference\nresolved through the workspace members above.",
       "labels": [],
@@ -657,7 +657,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                         "door"
                       ],
                       "usesResult": false,
-                      "observerId": "fleet.vehicle.mirrors.readFold.require[0]"
+                      "observerId": "fleet.vehicle.Mirrors.readFold.require[0]"
                     },
                     {
                       "kind": "CONTRACT_KIND_ENSURE",
@@ -665,7 +665,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "signalRefs": [],
                       "paramRefs": [],
                       "usesResult": true,
-                      "observerId": "fleet.vehicle.mirrors.readFold.ensure[0]"
+                      "observerId": "fleet.vehicle.Mirrors.readFold.ensure[0]"
                     }
                   ],
                   "timing": {

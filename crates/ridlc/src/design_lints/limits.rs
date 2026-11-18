@@ -16,10 +16,10 @@
 //!
 //! An interaction is named `Interface.member`: the short name of its shape,
 //! then `.`, then the member name. The short name is the interface name, or for
-//! an inline `service` shape the last segment of its dotted global name, so
-//! neither carries a package. When two shapes of one unit share a short name,
-//! no key can name either of them, and a key that uses the name is reported as
-//! ambiguous.
+//! an inline `service` shape the declared name of the service, which is its
+//! global name without the package prefix, so neither carries a package. When
+//! two shapes of one unit share a short name, no key can name either of them,
+//! and a key that uses the name is reported as ambiguous.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -72,9 +72,23 @@ fn a_kind(kind: LimitKind) -> String {
     format!("{article} {name}")
 }
 
-/// The last segment of the name of a shape.
-fn short_name(name: &str) -> &str {
-    name.rsplit('.').next().unwrap_or(name)
+/// The short name of a shape of `package`: the name of a declared interface, or
+/// the declared name of an inline shape's service, which is the service's
+/// global name without the package prefix.
+fn short_name<'a>(package: &str, shape: &v2::InterfaceShape<'a>) -> &'a str {
+    if shape.is_inline() {
+        declared_name(package, shape.name)
+    } else {
+        shape.name
+    }
+}
+
+/// `global_name` without the `package` prefix and its `.`.
+fn declared_name<'a>(package: &str, global_name: &'a str) -> &'a str {
+    global_name
+        .strip_prefix(package)
+        .and_then(|rest| rest.strip_prefix('.'))
+        .unwrap_or(global_name)
 }
 
 fn kind_of(decl: &v2::Decl) -> Option<LimitKind> {
@@ -88,14 +102,14 @@ fn kind_of(decl: &v2::Decl) -> Option<LimitKind> {
     }
 }
 
-/// The short names that more than one of `shape_names` has. No key can name a
+/// The short names that more than one of `short_names` is. No key can name a
 /// shape with such a short name.
-fn ambiguous_short_names<'a>(shape_names: impl Iterator<Item = &'a str>) -> BTreeSet<&'a str> {
+fn ambiguous_short_names<'a>(short_names: impl Iterator<Item = &'a str>) -> BTreeSet<&'a str> {
     let mut seen = BTreeSet::new();
     let mut ambiguous = BTreeSet::new();
-    for name in shape_names {
-        if !seen.insert(short_name(name)) {
-            ambiguous.insert(short_name(name));
+    for name in short_names {
+        if !seen.insert(name) {
+            ambiguous.insert(name);
         }
     }
     ambiguous
@@ -117,17 +131,19 @@ pub(crate) fn annotate_limits(
         let members: Vec<usize> = (0..checked.len())
             .filter(|index| units.get(*index) == Some(unit))
             .collect();
-        let ambiguous: BTreeSet<String> = ambiguous_short_names(
-            members
-                .iter()
-                .flat_map(|index| checked[*index].ir.shapes().map(|shape| shape.name)),
-        )
+        let ambiguous: BTreeSet<String> = ambiguous_short_names(members.iter().flat_map(|index| {
+            let package = &checked[*index].ir;
+            package
+                .shapes()
+                .map(|shape| short_name(&package.name, &shape))
+        }))
         .into_iter()
         .map(str::to_owned)
         .collect();
         let table = &table.limits;
         for index in members {
             let package = &mut checked[index].ir;
+            let package_name = package.name.clone();
             let inline = package.services.iter_mut().flat_map(|service| {
                 let name = service.name.clone();
                 service
@@ -135,7 +151,7 @@ pub(crate) fn annotate_limits(
                     .iter_mut()
                     .filter_map(move |slot| match slot.kind.as_mut()? {
                         v2::service_shape::Kind::Inline(interface) => {
-                            Some((name.clone(), interface))
+                            Some((name.clone(), true, interface))
                         }
                         v2::service_shape::Kind::InterfaceRef(_) => None,
                     })
@@ -143,9 +159,13 @@ pub(crate) fn annotate_limits(
             let named = package
                 .interfaces
                 .iter_mut()
-                .map(|interface| (interface.name.clone(), interface));
-            for (name, interface) in named.chain(inline) {
-                let short = short_name(&name);
+                .map(|interface| (interface.name.clone(), false, interface));
+            for (name, is_inline, interface) in named.chain(inline) {
+                let short = if is_inline {
+                    declared_name(&package_name, &name)
+                } else {
+                    &name
+                };
                 let owner = (!ambiguous.contains(short)).then_some(short);
                 for decl in &mut interface.interactions {
                     decl.limit =
@@ -205,11 +225,12 @@ pub(crate) fn check(
             .collect();
         let complete = examined.len() == unit.packages.len();
         let mut known = BTreeSet::new();
-        let ambiguous = ambiguous_short_names(
-            examined
-                .iter()
-                .flat_map(|index| ctx.checked[*index].ir.shapes().map(|shape| shape.name)),
-        );
+        let ambiguous = ambiguous_short_names(examined.iter().flat_map(|index| {
+            let package = &ctx.checked[*index].ir;
+            package
+                .shapes()
+                .map(|shape| short_name(&package.name, &shape))
+        }));
         for index in examined {
             let package = &ctx.checked[index].ir;
             let others: Vec<&v2::Package> = ctx
@@ -226,7 +247,7 @@ pub(crate) fn check(
                 Vec::new()
             };
             for (shape, interface) in package.shapes().zip(&interfaces) {
-                let short = short_name(shape.name);
+                let short = short_name(&package.name, &shape);
                 let owner = (!ambiguous.contains(short)).then_some(short);
                 for (decl, slot) in shape.interface.interactions.iter().zip(&interface.slots) {
                     let Some(v1::interaction_slot::Occupant::Interaction(interaction)) =

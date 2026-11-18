@@ -12,7 +12,7 @@
 //! LaneAssist 2 retired
 //! LaneKeeping 3
 //! DoorControl 4
-//! service:veh.hvac.cabin 5
+//! service:veh.hvac.Cabin 5
 //! ```
 //!
 //! - The first content line is `next N`: N is greater than every number in
@@ -26,7 +26,7 @@
 //!   An entry's number never changes and no entry is ever removed (lock
 //!   design §4): a rename rewrites the key in place, a retire adds the word.
 //! - The key is a declared interface's catalog name, or `service:` followed by
-//!   the dotted name of the service whose inline shape the entry numbers (lock
+//!   the global name of the service whose inline shape the entry numbers (lock
 //!   design §3). A catalog name is the interface's source package path
 //!   relative to the unit, then its name, joined by `.` (`cluster.Speed`); an
 //!   interface of the unit's root source package keeps its short name. The
@@ -68,12 +68,12 @@ pub const HEADER: &str = "# interfaces.lock — written by ridl lock; do not edi
 ///
 /// Its text form (`Display`, `FromStr`) is the token the file holds and the
 /// spelling `ridl lock`'s flags take: `LaneAssist` for a declared interface,
-/// `service:veh.hvac.cabin` for the inline shape of a service.
+/// `service:veh.hvac.Cabin` for the inline shape of a service.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum LockKey {
     /// A declared `interface`, by its name.
     Interface(String),
-    /// A service's inline shape, by the service's dotted name (without the
+    /// A service's inline shape, by the service's global name (without the
     /// `service:` prefix).
     Service(String),
 }
@@ -727,7 +727,7 @@ CruiseControl 1
 LaneAssist 2 retired
 LaneKeeping 3
 DoorControl 4
-service:veh.hvac.cabin 5
+service:veh.hvac.Cabin 5
 ";
 
     #[test]
@@ -788,7 +788,7 @@ service:veh.hvac.cabin 5
         assert!(lock.entries[1].retired, "`LaneAssist 2 retired` is retired");
         assert_eq!(
             lock.entries[4].key,
-            LockKey::Service("veh.hvac.cabin".to_string()),
+            LockKey::Service("veh.hvac.Cabin".to_string()),
             "the `service:` prefix keys the inline shape"
         );
 
@@ -815,7 +815,7 @@ service:veh.hvac.cabin 5
         );
         assert_eq!(
             lock.entries[4].range,
-            line_range(EXAMPLE, "service:veh.hvac.cabin 5")
+            line_range(EXAMPLE, "service:veh.hvac.Cabin 5")
         );
     }
 
@@ -1031,7 +1031,7 @@ C 3
     fn lock_key_display_and_from_str_agree() {
         for text in [
             "CruiseControl",
-            "service:veh.hvac.cabin",
+            "service:veh.hvac.Cabin",
             "cabin",
             "service:cabin",
             "A_B9",
@@ -1186,7 +1186,7 @@ C 3
             Err(LockEditError::KeyAlreadyLive(key("CruiseControl")))
         );
         assert_eq!(
-            lock.rename(&key("service:veh.hvac.cabin"), key("service:veh.hvac.rear")),
+            lock.rename(&key("service:veh.hvac.Cabin"), key("service:veh.hvac.Rear")),
             Ok(5),
             "a service rename is an entry rename (§3)"
         );

@@ -5659,8 +5659,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "VehHvacCabinReplayTraceParams",
-        "wire": "VehHvacCabinReplayTraceParams"
+        "rust": "VehClusterHvacCabinReplayTraceParams",
+        "wire": "VehClusterHvacCabinReplayTraceParams"
       },
       "fields": [],
       "visibility": "VISIBILITY_PUBLIC",
@@ -5689,8 +5689,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "VehHvacCabinRebalanceParams",
-        "wire": "VehHvacCabinRebalanceParams"
+        "rust": "VehClusterHvacCabinRebalanceParams",
+        "wire": "VehClusterHvacCabinRebalanceParams"
       },
       "fields": [],
       "visibility": "VISIBILITY_PUBLIC",
@@ -5719,8 +5719,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "VehHvacCabinGetBoundsParams",
-        "wire": "VehHvacCabinGetBoundsParams"
+        "rust": "VehClusterHvacCabinGetBoundsParams",
+        "wire": "VehClusterHvacCabinGetBoundsParams"
       },
       "fields": [],
       "visibility": "VISIBILITY_PUBLIC",
@@ -5749,8 +5749,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "VehHvacCabinGetBoundsReply",
-        "wire": "VehHvacCabinGetBoundsReply"
+        "rust": "VehClusterHvacCabinGetBoundsReply",
+        "wire": "VehClusterHvacCabinGetBoundsReply"
       },
       "fields": [
         {
@@ -5842,8 +5842,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "VehHvacCabinGetClimateParams",
-        "wire": "VehHvacCabinGetClimateParams"
+        "rust": "VehClusterHvacCabinGetClimateParams",
+        "wire": "VehClusterHvacCabinGetClimateParams"
       },
       "fields": [],
       "visibility": "VISIBILITY_PUBLIC",
@@ -5872,8 +5872,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "VehHvacCabinGetCabinTempParams",
-        "wire": "VehHvacCabinGetCabinTempParams"
+        "rust": "VehClusterHvacCabinGetCabinTempParams",
+        "wire": "VehClusterHvacCabinGetCabinTempParams"
       },
       "fields": [],
       "visibility": "VISIBILITY_PUBLIC",
@@ -5902,8 +5902,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "rust": "VehHvacCabinScaledFanParams",
-        "wire": "VehHvacCabinScaledFanParams"
+        "rust": "VehClusterHvacCabinScaledFanParams",
+        "wire": "VehClusterHvacCabinScaledFanParams"
       },
       "fields": [],
       "visibility": "VISIBILITY_PUBLIC",
@@ -8191,7 +8191,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
-      "number": 6,
+      "number": 7,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -8383,18 +8383,18 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "since": [],
       "rules": [],
       "service": {
-        "dotted": "veh.cluster.wheels",
+        "dotted": "veh.cluster.Wheels",
         "segments": [
           "veh",
           "cluster",
-          "wheels"
+          "Wheels"
         ],
         "joinedCamel": "VehClusterWheels",
-        "underscored": "veh_cluster_wheels"
+        "underscored": "veh_cluster_Wheels"
       }
     },
     {
-      "number": 7,
+      "number": 6,
       "provisional": true,
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -8991,7 +8991,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "t"
                   ],
                   "usesResult": false,
-                  "observerId": "veh.hvac.cabin.setTarget.require[0]",
+                  "observerId": "veh.cluster.HvacCabin.setTarget.require[0]",
                   "comparison": {
                     "op": "COMPARISON_OP_GE",
                     "literal": "-10.0",
@@ -9003,11 +9003,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "kind": "CONTRACT_KIND_REQUIRE",
                   "source": "cabinTemp >= -40.0",
                   "signalRefs": [
-                    "veh.hvac.cabin.cabinTemp"
+                    "veh.cluster.HvacCabin.cabinTemp"
                   ],
                   "paramRefs": [],
                   "usesResult": false,
-                  "observerId": "veh.hvac.cabin.setTarget.require[1]",
+                  "observerId": "veh.cluster.HvacCabin.setTarget.require[1]",
                   "refused": "the subject is not the interaction's declared parameter"
                 }
               ],
@@ -9570,7 +9570,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "signalRefs": [],
                   "paramRefs": [],
                   "usesResult": false,
-                  "observerId": "veh.hvac.cabin.getBounds.require[0]",
+                  "observerId": "veh.cluster.HvacCabin.getBounds.require[0]",
                   "refused": "no accepted comparison"
                 },
                 {
@@ -9579,7 +9579,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "signalRefs": [],
                   "paramRefs": [],
                   "usesResult": true,
-                  "observerId": "veh.hvac.cabin.getBounds.ensure[0]",
+                  "observerId": "veh.cluster.HvacCabin.getBounds.ensure[0]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
               ],
@@ -10232,7 +10232,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "level"
                   ],
                   "usesResult": false,
-                  "observerId": "veh.hvac.cabin.setFan.require[0]",
+                  "observerId": "veh.cluster.HvacCabin.setFan.require[0]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
               ],
@@ -10375,7 +10375,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "level"
                   ],
                   "usesResult": false,
-                  "observerId": "veh.hvac.cabin.trimFan.require[0]",
+                  "observerId": "veh.cluster.HvacCabin.trimFan.require[0]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 },
                 {
@@ -10386,7 +10386,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                     "level"
                   ],
                   "usesResult": false,
-                  "observerId": "veh.hvac.cabin.trimFan.require[1]",
+                  "observerId": "veh.cluster.HvacCabin.trimFan.require[1]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
               ],
@@ -10499,7 +10499,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "signalRefs": [],
                   "paramRefs": [],
                   "usesResult": true,
-                  "observerId": "veh.hvac.cabin.scaledFan.ensure[0]",
+                  "observerId": "veh.cluster.HvacCabin.scaledFan.ensure[0]",
                   "refused": "not `<subject> <comparison> <numeric literal>`"
                 }
               ],
@@ -10549,28 +10549,28 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "since": [],
       "rules": [],
       "service": {
-        "dotted": "veh.hvac.cabin",
+        "dotted": "veh.cluster.HvacCabin",
         "segments": [
           "veh",
-          "hvac",
-          "cabin"
+          "cluster",
+          "HvacCabin"
         ],
-        "joinedCamel": "VehHvacCabin",
-        "underscored": "veh_hvac_cabin"
+        "joinedCamel": "VehClusterHvacCabin",
+        "underscored": "veh_cluster_HvacCabin"
       }
     }
   ],
   "services": [
     {
       "name": {
-        "dotted": "veh.cluster.wheels",
+        "dotted": "veh.cluster.Wheels",
         "segments": [
           "veh",
           "cluster",
-          "wheels"
+          "Wheels"
         ],
         "joinedCamel": "VehClusterWheels",
-        "underscored": "veh_cluster_wheels"
+        "underscored": "veh_cluster_Wheels"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "The same two forms inside a service's inline shape.",
@@ -10584,14 +10584,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "dotted": "veh.cluster.status",
+        "dotted": "veh.cluster.Status",
         "segments": [
           "veh",
           "cluster",
-          "status"
+          "Status"
         ],
         "joinedCamel": "VehClusterStatus",
-        "underscored": "veh_cluster_status"
+        "underscored": "veh_cluster_Status"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "The cluster's published vehicle-status contract.",
@@ -10606,14 +10606,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "dotted": "veh.cluster.standby",
+        "dotted": "veh.cluster.Standby",
         "segments": [
           "veh",
           "cluster",
-          "standby"
+          "Standby"
         ],
         "joinedCamel": "VehClusterStandby",
-        "underscored": "veh_cluster_standby"
+        "underscored": "veh_cluster_Standby"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "A redundant twin over the same interface shape — one interface, many\nservices (ridl §14.0). Both services carry the identical member set; only\nthe global address differs.",
@@ -10628,14 +10628,14 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": {
-        "dotted": "veh.hvac.cabin",
+        "dotted": "veh.cluster.HvacCabin",
         "segments": [
           "veh",
-          "hvac",
-          "cabin"
+          "cluster",
+          "HvacCabin"
         ],
-        "joinedCamel": "VehHvacCabin",
-        "underscored": "veh_hvac_cabin"
+        "joinedCamel": "VehClusterHvacCabin",
+        "underscored": "veh_cluster_HvacCabin"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "Cabin climate — a one-off global contract, declared inline.",
@@ -10653,7 +10653,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "catalog": {
     "package": "veh.cluster",
-    "hash": "R9pVsGSot78dgnuul3MP0HATeiZ/U2Ykfz+xxditCOI=",
+    "hash": "Jv4hSRZySCnH6WjBAdLwYDFBtjjV4qqy4z28sudZNdQ=",
     "retired": [],
     "compatible": []
   },
@@ -11239,25 +11239,25 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "tuple": 5
       },
       {
-        "name": "VehHvacCabinReplayTraceParams",
+        "name": "VehClusterHvacCabinReplayTraceParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 6
       },
       {
-        "name": "VehHvacCabinRebalanceParams",
+        "name": "VehClusterHvacCabinRebalanceParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 7
       },
       {
-        "name": "VehHvacCabinGetBoundsParams",
+        "name": "VehClusterHvacCabinGetBoundsParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 8
       },
       {
-        "name": "VehHvacCabinGetBoundsReply",
+        "name": "VehClusterHvacCabinGetBoundsReply",
         "slots": [
           {
             "id": 0,
@@ -11286,19 +11286,19 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "tuple": 9
       },
       {
-        "name": "VehHvacCabinGetClimateParams",
+        "name": "VehClusterHvacCabinGetClimateParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 10
       },
       {
-        "name": "VehHvacCabinGetCabinTempParams",
+        "name": "VehClusterHvacCabinGetCabinTempParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 11
       },
       {
-        "name": "VehHvacCabinScaledFanParams",
+        "name": "VehClusterHvacCabinScaledFanParams",
         "slots": [],
         "vtableSlots": 0,
         "tuple": 12

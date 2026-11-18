@@ -77,6 +77,11 @@ because Windows does; the catalog file name is the one that starts with that
 package name. A package that used such a name before this amendment must be
 renamed.
 
+Amended 2026-11-18 by [ADR-0034](ADR-0034-service-declaration-names.md) decision
+6 (driftsys/ridl#1390): §1 gains MANI-023. Two directories of one unit that give
+one package name, such as `a.b/` and `a/b/`, are an error when the unit loads,
+and the directory reached second in the walk is not loaded.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -158,9 +163,12 @@ loads, a second unit that declares the same source package raises MANI-014
 and `veh.cluster`). A member that `members` lists twice is one unit: the loader
 skips the repeat before it reads the manifest, so the unit loads once; the
 repeated listing raises no diagnostic of its own and duplicates none, so the
-member's own diagnostics are raised once. In prose, "package" alone means a
-source package and "the package manifest" means the unit. A unit is the unit of
-distribution: it produces one catalog when it declares an interface shape (see
+member's own diagnostics are raised once. Two directories of one unit that give
+one package name, such as `a.b/` and `a/b/`, raise MANI-023 (Error, amended
+2026-11-18): the walk visits directories in name order, and the directory it
+reaches second is not loaded. In prose, "package" alone means a source package
+and "the package manifest" means the unit. A unit is the unit of distribution:
+it produces one catalog when it declares an interface shape (see
 [the catalog descriptor](../design/catalog-descriptor.md)), and one
 `interfaces.lock` beside its manifest (ridl language reference, §11).
 

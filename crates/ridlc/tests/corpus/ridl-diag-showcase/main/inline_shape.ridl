@@ -10,7 +10,7 @@
 
 package diag.ridl
 
-service diag.showcase.inline {
+service Inline {
 
   /// RIDL-201 — a stream is not a signal payload, inside an inline shape.
   signal live : <Sample> @1s

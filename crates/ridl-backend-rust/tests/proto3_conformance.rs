@@ -723,8 +723,8 @@ fn the_corpus_generates_with_proto3() {
         .filter(|c| !c.is_whitespace())
         .collect();
     for root in [
-        "VehHvacCabinGetBoundsParams",
-        "VehHvacCabinGetBoundsReply",
+        "VehClusterHvacCabinGetBoundsParams",
+        "VehClusterHvacCabinGetBoundsReply",
         "WheelDiagnosticsReadSpanReply",
     ] {
         assert!(

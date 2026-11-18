@@ -1,0 +1,148 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/services_named.ridl
+---
+SourceFile@0..331
+  PackageDecl@0..20
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..20
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..20 "services"
+  Whitespace@20..22 "\n\n"
+  InterfaceDef@22..114
+    InterfaceKw@22..31 "interface"
+    Whitespace@31..32 " "
+    Name@32..45
+      Ident@32..45 "CruiseControl"
+    Whitespace@45..46 " "
+    LBrace@46..47 "{"
+    Whitespace@47..50 "\n  "
+    SignalDef@50..74
+      SignalKw@50..56 "signal"
+      Whitespace@56..57 " "
+      Name@57..64
+        Ident@57..64 "engaged"
+      Whitespace@64..65 " "
+      Colon@65..66 ":"
+      Whitespace@66..67 " "
+      PathType@67..74
+        QualifiedName@67..74
+          Ident@67..74 "Boolean"
+    Whitespace@74..77 "\n  "
+    CommandDef@77..112
+      CommandKw@77..84 "command"
+      Whitespace@84..85 " "
+      Name@85..93
+        Ident@85..93 "setLever"
+      ParamList@93..112
+        LParen@93..94 "("
+        Param@94..111
+          Name@94..99
+            Ident@94..99 "lever"
+          Colon@99..100 ":"
+          Whitespace@100..101 " "
+          PathType@101..111
+            QualifiedName@101..111
+              Ident@101..111 "LeverInput"
+        RParen@111..112 ")"
+    Whitespace@112..113 "\n"
+    RBrace@113..114 "}"
+  Whitespace@114..116 "\n\n"
+  InterfaceDef@116..167
+    InterfaceKw@116..125 "interface"
+    Whitespace@125..126 " "
+    Name@126..137
+      Ident@126..137 "DoorControl"
+    Whitespace@137..138 " "
+    LBrace@138..139 "{"
+    Whitespace@139..142 "\n  "
+    SignalDef@142..165
+      SignalKw@142..148 "signal"
+      Whitespace@148..149 " "
+      Name@149..155
+        Ident@149..155 "locked"
+      Whitespace@155..156 " "
+      Colon@156..157 ":"
+      Whitespace@157..158 " "
+      PathType@158..165
+        QualifiedName@158..165
+          Ident@158..165 "Boolean"
+    Whitespace@165..166 "\n"
+    RBrace@166..167 "}"
+  Whitespace@167..169 "\n\n"
+  ServiceDef@169..199
+    ServiceKw@169..176 "service"
+    Whitespace@176..177 " "
+    DottedName@177..183
+      Ident@177..183 "Cruise"
+    Whitespace@183..184 " "
+    Colon@184..185 ":"
+    Whitespace@185..186 " "
+    PathType@186..199
+      QualifiedName@186..199
+        Ident@186..199 "CruiseControl"
+  Whitespace@199..200 "\n"
+  ServiceDef@200..228
+    ServiceKw@200..207 "service"
+    Whitespace@207..208 " "
+    DottedName@208..213
+      Ident@208..213 "Doors"
+    Whitespace@213..215 "  "
+    Colon@215..216 ":"
+    Whitespace@216..217 " "
+    PathType@217..228
+      QualifiedName@217..228
+        Ident@217..228 "DoorControl"
+  Whitespace@228..230 "\n\n"
+  ServiceDef@230..330
+    ServiceKw@230..237 "service"
+    Whitespace@237..238 " "
+    DottedName@238..243
+      Ident@238..243 "Cabin"
+    Whitespace@243..244 " "
+    LBrace@244..245 "{"
+    Whitespace@245..248 "\n  "
+    SignalDef@248..292
+      SignalKw@248..254 "signal"
+      Whitespace@254..256 "  "
+      Name@256..267
+        Ident@256..267 "temperature"
+      Whitespace@267..268 " "
+      Colon@268..269 ":"
+      Whitespace@269..270 " "
+      PathType@270..281
+        QualifiedName@270..281
+          Ident@270..281 "Temperature"
+      Whitespace@281..282 " "
+      Timing@282..292
+        At@282..283 "@"
+        LBracket@283..284 "["
+        TimingRange@284..291
+          Duration@284..286 "1s"
+          DotDot@286..288 ".."
+          Duration@288..291 "10s"
+        RBracket@291..292 "]"
+    Whitespace@292..295 "\n  "
+    CommandDef@295..328
+      CommandKw@295..302 "command"
+      Whitespace@302..303 " "
+      Name@303..312
+        Ident@303..312 "setTarget"
+      ParamList@312..328
+        LParen@312..313 "("
+        Param@313..327
+          Name@313..314
+            Ident@313..314 "t"
+          Colon@314..315 ":"
+          Whitespace@315..316 " "
+          PathType@316..327
+            QualifiedName@316..327
+              Ident@316..327 "Temperature"
+        RParen@327..328 ")"
+    Whitespace@328..329 "\n"
+    RBrace@329..330 "}"
+  Whitespace@330..331 "\n"
+errors: none
