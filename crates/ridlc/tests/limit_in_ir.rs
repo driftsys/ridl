@@ -156,6 +156,43 @@ fn a_name_is_ambiguous_across_the_packages_of_a_unit() {
     assert_eq!(seen, 2);
 }
 
+/// Two inline-shape services of one unit share the declared name `Svc` in
+/// two packages, so the key `Svc.sig` is ambiguous and applies to neither;
+/// the kind entry still does, and with no kind entry nothing applies.
+#[test]
+fn an_inline_service_short_name_is_ambiguous_across_the_packages_of_a_unit() {
+    let main = "package demo\ntype Payload: bytes [0..100]\n\
+                service Svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let sub = "package demo.sub\ntype Payload: bytes [0..100]\n\
+               service Svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    for (kind, expected) in [("[limits.kind]\nsignal = 300\n", Some(300)), ("", None)] {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        std::fs::write(
+            dir.path().join("ridl.toml"),
+            format!(
+                "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\
+                 {kind}[limits.interaction]\n\"Svc.sig\" = 10\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("m.ridl"), main).unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        std::fs::write(dir.path().join("sub/s.ridl"), sub).unwrap();
+        let mut db = RidlDatabase::default();
+        let output = compile_workspace(&mut db, dir.path()).unwrap();
+        let mut seen = 0;
+        for package in &output.checked {
+            for shape in package.ir.shapes() {
+                for decl in &shape.interface.interactions {
+                    assert_eq!(decl.limit, expected, "{}.{}", shape.name, decl.name);
+                    seen += 1;
+                }
+            }
+        }
+        assert_eq!(seen, 2);
+    }
+}
+
 #[test]
 fn a_payload_above_its_limit_still_has_the_limit_recorded() {
     // The payload is above the 10-byte limit, so RIDL-151 is an error, and
