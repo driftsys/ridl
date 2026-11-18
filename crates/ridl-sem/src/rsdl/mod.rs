@@ -584,7 +584,7 @@ impl Reference {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReferenceForm {
     /// `Name` or `pkg.Name`: a declaration of any kind, told apart by lookup
-    /// (rsdl §4, ADR-0033 decision 9) — a component, a service, or after
+    /// (rsdl §4, ADR-0034 decision 9) — a component, a service, or after
     /// `for` the system, and after `requires` an interface. `package` holds
     /// the lowercase leading segments joined by `.`, `None` for a bare name.
     Declared {
@@ -697,7 +697,7 @@ impl Reporter {
 
 /// The hint a slot's unknown-name message ends with when the reference is
 /// written as the old dotted spelling of a service, which names nothing since
-/// a service has a `CamelCase` declared name (ADR-0033 decision 5): every
+/// a service has a `CamelCase` declared name (ADR-0034 decision 5): every
 /// segment is lowercase. Empty for any other reference.
 fn old_service_hint(reference: &Reference) -> &'static str {
     if reference

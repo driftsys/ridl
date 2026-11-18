@@ -651,7 +651,7 @@ fn an_inline_shape_allocates_under_its_service_key() {
     assert_eq!(code, 0, "stderr:\n{stderr}");
 }
 
-/// ADR-0033 decision 7: an inline shape's entry moves to the global name and
+/// ADR-0034 decision 7: an inline shape's entry moves to the global name and
 /// keeps its number.
 #[test]
 fn rename_moves_an_inline_shape_key_to_the_global_name() {

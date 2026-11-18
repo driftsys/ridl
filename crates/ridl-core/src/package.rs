@@ -197,7 +197,7 @@ pub struct CatalogEntry {
 /// workspace keyed by its global name, the declaring package followed by the
 /// declared name (ridl §14.5).
 ///
-/// A service is a symbol of its package (ADR-0033), so its global name is
+/// A service is a symbol of its package (ADR-0034), so its global name is
 /// unique unless two packages share a name, which the manifest check refuses,
 /// and a second declaration of one name in a package is TYPL-009. The catalog
 /// therefore reports nothing. A service written in the dotted or lowercase

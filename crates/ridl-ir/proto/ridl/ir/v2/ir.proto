@@ -516,7 +516,7 @@ message Interface {
 // ADR-0015 decision 12).
 message Service {
   // Global service name: the package, `.`, and the declared name, e.g.
-  // "veh.adas.Cruise" (ridl §14.5, ADR-0033).
+  // "veh.adas.Cruise" (ridl §14.5, ADR-0034).
   string name = 1;
   Visibility visibility = 2;
   // Doc comment body in CommonMark; empty when absent (typl §14.1).

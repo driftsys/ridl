@@ -270,7 +270,7 @@ TimingRange =
 // after `:`, or carrying one inline body of interactions for a one-off global
 // contract (§14.5); never both (ADR-0015 decision 14). The declared name is
 // one `CamelCase` identifier; the global name is the package name followed by
-// it (ADR-0033). The dotted spelling is still parsed, so that the checker
+// it (ADR-0034). The dotted spelling is still parsed, so that the checker
 // reports it (RIDL-142). The inline body reuses the
 // `InterfaceMember` alternation, so an inline shape runs the same structural
 // pass as an interface. `ServiceDef::shapes()` yields the named shape list;

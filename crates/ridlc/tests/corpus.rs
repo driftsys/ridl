@@ -1256,7 +1256,7 @@ const DEFERRED_OR_RETIRED: &[(&str, u16, &str)] = &[
     (
         "RIDL",
         140,
-        "retired: a service name is in its package's namespace (ADR-0033 decision 6)",
+        "retired: a service name is in its package's namespace (ADR-0034 decision 6)",
     ),
     (
         "RIDL",

@@ -207,7 +207,7 @@ this: both arms are named types; only the union container is structural — §6.
 `camelCase` = members and interactions; `SCREAMING_SNAKE` = constants and enum
 values; `lowercase.dot` = packages. No exceptions, so case alone identifies the
 role of a name; which declaration a `CamelCase` name denotes is found by lookup
-in its package's namespace (amended by ADR-0033, which retired the
+in its package's namespace (amended by ADR-0034, which retired the
 `lowercase.dot` service name).
 
 **R8 — Separator discipline.** Newline and comma interchangeable in every block;

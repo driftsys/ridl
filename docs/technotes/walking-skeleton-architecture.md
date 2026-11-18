@@ -117,7 +117,7 @@ crate the workspace holds — see `AGENTS.md` for that.
   is a symbol of its package, so it takes part in that tiebreak; its global
   name, the package name followed by the declared name, is the key of the
   workspace service catalog (`service_catalog` in `ridl-core`), which reports
-  nothing, and the dotted form is RIDL-142 (ADR-0033). `check` lowers each
+  nothing, and the dotted form is RIDL-142 (ADR-0034). `check` lowers each
   resolved package to IR v2, lowering only the resolver's first-wins winner.
   Supporting modules: `scalar` (exact `BigRational` arithmetic for ranges,
   steps, and wire-width derivation — no `f32`/`f64` anywhere), `ucum` (the UCUM

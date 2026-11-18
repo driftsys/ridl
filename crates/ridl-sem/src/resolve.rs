@@ -48,7 +48,7 @@ pub enum SymbolKind {
     EnumSet,
     Union,
     Interface,
-    /// A `service` declaration (ADR-0033): bound only for a service declared
+    /// A `service` declaration (ADR-0034): bound only for a service declared
     /// with one `CamelCase` name.
     Service,
 }

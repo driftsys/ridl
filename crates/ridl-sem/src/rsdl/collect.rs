@@ -431,7 +431,7 @@ fn read_reference(reference: &ast::Reference, file: InputFile) -> Option<Referen
 /// segment names a component (or the system, or an interface), and one
 /// camelCase segment after it names an instance. A reference of lowercase
 /// segments only names nothing: a package is not a declaration, and the old
-/// dotted spelling of a service is read here as unreadable (ADR-0033).
+/// dotted spelling of a service is read here as unreadable (ADR-0034).
 fn form_of(segments: &[String]) -> ReferenceForm {
     let Some(first_upper) = segments
         .iter()
@@ -506,7 +506,7 @@ mod tests {
     }
 
     /// A reference of lowercase segments only names nothing: a package is not a
-    /// declaration, and the dotted spelling of a service is gone (ADR-0033).
+    /// declaration, and the dotted spelling of a service is gone (ADR-0034).
     #[test]
     fn a_lowercase_only_reference_is_unreadable() {
         assert_eq!(form("veh.diag.legacy"), ReferenceForm::Unreadable);

@@ -382,15 +382,15 @@ The CLI dump of `just freeze-check` records the flags of every `ridl` and
 `ridlc` subcommand; it records the exit codes and the report shape of
 `ridl check` only. ADR-0029 decision 3 states what it says of `ridl diff`.
 
-Amended 2026-11-14 by [ADR-0033](ADR-0033-service-declaration-names.md)
+Amended 2026-11-14 by [ADR-0034](ADR-0034-service-declaration-names.md)
 (driftsys/ridl#1390). A service is declared with one `CamelCase` name, and
-`check_service_name`, the uncoded error of decision 21, is replaced. ADR-0033
+`check_service_name`, the uncoded error of decision 21, is replaced. ADR-0034
 decision 5 mints **RIDL-142**, the code decision 21 reserved, for a service name
-that is not one `CamelCase_id`, and ADR-0033 decision 6 retires **RIDL-140**,
+that is not one `CamelCase_id`, and ADR-0034 decision 6 retires **RIDL-140**,
 which can no longer be raised because a service name is in its package's
 namespace. The inline `T|E` transport identity of decision 4 is unchanged as a
 rule; for an inline shape it derives from the service's global name, which
-ADR-0033 decision 8 defines. The editing note's sweep was run for this amendment
+ADR-0034 decision 8 defines. The editing note's sweep was run for this amendment
 and found four sentences that the change makes false; each keeps its text and
 gains a dated note: decision 6's last sentence, decision 13's count of the codes
 in the source, decision 21's "Still outstanding" paragraph, and the second
@@ -499,7 +499,7 @@ disagreeing sources is the correct one.
    in the same band under the same §16.4 table, and RIDL-142 is reserved by
    decision 21 for a third. The anomaly this decision carried at two codes now
    stands at three shipped, four once RIDL-142 is minted. **Extended
-   (2026-11-14):** ADR-0033 mints RIDL-142 and retires RIDL-140, so the codes in
+   (2026-11-14):** ADR-0034 mints RIDL-142 and retires RIDL-140, so the codes in
    force in the 1xx band under the §16.4 table are RIDL-141 and RIDL-142 to
    RIDL-145, beside the later RIDL-149 and RIDL-151 to RIDL-157 that other
    records placed in the same band. RIDL-140 stays reserved and is never reused.
@@ -614,11 +614,11 @@ disagreeing sources is the correct one.
     unimplemented, so a reader counting this ledger's codes in the source finds
     seven. This ledger is what decision 18 treats as authoritative and what a
     later epic will read, so the figure is maintained here rather than
-    reconstructed from decision 21. **Extended (2026-11-14):** ADR-0033 declares
+    reconstructed from decision 21. **Extended (2026-11-14):** ADR-0034 declares
     RIDL-142 in `crates/ridl-core/src/diag.rs`, so a reader counting this
     ledger's nine codes in the source finds eight; RIDL-111 is the one still
     reserved. RIDL-140 is not one of the nine — decision 6 kept it from the
-    reference — and ADR-0033 retires it.
+    reference — and ADR-0034 retires it.
 
 14. **`ridl diff` classifies changes directionally, comparing the resolved IR,
     and reads a workspace-local baseline.** Direction is judged from the
@@ -1378,7 +1378,7 @@ disagreeing sources is the correct one.
 
     **Extended (2026-11-14) — RIDL-142 is minted, for a wider rule.** The
     paragraph above no longer describes RIDL-142.
-    [ADR-0033](ADR-0033-service-declaration-names.md) decision 5 mints it, in
+    [ADR-0034](ADR-0034-service-declaration-names.md) decision 5 mints it, in
     `diag.rs`, in ridl §16.4 and in the showcase, and `check_service_name` is
     gone. The rule is not the one this decision allocated the code for: a
     service name is now one `CamelCase_id`, and RIDL-142 reports a name that is
@@ -1439,7 +1439,7 @@ disagreeing sources is the correct one.
   anomaly reached three codes by another route.** RIDL-142 is still reserved and
   unimplemented; what grew the anomaly from two to three is RIDL-143 (PR #168),
   in the 1xx band under the §16.4 table, and minting RIDL-142 will make four.
-  _Extended (2026-11-14):_ ADR-0033 mints RIDL-142 and retires RIDL-140; the
+  _Extended (2026-11-14):_ ADR-0034 mints RIDL-142 and retires RIDL-140; the
   current set is in decision 6's note of the same date. Unchanged: `persist` is
   still deferred, `final` still ships under an open reconsideration, the inline
   `T|E` transport-identity rule is still an agent-taken derivation,

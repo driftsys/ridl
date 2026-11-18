@@ -296,7 +296,7 @@ impl<'a> Lookup<'a> {
     }
 
     /// The declaration a `Name` or `pkg.Name` reference written in package
-    /// `from` binds, of whatever kind (rsdl §4, ADR-0033 decision 9). A
+    /// `from` binds, of whatever kind (rsdl §4, ADR-0034 decision 9). A
     /// qualified name binds the declaration of that package. A bare name
     /// binds a declaration of `from` first, of any kind, and an import of
     /// `from` only when `from` declares no such name (typl §3.2); each slot

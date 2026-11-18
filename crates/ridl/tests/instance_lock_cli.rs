@@ -615,7 +615,7 @@ const EGO_SERVICE: &str = "package veh.ego\ntype Flag: integer [0..1]\n\
                            service Status { signal a: Flag @[100ms..1s] }\n";
 const EGO_OLD_LOCK: &str = "next 4\nveh.ego.status/Unit 3\n";
 
-/// ADR-0033 decision 7: the implicit component of a lone service moves to the
+/// ADR-0034 decision 7: the implicit component of a lone service moves to the
 /// global name of the service and keeps its number.
 #[test]
 fn rename_moves_an_implicit_component_to_the_global_name() {

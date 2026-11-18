@@ -72,7 +72,7 @@ default response bound, like a signal or event, and `default_applied` can be
 true on an RPC (driftsys/ridl#741).
 
 Amended 2026-11-14 — decisions 12, 14, 15 and 16, by
-[ADR-0033](ADR-0033-service-declaration-names.md) (driftsys/ridl#1390): a
+[ADR-0034](ADR-0034-service-declaration-names.md) (driftsys/ridl#1390): a
 service is declared with one `CamelCase` name, and its global name is its
 package followed by that name. The grammar of decisions 12 and 14 names a
 `CamelCase_id` instead of a `DottedName`, the `service:` key of decision 15
@@ -397,12 +397,12 @@ indistinguishable, so no claim about any of the three can be exercised.
     (decision 19 as amended).
 
     **Amendment (2026-11-14) — the declared name.**
-    [ADR-0033](ADR-0033-service-declaration-names.md) decision 1 replaces the
+    [ADR-0034](ADR-0034-service-declaration-names.md) decision 1 replaces the
     dotted name with one `CamelCase_id`: ridl reference Appendix C reads
     `service_def = doc_comment? "service" CamelCase_id ( … )`. The syntax tree
     keeps the `ServiceDef` production above unchanged, `name:DottedName`
     included, so that the parser still accepts a dotted name and the checker
-    reports it as RIDL-142 (ADR-0033 decision 5). A declared name is a
+    reports it as RIDL-142 (ADR-0034 decision 5). A declared name is a
     `DottedName` of exactly one segment that is a `CamelCase_id`.
 
 13. **Commas are required between shapes**, diverging from the family's optional
@@ -421,7 +421,7 @@ indistinguishable, so no claim about any of the three can be exercised.
     two-branch alternation.
 
     **Amendment (2026-11-14).** The rule is unchanged. Both forms take the same
-    one-identifier name ([ADR-0033](ADR-0033-service-declaration-names.md)
+    one-identifier name ([ADR-0034](ADR-0034-service-declaration-names.md)
     decision 1): `service Cabin { … }` in package `veh.hvac` has the global name
     `veh.hvac.Cabin`, as `service Cabin : CabinShape` would.
 
@@ -455,11 +455,11 @@ indistinguishable, so no claim about any of the three can be exercised.
     across the refactor without making it compatible.
 
     **Amendment (2026-11-14) — the key holds the global name.** With
-    [ADR-0033](ADR-0033-service-declaration-names.md) decision 7, the inline
+    [ADR-0034](ADR-0034-service-declaration-names.md) decision 7, the inline
     shape's entry is `service:` followed by the service's global name, its
     package and its declared name: `service:veh.hvac.Cabin`. The service's
     "dotted name" above is that global name, and the identity of a fallible
-    return in an inline shape derives from it (ADR-0033 decision 8). The
+    return in an inline shape derives from it (ADR-0034 decision 8). The
     extraction example reads
     `ridl lock <pkg> --rename service:veh.hvac.Cabin=CabinShape`, because a
     service and the interface it publishes can no longer share a name in one
@@ -474,11 +474,11 @@ indistinguishable, so no claim about any of the three can be exercised.
     without renaming one of them.**
 
     **Amendment (2026-11-14).** The address is `package.Name.member`
-    ([ADR-0033](ADR-0033-service-declaration-names.md) decision 4), and
+    ([ADR-0034](ADR-0034-service-declaration-names.md) decision 4), and
     `Name.member` inside the package or after an import. It stays flat: no
     interface name is written between the service and the member. The addresses
     written in the dotted form are not valid after the change; every one is
-    rewritten once, by the migration that ADR-0033 decision 10 states.
+    rewritten once, by the migration that ADR-0034 decision 10 states.
 
 17. **Ordinals stay per-interface, and a binding separates the spaces by
     interface name.** Renumbering interactions across a service was rejected: an

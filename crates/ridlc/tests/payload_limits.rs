@@ -263,7 +263,7 @@ fn an_inline_service_is_keyed_by_its_short_name() {
     assert_eq!(with("RIDL-152", &diagnostics).len(), 1, "{diagnostics:?}");
 }
 
-/// ADR-0033 decision 4: a key names an inline shape by the declared name of its
+/// ADR-0034 decision 4: a key names an inline shape by the declared name of its
 /// service, without the package; the global name, written with the package, is
 /// no key.
 #[test]

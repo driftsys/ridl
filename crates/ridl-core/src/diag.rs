@@ -193,7 +193,7 @@ macro_rules! diag_codes {
 /// header carry an open declaration, so the case it refused is valid.
 ///
 /// RIDL-140 (a duplicate `service` name across the workspace) was retired
-/// (ADR-0033 decision 6): a service is a symbol of its package, so its global
+/// (ADR-0034 decision 6): a service is a symbol of its package, so its global
 /// name is unique unless two packages share a name, which MANI-014 refuses, and
 /// a second declaration of a name within a package is TYPL-009.
 pub const RETIRED_RIDL_CODES: &[u16] = &[140, 146, 147, 148, 150, 158, 415];
@@ -792,7 +792,7 @@ diag_codes! {
 
         /// The name after `service` is not one `CamelCase` identifier: a dotted
         /// name, or a one-segment name that is not `CamelCase_id` (ridl §14.5,
-        /// §16.4; ADR-0033 decision 5). The code ADR-0008 decision 21 reserved
+        /// §16.4; ADR-0034 decision 5). The code ADR-0008 decision 21 reserved
         /// for the uncoded lowercase error. A declaration that draws it binds
         /// nothing; the diagnostic carries a suggested name as a fix-it.
         /// Emitted per-package by the checker.

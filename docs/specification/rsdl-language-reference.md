@@ -1026,7 +1026,7 @@ version adds.
 7. **Resilience realization** — open. Redundancy is derived (§7); failover,
    voting and supervision wait for the failure-management specification (ridl
    §10.4). The v0.1.0 words `redundant`, `supervise` and `degraded` are retired.
-8. **Global service catalog scoping** — answered (ADR-0033). A service's global
+8. **Global service catalog scoping** — answered (ADR-0034). A service's global
    name is its package followed by its declared name, so the catalog is scoped
    by package: a duplicate is TYPL-009 in that package, and RIDL-140 is retired.
 9. **Service-number allocation** — answered. The routing key holds a catalog, an

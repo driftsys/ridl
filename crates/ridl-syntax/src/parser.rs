@@ -1225,7 +1225,7 @@ impl<'a> Parser<'a> {
     /// `ServiceDef = 'service' DottedName (':' shapes (',' shapes)* ','? |
     /// '{' (inline_members ','?)* '}')` — the global published declaration of
     /// one or more interfaces (ridl reference §14.5, ADR-0015 decision 12),
-    /// named by one `CamelCase` identifier (ADR-0033).
+    /// named by one `CamelCase` identifier (ADR-0034).
     /// The named form carries a comma-separated shape list after `:`; the
     /// inline form carries an interaction body reusing
     /// [`Parser::interface_body`], so the checker runs the same structural pass

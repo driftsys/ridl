@@ -1,4 +1,4 @@
-# ADR-0033 — Service declaration names
+# ADR-0034 — Service declaration names
 
 ## Status
 

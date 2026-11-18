@@ -4742,7 +4742,7 @@ fn a_malformed_instance_lock_is_published_under_the_lock_files_uri() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
-// --- the service namespace (ADR-0033) --------------------------------------
+// --- the service namespace (ADR-0034) --------------------------------------
 
 /// A package whose service and interface share a name: a service is a symbol
 /// of its package, so the clash is TYPL-009.

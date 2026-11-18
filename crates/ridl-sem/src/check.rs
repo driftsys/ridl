@@ -217,7 +217,7 @@ pub(crate) fn lower_package(
             interfaces.push(checker.lower_interface(&interface));
         }
         // Services: the global published declarations. A service is a symbol
-        // of its package (ADR-0033), so the resolver's first-wins rule applies
+        // of its package (ADR-0034), so the resolver's first-wins rule applies
         // to it as to an interface; a loser was reported as TYPL-009. A service
         // that is not declared with one CamelCase name binds nothing and is
         // reported as RIDL-142.
@@ -1017,7 +1017,7 @@ impl Checker<'_> {
                 );
                 PathTarget::Unresolved(written)
             }
-            // A service is not a type either (ADR-0033 decision 2).
+            // A service is not a type either (ADR-0034 decision 2).
             Some(symbol) if symbol.kind == SymbolKind::Service => {
                 self.error(
                     DiagCode::NONE,
@@ -4550,7 +4550,7 @@ impl Checker<'_> {
     }
 
     /// The global name of a service: the checked package's name followed by
-    /// the declared name, joined by `.` (ADR-0033 decision 1).
+    /// the declared name, joined by `.` (ADR-0034 decision 1).
     fn service_global_name(&self, service: &ast::ServiceDef) -> String {
         service
             .declared_name()
@@ -4580,7 +4580,7 @@ impl Checker<'_> {
     /// declarations are read in the package's file order and in source order
     /// within a file; a suggestion is also taken when an earlier old-form
     /// declaration was given it, because a declaration that draws RIDL-142
-    /// binds nothing (ADR-0033 decision 5).
+    /// binds nothing (ADR-0034 decision 5).
     fn suggest_old_service_names(
         &self,
         files: &[InputFile],
@@ -6334,7 +6334,7 @@ fn regex_crate_refusal(error: &regex::Error) -> String {
 }
 
 /// The name RIDL-142 suggests for a service written as `written` in `package`
-/// (ADR-0033 decision 5): the written segments without the leading run they
+/// (ADR-0034 decision 5): the written segments without the leading run they
 /// share with the package name (the last segment when nothing is left), each
 /// split at `_`, written with an upper-case first letter and joined. When
 /// `taken` holds the result, the first of the result followed by `Service`,
@@ -16599,7 +16599,7 @@ interface VehicleStatus {
         assert_eq!(diagnostic.fixits[0].replacement, "FaceService");
     }
 
-    /// ADR-0033 decision 5: old-form declarations bind nothing, so the
+    /// ADR-0034 decision 5: old-form declarations bind nothing, so the
     /// suggestion must also avoid the names already suggested in the same
     /// package.
     #[test]
@@ -16868,7 +16868,7 @@ service Rear { signal r : State @[100ms..1s] }
     }
 
     /// A service and an interface share the package's namespace, so a service
-    /// named like an interface is TYPL-009 (ADR-0033 decision 2), and only the
+    /// named like an interface is TYPL-009 (ADR-0034 decision 2), and only the
     /// first declaration is numbered.
     #[test]
     fn a_service_and_an_interface_of_one_name_are_one_entry() {
