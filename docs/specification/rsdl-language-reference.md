@@ -332,8 +332,8 @@ deployment Production for Vehicle {
 - **The descriptor file name.** `ridl build --emit deployment` writes one
   descriptor per deployment, named `<stem>.deployment.binfb`. The stem is
   `<package>.<Name>` in lowercase: `deployment Development` in package
-  `com.ampere.viewif` is written to
-  `com.ampere.viewif.development.deployment.binfb`. The `file` key on the
+  `com.example.viewif` is written to
+  `com.example.viewif.development.deployment.binfb`. The `file` key on the
   declaration replaces the stem: `deployment Development [ file = "view-dev" ]`
   is written to `view-dev.deployment.binfb`. The value is a string of lowercase
   letters, digits, `.`, `_` and `-` that starts and ends with a letter or a

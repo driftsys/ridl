@@ -2,10 +2,10 @@
 
 ## Status
 
-_Proposed_ — 2026-11-14. Written from the owner's proposal on driftsys/ridl#1390
-and its two comments, and from the decisions the owner delegated for that issue.
-The documents in "Documents amended" are changed with the acceptance of this
-record, in the pull request that builds it.
+_Accepted_ — 2026-11-18 (proposed 2026-11-14). Written from the owner's proposal
+on driftsys/ridl#1390 and its two comments, and from the decisions the owner
+delegated for that issue. The documents in "Documents amended" are changed with
+the acceptance of this record, in the pull request that builds it.
 
 Scope: the name a `service` declaration carries, the namespace that name lives
 in, how every other declaration refers to a service, the diagnostic for the
@@ -28,9 +28,9 @@ Today a service is declared with a dotted, reverse-domain global name, and every
 segment of that name must be lowercase:
 
 ```ridl,ignore
-package com.ampere.safety.sfar
+package com.example.safety.sfar
 
-service com.ampere.safety.sfar.telltales : SafetyTelltaleStatus
+service com.example.safety.sfar.telltales : SafetyTelltaleStatus
 ```
 
 The checker reports a segment that is not lowercase with an error that has no
@@ -76,14 +76,14 @@ already TYPL-009.
    joined by `.`. Both forms use it:
 
    ```ridl,ignore
-   package com.ampere.safety.sfar
+   package com.example.safety.sfar
 
    /// Safety telltale state provided to SFAR.
    service SafetyTelltales : SafetyTelltaleStatus
    ```
 
    ```ridl,ignore
-   package com.ampere.hmi.climate
+   package com.example.hmi.climate
 
    service CabinClimate {
      signal  temperature : Temperature @[1s..10s]
@@ -91,9 +91,10 @@ already TYPL-009.
    }
    ```
 
-   The global names are `com.ampere.safety.sfar.SafetyTelltales` and
-   `com.ampere.hmi.climate.CabinClimate`. A declaration uses either an interface
-   list or an inline shape, never both (ADR-0015 decision 14, unchanged).
+   The global names are `com.example.safety.sfar.SafetyTelltales` and
+   `com.example.hmi.climate.CabinClimate`. A declaration uses either an
+   interface list or an inline shape, never both (ADR-0015 decision 14,
+   unchanged).
 
    The checker enforces `CamelCase_id` for a service name, which it does not do
    for an interface name. The reason is that rsdl reads the role of a reference
@@ -114,7 +115,7 @@ already TYPL-009.
 
 3. **A service is referred to as an interface is.** A reference to a service is
    a path: the bare name in its own package, the bare name after an `import`
-   (`import com.ampere.safety.sfar.SafetyTelltales`), or the fully qualified
+   (`import com.example.safety.sfar.SafetyTelltales`), or the fully qualified
    global name. The places that take a service name are:
 
    | Place                                                     | What it takes                                                                      |
@@ -206,7 +207,7 @@ already TYPL-009.
 
 7. **The lock keys follow the global name.** The `interfaces.lock` entry of an
    inline shape is keyed `service:` followed by the global name:
-   `service:com.ampere.hmi.climate.CabinClimate`. The `instances.lock` entry of
+   `service:com.example.hmi.climate.CabinClimate`. The `instances.lock` entry of
    a lone service's implicit component is keyed by the global name followed by
    `/Unit`. Both are migrated with the commands `ridl lock` already has, after
    the source is changed:
