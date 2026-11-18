@@ -1,4 +1,4 @@
-//! The catalog hash (rsdl note D-8), computed by [`ridl_ir::catalog_hash`].
+//! The catalog hash (D-8 of `docs/archive/2026-09-12-rsdl-rewrite-decisions.md`), computed by [`ridl_ir::catalog_hash`].
 //! The hash is computed in `ridl-ir` (ADR-0014 decision 15) because the
 //! codegen model carries it too, in its `Catalog.hash`, and the model is
 //! lowered there. This module is the name the descriptor's callers use. Each

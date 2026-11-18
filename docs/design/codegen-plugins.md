@@ -728,7 +728,8 @@ guide for a plugin author, and its "Reading order" section is the reading list.
 
 ## 9. Where the records and the code disagree
 
-1. **ADR-0020 decision 11's text before its amendment, the release-scope note
+1. **ADR-0020 decision 11's text before its amendment, the
+   [release-scope note](../archive/2026-09-12-release-scope-and-plugin-system-design.md)
    §3.8's "Proof without a second language", and issue #322's `Done when` all
    named `ridlc-gen-ts`.** Decision 11 is amended in place; the note is a
    reasoning trail and is not edited; #322 is corrected by comment. The roadmap

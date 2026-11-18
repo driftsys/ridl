@@ -1,4 +1,4 @@
-//! The interface numbers (rsdl note D-7), copied from the IR. `ridl-sem`
+//! The interface numbers (D-7 of `docs/archive/2026-09-12-rsdl-rewrite-decisions.md`), copied from the IR. `ridl-sem`
 //! folds `interfaces.lock` into `Interface.number` and
 //! `Interface.provisional` for every shape, declared or inline, so the
 //! descriptor reads them and computes no numbering of its own. A number of

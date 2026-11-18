@@ -37,11 +37,13 @@ which carries the evidence this record summarises.
 decisions 3, 6, 15, 16 and 17 below. Decisions 3, 6 and 15 rest on
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md);
 decision 16 rests on the two-step plan of [`docs/ROADMAP.md`](../ROADMAP.md) and
-decision 17 on the re-scope note's §3.1, neither of which is that record's
-material. One correction applies to the whole record. **`ridl-rt` here names the
-engine; everywhere else it now names the library.** Decision 1's layer 2 and
-decision 2's sans-IO core are the engine — the store, the seqlock, the
-scheduler, the ring depth, the control plane and the platform traits — which
+decision 17 on §3.1 of
+[the re-scope note](../archive/2026-09-12-release-scope-and-plugin-system-design.md),
+neither of which is that record's material. One correction applies to the whole
+record. **`ridl-rt` here names the engine; everywhere else it now names the
+library.** Decision 1's layer 2 and decision 2's sans-IO core are the engine —
+the store, the seqlock, the scheduler, the ring depth, the control plane and the
+platform traits — which
 [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md)
 §0 moved out of this repository and [`docs/ROADMAP.md`](../ROADMAP.md) parks as
 `ridl-engine`, reopened by rmdl. The name `ridl-rt` now belongs to the portable
@@ -592,7 +594,7 @@ be generated, and in what order", which is what this record answers.
     is the schema.** The 2026-09-12 re-scope's §3.1 declines this sequencing.
     There is no separate deployment-facts schema step and no TOML descriptor as
     the user-facing surface: rsdl is rewritten around the nouns of
-    [`docs/wip/2026-09-08-topology-vocabulary.md`](../wip/2026-09-08-topology-vocabulary.md)
+    [`docs/archive/2026-09-08-topology-vocabulary.md`](../archive/2026-09-08-topology-vocabulary.md)
     and lowers to the IR the way ridl does, so the facts listed above become
     part of what rsdl lowers into. The reason given for schema-first — that it
     lets rsdl be designed against something real rather than against a guess —

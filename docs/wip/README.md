@@ -232,18 +232,37 @@ its note of 2026-11-01),
 [the evolution chapter](../book/evolving-an-interface.md) are their durable
 records.
 
+The rsdl rewrite cluster — the topology vocabulary
+(`2026-09-08-topology-vocabulary.md`), the release scope and codegen plugin
+system design note (`2026-09-12-release-scope-and-plugin-system-design.md`), the
+rsdl rewrite decisions (`2026-09-12-rsdl-rewrite-decisions.md`) and the two
+interface id study reports (`2026-09-12-interface-id-study.md` and
+`2026-09-12-interface-id-study-2.md`) — was archived verbatim on 2026-11-18,
+once the work it directed landed. The durable records are
+[the rsdl language reference](../specification/rsdl-language-reference.md)
+v0.2.0 for the language surface,
+[ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
+[the rsdl implementation technote](../technotes/rsdl-implementation.md) for the
+IR and the lowering, [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision
+15 and [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) (the
+2026-09-15 interface lock amendment) for the interface numbers and the catalog
+hash,
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+for the release scope's encodings, layering and plugin system,
+[the topology vocabulary technote](../technotes/topology-vocabulary.md) for the
+nouns, and [the roadmap](../ROADMAP.md), whose two steps come from the release
+scope. The reference cites the notes' `D-n` and `V-nn` ids, and they resolve in
+the archived notes.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)
 on 2026-10-15, as version 0.3.0, edited to match the system as built.
 
-- **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
-  the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
-  not-yet-written ADR-0003). Parts of it are aspirational rather than as-built —
-  §8.1's repository tree shows `spec/`, `backends/`, `runtimes/`, and `tools/`
-  directories that the workspace does not have (every crate lives at
-  `crates/<crate-name>/`, issue #180). Read §8.1 for the plumbing/porcelain
-  model it argues for, which did ship, not for the layout it draws.
+- The concept note `ridl-family-concept.md` moved to
+  [`../technotes/ridl-family-concept.md`](../technotes/ridl-family-concept.md)
+  on 2026-11-18, as a technote with a status banner; it is background, and
+  nothing binds to it.
 - **skill-ridl-authoring-outline.md** — outline for the agent-authoring skill
   (see ADR-0005). Forward-looking: the skill it outlines is roadmap story E8.2,
   which has not been built.
@@ -278,71 +297,6 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   [the `ridl-rt` design record](../design/ridl-rt.md); its numbered rules
   (`RA-nn`) that concern the codecs, the engine and the runtimes remain working
   memory here for the Epic 11 stories that take them.
-- **2026-09-08-topology-vocabulary.md** — the nouns for the layer between a
-  contract and the hardware: distribution, machine, process, component, service,
-  interface, member, catalog, with one question each (V-01) and only addressed
-  things carrying wire identity (V-02). Three trees rather than one hierarchy;
-  offer a service, consume an interface; generation follows imports while wiring
-  follows `requires`. A component is a sans-IO synchronous step machine with a
-  sync or async pump — which corrects rsdl v0.1 §1.3, whose three properties
-  belong to three different levels, and drops composites. Machine is verified
-  against AUTOSAR Adaptive ("quasi a virtualized ECU-HW"); a `target` is not
-  one, and `RTE` names the layer `ridl-rt` occupies. Restates the consumer's
-  catalog record §2/§5 and adds: a catalog is declared in ridl because it owns
-  an id space and a hash, one package one catalog, ids allocated-and-recorded
-  per package, and a generation filter produces a view and never a catalog.
-  Leaves rsdl with four declarations plus a lock. Full mapping table to
-  Adaptive, Classic and OSGi, and the rejected names with their reasons. **Not
-  ratified**; six opens, including the cross-catalog references question and
-  what a breaking _deployment_ change is.
-- **2026-09-12-release-scope-and-plugin-system-design.md** — the design note of
-  the 2026-09-12 re-scoping session: the release scope (typl, ridl, rsdl
-  finalized; rmdl deferred; Rust with three payload encodings and TypeScript
-  through wasm; the runtime library, a frame specification and an optional
-  WebSocket transport; the codegen plugin system with Kotlin as the first plugin
-  after the release), the decisions with their alternatives, and the open items
-  it carries. Supersedes the scope parts of
-  [`2026-09-08-roadmap-simplification.md`](../archive/2026-09-08-roadmap-simplification.md),
-  now archived; its S-15 and S-17 are applied by the roadmap rewrite, and it
-  feeds the ADR amendments. **Not ratified.**
-- **2026-09-12-rsdl-rewrite-decisions.md** — the decisions the rsdl rewrite
-  starts from, and the language surface: five container declarations, `offers` a
-  service and `requires` an interface, machines list their instances; a lone
-  service stands for an implicit component; no process and no scheduling facts;
-  named instances with a unit instance, redundancy derived; crossing kinds only,
-  transport and fabric are configuration, posture reserved; attributes as the
-  backend escape hatch; identity numbers kept out of the source at every level,
-  a per-package lock file frozen by `ridl lock` at release; cross-catalog
-  references allowed with the hash over the closure. Two identity studies
-  summarised. Amends `2026-09-08-topology-vocabulary.md` §1, §3, §7 and five of
-  its invariants; the note's §4 lists them. **Not ratified.**
-- **2026-09-12-interface-id-study.md** and
-  **2026-09-12-interface-id-study-2.md** — the two identity study reports that
-  note's D-7 summarises, kept verbatim; the first ranked the carriers, the
-  second simulated the merges and the diff. **Not ratified.**
-- **fmt-ridl-rsdl-layout.md** — the canonical `ridl fmt` layout of the seven
-  declarations covered by driftsys/ridl#387: ridl `interface` and `service`, and
-  the five rsdl declarations. Every member form with its rendering, the rules
-  general form §5 settles and the thirteen choices it does not, the line width
-  rule (D-9, decided 2026-10-01: 100 columns, `.editorconfig` overrides) with
-  the breaking rules it needs, the invariants and the test plan. All thirteen
-  decisions taken 2026-10-01 (the recommended option of each). Tasks 1–5 are
-  merged; Tasks 6–8 are merged in
-  [PR #634](https://github.com/driftsys/ridl/pull/634). Annotation-comment
-  corrections are merged in
-  [PR #635](https://github.com/driftsys/ridl/pull/635). Tasks 9–10 merged in
-  [PR #637](https://github.com/driftsys/ridl/pull/637) into its former stacked
-  base and are recovered in the final main-targeted branch. Tasks 11–13 are
-  implemented in [PR #638](https://github.com/driftsys/ridl/pull/638); both full
-  review passes, reviewed-head gates and CI are complete. One Minor evidence
-  finding is deferred as E1 debt
-  [#639](https://github.com/driftsys/ridl/issues/639). The PR awaits maintainer
-  merge. The [review report](fmt-ridl-rsdl-review.md) records current status and
-  approvals.
-- **fmt-ridl-rsdl-plan.md** — the thirteen-task implementation plan for that
-  note, written for a coding agent that starts with only the repository and the
-  file. Follow the review report for execution status; the plan retains its
-  original baseline wording.
 - **2026-10-03-devex-and-agent-tracks-brief.md** — the agreed scope of two
   tracks, an AI design assistant (MCP tools, design lints, skill) and code
   documentation (doc lints, language server, rules in generated facade docs),
@@ -423,32 +377,27 @@ and was not archived. The reason is stated once per file or group.
 - **2026-10-11-ridl-authoring-skill-design.md**,
   **2026-10-11-ridl-authoring-skill-plan.md** and
   **skill-ridl-authoring-outline.md** — the skill's gates, eval harness and
-  distribution landed (#893), but `skills/ridl-authoring/` holds a skeleton, not
-  the rule and reference content, and the plan's Tasks 10 to 13 (the content,
-  the judge check, the release record, the gardening and the ADR-0005
-  amendments) are open. The plan's Task 13 is the standing instruction.
+  distribution landed (#893), but `skills/ridl-authoring/` holds `SKILL.md` and
+  `rules.md` only, not the reference content. The plan's tasks 10 to 13 (the
+  content, the judge check, the release record, the gardening and the ADR-0005
+  amendments) are tracked by driftsys/ridl#1401. The files stay until that work
+  lands.
 - **2026-10-07-generated-observation-design.md** and
   **2026-10-07-generated-observation-plan.md** — optional trace spans from the
   generated Rust face, driftsys/ridl#754. Open; the generated crate has no
   `__observe` module.
-- **fmt-ridl-rsdl-layout.md**, **fmt-ridl-rsdl-plan.md**,
-  **fmt-ridl-rsdl-decisions.md**, **fmt-ridl-rsdl-review.md** and
-  **fmt-ridl-rsdl-evidence/** — the formatter work landed (#638, #387 closed).
-  The layout note is still the only record of the canonical layout rules of
-  `ridl fmt` (the decisions log calls it normative) and
-  [`family-general-form.md`](../specification/family-general-form.md) refers to
-  it, so archiving it needs a durable home for those rules first. That is a
-  decision for the maintainer.
-- **2026-09-21-nested-interface-design.md** and
-  **2026-10-01-portable-match-patterns-design.md** — each states in its own
-  header that it is a design note that has not graduated (the nested interface
-  note into an amendment of ADR-0015, the match pattern note into an amendment
-  of the typl reference). The tracker shows #597 closed, but no commit after the
-  design implements it; the maintainer decides whether each is taken, archived
-  or superseded. The nested interface note was taken on 2026-10-26 as E2.14
+- The formatter unit (`fmt-ridl-rsdl-{layout,plan,decisions,review}.md` and
+  `fmt-ridl-rsdl-evidence/`, driftsys/ridl#387) was gardened and archived
+  verbatim to [`../archive/`](../archive/) on 2026-11-18. Its canonical layout
+  rules are in [`../design/ridl-fmt-layout.md`](../design/ridl-fmt-layout.md).
+- **2026-09-21-nested-interface-design.md** — a design note that had not
+  graduated into an amendment of ADR-0015. It was taken on 2026-10-26 as E2.14
   (driftsys/ridl#1084).
-
-  or superseded.
+- **2026-10-01-portable-match-patterns-design.md** — a design note for an
+  amendment of the typl reference. driftsys/ridl#597 was closed by mistake when
+  its design PR merged (PR #615) and was reopened on 2026-11-18. Approach A was
+  chosen and nothing is implemented. The note stays in `docs/wip/` until the fix
+  lands.
 
 The streams stage 5b plan (`2026-11-04-streams-stage-5b-plan.md`) was archived
 on 2026-11-04, once the work landed (driftsys/ridl#1241);

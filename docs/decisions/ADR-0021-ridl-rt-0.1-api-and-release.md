@@ -234,25 +234,27 @@ driftsys/ridl#526.
 implements. Its earlier records fixed the shape of the problem — six modules,
 three payload encodings, ports over bytes rather than payload types — but left
 several questions for the crate that actually had to compile: what identifies an
-interface once the service slot model is gone (driftsys/ridl's identity studies
-retired `ServiceId`), whether a `require` or `ensure` failure carries a value
-nothing yet has a type for, how two open issues about delivery semantics resolve
-for a 0.1 that ships before the engine does, and how a decoded value can be
-trusted with no `unsafe` and no second verification pass.
+interface once the service slot model is gone (driftsys/ridl's
+[identity studies](../archive/2026-09-12-interface-id-study.md) retired
+`ServiceId`), whether a `require` or `ensure` failure carries a value nothing
+yet has a type for, how two open issues about delivery semantics resolve for a
+0.1 that ships before the engine does, and how a decoded value can be trusted
+with no `unsafe` and no second verification pass.
 
 ## Decision
 
 1. **An interface number is scoped by its catalog, not by a service, and is
    named `InterfaceNo`.** The note this crate refines called it `InterfaceId`
-   and scoped it "per service" — a scope the identity studies retired. Under the
-   catalog model, the value is a number: frozen from the lock file's `next`
-   counter, or provisional and ordered after the frozen ones deterministically.
-   `ServiceId` is dropped — nothing produces it, because a service has no number
-   of its own — and there is no catalog slot type: which connection a catalog is
-   attached to is assigned outside generated code. A provisional number is
-   marked on the interface's descriptor (`Interface::PROVISIONAL`), not on the
-   type, because it routes exactly like a frozen one and a flag bit would take
-   width the next decision fixes.
+   and scoped it "per service" — a scope the
+   [identity studies](../archive/2026-09-12-interface-id-study-2.md) retired.
+   Under the catalog model, the value is a number: frozen from the lock file's
+   `next` counter, or provisional and ordered after the frozen ones
+   deterministically. `ServiceId` is dropped — nothing produces it, because a
+   service has no number of its own — and there is no catalog slot type: which
+   connection a catalog is attached to is assigned outside generated code. A
+   provisional number is marked on the interface's descriptor
+   (`Interface::PROVISIONAL`), not on the type, because it routes exactly like a
+   frozen one and a flag bit would take width the next decision fixes.
 
 2. **`Ordinal` and `InterfaceNo` are `u32`; `CatalogHash` is `[u8; 32]`,
    SHA-256.** The first is gate GW's width, which lane L posted on

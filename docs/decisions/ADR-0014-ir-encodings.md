@@ -527,10 +527,12 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
 15. **Amendment (2026-10-04, 2026-10-09, 2026-10-10, 2026-10-25) — the catalog
     hash is SHA-256 over the protobuf binary of a reduced unit.** The catalog
     hash is the identity of a unit's interfaces, their numbers and the types
-    they reach (the rsdl rewrite decisions note, D-7 and D-8). It is derived on
-    every build and never recorded. There is one such identity: the schema hash
-    over the IR that driftsys/ridl#275 asked for is this hash, so it does not
-    depend on which wire schema a build emits — proto3, FlatBuffers or both.
+    they reach
+    ([the rsdl rewrite decisions note](../archive/2026-09-12-rsdl-rewrite-decisions.md),
+    D-7 and D-8). It is derived on every build and never recorded. There is one
+    such identity: the schema hash over the IR that driftsys/ridl#275 asked for
+    is this hash, so it does not depend on which wire schema a build emits —
+    proto3, FlatBuffers or both.
 
     **What is hashed.** `ridl_ir::v2::to_binary` of the package that
     `ridl_ir::catalog_hash::reduced_unit` returns. A unit is selected by the

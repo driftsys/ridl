@@ -18,6 +18,11 @@ it — for decisions that bind downstream work, see
   the unit instance), why RSDL-804 is raised by the drivers, the lowering and
   its gating and orderings, what `ridl build` writes, `ridl diff` at the system,
   `rsdl` fences in the book, and what is not built yet.
+- **topology-vocabulary.md** — where the nouns of the layer between a contract
+  and the hardware came from: the question each noun answers, the mapping to
+  AUTOSAR Adaptive, AUTOSAR Classic and OSGi, the three wording decisions
+  (machine, component against SWC, `RTE`) and the rejected names with their
+  reasons.
 - **ridl-rt-by-example.md** — an introduction to the `ridl-rt` traits, built one
   interaction at a time from the code the Rust backend generates: reading a
   signal, publishing one, the payload proof type, an event, a call, the
@@ -43,3 +48,8 @@ it — for decisions that bind downstream work, see
   Pixel 5 tables for a Cortex-A55 and a Cortex-A76 core, each with the update
   and encode, verify and decode apart: time, ratios to podbuf, CPU load, mixes
   and allocations per operation.
+- **ridl-family-concept.md** — the concept note that proposed the family: the
+  motivation, the shared cores, the profiles, the platform and IR model, and the
+  naming ledger. It was written before ADR-0012 and its banner lists what has
+  changed since (four languages, the real crate layout, an ADR-0003 that was
+  never written). The specifications and the ADRs are the as-built record.

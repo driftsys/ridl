@@ -1482,7 +1482,7 @@ disagreeing sources is the correct one.
   decision 16 extends.
 - docs/specification/family-general-form.md — §4 (attributes) and §6 (the four
   supersessions decision 1 adopts).
-- docs/wip/ridl-family-concept.md — §9.1 (the `ridl diff` exit-code contract,
-  decision 9).
+- docs/technotes/ridl-family-concept.md — §9.1 (the `ridl diff` exit-code
+  contract, decision 9).
 - docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md — the execution plan
   citing these decisions, archived from `docs/wip/` at epic close.
