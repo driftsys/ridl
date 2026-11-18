@@ -202,7 +202,10 @@ pub struct CatalogEntry {
 /// for two units, MANI-023 for two directories of one unit), and a second
 /// declaration of one name in a package is TYPL-009. The catalog
 /// therefore reports nothing. A service written in the dotted or lowercase
-/// form has no declared name (RIDL-142) and is not in the catalog.
+/// form has no declared name (RIDL-142) and is not in the catalog, and neither
+/// is a service that an earlier declaration of its package names (a typl
+/// definition, an interface or a service, in file then source order): it is
+/// the TYPL-009 loser.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServiceCatalog {
     pub entries: BTreeMap<String, CatalogEntry>,
