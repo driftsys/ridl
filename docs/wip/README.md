@@ -232,6 +232,28 @@ its note of 2026-11-01),
 [the evolution chapter](../book/evolving-an-interface.md) are their durable
 records.
 
+The rsdl rewrite cluster — the topology vocabulary
+(`2026-09-08-topology-vocabulary.md`), the release scope and codegen plugin
+system design note (`2026-09-12-release-scope-and-plugin-system-design.md`), the
+rsdl rewrite decisions (`2026-09-12-rsdl-rewrite-decisions.md`) and the two
+interface id study reports (`2026-09-12-interface-id-study.md` and
+`2026-09-12-interface-id-study-2.md`) — was archived verbatim on 2026-11-18,
+once the work it directed landed. The durable records are
+[the rsdl language reference](../specification/rsdl-language-reference.md)
+v0.2.0 for the language surface,
+[ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
+[the rsdl implementation technote](../technotes/rsdl-implementation.md) for the
+IR and the lowering, [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision
+15 and [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) (the
+2026-09-15 interface lock amendment) for the interface numbers and the catalog
+hash,
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+for the release scope's encodings, layering and plugin system,
+[the topology vocabulary technote](../technotes/topology-vocabulary.md) for the
+nouns, and [the roadmap](../ROADMAP.md), whose two steps come from the release
+scope. The reference cites the notes' `D-n` and `V-nn` ids, and they resolve in
+the archived notes.
+
 The family general form (`family-general-form.md`) was ratified rather than
 archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)
@@ -278,48 +300,6 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   [the `ridl-rt` design record](../design/ridl-rt.md); its numbered rules
   (`RA-nn`) that concern the codecs, the engine and the runtimes remain working
   memory here for the Epic 11 stories that take them.
-- **2026-09-08-topology-vocabulary.md** — the nouns for the layer between a
-  contract and the hardware: distribution, machine, process, component, service,
-  interface, member, catalog, with one question each (V-01) and only addressed
-  things carrying wire identity (V-02). Three trees rather than one hierarchy;
-  offer a service, consume an interface; generation follows imports while wiring
-  follows `requires`. A component is a sans-IO synchronous step machine with a
-  sync or async pump — which corrects rsdl v0.1 §1.3, whose three properties
-  belong to three different levels, and drops composites. Machine is verified
-  against AUTOSAR Adaptive ("quasi a virtualized ECU-HW"); a `target` is not
-  one, and `RTE` names the layer `ridl-rt` occupies. Restates the consumer's
-  catalog record §2/§5 and adds: a catalog is declared in ridl because it owns
-  an id space and a hash, one package one catalog, ids allocated-and-recorded
-  per package, and a generation filter produces a view and never a catalog.
-  Leaves rsdl with four declarations plus a lock. Full mapping table to
-  Adaptive, Classic and OSGi, and the rejected names with their reasons. **Not
-  ratified**; six opens, including the cross-catalog references question and
-  what a breaking _deployment_ change is.
-- **2026-09-12-release-scope-and-plugin-system-design.md** — the design note of
-  the 2026-09-12 re-scoping session: the release scope (typl, ridl, rsdl
-  finalized; rmdl deferred; Rust with three payload encodings and TypeScript
-  through wasm; the runtime library, a frame specification and an optional
-  WebSocket transport; the codegen plugin system with Kotlin as the first plugin
-  after the release), the decisions with their alternatives, and the open items
-  it carries. Supersedes the scope parts of
-  [`2026-09-08-roadmap-simplification.md`](../archive/2026-09-08-roadmap-simplification.md),
-  now archived; its S-15 and S-17 are applied by the roadmap rewrite, and it
-  feeds the ADR amendments. **Not ratified.**
-- **2026-09-12-rsdl-rewrite-decisions.md** — the decisions the rsdl rewrite
-  starts from, and the language surface: five container declarations, `offers` a
-  service and `requires` an interface, machines list their instances; a lone
-  service stands for an implicit component; no process and no scheduling facts;
-  named instances with a unit instance, redundancy derived; crossing kinds only,
-  transport and fabric are configuration, posture reserved; attributes as the
-  backend escape hatch; identity numbers kept out of the source at every level,
-  a per-package lock file frozen by `ridl lock` at release; cross-catalog
-  references allowed with the hash over the closure. Two identity studies
-  summarised. Amends `2026-09-08-topology-vocabulary.md` §1, §3, §7 and five of
-  its invariants; the note's §4 lists them. **Not ratified.**
-- **2026-09-12-interface-id-study.md** and
-  **2026-09-12-interface-id-study-2.md** — the two identity study reports that
-  note's D-7 summarises, kept verbatim; the first ranked the carriers, the
-  second simulated the merges and the diff. **Not ratified.**
 - **2026-10-03-devex-and-agent-tracks-brief.md** — the agreed scope of two
   tracks, an AI design assistant (MCP tools, design lints, skill) and code
   documentation (doc lints, language server, rules in generated facade docs),

@@ -42,7 +42,7 @@ for rmdl; the scope note below says which part.
 > bindings they generate wait for rmdl**: the roadmap parks the ecosystem half
 > of rxdl and the spellings with their bindings as one block, reopened by rmdl.
 > Nothing here is retired, only partly deferred. Recorded in
-> [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
+> [`docs/archive/2026-09-12-release-scope-and-plugin-system-design.md`](../archive/2026-09-12-release-scope-and-plugin-system-design.md)
 > §3.2.
 
 ---

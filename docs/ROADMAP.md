@@ -13,7 +13,7 @@ narratives for Epics 0, 1, 2 and 9 — is in
 [issue backlog](BACKLOG.md) records current triage priorities and remaining bugs
 and technical debt. The scope below was set by the re-scope of 2026-09-12,
 recorded in
-[`2026-09-12-release-scope-and-plugin-system-design.md`](wip/2026-09-12-release-scope-and-plugin-system-design.md):
+[`2026-09-12-release-scope-and-plugin-system-design.md`](archive/2026-09-12-release-scope-and-plugin-system-design.md):
 §1 is the scope, §3 the thirteen decisions, most with the alternative each
 rejected, §4 the open items it carries.
 
@@ -235,10 +235,10 @@ that writes a hash or a golden file before the lock lands would be written
 twice.
 
 **rsdl is finalized beside it.** The language is rewritten around the
-topology-vocabulary note's nouns and lowered to the IR the way ridl is, and its
-specification is the rsdl reference v0.2.0. Only E6.17 waited for the lock and
-for the catalog descriptor, and it landed on 2026-10-04; the rest of Epic 6 ran
-beside them.
+[topology vocabulary](archive/2026-09-08-topology-vocabulary.md)'s nouns and
+lowered to the IR the way ridl is, and its specification is the rsdl reference
+v0.2.0. Only E6.17 waited for the lock and for the catalog descriptor, and it
+landed on 2026-10-04; the rest of Epic 6 ran beside them.
 
 **The runtime library ran beside both, and its story has landed.** `ridl-rt` —
 identity, the envelope, provenance, freshness and the sample, the payload
@@ -332,7 +332,7 @@ Design and plan of record:
 [`2026-09-13-lock-design.md`](archive/2026-09-13-lock-design.md) and
 [`2026-09-15-lock-plan.md`](archive/2026-09-15-lock-plan.md). The design
 satisfies D-7 of
-[`2026-09-12-rsdl-rewrite-decisions.md`](wip/2026-09-12-rsdl-rewrite-decisions.md)
+[`2026-09-12-rsdl-rewrite-decisions.md`](archive/2026-09-12-rsdl-rewrite-decisions.md)
 and driftsys/ridl#315 at the interface level.
 
 **Six stories, twelve plan tasks, one pull request.** The plan runs its twelve
@@ -346,14 +346,14 @@ append-only and needed the three slot diagnostics. With a number on the
 interface itself, the list becomes a set: RIDL-146, RIDL-147 and RIDL-148 are
 retired and never reused, and `reserved` in a service's list goes with them.
 
-| ID    | Story                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                    | Size |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E15.1 | The IR carries identity — `Interface.number`, `Interface.provisional`, `Package.retired` — and `interfaces.lock` has a parser, a writer and its edits (plan Tasks 1, 2)                                                                                                                          | a lock file round-trips through the parser and the writer, and the IR carries a number and its provisional flag                              | M    |
-| E15.2 | The loader reads the lock and the checker numbers every interface: a frozen number from its entry, a provisional one otherwise; RIDL-409 for a live entry with no declaration, RIDL-410 for a malformed file (plan Tasks 3, 4)                                                                   | a package with a lock file lowers with frozen numbers; an orphan entry draws RIDL-409, and a file with conflict markers draws RIDL-410       | M    |
-| E15.3 | `ridl lock` — allocation, `--rename`, `--retire` — `ridl lock merge` as the git merge driver, and the `ridl check` desk check that runs while RIDL-409 stands and names the command that fixes it; the CLI reference and ADR-0010 rows for both (plan Tasks 5, 6, 7)                             | `ridl lock` allocates a number for a new interface, a merge of two branches keeps both sides' numbers, and the rename hint names one command | L    |
-| E15.4 | The slot model retired: `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` replace the slot categories, and RIDL-146 to RIDL-148 and `reserved` in a service's list are removed (plan Tasks 8, 9)                                                                                             | a service's interface list is a set, reordering it is no change, and the three codes are gone from the catalogue and never reused            | M    |
-| E15.5 | `ridl diff` matches interfaces by number, and `ridl baseline` refuses a provisional number (RIDL-411) or a published number that is absent from the fresh side and not retired (RIDL-412) (plan Tasks 10, 11)                                                                                    | a renamed interface that keeps its number diffs as `InterfaceRenamed` and exits 0, and a package with a provisional number cannot publish    | M    |
-| E15.6 | The records: the ADR-0015 and ADR-0016 amendments, the decisions index, ridl reference §16.4 and Appendices B and C, one line of the family overview's open-question index, one sentence of rsdl reference §13, and the topology-vocabulary and family general-form working notes (plan Task 12) | no record still describes a service slot, an implicit interface id, or numbering by position                                                 | S    |
+| ID    | Story                                                                                                                                                                                                                                                                                                                                         | Done when                                                                                                                                    | Size |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E15.1 | The IR carries identity — `Interface.number`, `Interface.provisional`, `Package.retired` — and `interfaces.lock` has a parser, a writer and its edits (plan Tasks 1, 2)                                                                                                                                                                       | a lock file round-trips through the parser and the writer, and the IR carries a number and its provisional flag                              | M    |
+| E15.2 | The loader reads the lock and the checker numbers every interface: a frozen number from its entry, a provisional one otherwise; RIDL-409 for a live entry with no declaration, RIDL-410 for a malformed file (plan Tasks 3, 4)                                                                                                                | a package with a lock file lowers with frozen numbers; an orphan entry draws RIDL-409, and a file with conflict markers draws RIDL-410       | M    |
+| E15.3 | `ridl lock` — allocation, `--rename`, `--retire` — `ridl lock merge` as the git merge driver, and the `ridl check` desk check that runs while RIDL-409 stands and names the command that fixes it; the CLI reference and ADR-0010 rows for both (plan Tasks 5, 6, 7)                                                                          | `ridl lock` allocates a number for a new interface, a merge of two branches keeps both sides' numbers, and the rename hint names one command | L    |
+| E15.4 | The slot model retired: `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` replace the slot categories, and RIDL-146 to RIDL-148 and `reserved` in a service's list are removed (plan Tasks 8, 9)                                                                                                                                          | a service's interface list is a set, reordering it is no change, and the three codes are gone from the catalogue and never reused            | M    |
+| E15.5 | `ridl diff` matches interfaces by number, and `ridl baseline` refuses a provisional number (RIDL-411) or a published number that is absent from the fresh side and not retired (RIDL-412) (plan Tasks 10, 11)                                                                                                                                 | a renamed interface that keeps its number diffs as `InterfaceRenamed` and exits 0, and a package with a provisional number cannot publish    | M    |
+| E15.6 | The records: the ADR-0015 and ADR-0016 amendments, the decisions index, ridl reference §16.4 and Appendices B and C, one line of the family overview's open-question index, one sentence of rsdl reference §13, and the [topology vocabulary](archive/2026-09-08-topology-vocabulary.md) and family general-form working notes (plan Task 12) | no record still describes a service slot, an implicit interface id, or numbering by position                                                 | S    |
 
 ## Epic 16 — the catalog descriptor
 
@@ -1281,7 +1281,7 @@ numbers, and its third, the bounded form, become their own rows when this one
 lands, and they are not in this release.
 
 **E6.20 reopens decision D-2.** D-2 of
-[`2026-09-12-rsdl-rewrite-decisions.md`](wip/2026-09-12-rsdl-rewrite-decisions.md)
+[`2026-09-12-rsdl-rewrite-decisions.md`](archive/2026-09-12-rsdl-rewrite-decisions.md)
 says rsdl declares no process, and it names the shape a grouping noun would
 take; the maintainer reopened it on 2026-10-26. The rsdl reference §12 states
 the same shape, and the story amends that section when it lands. The partition

@@ -3,10 +3,10 @@
 Status: working note, 2026-09-13, design agreed in conversation with Sebastien
 section by section. Nothing here is ratified. Stage L1 of lane L in
 [`2026-09-13-step1-lanes-plan.md`](2026-09-13-step1-lanes-plan.md). Read after
-[`2026-09-12-rsdl-rewrite-decisions.md`](../wip/2026-09-12-rsdl-rewrite-decisions.md)
+[`2026-09-12-rsdl-rewrite-decisions.md`](2026-09-12-rsdl-rewrite-decisions.md)
 D-7 and the two identity studies
-([`2026-09-12-interface-id-study.md`](../wip/2026-09-12-interface-id-study.md),
-[`2026-09-12-interface-id-study-2.md`](../wip/2026-09-12-interface-id-study-2.md)).
+([`2026-09-12-interface-id-study.md`](2026-09-12-interface-id-study.md),
+[`2026-09-12-interface-id-study-2.md`](2026-09-12-interface-id-study-2.md)).
 
 Satisfies: rsdl decisions D-7 (numbers live outside the source, at every level)
 and the §4 amendment items about identity and the lock; driftsys/ridl#315 at the
@@ -25,8 +25,8 @@ Approved by Sebastien on 2026-09-13, before the rest of this note was written
 
 The routing key is (catalog slot, interface number, member ordinal). The catalog
 slot is assigned per connection and is outside this note
-([`2026-09-08-topology-vocabulary.md`](../wip/2026-09-08-topology-vocabulary.md)
-§6 gives it as `u8`).
+([`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md) §6
+gives it as `u8`).
 
 **Why `u32`.** Every consumer that exists already carries 32 bits: the checker's
 ordinal counter, the IR's `uint32 ordinal`, the proto3 backend's
