@@ -191,7 +191,8 @@ A relation clause that is a keyword takes the slot of the type, because the two
 never occur together: `deployment Name for System [ attrs ] { body }`. New
 clauses must be slotted into this order explicitly. The parser accepts `@timing`
 and `[ attrs ]` in either order, and `ridl fmt` writes `@timing` before
-`[ attrs ]` (maintainer decision D-4 of `fmt-ridl-rsdl-layout.md`); `ridl fmt`
+`[ attrs ]` (decision D-4 of
+[`../design/ridl-fmt-layout.md`](../design/ridl-fmt-layout.md)); `ridl fmt`
 reorders no other slot. The parser accepts `= value` only before `@timing`,
 which follows decision 2 of ADR-0008. The reserved word `during` has no slot: no
 parser in the workspace accepts it, and no recorded decision places it (ridl
@@ -419,13 +420,14 @@ The formatter implements these rules (`crates/ridl-fmt/src/lib.rs`):
 - **Width.** A line breaks at 100 columns by default. The width is the
   `max_line_length` of the matching `.editorconfig`; `off` disables breaking.
 - **Timing before attributes.** A timing annotation is written before the
-  attribute block (decision D-4 of the layout note).
+  attribute block (decision D-4 of
+  [`../design/ridl-fmt-layout.md`](../design/ridl-fmt-layout.md)).
 - **No commas in a broken block.** Inside braces, one member per line with no
   separator comma. Tuple types, parameter lists, attribute value lists and
   service shape lists that break go one item per line, with commas.
 
 The full layout — every declaration, the breaking rules, and the treatment of
-comments — is `docs/wip/fmt-ridl-rsdl-layout.md`.
+comments — is [`../design/ridl-fmt-layout.md`](../design/ridl-fmt-layout.md).
 
 Why, on the record:
 
