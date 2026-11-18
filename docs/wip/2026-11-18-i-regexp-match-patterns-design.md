@@ -46,8 +46,8 @@ engine.
 
 ### 3.1 What a typl pattern has
 
-- literal characters, and the escapes `\(` `\)` `\*` `\+` `\-` `\.` `\?` `\[`
-  `\\` `\]` `\^` `\n` `\r` `\t` `\{` `\|` `\}`;
+- literal characters, and the escapes `\(` `\)` `\*` `\+` `\.` `\?` `\[` `\\`
+  `\]` `\^` `\n` `\r` `\t` `\{` `\|` `\}`, and `\-` inside a class only (§3.3);
 - `.`, which matches any character except `\n` and `\r`;
 - character classes with ranges and negation: `[a-z0-9_]`, `[^@]`;
 - alternation, groups, and the quantifiers `*`, `+`, `?`, `{n}`, `{n,}`,
@@ -96,9 +96,11 @@ A probe on 2026-11-18 measured `regex` 1.13.1, V8 (Node, `u` flag) and
 
 The probe measured each spelling of the last column in all three engines, for
 the rows `^`, `$`, `&&`, `~~` and `\-`. The `regex` reading of `--` is from the
-source of `regex-syntax`. The grammar of RFC 9485 produces `--` only when a
-class holds nothing but a leading and a trailing `-`: `[--]` and `[^--]`. §3.6
-covers the last row.
+source of `regex-syntax`. The refusal is of an unescaped `-` directly followed
+by an unescaped `-`. The grammar of RFC 9485 produces that only when a class
+holds nothing but a leading and a trailing `-`: `[--]` and `[^--]`. A class such
+as `[\--z]`, the range from `-` to `z`, is accepted, and all three engines read
+it the same way. §3.6 covers the last row.
 
 A class never needs a character twice, so the three class rows remove nothing
 from the language.
@@ -179,7 +181,8 @@ single pattern: "holds at least one X and at least one Y".
   and in a regex constant. The message names the construct and its replacement
   from §3.2 or §3.3, for example: "`^` is not accepted: a pattern matches the
   whole value, so remove the anchor; a literal `^` is `\^`". The code keeps its
-  number and its meaning ("not a valid pattern"). No new code is added.
+  number and its catalogue text ("invalid regex syntax in `match` or a regex
+  `const`"). No new code is added.
 - **TYPL-220 stays** for an accepted pattern that the `regex` crate still
   refuses. The known case is the size limit of a compiled pattern:
   `(([a-z]{1,64}){1,64}){1,64}` exceeds it (measured). Its message drops the
@@ -216,16 +219,28 @@ written and read, and the meaning of an existing value does not change in place.
 - **Old fields.** `pattern` and `pattern_const` stay, are marked deprecated, and
   are still written, for the first clause. A reader of 0.20 searches with that
   text, so the writer gives it a text that a search reads as a whole-value
-  match: `^(?:P)$`, where `P` is the normalised pattern. The meaning of the
-  field ("a pattern that a search applies") does not change. In `ridl.ir.v2` the
-  field keeps its delimiters, as today. A reader of 0.20 does not see a second
-  clause; §12 decision 2 accepts that.
+  match. In `ridl.codegen.v1` the text is `^(?:P)$`, where `P` is the normalised
+  pattern. In `ridl.ir.v2` the field keeps its delimiters, as today, and the
+  text is `/^(?:S)$/`, where `S` is the text between the delimiters of the
+  source literal, with its `\/` escapes unchanged. The meaning of the field ("a
+  pattern that a search applies") does not change. A search with `regex` or with
+  `RegExp` gives the verdict of the whole-value match. In `java.util.regex`, `$`
+  also matches before a final line terminator, as it does for every pattern that
+  ends with `$` today. A reader of 0.20 does not see a second clause; §12
+  decision 2 accepts that.
 - **Readers.** Every reader of `Constraint.pattern` in this workspace moves to
   `matches`: the two code backends, the proto3 and FlatBuffers spellings, the
   descriptor spelling, hover, the derived-init rule in `ridl-sem`,
   `constraint_is_vacuous`, the absent-value rule of the proto3 codec, the
-  model-to-IR copy, and `ridl diff`. `ridl diff` reads the old field only from a
-  snapshot that has no `matches`.
+  IR-to-model copy and the model-to-IR copy, and `ridl diff`. Four more sites
+  read `pattern_const` and visit the constant of every clause: the reference
+  walk of `ridl-ir`, the canonical form behind the catalog hash, the design lint
+  that qualifies an inline scalar, and the dependency scan of `ridlc`, which
+  matches the JSON key.
+- **Input from 0.20.** An IR snapshot or a codegen request that 0.20 wrote has
+  no `matches`. Every reader treats an empty `matches` with a present `pattern`
+  as one clause with the old meaning (a search), so the old fields are still
+  read, as the IR specification §6 requires.
 - **The Rust backend** reads the model, so it receives the normalised pattern.
   **The TypeScript backend** reads `ridl.ir.v2` directly and calls the same
   `ridl-ir` function. No backend implements the normalisation itself.
@@ -286,6 +301,12 @@ a hand-written changelog entry.
   - A pattern that used `.`: the Rust output stops accepting `\r` in that
     position, and the checker and the TypeScript output start accepting U+2028
     and U+2029 there.
+  - A pattern that used `\s` or `\w`: the replacements of §3.2 are ASCII sets.
+    `[ \t\n\r]` is smaller than the 25 characters of `\s` in the checker, and
+    `[0-9A-Za-z_]` is smaller than the Unicode `\w` of the Rust output.
+  - A character outside the Basic Multilingual Plane: with the `u` flag, the
+    TypeScript output counts it as one character for `.`, a class and a
+    quantifier, as the Rust output does. Today it counts as two.
   - A pattern with no `$`, or no `^`: every output stops accepting text after,
     or before, the match, unless the author adds `.*`.
 - **`ridl.std`.** All 13 patterns (8 constants and 5 inline) are rewritten:
@@ -301,6 +322,11 @@ a hand-written changelog entry.
 
   `TimeOfDay` and `Version` have no `$` today, so they accept any text after the
   prefix. `.*` keeps that, except that the text can no longer hold `\n` or `\r`.
+- **Catalog hash.** The hash input includes the constraint. The new `matches`
+  field and the rewritten `ridl.std` patterns change the hash of every unit that
+  reaches a type with a pattern, including a unit that reaches only a `ridl.std`
+  type. A toolchain change that moves the hash restarts each compatibility chain
+  once, as the catalog descriptor design records.
 - **Generated code.** The pattern text in every generated crate and module
   changes, and the doc comment of a type prints the new literal.
   `freeze/generated/` is regenerated.
@@ -383,12 +409,12 @@ The owner answered these on 2026-11-18.
 
 ## 13. Records to amend when this lands
 
-- typl reference §2.7 (the pattern language, replacing the dialect text and both
-  tables), §5.3 (several clauses), §6.2, §16 (TYPL-106 and TYPL-220), the
-  grammar appendix (`pattern`, the constraint productions), the `ridl.std`
-  appendix, the two appendices that map `match` to a JSON Schema `pattern` (the
-  text is `^(?:P)$`, and several clauses are an `allOf`), the normative
-  references (RFC 9485 replaces ECMA-262) and the glossary.
+- typl reference §2.7 (the pattern language, replacing the dialect text and its
+  table), §5.3 (several clauses), §6.2, §16 (TYPL-106 and TYPL-220), the grammar
+  appendix (`pattern`, the constraint productions), the `ridl.std` appendix, the
+  two appendices that map `match` to a JSON Schema `pattern` (the text is
+  `^(?:P)$`, and several clauses are an `allOf`), the normative references (RFC
+  9485 replaces ECMA-262) and the glossary.
 - `family.ungram`.
 - IR specification: the `Constraint` fields, and a statement in §6 of the
   exception that §12 decision 2 accepts.
