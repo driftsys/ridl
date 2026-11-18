@@ -227,21 +227,34 @@ pub fn service_catalog(db: &dyn salsa::Database, ws: Workspace, std: Package) ->
         // declarations and imports are collected across every file of the
         // package, and a local declaration shadows an import.
         let names = package_names(db, package);
+        // The names already declared in the package, in the resolver's order:
+        // file order, then source order. A service whose name an earlier
+        // declaration of any vocabulary kind holds is TYPL-009 and is not in
+        // the catalog, as it is not in the IR.
+        let mut declared_before: HashSet<String> = HashSet::new();
         for file in package.files(db) {
             let source = service_source(db, *file);
-            for service in source.services() {
-                let Some(declared) = service.declared_name() else {
-                    continue;
-                };
-                // A repeated declared name is TYPL-009 in the package; the
-                // first declaration holds the entry.
-                entries
-                    .entry(format!("{package_name}.{}", declared.text()))
-                    .or_insert_with(|| CatalogEntry {
-                        package: package_name.clone(),
-                        interface_refs: canonical_interface_refs(&names, &service),
-                        inline: service.colon_token().is_none(),
-                    });
+            for node in source.syntax().children() {
+                if let Some(service) = ServiceDef::cast(node.clone()) {
+                    let Some(declared) = service.declared_name() else {
+                        continue;
+                    };
+                    if !declared_before.insert(declared.text().to_string()) {
+                        continue;
+                    }
+                    entries.insert(
+                        format!("{package_name}.{}", declared.text()),
+                        CatalogEntry {
+                            package: package_name.clone(),
+                            interface_refs: canonical_interface_refs(&names, &service),
+                            inline: service.colon_token().is_none(),
+                        },
+                    );
+                } else if is_vocabulary_declaration(&node)
+                    && let Some(name) = declaration_name(&node)
+                {
+                    declared_before.insert(name);
+                }
             }
         }
     }
@@ -336,6 +349,13 @@ fn package_names(db: &dyn salsa::Database, package: &Package) -> PackageNames {
         }
     }
     PackageNames { locals, imports }
+}
+
+/// Whether `node` is a typl definition or an `interface`: a declaration the
+/// resolver binds beside a service.
+fn is_vocabulary_declaration(node: &SyntaxNode) -> bool {
+    ridl_syntax::ast::Definition::cast(node.clone()).is_some()
+        || ridl_syntax::ast::InterfaceDef::cast(node.clone()).is_some()
 }
 
 /// The identifier of a declaration's `Name` child.
@@ -464,6 +484,53 @@ mod tests {
         let ws = Workspace::new(&db, vec![old], BTreeMap::new());
 
         assert!(service_catalog(&db, ws, std).entries.is_empty());
+    }
+
+    /// The resolver binds the first declaration of a name in the package; a
+    /// second `service` of that name is TYPL-009 and does not enter the
+    /// catalog, so the entry is the first one's.
+    #[test]
+    fn service_catalog_keeps_the_first_service_of_a_name() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(&db, "a", "package a\nservice S : Foo\nservice S : Bar\n");
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+
+        assert_eq!(
+            service_catalog(&db, ws, std).entries["a.S"].interface_refs,
+            ["Foo"]
+        );
+    }
+
+    /// A service that loses TYPL-009 to an earlier interface of the same name
+    /// is not in the catalog.
+    #[test]
+    fn service_catalog_skips_a_service_that_an_earlier_interface_names() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(&db, "a", "package a\ninterface S {}\nservice S : Foo\n");
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+
+        assert!(service_catalog(&db, ws, std).entries.is_empty());
+    }
+
+    /// A declared service name is a local of its package, so it shadows an
+    /// import of the same name and a shape reference to it stays bare.
+    #[test]
+    fn service_catalog_reads_a_local_service_name_before_an_import() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let other = ridl_package(&db, "b", "package b\ninterface S {}\n");
+        let pkg = ridl_package(&db, "a", "package a\nimport b.S\nservice S : S\n");
+        let ws = Workspace::new(&db, vec![other, pkg], BTreeMap::new());
+
+        assert_eq!(
+            service_catalog(&db, ws, std).entries["a.S"].interface_refs,
+            ["S"]
+        );
     }
 
     #[test]
