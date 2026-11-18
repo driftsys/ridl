@@ -520,8 +520,8 @@ Recorded rather than decided; none blocks the core work.
 - `docs/specification/rxdl-language-reference.md` — the spelling layer this
   decision leaves over
 - `docs/archive/uxdl-language-reference-v0.1.md` — retired by decision 1
-- `docs/wip/ridl-family-concept.md` §1.2, §2, §3, §12.3 — the five-language
-  proposal and the uxdl-vocabulary question this closes
+- `docs/technotes/ridl-family-concept.md` §1.2, §2, §3, §12.3 — the
+  five-language proposal and the uxdl-vocabulary question this closes
 - `docs/specification/family-general-form.md` §4.1–§4.5, §4.8, §9.4 — the
   attribute model, the deletion test, the promotion path, and the registry
   question decision 8 promotes

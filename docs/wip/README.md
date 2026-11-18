@@ -259,13 +259,10 @@ archived: it graduated into
 [`../specification/family-general-form.md`](../specification/family-general-form.md)
 on 2026-10-15, as version 0.3.0, edited to match the system as built.
 
-- **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
-  the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
-  not-yet-written ADR-0003). Parts of it are aspirational rather than as-built —
-  §8.1's repository tree shows `spec/`, `backends/`, `runtimes/`, and `tools/`
-  directories that the workspace does not have (every crate lives at
-  `crates/<crate-name>/`, issue #180). Read §8.1 for the plumbing/porcelain
-  model it argues for, which did ship, not for the layout it draws.
+- The concept note `ridl-family-concept.md` moved to
+  [`../technotes/ridl-family-concept.md`](../technotes/ridl-family-concept.md)
+  on 2026-11-18, as a technote with a status banner; it is background, and
+  nothing binds to it.
 - **skill-ridl-authoring-outline.md** — outline for the agent-authoring skill
   (see ADR-0005). Forward-looking: the skill it outlines is roadmap story E8.2,
   which has not been built.
@@ -380,10 +377,11 @@ and was not archived. The reason is stated once per file or group.
 - **2026-10-11-ridl-authoring-skill-design.md**,
   **2026-10-11-ridl-authoring-skill-plan.md** and
   **skill-ridl-authoring-outline.md** — the skill's gates, eval harness and
-  distribution landed (#893), but `skills/ridl-authoring/` holds a skeleton, not
-  the rule and reference content, and the plan's Tasks 10 to 13 (the content,
-  the judge check, the release record, the gardening and the ADR-0005
-  amendments) are open. The plan's Task 13 is the standing instruction.
+  distribution landed (#893), but `skills/ridl-authoring/` holds `SKILL.md` and
+  `rules.md` only, not the reference content. The plan's tasks 10 to 13 (the
+  content, the judge check, the release record, the gardening and the ADR-0005
+  amendments) are tracked by driftsys/ridl#1401. The files stay until that work
+  lands.
 - **2026-10-07-generated-observation-design.md** and
   **2026-10-07-generated-observation-plan.md** — optional trace spans from the
   generated Rust face, driftsys/ridl#754. Open; the generated crate has no
@@ -392,16 +390,14 @@ and was not archived. The reason is stated once per file or group.
   `fmt-ridl-rsdl-evidence/`, driftsys/ridl#387) was gardened and archived
   verbatim to [`../archive/`](../archive/) on 2026-11-18. Its canonical layout
   rules are in [`../design/ridl-fmt-layout.md`](../design/ridl-fmt-layout.md).
-- **2026-09-21-nested-interface-design.md** and
-  **2026-10-01-portable-match-patterns-design.md** — each states in its own
-  header that it is a design note that has not graduated (the nested interface
-  note into an amendment of ADR-0015, the match pattern note into an amendment
-  of the typl reference). The tracker shows #597 closed, but no commit after the
-  design implements it; the maintainer decides whether each is taken, archived
-  or superseded. The nested interface note was taken on 2026-10-26 as E2.14
+- **2026-09-21-nested-interface-design.md** — a design note that had not
+  graduated into an amendment of ADR-0015. It was taken on 2026-10-26 as E2.14
   (driftsys/ridl#1084).
-
-  or superseded.
+- **2026-10-01-portable-match-patterns-design.md** — a design note for an
+  amendment of the typl reference. driftsys/ridl#597 was closed by mistake when
+  its design PR merged (PR #615) and was reopened on 2026-11-18. Approach A was
+  chosen and nothing is implemented. The note stays in `docs/wip/` until the fix
+  lands.
 
 The streams stage 5b plan (`2026-11-04-streams-stage-5b-plan.md`) was archived
 on 2026-11-04, once the work landed (driftsys/ridl#1241);

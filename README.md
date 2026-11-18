@@ -82,14 +82,14 @@ docs/
 │   ├── family-general-form.md      Cross-profile syntax, typing, and attribute rules
 │   └── expr-core-specification.md  The shared contract-term grammar (require / ensure, and rmdl's function layer)
 ├── wip/                        Pre-ADR drafts and working specs — nothing here is ratified
-│   ├── ridl-family-concept.md      Concept note — the family direction (pre-ADR)
 │   └── …                           Design notes feeding the roadmap; see wip/README.md
 ├── design/                      Architecture records — a crate/component, as built
 │   ├── ridl-rt.md               The ridl-rt 0.1 runtime library: modules, types, traits
 │   ├── ridl-transport-ws.md     The ridl-transport-ws crate: the frame codec and the WebSocket server
 │   └── ridl-transport-ws-ts.md  The @driftsys/ridl-transport-ws package: the WebSocket client in TypeScript
 ├── technotes/                  Informative architecture notes (bind nothing)
-│   └── walking-skeleton-architecture.md   The RIDL toolchain, as built
+│   ├── walking-skeleton-architecture.md   The RIDL toolchain, as built
+│   └── ridl-family-concept.md   Concept note — the family direction (background, binds nothing)
 ├── archive/                    Superseded documents + landed epic plans
 │   ├── ridl-language-reference-v0.1.md   Split into typl + ridl v0.2
 │   ├── uxdl-language-reference-v0.1.md   Retired by ADR-0012; its content moved into ridl and rxdl
@@ -128,7 +128,7 @@ docs/
   [`docs/specification/ridl-family-overview.md`](docs/specification/ridl-family-overview.md)
   — the map and reading-path guide.
 - Want the motivation and the big picture?
-  [`docs/wip/ridl-family-concept.md`](docs/wip/ridl-family-concept.md).
+  [`docs/technotes/ridl-family-concept.md`](docs/technotes/ridl-family-concept.md).
 - Building the toolchain? [`docs/ROADMAP.md`](docs/ROADMAP.md) and the ADRs
   under [`docs/decisions/`](docs/decisions/).
 - Using the tools for agents? `ridl mcp` serves nine workspace tools, listed in
