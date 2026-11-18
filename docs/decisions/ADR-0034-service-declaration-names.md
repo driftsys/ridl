@@ -287,21 +287,21 @@ TYPL-009.
    inline shape is breaking by design: the identity derives from the name the
    source gives the shape (ADR-0008 decision 4, ADR-0015 decision 15), and that
    name changes. The frozen surfaces this breaks are approved with the procedure
-   of ADR-0029 decision 4: `diagnostics` (RIDL-140 leaves, RIDL-142 arrives),
-   `accepted-sources` (the frozen copy of `examples/cabin` was in the dotted
-   form, which is no longer accepted; the copy was migrated to the new form and
-   its line `examples/cabin ok` remains, and the row was removed because the
-   surface was broken while the change was made), `wire` and `generated-crate`
-   (the inline shapes of the frozen `veh-cluster` copy). The step that applies
-   is the two-step procedure of decision 4, which its bullet "0.11 starts with a
-   pull request that breaks surfaces on purpose, with the same two steps"
-   extends to a later pre-1.0 minor: the pull request that makes the break
-   deletes each surface's row from `freeze/surfaces.toml`, keeps the name in
-   `required`, carries `!` in its title, states the approval in its description
-   and merges only on the maintainer's explicit approval; a follow-up pull
-   request adds each row again with that merge commit as its `baseline`. The
-   break is shown before the copies are refreshed, and the refreshed copies are
-   what the follow-up baseline records.
+   of ADR-0029 decision 4: `diagnostics` (RIDL-140 leaves, RIDL-142 and MANI-023
+   arrive), `accepted-sources` (the frozen copy of `examples/cabin` was in the
+   dotted form, which is no longer accepted; the copy was migrated to the new
+   form and its line `examples/cabin ok` remains, and the row was removed
+   because the surface was broken while the change was made), `wire` and
+   `generated-crate` (the inline shapes of the frozen `veh-cluster` copy). The
+   step that applies is the two-step procedure of decision 4, which its bullet
+   "0.11 starts with a pull request that breaks surfaces on purpose, with the
+   same two steps" extends to a later pre-1.0 minor: the pull request that makes
+   the break deletes each surface's row from `freeze/surfaces.toml`, keeps the
+   name in `required`, carries `!` in its title, states the approval in its
+   description and merges only on the maintainer's explicit approval; a
+   follow-up pull request adds each row again with that merge commit as its
+   `baseline`. The break is shown before the copies are refreshed, and the
+   refreshed copies are what the follow-up baseline records.
 
 9. **rsdl reads a `CamelCase` reference as a declaration of any kind.** The rsdl
    case table (rsdl §2) and the general form's rule R7 list `service` among the
@@ -399,7 +399,8 @@ TYPL-009.
 | ridl reference §11, §14, §14.5, §14.6, §16.4, Appendix C, Appendix G                | the declared name, the global name, the namespace, the references, RIDL-142, RIDL-140 retired, the grammar |
 | rsdl reference §2, §3, §4, §6, §7, §9, §13, §15, §16.3, §17, Appendix A, Appendix B | services named as declarations; the case table; open question 8 answered                                   |
 | general form §2 Shape 3, R7                                                         | the `service` examples; R7 lists `service` among the `CamelCase` roles                                     |
-| family overview §5, §6                                                              | decision ledger row; rsdl §17 item 8 answered                                                              |
+| family overview §5, §6, §7.2                                                        | decision ledger row; rsdl §17 item 8 answered; MANI-023 in the code table                                  |
+| ADR-0002 Status, §1                                                                 | dated amendment note: MANI-023 for two directories of one unit                                             |
 | ADR-0015 decisions 12, 14, 15, 16                                                   | dated amendment notes                                                                                      |
 | ADR-0008 decisions 6, 13, 21, Consequences                                          | dated note: RIDL-142 minted, RIDL-140 retired                                                              |
 | ADR-0022 decision 4                                                                 | dated note: no case rule for the implicit component; an inline shape and an interface cannot share a name  |

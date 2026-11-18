@@ -61,12 +61,11 @@ diagnostics is a successful tool result.
 **What this tool shares with `ridl check --format json <file>`, and where it
 differs.** The CLI prints a bare diagnostic array; the tool wraps that array.
 Source mode checks one standalone file against embedded `ridl.std`, including
-the service catalogue and rsdl system checks. Its spans use `input.typl`,
-`input.ridl` or `input.rsdl`. For a standalone file without a manifest or
-imports, source mode agrees with the CLI except for those paths and the wrapper.
-Path mode reports the same diagnostic objects as the CLI for the overlaid tree,
-except for CLI operations that need the network, the `ridl.lock` write or the
-baseline:
+the rsdl system checks. Its spans use `input.typl`, `input.ridl` or
+`input.rsdl`. For a standalone file without a manifest or imports, source mode
+agrees with the CLI except for those paths and the wrapper. Path mode reports
+the same diagnostic objects as the CLI for the overlaid tree, except for CLI
+operations that need the network, the `ridl.lock` write or the baseline:
 
 - the fetch and the `ridl.lock` write: the tools read a remote unit of the
   `[imports]` as `ridl check --frozen` does, from `vendor/<key>/` at the

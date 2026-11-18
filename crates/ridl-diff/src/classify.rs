@@ -148,7 +148,7 @@ pub(crate) fn classify_in(
         // decision 19 as amended on 2026-09-15). The routing key does not
         // contain the service, so an interface joining or leaving the set
         // moves no wire identity: both directions are compatible. A removal
-        // is still visible in source — the `service.member` addresses of that
+        // is still visible in source — the `Service.member` addresses of that
         // interface stop resolving under the service — which is what the text
         // report's heading says of it.
         Category::ServiceInterfaceAdded | Category::ServiceInterfaceRemoved => Verdict::Compatible,
@@ -1532,7 +1532,7 @@ pub fn explain(category: Category) -> &'static str {
             "  compatible  always — on the wire: the routing key does not contain the\n",
             "              service, so no identity moves, and a split into two services\n",
             "              is a removal plus an addition. Visible in source: the\n",
-            "              service.member addresses of that interface stop resolving\n",
+            "              Service.member addresses of that interface stop resolving\n",
             "              under this service, which is why the text report lists it\n",
             "              under the heading \"compatible on the wire, visible in\n",
             "              source\". A consumer that loses its only provider is a\n",

@@ -209,7 +209,7 @@ fn check_depths(
 /// One event of a required interface, with its contract bound or the reason
 /// it has none, as the RSDL-806 message states it.
 struct EventBound {
-    /// `pkg.Interface.event`, or `service.event` for an inline shape.
+    /// `pkg.Interface.event`, or `pkg.Service.event` for an inline shape.
     name: String,
     bound: Result<u32, &'static str>,
 }
@@ -3071,7 +3071,7 @@ deployment Bench for Vehicle {
     }
 
     /// rsdl §5: an event of an inline-shape service (ridl §4) is read like one
-    /// of a declared interface; the event is named `service.event`.
+    /// of a declared interface; the event is named `pkg.Service.event`.
     #[test]
     fn an_event_of_an_inline_shape_service_draws_both_codes() {
         let system = check_events(

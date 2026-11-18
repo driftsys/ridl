@@ -3,10 +3,10 @@
 //!
 //! Each directory under `corpus/` is a real package (or workspace) with its own
 //! `ridl.toml`. This runner compiles every entry end to end — load, parse,
-//! resolve, check, lower to IR v2, run the workspace-wide service catalog, and
-//! generate Rust and TypeScript — and snapshots four artifacts per entry: the
-//! rendered diagnostics, the IR v2 JSON, the generated Rust, and the generated
-//! TypeScript. `insta::glob!` drives one iteration per entry.
+//! resolve, check, lower to IR v2, run the workspace-wide system
+//! checks, and generate Rust and TypeScript — and snapshots four artifacts per
+//! entry: the rendered diagnostics, the IR v2 JSON, the generated Rust, and the
+//! generated TypeScript. `insta::glob!` drives one iteration per entry.
 //!
 //! The diagnostics are snapshotted for every entry. The IR JSON and generated
 //! code are snapshotted only for an entry that compiles without error
