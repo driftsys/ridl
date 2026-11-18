@@ -1162,6 +1162,7 @@ pub mod catalog_hash;
 pub mod class;
 pub mod codegen;
 pub mod name;
+pub mod pattern;
 pub mod projection;
 pub mod rules;
 pub mod step;
