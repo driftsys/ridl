@@ -4561,7 +4561,7 @@ impl Checker<'_> {
     /// Whether `service` is the declaration the resolver bound its declared
     /// name to — the first of the package's declarations of that name. A
     /// losing duplicate was reported as TYPL-009 and does not lower.
-    fn is_winning_service(&self, file: InputFile, service: &ast::ServiceDef) -> bool {
+    pub(crate) fn is_winning_service(&self, file: InputFile, service: &ast::ServiceDef) -> bool {
         let Some(declared) = service.declared_name() else {
             return false;
         };
