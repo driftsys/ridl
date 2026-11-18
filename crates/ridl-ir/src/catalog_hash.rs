@@ -1,4 +1,4 @@
-//! The catalog hash (rsdl note D-8): SHA-256 over the interfaces of one
+//! The catalog hash (D-8 of `docs/archive/2026-09-12-rsdl-rewrite-decisions.md`): SHA-256 over the interfaces of one
 //! unit, their numbers and every type they reach, transitively, wherever
 //! declared. Derived, never recorded. The input is the protobuf binary of
 //! the reduced unit (ADR-0014 decision 15); see that decision for the

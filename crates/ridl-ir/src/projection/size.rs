@@ -291,7 +291,7 @@ pub fn size_state<'a>(
 }
 
 /// The byte capacity of a `string`: its bound in scalar values times four
-/// (release-scope design §3.11). `None` when the constraint carries no
+/// (`docs/archive/2026-09-12-release-scope-and-plugin-system-design.md` §3.11). `None` when the constraint carries no
 /// `len_max`: the FlatBuffers projection answers `None` for a whole type that
 /// holds a string without a bound, and this function agrees with it on both
 /// the multiplier and the absence

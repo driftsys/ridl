@@ -960,3 +960,61 @@ provenance. Nothing here is normative — the current references live in
   folder records time-qualified review claims that are open debt in
   driftsys/ridl#639 and is kept as it was. The durable record is
   [the layout design](../design/ridl-fmt-layout.md).
+
+- **2026-09-08-topology-vocabulary.md** — the nouns of the layer between a
+  contract and the hardware (distribution, machine, component, service,
+  interface, member, catalog), their invariants `V-01` to `V-21` and the open
+  items `V-X1` to `V-X6`. Archived verbatim on 2026-11-18, after the rsdl
+  reference v0.2.0 landed. As built, a catalog is one per unit rather than one
+  per package (`V-16`), and the component's step and pump (`V-07`, `V-08`,
+  `V-12`) and the view and reachability rules (`V-18`, `V-19`) have no normative
+  record, because rsdl declares no scheduling fact and rmdl has no
+  implementation. The durable records are
+  [the rsdl reference](../specification/rsdl-language-reference.md) (which cites
+  the ids), [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md),
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15 and
+  [the topology vocabulary technote](../technotes/topology-vocabulary.md).
+
+- **2026-09-12-rsdl-rewrite-decisions.md** — the decisions `D-1` to `D-11` that
+  the rsdl rewrite started from: five container declarations, `offers` and
+  `requires`, machines that list their instances, the implicit component, no
+  process, attributes as the backend escape hatch, interface numbers in a lock
+  file, and the catalog hash over the closure. Archived verbatim on 2026-11-18.
+  The rsdl reference governs where the two differ, as the note's own header
+  records. Since that header was written, instances are also numbered
+  (`instances.lock`, reference §7), the rsdl-owned attribute keys also include
+  `depth`, `slots`, `budget`, `file` and `deprecated` (reference §5), the lock
+  and the catalog are per unit, and `D-2` is reopened by roadmap row E6.20, and
+  roadmap row E6.21 with the proposed ADR-0033 would change the "one system per
+  workspace" point of `D-9`. The durable records are
+  [the rsdl reference](../specification/rsdl-language-reference.md),
+  [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md),
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15,
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) and
+  [the rsdl implementation technote](../technotes/rsdl-implementation.md).
+
+- **2026-09-12-interface-id-study.md** and
+  **2026-09-12-interface-id-study-2.md** — the two identity study reports that
+  `D-7` summarises: the first ranked the carriers and recommended a stamped
+  attribute, which `D-7` overrode; the second simulated the merges and the diff
+  and led to the lock with a `next` line and a three-way merge driver. Archived
+  verbatim on 2026-11-18. Their statements about "the current crates" describe
+  the code at `69def56`; the defects they found (driftsys/ridl#314 and
+  driftsys/ridl#315) are closed. The durable records are the 2026-09-15
+  interface lock amendment of
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md),
+  [ADR-0010](../decisions/ADR-0010-cli-conventions.md) for `ridl lock`, and
+  [the ridl reference](../specification/ridl-language-reference.md) §11.
+
+- **2026-09-12-release-scope-and-plugin-system-design.md** — the design note of
+  the 2026-09-12 re-scoping session: the release scope, the encodings, the
+  layering of the runtime library, the codegen plugin system and the first
+  plugins. Archived verbatim on 2026-11-18. As built, the third encoding is
+  `podbuf` and not `repr(C)` (and the `ridl-rt` feature is `podbuf`), the parity
+  test runs over the Rust backend and not a `ridlc-gen-ts` binary, and §3.5's
+  "wasm build of the runtime library" is corrected by ADR-0020 decision 7. The
+  durable records are
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+  [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md),
+  [the codegen plugins design record](../design/codegen-plugins.md), the typl
+  reference §17 and [the roadmap](../ROADMAP.md).

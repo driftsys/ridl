@@ -22,7 +22,7 @@ Epic and story numbers are unchanged; only their order is. The stack decisions
 **Amended 2026-09-12** — §1's sequencing and its release definitions are
 superseded by [`docs/ROADMAP.md`](../ROADMAP.md), rewritten from the re-scope
 recorded in
-[`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md).
+[`docs/archive/2026-09-12-release-scope-and-plugin-system-design.md`](../archive/2026-09-12-release-scope-and-plugin-system-design.md).
 Two things change.
 
 1. **rsdl runs before rmdl, and rmdl has no implementation in view.** The
