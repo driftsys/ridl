@@ -10,5 +10,5 @@ interface Horn {
   command honk() @[..50ms]
 }
 
-service veh.bench.lane : LaneAssist
-service veh.bench.horn : Horn
+service LaneService : LaneAssist
+service HornService : Horn

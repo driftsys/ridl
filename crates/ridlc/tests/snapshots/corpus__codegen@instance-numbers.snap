@@ -170,28 +170,28 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       "since": [],
       "rules": [],
       "service": {
-        "dotted": "veh.adas.cruise",
+        "dotted": "veh.adas.CruiseService",
         "segments": [
           "veh",
           "adas",
-          "cruise"
+          "CruiseService"
         ],
-        "joinedCamel": "VehAdasCruise",
-        "underscored": "veh_adas_cruise"
+        "joinedCamel": "VehAdasCruiseService",
+        "underscored": "veh_adas_CruiseService"
       }
     }
   ],
   "services": [
     {
       "name": {
-        "dotted": "veh.adas.cruise",
+        "dotted": "veh.adas.CruiseService",
         "segments": [
           "veh",
           "adas",
-          "cruise"
+          "CruiseService"
         ],
-        "joinedCamel": "VehAdasCruise",
-        "underscored": "veh_adas_cruise"
+        "joinedCamel": "VehAdasCruiseService",
+        "underscored": "veh_adas_CruiseService"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -206,7 +206,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
   ],
   "catalog": {
     "package": "veh.adas",
-    "hash": "jrEDJYpcqYAicg1izSh9HlgbR0+nBc4WjRsSSmrg61I=",
+    "hash": "Y805IaH4uPTVlZszUipVOvtfpzncaXU2Gnbp9KEncPM=",
     "retired": [],
     "compatible": []
   },
@@ -443,28 +443,28 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       "since": [],
       "rules": [],
       "service": {
-        "dotted": "veh.ego.status",
+        "dotted": "veh.ego.Status",
         "segments": [
           "veh",
           "ego",
-          "status"
+          "Status"
         ],
         "joinedCamel": "VehEgoStatus",
-        "underscored": "veh_ego_status"
+        "underscored": "veh_ego_Status"
       }
     }
   ],
   "services": [
     {
       "name": {
-        "dotted": "veh.ego.status",
+        "dotted": "veh.ego.Status",
         "segments": [
           "veh",
           "ego",
-          "status"
+          "Status"
         ],
         "joinedCamel": "VehEgoStatus",
-        "underscored": "veh_ego_status"
+        "underscored": "veh_ego_Status"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -479,7 +479,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
   ],
   "catalog": {
     "package": "veh.ego",
-    "hash": "YP5bC/ShuCE/A4as6VufGJLPmSEyI39kosGyv3/e5vE=",
+    "hash": "B055V+PJy5yDYwqbxxS3QPEoifgyvytdOpVgN8g1YUM=",
     "retired": [],
     "compatible": []
   },

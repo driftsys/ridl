@@ -1152,6 +1152,31 @@ mod tests {
         assert_ne!(hash_of(&p, &fw), before);
     }
 
+    /// ADR-0034: preserving generated identifiers does not preserve wire identity.
+    #[test]
+    fn a_package_prefixed_rename_keeps_identifiers_and_moves_the_hash() {
+        let inline_unit = |name: &str| Package {
+            name: "veh.cluster".to_owned(),
+            unit: "veh.cluster".to_owned(),
+            services: vec![inline_service(name, vec![])],
+            ..Default::default()
+        };
+        let before = inline_unit("veh.cluster.wheels");
+        let after = inline_unit("veh.cluster.Wheels");
+        assert_ne!(
+            catalog_hash("veh.cluster", &[&before]),
+            catalog_hash("veh.cluster", &[&after])
+        );
+        let fallible = FallibleType {
+            ok: "Ok".to_owned(),
+            err: "Err".to_owned(),
+        };
+        assert_ne!(
+            crate::v2::fallible_transport_identity("veh.cluster.wheels", 1, &fallible),
+            crate::v2::fallible_transport_identity("veh.cluster.Wheels", 1, &fallible),
+        );
+    }
+
     /// The reduced interface of an inline shape carries the owning service's
     /// visibility, so a declared interface and an inline shape hash alike
     /// (driftsys/ridl#326, third minor item).

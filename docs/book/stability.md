@@ -159,3 +159,43 @@ Enum sets keep their existing mapping.
 The plugin-visible `FbEnum.width_bytes` changes from 8 to 4. The `wire` and
 `generated-crate` freeze rows are removed until the follow-up restores them
 after this change merges.
+
+## Service declaration names
+
+Release 0.20.0 changes how a service is named
+([ADR-0034](../decisions/ADR-0034-service-declaration-names.md)). A service is
+declared with one `CamelCase` name, and its global name is its package followed
+by that name: `service Doors : DoorControl` in package `veh.body` is
+`veh.body.Doors`, and its members are `veh.body.Doors.<member>`. A dotted name
+is RIDL-142, whose fix-it gives the new name. RIDL-140 is retired.
+
+To migrate a workspace:
+
+1. Run `ridl check`. Apply each RIDL-142 fix-it (the language server offers it
+   as a quick fix).
+2. Rewrite each rsdl `offers` line, each lone service in a `system`,
+   `distribution` or `machine` body, each `requires` line that names an
+   inline-shape service, and each doc link to a service, with the new name: bare
+   in the same package, after an `import`, or the global name.
+3. For each inline-shape service, run
+   `ridl lock <unit directory> --rename service:<old name>=service:<package>.<Name>`,
+   once per unit, with the directory of the unit that declares it: an interface
+   edit changes one unit's `interfaces.lock`. For each lone service listed in a
+   system, run `ridl lock <workspace root> --rename <old name>=<package>.<Name>`
+   at the workspace root, which holds `instances.lock`. Both keep their numbers.
+4. Run `ridl check` and `ridl build`. Regenerate and redeploy every peer
+   together. The descriptor strings and lock keys of every service change. Every
+   renamed inline shape changes the catalog hash of its unit and the transport
+   identities of its fallible returns, because both hold the service's name as
+   written. Generated type and enum names depend on the resulting global name:
+   `veh.hvac.cabin` in package `veh.cluster` becomes `VehClusterHvacCabin…`,
+   while `veh.cluster.wheels` keeps `VehClusterWheels…`. A suffix added to avoid
+   a declaration-name collision, or a change to underscore spelling, can also
+   change generated names.
+5. `ridl diff` keys a service by its package and global name, so against a
+   baseline published before the migration it reports every renamed service as
+   removed and added, which is breaking. Expect that verdict once, then publish
+   a new baseline with `ridl baseline`.
+
+The `diagnostics`, `accepted-sources`, `wire` and `generated-crate` freeze rows
+are removed until the follow-up restores them.

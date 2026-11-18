@@ -48,7 +48,7 @@ use ridl_ir::codegen::v1;
 /// The model's `interfaces` list is `Package::shapes()` order, so an interface
 /// enumerated here is never accidentally the incomplete `Package::interfaces`
 /// field (the shape-walk guard). A service's inline shape is skipped: its
-/// identity name is the dotted service name, which is not a single Rust
+/// identity name is the global service name, which is not a single Rust
 /// identifier, and descriptors for an inline shape are not emitted.
 pub(crate) fn interface_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items = Vec::new();
@@ -62,7 +62,7 @@ pub(crate) fn interface_items(ctx: &Ctx) -> Result<Vec<TokenStream>, GenerateErr
 }
 
 /// The declared name of one interface, or `None` for a service's inline
-/// shape, whose identity is the service's dotted name.
+/// shape, whose identity is the service's global name.
 pub(crate) fn declared_name(interface: &v1::Interface) -> Option<&str> {
     match interface.identity.as_ref() {
         Some(v1::interface::Identity::Declared(name)) => Some(name.declared.as_str()),

@@ -3469,3 +3469,24 @@ fn a_stream_without_a_string_imports_the_runtime_as_a_value() {
         "a stream-only interface needs the stream port:\n{source}"
     );
 }
+
+#[test]
+fn an_inline_tuple_doc_uses_the_service_global_name() {
+    let output = ridlc::compile(
+        "global.ridl",
+        "package veh.cluster\ntype Level: integer [0..100]\nservice HvacCabin { query getClimate(): Level @[..1s] }\n",
+    );
+    assert!(
+        output
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != ridl_core::diag::Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    let source = module(&codegen::lower(&output.package, &[]), "veh.cluster");
+    assert!(
+        source.contains("/** The induced tuple of `veh.cluster.HvacCabin.getClimate`. */"),
+        "{source}"
+    );
+}

@@ -31,7 +31,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
   "interfaces": [],
   "services": [
     {
-      "name": "veh.adas.cruise",
+      "name": "veh.adas.CruiseService",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],
@@ -114,7 +114,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
   "interfaces": [],
   "services": [
     {
-      "name": "veh.ego.status",
+      "name": "veh.ego.Status",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],

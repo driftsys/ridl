@@ -843,7 +843,7 @@ fn emit_catalog_writes_one_file_per_unit() {
         .collect();
     assert_eq!(
         names,
-        ["adas.CruiseControl", "adas.LaneAssist", "veh.diag.access"]
+        ["adas.CruiseControl", "adas.LaneAssist", "veh.diag.Access"]
     );
 }
 
@@ -930,12 +930,12 @@ fn a_region_hash_covers_the_standard_types_its_catalog_reaches() {
         "lane.ridl",
         "package veh.demo\n\n\
          interface LaneAssist {\n  command choose(id: Uuid) @[..50ms]\n}\n\n\
-         service veh.demo.lane : LaneAssist\n",
+         service LaneService : LaneAssist\n",
     );
     dir.write(
         "topology.rsdl",
         "package veh.demo\n\n\
-         component Lane { offers veh.demo.lane }\n\
+         component Lane { offers veh.demo.LaneService }\n\
          component Panel { requires LaneAssist }\n\
          system Vehicle { Lane, Panel }\n\
          deployment Good for Vehicle { machine A { Lane, Panel } }\n",
@@ -977,13 +977,13 @@ fn placement_workspace(label: &str, system: &str) -> TempDir {
         "lane.ridl",
         "package veh.demo\n\ntype Flag: boolean\n\n\
          interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
-         service veh.demo.lane : LaneAssist\n",
+         service LaneService : LaneAssist\n",
     );
     dir.write(
         "topology.rsdl",
         &format!(
             "package veh.demo\n\n\
-             component Lane {{ offers veh.demo.lane }}\n\
+             component Lane {{ offers veh.demo.LaneService }}\n\
              component Panel {{ requires LaneAssist }}\n\
              {system}\n\
              deployment Good for Vehicle {{ machine A {{ Lane, Panel }} }}\n\
@@ -2024,12 +2024,12 @@ fn the_standard_packages_request_carries_the_same_deployment() {
         "lane.ridl",
         "package veh.demo\n\n\
          interface LaneAssist {\n  command choose(id: Uuid) @[..50ms]\n}\n\n\
-         service veh.demo.lane : LaneAssist\n",
+         service LaneService : LaneAssist\n",
     );
     dir.write(
         "topology.rsdl",
         "package veh.demo\n\n\
-         component Lane { offers veh.demo.lane }\n\
+         component Lane { offers veh.demo.LaneService }\n\
          component Panel { requires LaneAssist }\n\
          system Vehicle { Lane, Panel }\n\
          deployment Good for Vehicle { machine A { Lane, Panel } }\n",
@@ -2088,12 +2088,12 @@ fn build_with_a_deployment_flag_and_a_system_with_no_deployment_says_which() {
         "lane.ridl",
         "package veh.demo\n\ntype Flag: boolean\n\n\
          interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
-         service veh.demo.lane : LaneAssist\n",
+         service LaneService : LaneAssist\n",
     );
     dir.write(
         "topology.rsdl",
         "package veh.demo\n\n\
-         component Lane { offers veh.demo.lane }\n\
+         component Lane { offers veh.demo.LaneService }\n\
          component Panel { requires LaneAssist }\n\
          system Vehicle { Lane, Panel }\n",
     );
@@ -2287,8 +2287,8 @@ fn a_link_whose_encoding_is_not_emitted_warns_once() {
 #[test]
 fn the_location_is_the_links_own_requires_line() {
     let topology = "package veh.bench\n\n\
-                    component Lane { offers veh.bench.lane }\n\
-                    component Klaxon { offers veh.bench.horn }\n\
+                    component Lane { offers veh.bench.LaneService }\n\
+                    component Klaxon { offers veh.bench.HornService }\n\
                     component Telemetry {\n  \
                       requires LaneAssist\n  \
                       requires Horn\n\
@@ -2396,8 +2396,8 @@ fn a_types_only_build_warns_for_every_link() {
 #[test]
 fn a_deployment_with_a_placement_error_does_not_warn() {
     let topology = "package veh.bench\n\n\
-                    component Lane { offers veh.bench.lane }\n\
-                    component Klaxon { offers veh.bench.horn }\n\
+                    component Lane { offers veh.bench.LaneService }\n\
+                    component Klaxon { offers veh.bench.HornService }\n\
                     component Panel { requires LaneAssist }\n\
                     component Telemetry { requires Horn }\n\n\
                     system Vehicle { Lane, Klaxon, Panel, Telemetry }\n\n\
@@ -2672,8 +2672,8 @@ fn a_backend_with_no_encodings_does_not_make_the_directive_unused() {
 #[test]
 fn a_single_deployment_is_selected_without_the_flag() {
     let topology = "package veh.bench\n\n\
-                    component Lane { offers veh.bench.lane }\n\
-                    component Klaxon { offers veh.bench.horn }\n\
+                    component Lane { offers veh.bench.LaneService }\n\
+                    component Klaxon { offers veh.bench.HornService }\n\
                     component Panel { requires LaneAssist }\n\
                     component Telemetry { requires Horn }\n\n\
                     system Vehicle { Lane, Klaxon, Panel, Telemetry }\n\n\

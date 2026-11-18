@@ -454,7 +454,7 @@ fn veh_cluster_payloads_fit_the_default_ceilings() {
 /// interchange encodings unchanged — the list is package data the encodings
 /// must carry, not a lowering-only view. The
 /// generation halves of the same claim are the `services-workspace` Rust and
-/// TypeScript snapshots, which carry `fleet.vehicle.cockpit`'s rows.
+/// TypeScript snapshots, which carry `fleet.vehicle.Cockpit`'s rows.
 #[test]
 fn a_composed_service_compiles_and_round_trips_through_the_ir() {
     let mut db = RidlDatabase::default();
@@ -483,7 +483,7 @@ fn a_composed_service_compiles_and_round_trips_through_the_ir() {
         .ir
         .services
         .iter()
-        .find(|service| service.name == "fleet.vehicle.cockpit")
+        .find(|service| service.name == "fleet.vehicle.Cockpit")
         .expect("the composed service lowers");
     let references: Vec<String> = cockpit
         .shapes
@@ -2522,7 +2522,7 @@ fn tombstones_hold_their_ordinals_in_both_interaction_stores() {
     let ir = checked_ir(Path::new("tests/corpus/veh-cluster"), "veh.cluster");
 
     // `Package::shapes` keys a named interface on its own name and an inline
-    // shape on the owning service's dotted name, so one lookup finds both.
+    // shape on the owning service's global name, so one lookup finds both.
     let named = ir
         .shapes()
         .find(|shape| shape.name == "WheelHistory")
@@ -2530,7 +2530,7 @@ fn tombstones_hold_their_ordinals_in_both_interaction_stores() {
         .interface;
     let inline = ir
         .shapes()
-        .find(|shape| shape.name == "veh.cluster.wheels")
+        .find(|shape| shape.name == "veh.cluster.Wheels")
         .expect("the tombstone inline shape is in the corpus")
         .interface;
 
@@ -2792,7 +2792,7 @@ fn reserved_accepts_every_meaningful_form() {
          union U {\n  x : L\n  reserved oldArm\n  y : L\n}\n\
          interface I {\n  signal a : L @1s\n  reserved legacyTemp\n  reserved 3\n  \
          signal b : L @1s\n}\n\
-         service app.svc {\n  signal c : L @1s\n  reserved legacyRate\n  reserved 3\n  \
+         service Svc {\n  signal c : L @1s\n  reserved legacyRate\n  reserved 3\n  \
          signal d : L @1s\n}\n";
     let output = ridlc::compile("app.ridl", source);
 

@@ -168,7 +168,7 @@
   ],
   "services": [
     {
-      "name": "corpus.baseline.hvac",
+      "name": "corpus.baseline.Hvac",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],

@@ -1,7 +1,7 @@
 package veh.bench
 
-component Lane { offers veh.bench.lane }
-component Klaxon { offers veh.bench.horn }
+component Lane { offers veh.bench.LaneService }
+component Klaxon { offers veh.bench.HornService }
 component Panel { requires LaneAssist }
 component Telemetry { requires Horn }
 

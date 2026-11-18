@@ -220,13 +220,13 @@ fn run_build_with_writes_the_given_list_beside_an_rsdl_7xx_error() {
         root.path().join("lane.ridl"),
         "package veh.demo\n\ntype Flag: boolean\n\n\
          interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
-         service veh.demo.lane : LaneAssist\n",
+         service LaneService : LaneAssist\n",
     )
     .expect("the source is written");
     std::fs::write(
         root.path().join("topology.rsdl"),
         "package veh.demo\n\n\
-         component Lane { offers veh.demo.lane }\n\
+         component Lane { offers veh.demo.LaneService }\n\
          component Panel { requires LaneAssist }\n\
          system Vehicle { Lane, Panel }\n\
          deployment Good for Vehicle { machine A { Lane, Panel } }\n\

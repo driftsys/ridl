@@ -1343,14 +1343,14 @@ fn the_shipped_multi_member_corpus_evaluates_its_cross_package_clauses() {
                 // A `ridl.std.Duration` parameter, from Appendix A verbatim.
                 "VehicleStatus.getAverageSpeed.require[0]",
                 // A `veh.common.Temperature` parameter inside an inline shape.
-                "veh.hvac.cabin.setTarget.require[0]",
+                "veh.cluster.HvacCabin.setTarget.require[0]",
             ],
         ),
         (
             "services-workspace",
             // A `fleet.contracts.DoorId` parameter inside an inline shape in a
             // package that owns none of its vocabulary.
-            vec!["fleet.vehicle.mirrors.readFold.require[0]"],
+            vec!["fleet.vehicle.Mirrors.readFold.require[0]"],
         ),
     ] {
         let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))

@@ -12,9 +12,9 @@ interface Braking {
   signal active: Flag @[100ms..1s]
 }
 
-service rsdl.showcase.chassis : Steering, Braking
+service ChassisService : Steering, Braking
 
-service rsdl.showcase.status {
+service Status {
   signal alive: Flag @[100ms..1s]
 }
 
@@ -26,17 +26,17 @@ interface Wiper {
   signal wiping: Flag @[100ms..1s]
 }
 
-service rsdl.showcase.brakes : Braking
+service BrakesService : Braking
 
-service rsdl.showcase.horn : Horn
+service HornService : Horn
 
-service rsdl.showcase.wipers : Wiper
+service WipersService : Wiper
 
-service rsdl.showcase.lights {
+service Lights {
   signal lit: Flag @[100ms..1s]
 }
 
-service rsdl.showcase.echo {
+service EchoService {
   signal ping: Flag @[100ms..1s]
 }
 
@@ -47,4 +47,4 @@ interface Alerts {
   event released: Flag @[100ms..]
 }
 
-service rsdl.showcase.alerts : Alerts
+service AlertsService : Alerts

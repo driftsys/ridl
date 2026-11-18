@@ -62,13 +62,13 @@ fn an_interface_emits_its_ordinal_table() {
 }
 
 #[test]
-fn an_inline_service_shape_is_named_from_the_service_address() {
+fn an_inline_service_shape_is_named_from_the_global_name() {
     // Interface.name is "" for an inline shape (ridl §14.5), so the enum takes
-    // the service's dotted address instead.
+    // the service's global name instead.
     let package = v2::Package {
         name: "corpus.baseline".to_string(),
         services: vec![v2::Service {
-            name: "corpus.baseline.hvac".to_string(),
+            name: "corpus.baseline.Hvac".to_string(),
             shapes: vec![v2::ServiceShape {
                 kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
                     name: String::new(),
@@ -3459,4 +3459,47 @@ fn proto_backend_refuses_enum_values_outside_int32() {
             );
         }
     }
+}
+
+fn inline_package(package: &str, service: &str) -> v2::Package {
+    v2::Package {
+        name: package.to_owned(),
+        services: vec![v2::Service {
+            name: service.to_owned(),
+            shapes: vec![v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
+                    interactions: vec![signal_decl("cabinTemp", 1)],
+                    ..Default::default()
+                })),
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+#[test]
+fn a_global_name_outside_its_old_prefix_moves_the_identifiers() {
+    // ADR-0034: veh.hvac.cabin in veh.cluster becomes HvacCabin.
+    let before = generate(&inline_package("veh.cluster", "veh.hvac.cabin")).unwrap();
+    let after = generate(&inline_package("veh.cluster", "veh.cluster.HvacCabin")).unwrap();
+    assert!(before.proto_source.contains("enum VehHvacCabinOrdinal {"));
+    assert!(
+        after
+            .proto_source
+            .contains("enum VehClusterHvacCabinOrdinal {")
+    );
+    assert!(!after.proto_source.contains("enum VehHvacCabinOrdinal {"));
+}
+
+#[test]
+fn a_package_prefixed_rename_keeps_the_generated_identifiers() {
+    let before = generate(&inline_package("veh.cluster", "veh.cluster.wheels")).unwrap();
+    let after = generate(&inline_package("veh.cluster", "veh.cluster.Wheels")).unwrap();
+    assert!(
+        after
+            .proto_source
+            .contains("enum VehClusterWheelsOrdinal {")
+    );
+    assert_eq!(before.proto_source, after.proto_source);
 }

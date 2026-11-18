@@ -357,8 +357,9 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/tests.rs",
-        lines: 8,
-        why: "one test fixture sets a package's named interfaces and reads \
+        lines: 9,
+        why: "the global-service-name test reads the model interface identity; \
+              one test fixture sets a package's named interfaces and reads \
               the lowered model's own `Model.interfaces` field back, to pin \
               that the model copies the interaction's family and an intent \
               command's shape; a third walks the same fixture's interfaces to \

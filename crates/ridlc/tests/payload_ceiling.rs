@@ -671,17 +671,17 @@ fn an_error_blocks_only_its_own_package_and_its_dependents() {
     assert!(path.ends_with("independent/m.ridl"), "{path}");
 }
 
-/// An inline service shape is named by the last segment of its service name,
+/// An inline service shape is named by its declared service name,
 /// the name a `[limits.interaction]` key uses.
 #[test]
 fn an_inline_service_shape_is_named_by_its_short_name() {
     let source =
-        format!("package demo\n{BIG}service demo.svc {{\n  signal s: Payload @[10ms..100ms]\n}}\n");
+        format!("package demo\n{BIG}service Svc {{\n  signal s: Payload @[10ms..100ms]\n}}\n");
     let diagnostics = check(&source, "");
     let found = ridl_157(&diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
     assert!(
-        found[0].message.starts_with("the payload of `svc.s`"),
+        found[0].message.starts_with("the payload of `Svc.s`"),
         "{}",
         found[0].message
     );

@@ -55,8 +55,8 @@ RIDL-108 warning lint=degenerate-timing-range default=warn
 RIDL-109 error
 RIDL-110 error
 RIDL-112 warning lint=missing-response-bound default=warn
-RIDL-140 error
 RIDL-141 error
+RIDL-142 error
 RIDL-143 error
 RIDL-144 error
 RIDL-145 error

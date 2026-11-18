@@ -3,7 +3,7 @@
 // The published shape — snapshotted into `.ridl/baseline/` beside this file and
 // committed — declared its interactions in this order:
 //
-//   interface VehicleStatus            service corpus.baseline.hvac (inline shape)
+//   interface VehicleStatus            service Hvac (inline shape)
 //     1  currentSpeed                    1  cabinTemp
 //     2  doorOpened                      2  filterClogged
 //     3  doorClosed                      3  setEcoMode
@@ -45,7 +45,7 @@ interface VehicleStatus {
   signal legacyWheelPhase: Speed @10ms
 }
 
-service corpus.baseline.hvac {
+service Hvac {
   signal cabinTemp: Speed @[500ms..5s]
   event filterClogged: DoorState @[100ms..1s]
 }

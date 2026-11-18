@@ -731,38 +731,38 @@ fbs veh-cluster/veh.cluster.fbs [RawWheelSpanSpan] }
 fbs veh-cluster/veh.cluster.fbs [RawWheelSpan] bursts: [RawWheelSpanBurstsElement] (id: 1);
 fbs veh-cluster/veh.cluster.fbs [RawWheelSpan] span: RawWheelSpanSpan (id: 0);
 fbs veh-cluster/veh.cluster.fbs [RawWheelSpan] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinGetBoundsParams] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinGetBoundsReply] field_1: float (id: 0);
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinGetBoundsReply] field_2: float (id: 1);
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinGetBoundsReply] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinGetCabinTempParams] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinGetClimateParams] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] BLOWER_DUTY = 3,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] CABIN_TEMP = 1,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] CALIBRATE = 13,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] COMPRESSOR_LOAD = 5,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] FAN_LEVEL = 4,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] FILTER_CLOGGED = 6,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] GET_BOUNDS = 12,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] GET_CABIN_TEMP = 15,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] GET_CLIMATE = 14,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] REBALANCE = 11,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] REPLAY_TRACE = 9,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] SCALED_FAN = 20,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] SET_FAN = 18,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] SET_TARGET = 7,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] STREAM_FILTER_HISTORY = 10,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] SUPPORTED_MODES = 17,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] TARGET_TEMP = 2,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] TRIM_FAN = 19,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] UNIT_SERIAL = 16,
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinOrdinal] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinRebalanceParams] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinReplayTraceParams] }
+fbs veh-cluster/veh.cluster.fbs [VehClusterHvacCabinScaledFanParams] }
 fbs veh-cluster/veh.cluster.fbs [VehClusterWheelsOrdinal] SLIPPED = 4,
 fbs veh-cluster/veh.cluster.fbs [VehClusterWheelsOrdinal] TICKS = 1,
 fbs veh-cluster/veh.cluster.fbs [VehClusterWheelsOrdinal] }
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetBoundsParams] }
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetBoundsReply] field_1: float (id: 0);
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetBoundsReply] field_2: float (id: 1);
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetBoundsReply] }
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetCabinTempParams] }
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinGetClimateParams] }
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] BLOWER_DUTY = 3,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] CABIN_TEMP = 1,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] CALIBRATE = 13,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] COMPRESSOR_LOAD = 5,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] FAN_LEVEL = 4,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] FILTER_CLOGGED = 6,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] GET_BOUNDS = 12,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] GET_CABIN_TEMP = 15,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] GET_CLIMATE = 14,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] REBALANCE = 11,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] REPLAY_TRACE = 9,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] SCALED_FAN = 20,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] SET_FAN = 18,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] SET_TARGET = 7,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] STREAM_FILTER_HISTORY = 10,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] SUPPORTED_MODES = 17,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] TARGET_TEMP = 2,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] TRIM_FAN = 19,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] UNIT_SERIAL = 16,
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinOrdinal] }
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinRebalanceParams] }
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinReplayTraceParams] }
-fbs veh-cluster/veh.cluster.fbs [VehHvacCabinScaledFanParams] }
 fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] CAPABILITIES = 11,
 fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] CURRENT_SPEED = 1,
 fbs veh-cluster/veh.cluster.fbs [VehicleStatusOrdinal] DOOR_OPENED = 4,
@@ -798,8 +798,8 @@ fbs veh-cluster/veh.cluster.fbs [WheelSummaryOrdinal] }
 fbs veh-cluster/veh.cluster.fbs enum DiagError : int {
 fbs veh-cluster/veh.cluster.fbs enum FaultLogOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum HvacError : int {
+fbs veh-cluster/veh.cluster.fbs enum VehClusterHvacCabinOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum VehClusterWheelsOrdinal : uint {
-fbs veh-cluster/veh.cluster.fbs enum VehHvacCabinOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum VehicleStatusOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum WheelDiagnosticsOrdinal : uint {
 fbs veh-cluster/veh.cluster.fbs enum WheelHistoryOrdinal : uint {
@@ -820,13 +820,13 @@ fbs veh-cluster/veh.cluster.fbs table RawTickCountBox {
 fbs veh-cluster/veh.cluster.fbs table RawWheelSpan {
 fbs veh-cluster/veh.cluster.fbs table RawWheelSpanBurstsElement {
 fbs veh-cluster/veh.cluster.fbs table RawWheelSpanSpan {
-fbs veh-cluster/veh.cluster.fbs table VehHvacCabinGetBoundsParams {
-fbs veh-cluster/veh.cluster.fbs table VehHvacCabinGetBoundsReply {
-fbs veh-cluster/veh.cluster.fbs table VehHvacCabinGetCabinTempParams {
-fbs veh-cluster/veh.cluster.fbs table VehHvacCabinGetClimateParams {
-fbs veh-cluster/veh.cluster.fbs table VehHvacCabinRebalanceParams {
-fbs veh-cluster/veh.cluster.fbs table VehHvacCabinReplayTraceParams {
-fbs veh-cluster/veh.cluster.fbs table VehHvacCabinScaledFanParams {
+fbs veh-cluster/veh.cluster.fbs table VehClusterHvacCabinGetBoundsParams {
+fbs veh-cluster/veh.cluster.fbs table VehClusterHvacCabinGetBoundsReply {
+fbs veh-cluster/veh.cluster.fbs table VehClusterHvacCabinGetCabinTempParams {
+fbs veh-cluster/veh.cluster.fbs table VehClusterHvacCabinGetClimateParams {
+fbs veh-cluster/veh.cluster.fbs table VehClusterHvacCabinRebalanceParams {
+fbs veh-cluster/veh.cluster.fbs table VehClusterHvacCabinReplayTraceParams {
+fbs veh-cluster/veh.cluster.fbs table VehClusterHvacCabinScaledFanParams {
 fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadSpanParams {
 fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadSpanReply {
 fbs veh-cluster/veh.cluster.fbs table WheelDiagnosticsReadTicksParams {
@@ -3601,43 +3601,43 @@ proto veh-cluster/veh.cluster.proto [RawWheelSpanSpan] }
 proto veh-cluster/veh.cluster.proto [RawWheelSpan] RawWheelSpanSpan span = 1;
 proto veh-cluster/veh.cluster.proto [RawWheelSpan] repeated RawWheelSpanBurstsElement bursts = 2;
 proto veh-cluster/veh.cluster.proto [RawWheelSpan] }
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinGetBoundsParams] }
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinGetBoundsReply] float field_1 = 1;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinGetBoundsReply] float field_2 = 2;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinGetBoundsReply] }
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinGetCabinTempParams] }
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinGetClimateParams] }
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_BLOWER_DUTY = 3;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_CABIN_TEMP = 1;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_CALIBRATE = 13;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_COMPRESSOR_LOAD = 5;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_FAN_LEVEL = 4;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_FILTER_CLOGGED = 6;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_GET_BOUNDS = 12;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_GET_CABIN_TEMP = 15;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_GET_CLIMATE = 14;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_REBALANCE = 11;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_REPLAY_TRACE = 9;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_SCALED_FAN = 20;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_SET_FAN = 18;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_SET_TARGET = 7;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_STREAM_FILTER_HISTORY = 10;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_SUPPORTED_MODES = 17;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_TARGET_TEMP = 2;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_TRIM_FAN = 19;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_UNIT_SERIAL = 16;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] VEH_CLUSTER_HVAC_CABIN_ORDINAL_UNSPECIFIED = 0;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] reserved 8;
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinOrdinal] }
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinRebalanceParams] }
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinReplayTraceParams] }
+proto veh-cluster/veh.cluster.proto [VehClusterHvacCabinScaledFanParams] }
 proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] VEH_CLUSTER_WHEELS_ORDINAL_SLIPPED = 4;
 proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] VEH_CLUSTER_WHEELS_ORDINAL_TICKS = 1;
 proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] VEH_CLUSTER_WHEELS_ORDINAL_UNSPECIFIED = 0;
 proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] reserved 2;
 proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] reserved 3;
 proto veh-cluster/veh.cluster.proto [VehClusterWheelsOrdinal] }
-proto veh-cluster/veh.cluster.proto [VehHvacCabinGetBoundsParams] }
-proto veh-cluster/veh.cluster.proto [VehHvacCabinGetBoundsReply] float field_1 = 1;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinGetBoundsReply] float field_2 = 2;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinGetBoundsReply] }
-proto veh-cluster/veh.cluster.proto [VehHvacCabinGetCabinTempParams] }
-proto veh-cluster/veh.cluster.proto [VehHvacCabinGetClimateParams] }
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_BLOWER_DUTY = 3;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_CABIN_TEMP = 1;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_CALIBRATE = 13;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_COMPRESSOR_LOAD = 5;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_FAN_LEVEL = 4;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_FILTER_CLOGGED = 6;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_GET_BOUNDS = 12;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_GET_CABIN_TEMP = 15;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_GET_CLIMATE = 14;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_REBALANCE = 11;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_REPLAY_TRACE = 9;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_SCALED_FAN = 20;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_SET_FAN = 18;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_SET_TARGET = 7;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_STREAM_FILTER_HISTORY = 10;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_SUPPORTED_MODES = 17;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_TARGET_TEMP = 2;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_TRIM_FAN = 19;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_UNIT_SERIAL = 16;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] VEH_HVAC_CABIN_ORDINAL_UNSPECIFIED = 0;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] reserved 8;
-proto veh-cluster/veh.cluster.proto [VehHvacCabinOrdinal] }
-proto veh-cluster/veh.cluster.proto [VehHvacCabinRebalanceParams] }
-proto veh-cluster/veh.cluster.proto [VehHvacCabinReplayTraceParams] }
-proto veh-cluster/veh.cluster.proto [VehHvacCabinScaledFanParams] }
 proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_CAPABILITIES = 11;
 proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_CURRENT_SPEED = 1;
 proto veh-cluster/veh.cluster.proto [VehicleStatusOrdinal] VEHICLE_STATUS_ORDINAL_DOOR_OPENED = 4;
@@ -3680,8 +3680,8 @@ proto veh-cluster/veh.cluster.proto [WheelSummaryOrdinal] }
 proto veh-cluster/veh.cluster.proto enum DiagError {
 proto veh-cluster/veh.cluster.proto enum FaultLogOrdinal {
 proto veh-cluster/veh.cluster.proto enum HvacError {
+proto veh-cluster/veh.cluster.proto enum VehClusterHvacCabinOrdinal {
 proto veh-cluster/veh.cluster.proto enum VehClusterWheelsOrdinal {
-proto veh-cluster/veh.cluster.proto enum VehHvacCabinOrdinal {
 proto veh-cluster/veh.cluster.proto enum VehicleStatusOrdinal {
 proto veh-cluster/veh.cluster.proto enum WheelDiagnosticsOrdinal {
 proto veh-cluster/veh.cluster.proto enum WheelHistoryOrdinal {
@@ -3701,13 +3701,13 @@ proto veh-cluster/veh.cluster.proto message RawTickCountBox {
 proto veh-cluster/veh.cluster.proto message RawWheelSpan {
 proto veh-cluster/veh.cluster.proto message RawWheelSpanBurstsElement {
 proto veh-cluster/veh.cluster.proto message RawWheelSpanSpan {
-proto veh-cluster/veh.cluster.proto message VehHvacCabinGetBoundsParams {
-proto veh-cluster/veh.cluster.proto message VehHvacCabinGetBoundsReply {
-proto veh-cluster/veh.cluster.proto message VehHvacCabinGetCabinTempParams {
-proto veh-cluster/veh.cluster.proto message VehHvacCabinGetClimateParams {
-proto veh-cluster/veh.cluster.proto message VehHvacCabinRebalanceParams {
-proto veh-cluster/veh.cluster.proto message VehHvacCabinReplayTraceParams {
-proto veh-cluster/veh.cluster.proto message VehHvacCabinScaledFanParams {
+proto veh-cluster/veh.cluster.proto message VehClusterHvacCabinGetBoundsParams {
+proto veh-cluster/veh.cluster.proto message VehClusterHvacCabinGetBoundsReply {
+proto veh-cluster/veh.cluster.proto message VehClusterHvacCabinGetCabinTempParams {
+proto veh-cluster/veh.cluster.proto message VehClusterHvacCabinGetClimateParams {
+proto veh-cluster/veh.cluster.proto message VehClusterHvacCabinRebalanceParams {
+proto veh-cluster/veh.cluster.proto message VehClusterHvacCabinReplayTraceParams {
+proto veh-cluster/veh.cluster.proto message VehClusterHvacCabinScaledFanParams {
 proto veh-cluster/veh.cluster.proto message WheelDiagnosticsReadSpanParams {
 proto veh-cluster/veh.cluster.proto message WheelDiagnosticsReadSpanReply {
 proto veh-cluster/veh.cluster.proto message WheelDiagnosticsReadTicksParams {

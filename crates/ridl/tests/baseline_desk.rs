@@ -2437,7 +2437,7 @@ fn ridl_407_block<'a>(stderr: &'a str, name: &str) -> &'a str {
 /// code stays 0 — the desk check informs, `ridl diff` gates.
 ///
 /// The inline-shape case is pinned separately because its span falls on a
-/// different construct — the service's dotted name rather than an interface
+/// different construct — the service's declared name rather than an interface
 /// name: see [`inline_shape_removal_spans_the_service_name`].
 #[test]
 fn check_reports_ordinal_drift_against_the_committed_baseline() {
@@ -2581,8 +2581,8 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
 ///
 /// `DeclIndex::build` now walks `SourceFile::shapes()`, which yields an
 /// `interface` declaration and a service's inline shape alike, so the fallback
-/// covers both. The span for an inline shape lands on the service's dotted
-/// name, which is the identity its diff paths carry.
+/// covers both. The span for an inline shape lands on the service's declared
+/// name; the diff path carries its global name.
 #[test]
 fn inline_shape_removal_spans_the_service_name() {
     let (_, _, stderr) = ridl(&["check".as_ref(), "tests/baseline-corpus".as_ref()]);
@@ -2590,7 +2590,7 @@ fn inline_shape_removal_spans_the_service_name() {
     let inline = ridl_407_block(&stderr, "setEcoMode");
     assert!(
         inline.starts_with(
-            "warning[RIDL-407]: `setEcoMode` is gone in `corpus.baseline.hvac` but the \
+            "warning[RIDL-407]: `setEcoMode` is gone in `corpus.baseline.Hvac` but the \
              published baseline still declares it."
         ),
         "the inline-shape removal is reported, naming the service it left:\n{stderr}"
@@ -2601,27 +2601,26 @@ fn inline_shape_removal_spans_the_service_name() {
          regression, back:\n{inline}"
     );
     assert!(
-        inline.contains("service corpus.baseline.hvac {"),
+        inline.contains("service Hvac {"),
         "the fallback span points at the service's own declaration:\n{inline}"
     );
-    // The span starts on the dotted name, not on the `service` keyword and not
-    // at the head of the declaration: the name is the identity the diff path
-    // carries. The COLUMN is what pins that — a caret-run assertion would
+    // The span starts on the declared name, not on the `service` keyword and not
+    // at the head of the declaration. The COLUMN is what pins that — a caret-run assertion would
     // still pass on a span widened leftwards to the keyword, because the
     // widened run is longer and `contains` matches any prefix of it.
     assert!(
         inline.contains("cluster.ridl:48:9"),
-        "the span starts at the dotted name, column 9 — not column 1, where \
+        "the span starts at the declared name, column 9 — not column 1, where \
          the `service` keyword is:\n{inline}"
     );
-    // A caret run of at least 20, which with the column above pins the left
+    // A caret run of at least 4, which with the column above pins the left
     // edge exactly and the width as a floor. The exact right edge is
     // `shape_identity_range_covers_the_declared_name`'s job — a two-character
-    // rightward widening still satisfies a `contains` on 20 carets, and that
+    // rightward widening still satisfies a `contains` on 4 carets, and that
     // unit test does fail on it.
     assert!(
-        inline.contains("^^^^^^^^^^^^^^^^^^^^"),
-        "the underline covers `corpus.baseline.hvac`, the 20-character dotted \
+        inline.contains("^^^^"),
+        "the underline covers `Hvac`, the four-character declared \
          name:\n{inline}"
     );
 

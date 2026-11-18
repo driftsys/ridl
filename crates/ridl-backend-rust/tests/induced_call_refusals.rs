@@ -262,12 +262,12 @@ interface Healthy {
 }
 
 /// `package` with `Pump` moved into the inline shape of the service
-/// `face.calls.pump`, which has no declared name.
+/// `face.calls.Pump`, whose inline shape has no declared name.
 fn package_with_pump_as_a_service_shape(ty: v2::FieldType) -> v2::Package {
     let mut package = package(ty);
     let pump = package.interfaces.remove(0);
     package.services.push(v2::Service {
-        name: "face.calls.pump".to_string(),
+        name: "face.calls.Pump".to_string(),
         shapes: vec![v2::ServiceShape {
             kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
                 name: String::new(),
