@@ -226,7 +226,7 @@ bound counts Unicode scalar values and its byte capacity is four bytes per
 scalar value under UTF-8 (design note §3.11), in both columns and with no
 narrowing from a `match` constraint: the checker and the generated Rust code do
 not agree on what a pattern matches until the design of
-[`2026-10-01-portable-match-patterns-design.md`](../wip/2026-10-01-portable-match-patterns-design.md)
+[`2026-10-01-portable-match-patterns-design.md`](2026-10-01-portable-match-patterns-design.md)
 (approach A) is implemented, so an ASCII-only verdict is not safe for a size
 bound; driftsys/ridl#665 records the narrowing, to be built once in one function
 both bounds call. Each encoding's overhead — proto3 tags and varint widths at
