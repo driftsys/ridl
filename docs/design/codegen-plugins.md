@@ -392,6 +392,20 @@ unmoved snapshots of `crates/ridl-backend-rust/src/snapshots/`,
 `crates/ridl-backend-rust/tests/generated/interaction_face.rs` prove beside it:
 the model carries every fact that output is a function of.
 
+**The snapshots and `ridl build` generate over different scopes.** The Rust
+snapshots of `crates/ridl-backend-rust/src/snapshots/` and the Rust snapshots of
+the corpus harness (`crates/ridlc/tests/corpus.rs`) are taken with an empty
+scope: the backend lowers with `others` equal to `&[]`, so a type that reaches
+another package gets no codec, and a snapshot that includes the codec carries a
+`__RIDL_FB_NO_CODEC_*` note for it. `ridl build` lowers each package over
+`ridlc::catalog_scope` (every package of the workspace, plus `ridl.std` when a
+package references it), so the same type gets its codec there. The corpus
+harness uses `catalog_scope` for its codegen model snapshot
+(`corpus__codegen@*`), and `generate_rust_beside` gives the composed compile
+proofs the other packages of the entry. A change to what the Rust backend emits
+for a cross-package reference is therefore visible in those proofs and in a
+build, and not in the Rust snapshots.
+
 **The other four backends stay on the raw IR** — TypeScript, proto3, FlatBuffers
 and podbuf — until their own stories port them, and are not plugins until then.
 TypeScript, proto3 and FlatBuffers each keep the fact-level drift test of the
@@ -767,10 +781,8 @@ guide for a plugin author, and its "Reading order" section is the reading list.
    codec a scope. With the scope, a cross-package member could be judged and
    named. That would change the attribution messages. **Open.** No tracking
    issue.
-8. **The corpus harness and the CLI generate over different scopes.** The
-   byte-identity snapshots of the Rust backend are taken with no scope, and the
-   demo run uses one. No record states it elsewhere. **Open.** No tracking
-   issue.
+8. **The corpus harness and the CLI generate over different scopes.** Resolved:
+   [section 6](#6-the-parity-test-and-what-it-proves) states the difference.
 9. **The module documentation of the TypeScript backend's `generate` names an
    `interact` module that does not exist**
    (`crates/ridl-backend-ts/src/lib.rs`). The interaction layer the language
