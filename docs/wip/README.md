@@ -320,29 +320,6 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   **2026-09-12-interface-id-study-2.md** — the two identity study reports that
   note's D-7 summarises, kept verbatim; the first ranked the carriers, the
   second simulated the merges and the diff. **Not ratified.**
-- **fmt-ridl-rsdl-layout.md** — the canonical `ridl fmt` layout of the seven
-  declarations covered by driftsys/ridl#387: ridl `interface` and `service`, and
-  the five rsdl declarations. Every member form with its rendering, the rules
-  general form §5 settles and the thirteen choices it does not, the line width
-  rule (D-9, decided 2026-10-01: 100 columns, `.editorconfig` overrides) with
-  the breaking rules it needs, the invariants and the test plan. All thirteen
-  decisions taken 2026-10-01 (the recommended option of each). Tasks 1–5 are
-  merged; Tasks 6–8 are merged in
-  [PR #634](https://github.com/driftsys/ridl/pull/634). Annotation-comment
-  corrections are merged in
-  [PR #635](https://github.com/driftsys/ridl/pull/635). Tasks 9–10 merged in
-  [PR #637](https://github.com/driftsys/ridl/pull/637) into its former stacked
-  base and are recovered in the final main-targeted branch. Tasks 11–13 are
-  implemented in [PR #638](https://github.com/driftsys/ridl/pull/638); both full
-  review passes, reviewed-head gates and CI are complete. One Minor evidence
-  finding is deferred as E1 debt
-  [#639](https://github.com/driftsys/ridl/issues/639). The PR awaits maintainer
-  merge. The [review report](fmt-ridl-rsdl-review.md) records current status and
-  approvals.
-- **fmt-ridl-rsdl-plan.md** — the thirteen-task implementation plan for that
-  note, written for a coding agent that starts with only the repository and the
-  file. Follow the review report for execution status; the plan retains its
-  original baseline wording.
 - **2026-10-03-devex-and-agent-tracks-brief.md** — the agreed scope of two
   tracks, an AI design assistant (MCP tools, design lints, skill) and code
   documentation (doc lints, language server, rules in generated facade docs),
@@ -431,14 +408,10 @@ and was not archived. The reason is stated once per file or group.
   **2026-10-07-generated-observation-plan.md** — optional trace spans from the
   generated Rust face, driftsys/ridl#754. Open; the generated crate has no
   `__observe` module.
-- **fmt-ridl-rsdl-layout.md**, **fmt-ridl-rsdl-plan.md**,
-  **fmt-ridl-rsdl-decisions.md**, **fmt-ridl-rsdl-review.md** and
-  **fmt-ridl-rsdl-evidence/** — the formatter work landed (#638, #387 closed).
-  The layout note is still the only record of the canonical layout rules of
-  `ridl fmt` (the decisions log calls it normative) and
-  [`family-general-form.md`](../specification/family-general-form.md) refers to
-  it, so archiving it needs a durable home for those rules first. That is a
-  decision for the maintainer.
+- The formatter unit (`fmt-ridl-rsdl-{layout,plan,decisions,review}.md` and
+  `fmt-ridl-rsdl-evidence/`, driftsys/ridl#387) was gardened and archived
+  verbatim to [`../archive/`](../archive/) on 2026-11-18. Its canonical layout
+  rules are in [`../design/ridl-fmt-layout.md`](../design/ridl-fmt-layout.md).
 - **2026-09-21-nested-interface-design.md** and
   **2026-10-01-portable-match-patterns-design.md** — each states in its own
   header that it is a design note that has not graduated (the nested interface

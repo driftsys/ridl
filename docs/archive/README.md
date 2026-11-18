@@ -947,3 +947,16 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   (open items 4 and 6) and
   [the generated code chapter](../book/generated-code.md).
+
+- **fmt-ridl-rsdl-layout.md**, **fmt-ridl-rsdl-plan.md**,
+  **fmt-ridl-rsdl-decisions.md**, **fmt-ridl-rsdl-review.md** and
+  **fmt-ridl-rsdl-evidence/** — the formatter unit of driftsys/ridl#387: the
+  design note for the canonical `ridl fmt` layout of the ridl `interface` and
+  `service` and the five rsdl declarations (thirteen decisions, each with its
+  rejected alternatives), the thirteen-task plan, the execution decision log,
+  the review report and the per-task and per-pull-request evidence. Archived
+  verbatim, on 2026-11-18, after the formatter landed; the note's header still
+  says nothing is implemented, which was true when it was written. The evidence
+  folder records time-qualified review claims that are open debt in
+  driftsys/ridl#639 and is kept as it was. The durable record is
+  [the layout design](../design/ridl-fmt-layout.md).

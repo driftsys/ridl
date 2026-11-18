@@ -139,3 +139,11 @@ choices, see [`../decisions/`](../decisions/).
   calibration records, `cargo xtask calibrate`, and the tests. The decisions
   behind its choices are
   [ADR-0027](../decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md).
+- **ridl-fmt-layout.md** — the canonical layout of `ridl fmt` for the ridl
+  `interface` and `service` and the rsdl `system`, `component`, `distribution`,
+  `deployment` and `machine` as built: the member and header renderings, the
+  attribute block forms, the line width and the breaking rules, where the width
+  comes from, the treatment of comments, and the tests. The rules that hold for
+  every declaration are in the `ridl-fmt` crate documentation. The decisions
+  behind its choices are D-1 to D-13 of the record itself, with the rejected
+  alternatives in the archived design note.
