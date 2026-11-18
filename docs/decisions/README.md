@@ -49,7 +49,7 @@ other entry below is Accepted.
   scalar widening is compatible only for a reached type the consumer exclusively
   sends; received, both-direction and unreached types are breaking. Per-side
   remote contexts report scalar constraint changes at consumer interaction
-  paths. Amended 2026-11-14 by ADR-0034: RIDL-142, which decision 21 reserved,
+  paths. Amended 2026-11-18 by ADR-0034: RIDL-142, which decision 21 reserved,
   is minted for a service name that is not one `CamelCase_id`, and RIDL-140 is
   retired.
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
@@ -180,7 +180,7 @@ other entry below is Accepted.
   (rewritten 2026-09-13), which renumbered the sections they name and reserved
   two of the codes. Amended again 2026-09-16: decision 9's coherence group is
   corrected to be the provided interface, identified by its number in the unit's
-  `interfaces.lock` rather than by the interface name. Amended 2026-11-14 by
+  `interfaces.lock` rather than by the interface name. Amended 2026-11-18 by
   ADR-0034: decisions 12 and 14 name a service with one `CamelCase_id`, decision
   15's `service:` key holds the global name, and decision 16's address is
   `package.Name.member`.

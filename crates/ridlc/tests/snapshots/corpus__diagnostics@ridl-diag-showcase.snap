@@ -424,7 +424,7 @@ error[RIDL-141]: `Sample` is not an interface, and a service publishes an interf
 15 │ service Mistyped : Sample
    │                    ^^^^^^
 
-error[RIDL-144]: `HealthBlock` declares `status`, which `DoorBlock` already contributes — members are addressed `service.member`, so one name cannot have two referents. Rename the member in one of the two interfaces (ridl §14.5)
+error[RIDL-144]: `HealthBlock` declares `status`, which `DoorBlock` already contributes — members are addressed `Name.member`, so one name cannot have two referents. Rename the member in one of the two interfaces (ridl §14.5)
    ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:27:28
    │
 27 │ service Doors : DoorBlock, HealthBlock

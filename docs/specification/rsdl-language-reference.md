@@ -399,16 +399,17 @@ declaration a CamelCase segment names is decided by lookup: components,
 services, interfaces and the system share their package's namespace (§3, ridl
 §14.5), so a name finds one declaration. A bare name binds the declaration of
 the reference's own package first, of whatever kind, and an import only when the
-package declares no such name (typl §3.2). In `offers` it must be a service; in
-a `system` or `distribution` member line, a component or a lone service (§6); in
-a placement line, a component, an instance or a lone service; in `requires`, an
-interface or an inline-shape service (§3.2). A reference whose case says one
-role and whose lookup finds another, or nothing, draws the unknown-name code of
-its slot: RSDL-602 (`system`), RSDL-903 (`distribution`), RSDL-702 (`machine`),
-RSDL-310 to RSDL-312 (`component`), RSDL-704 (`for`). A reference of lowercase
-segments only names nothing: it is the dotted service name of earlier releases,
-and the message of the slot's code says that a service is named by its CamelCase
-name (ridl §14.5, RIDL-142).
+package declares no such name (ADR-0034 decision 9). In `offers` it must be a
+service; in a `system` or `distribution` member line, a component or a lone
+service (§6); in a placement line, a component, an instance or a lone service;
+in `requires`, an interface or an inline-shape service (§3.2). A reference whose
+case says one role and whose lookup finds another, or nothing, draws the
+unknown-name code of its slot: RSDL-602 (`system`), RSDL-903 (`distribution`),
+RSDL-702 (`machine`), RSDL-310 to RSDL-312 (`component`), RSDL-704 (`for`). A
+reference of lowercase segments only names nothing: it is the dotted service
+name of earlier releases. In the slots that can name a service, the message of
+the slot's code then says that a service is named by its CamelCase name (ridl
+§14.5, RIDL-142): RSDL-310, RSDL-312, RSDL-602, RSDL-702 and RSDL-903.
 
 ---
 

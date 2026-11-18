@@ -2555,8 +2555,10 @@ Options:
 - `ridl_check` checks workspace files or a source text.
 - `ridl_explain` explains a diagnostic code or diff category.
 - `ridl_resolve` resolves a declaration and its location.
-- `ridl_describe_type` describes a non-interface declaration.
-- `ridl_list_interactions` lists an interface's interactions.
+- `ridl_describe_type` describes a declaration that is not an interface or a
+  service.
+- `ridl_list_interactions` lists an interface's or an inline service's
+  interactions.
 - `ridl_references` lists declarations and interactions using a declaration.
 - `ridl_dependencies` lists package dependencies and dependents.
 - `ridl_metrics` reports package coupling and interface cohesion groups.

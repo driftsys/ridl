@@ -183,11 +183,10 @@ fn compile_entry(entry: &Path) -> Compiled {
         checked_irs.push((name, checked.ir));
     }
 
-    // The workspace-wide passes — the service catalog and the rsdl
-    // system query — driven through `ridl_sem::check_workspace`, as
-    // `ridlc::compile_workspace` drives them: their diagnostics span the whole
-    // workspace, so their FileIds index every source file in package-then-file
-    // order. That order is rebuilt here and remapped onto the render source
+    // The workspace-wide pass — the rsdl system query — driven through
+    // `ridl_sem::check_workspace`, as `ridlc::compile_workspace` drives it:
+    // its diagnostics span the whole workspace, so their FileIds index every
+    // source file in package-then-file order. That order is rebuilt here and remapped onto the render source
     // map. Without this the runner would compile a workspace the real pipeline
     // rejects and snapshot it as clean.
     //

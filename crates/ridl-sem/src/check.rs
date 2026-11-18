@@ -4229,7 +4229,7 @@ impl Checker<'_> {
     ///   diagnostic per member.
     /// - **RIDL-144** — a member name duplicated across the composed
     ///   interfaces. Flat addressing (decision 16) gives every member the
-    ///   address `service.member`, so two referents for one name cannot be
+    ///   address `Name.member`, so two referents for one name cannot be
     ///   expressed.
     fn lower_service_shapes(&mut self, service: &ast::ServiceDef) -> Vec<v2::ServiceShape> {
         // RIDL-145 keys on the canonical reference, so a bare local name and
@@ -4498,7 +4498,7 @@ impl Checker<'_> {
     }
 
     /// RIDL-144: a member name duplicated across a service's interfaces
-    /// (ADR-0015 decisions 16 and 18). Addressing is flat — `service.member`
+    /// (ADR-0015 decisions 16 and 18). Addressing is flat — `Name.member`
     /// — so one member name cannot have two referents; two independently
     /// written interfaces that share a member name cannot be composed into
     /// one service without renaming one of them.
@@ -4515,7 +4515,7 @@ impl Checker<'_> {
             range,
             format!(
                 "`{shape}` declares `{member}`, which `{owner}` already contributes — members \
-                 are addressed `service.member`, so one name cannot have two referents. Rename \
+                 are addressed `Name.member`, so one name cannot have two referents. Rename \
                  the member in one of the two interfaces (ridl §14.5)"
             ),
             owner_range,

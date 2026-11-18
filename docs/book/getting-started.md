@@ -1070,7 +1070,7 @@ interactions. It is not addressable and not deployed.
 
 A `service` is a global, named, published declaration of one or more of them —
 the catalog entry that gives contracts a concrete identity in the system. The
-specification defines its members as addressed `service.member`; no runtime
+specification defines its members as addressed `Name.member`; no runtime
 resolves such an address today, so read it as the naming scheme a deployment
 will use. A service is public and is declared with one `CamelCase` name. Its
 global name is the package followed by that declared name: `Status` in package
@@ -1103,8 +1103,8 @@ Composing interfaces is how a recurring interaction set — a diagnostics block,
 heartbeat — is reused without duplication: each composed interface keeps its own
 ordinal space, and its number comes from its unit's `interfaces.lock`, not from
 its place in the list, so the list is a set and its order carries nothing.
-Because members stay addressed `service.member`, two composed interfaces must
-not share a member name (`RIDL-144`).
+Because members stay addressed `Name.member`, two composed interfaces must not
+share a member name (`RIDL-144`).
 
 Interfaces are flat: there is no interface inheritance. Sharing a _shape_ is
 typl's job; a shared interaction _set_ is composed at the service, never

@@ -288,18 +288,20 @@ TYPL-009.
    source gives the shape (ADR-0008 decision 4, ADR-0015 decision 15), and that
    name changes. The frozen surfaces this breaks are approved with the procedure
    of ADR-0029 decision 4: `diagnostics` (RIDL-140 leaves, RIDL-142 arrives),
-   `accepted-sources` (the frozen copy of `examples/cabin`, in the dotted form,
-   is no longer accepted, so its line `examples/cabin ok` is removed), `wire`
-   and `generated-crate` (the inline shapes of the frozen `veh-cluster` copy).
-   The step that applies is the two-step procedure of decision 4, which its
-   bullet "0.11 starts with a pull request that breaks surfaces on purpose, with
-   the same two steps" extends to a later pre-1.0 minor: the pull request that
-   makes the break deletes each surface's row from `freeze/surfaces.toml`, keeps
-   the name in `required`, carries `!` in its title, states the approval in its
-   description and merges only on the maintainer's explicit approval; a
-   follow-up pull request adds each row again with that merge commit as its
-   `baseline`. The break is shown before the copies are refreshed, and the
-   refreshed copies are what the follow-up baseline records.
+   `accepted-sources` (the frozen copy of `examples/cabin` was in the dotted
+   form, which is no longer accepted; the copy was migrated to the new form and
+   its line `examples/cabin ok` remains, and the row was removed because the
+   surface was broken while the change was made), `wire` and `generated-crate`
+   (the inline shapes of the frozen `veh-cluster` copy). The step that applies
+   is the two-step procedure of decision 4, which its bullet "0.11 starts with a
+   pull request that breaks surfaces on purpose, with the same two steps"
+   extends to a later pre-1.0 minor: the pull request that makes the break
+   deletes each surface's row from `freeze/surfaces.toml`, keeps the name in
+   `required`, carries `!` in its title, states the approval in its description
+   and merges only on the maintainer's explicit approval; a follow-up pull
+   request adds each row again with that merge commit as its `baseline`. The
+   break is shown before the copies are refreshed, and the refreshed copies are
+   what the follow-up baseline records.
 
 9. **rsdl reads a `CamelCase` reference as a declaration of any kind.** The rsdl
    case table (rsdl §2) and the general form's rule R7 list `service` among the
@@ -367,8 +369,10 @@ TYPL-009.
   linked like every other declaration. The service catalog loses its own
   uniqueness check. The uncoded error is gone, and RIDL-142 can be explained by
   `ridl explain`.
-- Positive: the names that differ only in case are refused (TYPL-009), because a
-  service and an interface of one package now share one namespace.
+- Positive: a service and an interface of one package can no longer have the
+  same name (TYPL-009), because they now share one namespace. The clash is
+  exact: names that differ only in case, such as an interface `widgets` and a
+  service `Widgets`, are not refused.
 - Negative / accepted: every catalog that declares a service needs a one-time
   migration of its sources and its lock files. A peer that was built against an
   inline shape's old generated names, or that compares descriptor strings, is

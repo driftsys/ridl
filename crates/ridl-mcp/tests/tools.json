@@ -264,7 +264,7 @@
     }
   },
   {
-    "description": "Describe a non-interface declaration in canonical IR JSON. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
+    "description": "Describe a declaration that is not an interface or a service in canonical IR JSON. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
     "inputSchema": {
       "$defs": {
         "OverlayInput": {
@@ -566,7 +566,7 @@
     }
   },
   {
-    "description": "List an interface and its interactions in source order. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
+    "description": "List an interface, or the inline shape of a service, and its interactions in source order. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.",
     "inputSchema": {
       "$defs": {
         "OverlayInput": {

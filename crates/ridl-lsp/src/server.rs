@@ -833,9 +833,9 @@ impl ServerState {
     /// in the same file order) and rewrites the spans onto those ids with
     /// [`remap_diagnostics`] before conversion.
     ///
-    /// The workspace-wide passes — the service catalog and the rsdl system
-    /// query (rsdl reference v0.2) — run once over the workspace afterwards,
-    /// through the `check_workspace` that `ridlc` calls too.
+    /// The workspace-wide pass — the rsdl system query (rsdl reference v0.2) —
+    /// runs once over the workspace afterwards, through the `check_workspace`
+    /// that `ridlc` calls too.
     fn analyze(&self) -> Batch {
         let db = &self.db;
         let mut sources = SourceMap::new();
@@ -917,8 +917,8 @@ impl ServerState {
             ));
             checked.push(checked_package);
         }
-        // The workspace-wide passes — the service catalog and the rsdl system
-        // query — run once over the workspace, as in `ridlc`; a standalone
+        // The workspace-wide pass — the rsdl system query — runs once over the
+        // workspace, as in `ridlc`; a standalone
         // overlay is outside it. RSDL-804 is raised by the driver, not the
         // query: the server configures no backend, as the command line does
         // not, so no namespace is claimed and every backend key draws the

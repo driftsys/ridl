@@ -11,8 +11,8 @@
 //! language server navigates to it.
 //!
 //! The diagnostics carry a [`FileId`] indexing the workspace's files in
-//! package-then-file order — the order `ridl_core::package::service_catalog`
-//! uses — so a driver remaps both with one list of render ids.
+//! package-then-file order, so a driver remaps them with the render ids it
+//! builds for the package passes.
 
 mod attrs;
 mod closure;
@@ -1131,8 +1131,8 @@ deployment Production for Vehicle {
     }
 
     /// A diagnostic's file id indexes the workspace's files in
-    /// package-then-file order, the order `service_catalog` uses, so a driver
-    /// remaps both with the same render ids.
+    /// package-then-file order, so a driver remaps it with the render ids it
+    /// builds for the package passes.
     #[test]
     fn diagnostics_index_the_workspace_files_in_package_then_file_order() {
         let first: &[(&str, &str)] = &[

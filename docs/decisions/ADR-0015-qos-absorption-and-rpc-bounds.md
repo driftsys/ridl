@@ -71,7 +71,7 @@ Amended 2026-10-06 — decisions 4, 6, 7 and 8: a `command` or `query` takes a
 default response bound, like a signal or event, and `default_applied` can be
 true on an RPC (driftsys/ridl#741).
 
-Amended 2026-11-14 — decisions 12, 14, 15 and 16, by
+Amended 2026-11-18 — decisions 12, 14, 15 and 16, by
 [ADR-0034](ADR-0034-service-declaration-names.md) (driftsys/ridl#1390): a
 service is declared with one `CamelCase` name, and its global name is its
 package followed by that name. The grammar of decisions 12 and 14 names a
@@ -396,7 +396,7 @@ indistinguishable, so no claim about any of the three can be exercised.
     The multi-interface list itself stands, as a set of interface references
     (decision 19 as amended).
 
-    **Amendment (2026-11-14) — the declared name.**
+    **Amendment (2026-11-18) — the declared name.**
     [ADR-0034](ADR-0034-service-declaration-names.md) decision 1 replaces the
     dotted name with one `CamelCase_id`: ridl reference Appendix C reads
     `service_def = doc_comment? "service" CamelCase_id ( … )`. The syntax tree
@@ -420,7 +420,7 @@ indistinguishable, so no claim about any of the three can be exercised.
     holds the inline shape" for no gain, and the either/or keeps `ServiceDef` a
     two-branch alternation.
 
-    **Amendment (2026-11-14).** The rule is unchanged. Both forms take the same
+    **Amendment (2026-11-18).** The rule is unchanged. Both forms take the same
     one-identifier name ([ADR-0034](ADR-0034-service-declaration-names.md)
     decision 1): `service Cabin { … }` in package `veh.hvac` has the global name
     `veh.hvac.Cabin`, as `service Cabin : CabinShape` would.
@@ -454,7 +454,7 @@ indistinguishable, so no claim about any of the three can be exercised.
     `ridl lock <pkg> --rename service:veh.hvac.cabin=Cabin` carries the number
     across the refactor without making it compatible.
 
-    **Amendment (2026-11-14) — the key holds the global name.** With
+    **Amendment (2026-11-18) — the key holds the global name.** With
     [ADR-0034](ADR-0034-service-declaration-names.md) decision 7, the inline
     shape's entry is `service:` followed by the service's global name, its
     package and its declared name: `service:veh.hvac.Cabin`. The service's
@@ -473,7 +473,7 @@ indistinguishable, so no claim about any of the three can be exercised.
     interfaces that share a member name cannot be composed into one service
     without renaming one of them.**
 
-    **Amendment (2026-11-14).** The address is `package.Name.member`
+    **Amendment (2026-11-18).** The address is `package.Name.member`
     ([ADR-0034](ADR-0034-service-declaration-names.md) decision 4), and
     `Name.member` inside the package or after an import. It stays flat: no
     interface name is written between the service and the member. The addresses

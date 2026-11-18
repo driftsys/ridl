@@ -815,7 +815,7 @@ diag_codes! {
 
         /// Duplicate member name across a service's interfaces (ridl §14.5,
         /// §16.4; ADR-0015 decisions 16 and 18): two composed interfaces both
-        /// declaring `status` would give `service.status` two referents, which
+        /// declaring `status` would give `Name.status` two referents, which
         /// flat addressing cannot express. Emitted per-package by the checker
         /// The service codes sit in the 1xx band (see RIDL-141);
         /// RIDL-112 is minted by ADR-0015 decision 6, so 144 is the first free
