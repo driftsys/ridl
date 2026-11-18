@@ -3025,9 +3025,9 @@ fn a_chunk_restarts_the_abandon_bound() {
     let (mut config, notes) = recording();
     config.call_abandon_after = Duration::from_millis(1000);
     // The pushes are 250 ms apart against a bound of 1000 ms, so a stall of
-    // 750 ms is needed to end the stream early. Six pushes span 1500 ms, more
-    // than the bound, so a bound that a chunk does not restart ends the
-    // stream before the last push.
+    // 750 ms is needed to end the stream early. The first and the last of six
+    // pushes are 1250 ms apart, more than the bound, so a bound that a chunk
+    // does not restart ends the stream before the last push.
     let (mut ws, handle, provider) = stream_session(config, SUBPROTOCOL_V3, false);
     request(&mut ws, STREAM_QUERY, 1, &[64]);
     grant(&mut ws, 1, 100);
