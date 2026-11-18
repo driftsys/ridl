@@ -725,7 +725,8 @@ other entry below is Accepted.
   21 reserved, with a suggested name as a fix-it; RIDL-140 is retired. The
   `service:` lock key, the implicit component name and every name derived from
   an inline shape follow the global name. Amends ADR-0015 decisions 12, 14, 15
-  and 16, and adds a dated note to ADR-0008. ADR-0001 and ADR-0003 are not
-  present in this repository; ADR-0003 ("the family decision") is noted as
-  not-yet-written in the family overview, and ADR-0012 constrains it to four
-  family members rather than five.
+  and 16, and adds dated notes to ADR-0008, ADR-0016, ADR-0022 and ADR-0002.
+
+ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
+decision") is noted as not-yet-written in the family overview, and ADR-0012
+constrains it to four family members rather than five.

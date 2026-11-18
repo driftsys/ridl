@@ -10,8 +10,8 @@ From the repository root, regenerate into a temporary directory and copy the
 verified descriptor:
 
 ```sh
-identity_output=target/identity-output
-mkdir -p "$identity_output"
+identity_output=$(mktemp -d)
+trap 'rm -rf "$identity_output"' EXIT
 cargo run --locked -p ridl-cli -- build crates/ridl-rt-conformance/fixtures/identity --emit deployment --out-dir "$identity_output"
 cp "$identity_output/alpha.bench.deployment.binfb" crates/ridl-rt-conformance/fixtures/identity/identity.deployment.binfb
 ```
