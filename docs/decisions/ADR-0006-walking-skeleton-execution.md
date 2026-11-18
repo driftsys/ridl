@@ -105,5 +105,5 @@ landed.
 ## References
 
 - ADR-0004 — implementation sequencing and stack (the frame this refines).
-- docs/wip/ridl-family-concept.md §8.1 (layout), §10 (naming ledger).
+- docs/technotes/ridl-family-concept.md §8.1 (layout), §10 (naming ledger).
 - docs/ROADMAP.md — epic E0 stories and exit criteria.

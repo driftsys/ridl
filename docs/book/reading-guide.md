@@ -32,7 +32,7 @@ Writing your first `.ridl` file rather than reading a specification? Start with
 [First steps](first-steps.md), then [Getting started](getting-started.md).
 
 For the motivation and the big picture, read the concept note
-([`docs/wip/ridl-family-concept.md`](https://github.com/driftsys/ridl/blob/main/docs/wip/ridl-family-concept.md));
+([`docs/technotes/ridl-family-concept.md`](https://github.com/driftsys/ridl/blob/main/docs/technotes/ridl-family-concept.md));
 for the shared surface rules across every profile, the general form
 ([`docs/specification/family-general-form.md`](https://github.com/driftsys/ridl/blob/main/docs/specification/family-general-form.md)).
 Building the toolchain? Start with

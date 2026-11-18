@@ -43,3 +43,8 @@ it — for decisions that bind downstream work, see
   Pixel 5 tables for a Cortex-A55 and a Cortex-A76 core, each with the update
   and encode, verify and decode apart: time, ratios to podbuf, CPU load, mixes
   and allocations per operation.
+- **ridl-family-concept.md** — the concept note that proposed the family: the
+  motivation, the shared cores, the profiles, the platform and IR model, and the
+  naming ledger. It was written before ADR-0012 and its banner lists what has
+  changed since (four languages, the real crate layout, an ADR-0003 that was
+  never written). The specifications and the ADRs are the as-built record.

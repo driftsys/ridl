@@ -6,6 +6,14 @@
 Status: **Draft — exploratory concept note** (pre-ADR). Written to align on
 direction before committing to ADR-0003 and per-language specification drafts.
 
+> **Status of this note.** The family is four languages, not five: ADR-0012
+> ([`ADR-0012-interaction-boundary-model.md`](../decisions/ADR-0012-interaction-boundary-model.md))
+> retired `uxdl`. The repository tree of §8.1 is not the layout: every crate
+> lives at `crates/<crate-name>/`. The ADR-0003 that this note was written to
+> feed was never written, and no ADR-0003 exists under `docs/decisions/`. The
+> specifications and the ADRs are the as-built record; this note is background
+> and nothing binds to it.
+
 Scope: this note proposes extending RIDL from a single interface-description
 language into a **family of five languages sharing one grammar, one toolchain,
 and one set of reusable semantic cores**. It records the reasoning settled in
