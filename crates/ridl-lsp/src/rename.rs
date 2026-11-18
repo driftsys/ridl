@@ -7,18 +7,19 @@
 //! does not resolve a member, and a member rename would need its own resolution
 //! pass.
 //!
-//! The edit is assembled from three sources, because no single walk covers them
+//! The edit is assembled from four sources, because no single walk covers them
 //! all:
 //!
 //! 1. the declaration site itself;
 //! 2. every resolved reference, via [`nav::find_references`] — a qualified
 //!    reference (`pkg.Name`) spans the whole path, so each reference is narrowed
 //!    to its final segment with [`nav::final_segment_range`];
-//! 3. a **separate import-statement pass**: [`nav::find_references`] deliberately
-//!    skips import lines (they are not references the resolver walks), so
-//!    renaming would leave `import pkg.OldName` dangling. This pass walks every
-//!    importing package's `import` declarations and rewrites the imported-name
-//!    segment — never the alias (`import pkg.OldName as Alias` keeps `Alias`);
+//! 3. a **separate import-statement pass**: [`nav::find_references`] includes
+//!    import lines for services, but skips them for other symbols. This pass
+//!    walks every importing package's `import` declarations, checks for binding
+//!    collisions and rewrites the imported-name segment — never the alias
+//!    (`import pkg.OldName as Alias` keeps `Alias`). Duplicate edits from the
+//!    service reference walk are removed when the edits are assembled;
 //! 4. every doc link and `@see` target that resolves to the symbol, via
 //!    [`nav::doc_link_references`] (ADR-0026) — the segment that names the
 //!    symbol, so `[veh.common.Gear.PARK]` keeps its path and its member.

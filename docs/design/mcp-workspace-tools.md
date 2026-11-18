@@ -59,24 +59,21 @@ The behaviour that is not in the README:
   protobuf JSON form (the pbjson serde impls in `ridl-ir`, the form `.ir.json`
   snapshots use), so a field the IR gains later appears with no change to the
   tool.
-- **`ridl_list_interactions`** returns each interaction as the IR `Decl`, whose
-  kind is one of `signal`, `event`, `command`, `query`, `fixed`, or a `reserved`
-  tombstone. An inline service is looked up by joining its package and declared
-  name to the IR global name. A list-form service is refused with the list of
-  interfaces to query. `ridl_resolve` reports kind `service` and public
-  visibility; `ridl_describe_type` refuses either service form.
-- **`ridl_references`** resolves the target as `ridl_resolve` does, to a
-  canonical `pkg.Name`. It walks the canonical JSON of every declaration, every
-  interface and every service of every workspace package, and collects each
-  string that is a type reference. The IR writes a reference in the same package
-  as a bare `Name` and a reference across packages as `pkg.Name`, so a bare
-  reference is qualified with its own package before the comparison. Results are
-  reported once for each (declaration, interaction) pair. `ridl.std` is not
-  walked: a standard type cannot refer to a workspace type. `kind` is
-  `declaration` (a package-level declaration other than an interface),
-  `interface`, `service` or `component`. A reference inside a service reports
-  the service's name as its declaration. A service target adds no new kind of
-  use; components offering it are not reported (ADR-0034 decision 3).
+- **`ridl_list_interactions`** looks up an inline service by joining its package
+  and declared name to the IR global name. The accepted declarations and results
+  are specified in the README's
+  [`ridl_list_interactions`](../../crates/ridl-mcp/README.md#ridl_list_interactions)
+  section; service resolution and type-description contracts are in
+  [`ridl_resolve`](../../crates/ridl-mcp/README.md#ridl_resolve) and
+  [`ridl_describe_type`](../../crates/ridl-mcp/README.md#ridl_describe_type).
+- **`ridl_references`** walks the canonical JSON of every declaration, interface
+  and service of every workspace package, and collects each string that is a
+  type reference. The IR writes a reference in the same package as a bare `Name`
+  and a reference across packages as `pkg.Name`, so a bare reference is
+  qualified with its own package before the comparison. A standard type cannot
+  refer to a workspace type, which is why `ridl.std` is not walked. The lookup,
+  result and service-target contracts are specified in the README's
+  [`ridl_references`](../../crates/ridl-mcp/README.md#ridl_references) section.
 - **rsdl component uses.** `ridl_references` and `ridl_dependencies` also read
   the lowered system, `WorkspaceOutput.system`, because components exist only
   there. For each component whose `package` is not empty, each `Require` whose
@@ -237,9 +234,11 @@ forms); an overlay outside the workspace or not a source file; a name with no
 match (the message lists up to 10 declared canonical names that contain it,
 ignoring case, sorted, and ends after the name when there are none); a bare name
 with several matches (every canonical name, and that `pkg.Name` or `from`
-selects one); `ridl_describe_type` given an interface; `ridl_list_interactions`
-given a declaration that is not an interface (the message points to
-`ridl_describe_type`); a `from` or `ridl_dependencies` `package` that names no
+selects one); `ridl_describe_type` given an interface or service;
+`ridl_list_interactions` given a list-form service (the message lists its
+interfaces to query separately), or a declaration that is neither an interface
+nor a service (the message points to `ridl_describe_type`); inline-shape
+services are accepted; a `from` or `ridl_dependencies` `package` that names no
 workspace package (the message lists the packages); a declaration with no kind
 (the message advises `ridl_check`); an unknown code or category (the five
 namespaces, and that diff category words are accepted); a `ridl_diff`

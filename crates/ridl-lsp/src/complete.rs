@@ -36,8 +36,9 @@
 //! - at the top level → the four rsdl declaration keywords;
 //! - at the start of a component line → `offers` and `requires`; in a
 //!   deployment body → `machine`;
-//! - after `offers` → every service of the catalog; after `requires` → the
-//!   interfaces the package sees, the interfaces of the other packages of the
+//! - after `offers` → every service of the catalog, by its bare name or import
+//!   alias when in scope, otherwise by its qualified name; after `requires` →
+//!   the interfaces the package sees, the interfaces of the other packages of the
 //!   workspace by their qualified names, and the services with an inline shape;
 //! - on a member line of a `system` or a `distribution` → the components and
 //!   the services no component offers (RSDL-504); on the placement line of a
