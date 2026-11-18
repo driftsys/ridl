@@ -519,6 +519,47 @@ mod tests {
         assert!(service_catalog(&db, ws, std).entries.is_empty());
     }
 
+    /// A service that loses TYPL-009 to an earlier typl definition of the same
+    /// name is not in the catalog.
+    #[test]
+    fn service_catalog_skips_a_service_that_an_earlier_definition_names() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(&db, "a", "package a\ntype S: u8\nservice S : Foo\n");
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+
+        assert!(service_catalog(&db, ws, std).entries.is_empty());
+    }
+
+    /// The first service of a name wins across the files of one package, in
+    /// file order, not only within one file.
+    #[test]
+    fn service_catalog_keeps_the_first_service_of_a_name_across_files() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = Package::new(
+            &db,
+            "a".to_string(),
+            "a".to_string(),
+            vec![
+                file(&db, "a/one.ridl", "package a\nservice S : Foo\n"),
+                file(&db, "a/two.ridl", "package a\nservice S : Bar\n"),
+            ],
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            TimingDefaults::default(),
+            None,
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+
+        assert_eq!(
+            service_catalog(&db, ws, std).entries["a.S"].interface_refs,
+            ["Foo"]
+        );
+    }
+
     /// A declared service name is a local of its package, so it shadows an
     /// import of the same name and a shape reference to it stays bare.
     #[test]

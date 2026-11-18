@@ -4973,6 +4973,28 @@ service:veh.common.Climate 2
             1,
             "{codes:?}"
         );
+        let diag = loaded
+            .diagnostics
+            .iter()
+            .find(|d| d.code == DiagCode::MANI_023)
+            .expect("MANI-023 is reported");
+        let manifest = loaded.sources.path(diag.primary.file).unwrap();
+        assert!(manifest.ends_with("x/ridl.toml"), "{manifest}");
+        let text = loaded.sources.text(diag.primary.file).unwrap();
+        let range = diag.primary.range;
+        assert_eq!(
+            text[usize::from(range.start())..usize::from(range.end())].trim_matches('"'),
+            "x",
+            "reported on the unit's `[package] name`"
+        );
+        let sep = std::path::MAIN_SEPARATOR;
+        for directory in [format!("x{sep}a.b"), format!("x{sep}a{sep}b")] {
+            assert!(
+                diag.message.contains(&directory),
+                "`{directory}` in {}",
+                diag.message
+            );
+        }
         let named: Vec<_> = loaded
             .workspace
             .packages(&db)
