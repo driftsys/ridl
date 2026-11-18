@@ -1326,6 +1326,35 @@ fn completion_after_colon_offers_types_and_primitives() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// A service is not a type, so a field type position does not offer one.
+#[test]
+fn completion_in_a_type_position_does_not_offer_a_service() {
+    let uri =
+        path_to_uri("/ridl-lsp-complete/no-service.ridl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // `struct Holder { item: }` on line 3; a cursor at column 22 sits just
+    // past `: `.
+    let text = "package demo\ninterface I {}\nservice Doors : I\nstruct Holder { item: }\n";
+    did_open(&client, &uri, text);
+    let items = complete_at(&client, 10, uri.clone(), pos(3, 22));
+    let offered = labels(&items);
+
+    assert!(
+        offered.contains(&"integer"),
+        "a primitive offered: {offered:?}"
+    );
+    assert!(
+        !offered.contains(&"Doors"),
+        "a service offered: {offered:?}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// (b) Completion after `import` offers the known package names, and after a
 /// completed package path offers that package's public symbols.
 #[test]
@@ -7566,7 +7595,11 @@ fn completion_after_offers_lists_services_in_scope_bare_and_qualified() {
     }
     did_open(&client, &local, text);
     let items = complete_at(&client, 14, local, pos_after(text, "offers ", 0));
-    assert!(labels(&items).contains(&"AdaptiveCruise"));
+    let got = labels(&items);
+    assert!(got.contains(&"AdaptiveCruise"), "{got:?}");
+    // A service in scope by its bare name is not offered a second time under
+    // its global name.
+    assert!(!got.contains(&"veh.adas.AdaptiveCruise"), "{got:?}");
     shut_down(&client, 15);
     server.join().unwrap().unwrap();
 }
@@ -7676,6 +7709,25 @@ fn service_rename_respects_rsdl_binding_and_namespace_collisions() {
         2,
         "only the two imports, not the component member: {edits:?}"
     );
+    for occurrence in [0, 1] {
+        let range = range_of(&text, "Inline", occurrence);
+        assert!(
+            edits
+                .iter()
+                .any(|edit| edit.range == range && edit.new_text == "Diagnostics"),
+            "import {occurrence} at {range:?}: {edits:?}"
+        );
+    }
+    let declaration_edits = edits_for(&edit, &contracts);
+    for occurrence in [0, 1] {
+        let range = range_of(SERVICE_NAMES, "Inline", occurrence);
+        assert!(
+            declaration_edits
+                .iter()
+                .any(|edit| edit.range == range && edit.new_text == "Diagnostics"),
+            "{range:?}: {declaration_edits:?}"
+        );
+    }
     for (id, new_name) in [(11, "Occupied"), (12, "Provider"), (13, "lowercase")] {
         let cursor = find_pos(SERVICE_NAMES, "AdaptiveCruise", 0);
         let result = rename_raw(&client, id, contracts.clone(), cursor, new_name);
@@ -7789,7 +7841,17 @@ fn service_rename_preserves_an_explicit_alias_equal_to_the_old_name() {
                 .any(|edit| edit.range == range && edit.new_text == "Cruising")
         );
     }
-    assert_eq!(edits_for(&edit, &contracts).len(), 2);
+    let declaration_edits = edits_for(&edit, &contracts);
+    assert_eq!(declaration_edits.len(), 2);
+    for occurrence in [0, 1] {
+        let range = range_of(SERVICE_NAMES, "AdaptiveCruise", occurrence);
+        assert!(
+            declaration_edits
+                .iter()
+                .any(|edit| edit.range == range && edit.new_text == "Cruising"),
+            "{range:?}: {declaration_edits:?}"
+        );
+    }
     shut_down(&client, 11);
     server.join().unwrap().unwrap();
 }

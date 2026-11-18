@@ -756,6 +756,7 @@ fn is_import(node: SyntaxNode) -> bool {
 }
 
 /// The visible named types plus the primitives, for a type/backing position.
+/// A constant and a service are left out: neither is a type.
 fn type_completions(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -767,7 +768,8 @@ fn type_completions(
     let mut items: Vec<lt::CompletionItem> = resolution
         .symbols
         .iter()
-        .filter(|(_, symbol)| symbol.kind != SymbolKind::Const)
+        // A constant and a service are not types (ridl §14.0, §14.5).
+        .filter(|(_, symbol)| !matches!(symbol.kind, SymbolKind::Const | SymbolKind::Service))
         .map(|(name, symbol)| {
             documented(
                 item(
