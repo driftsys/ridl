@@ -1525,6 +1525,47 @@ service FaultAccess {
         );
     }
 
+    /// Every slot that names a service ends its unknown-name message with the
+    /// `CamelCase` hint when the reference is the old dotted spelling, every
+    /// segment lowercase, and without it when one segment is not lowercase
+    /// (ADR-0034 decision 5).
+    #[test]
+    fn every_service_slot_gives_the_old_name_hint_for_an_all_lowercase_reference() {
+        const HINT: &str = "a service is named by its CamelCase name";
+        let ridl = (
+            "adas.ridl",
+            "package veh.adas\ninterface CruiseControl {}\nservice AdaptiveCruise : CruiseControl\n",
+        );
+        for (code, template) in [
+            ("RSDL-312", "component C { requires REF }\nsystem V { C }\n"),
+            ("RSDL-602", "component C {}\nsystem V { C, REF }\n"),
+            (
+                "RSDL-702",
+                "component C {}\nsystem V { C }\ndeployment D for V { machine M { C, REF } }\n",
+            ),
+            (
+                "RSDL-903",
+                "component C {}\nsystem V { C }\ndistribution X { C, REF }\n",
+            ),
+        ] {
+            for (reference, hinted) in [("veh.adas.cruise", true), ("veh.adas.Cruise", false)] {
+                let text = format!("package veh.top\n{}", template.replace("REF", reference));
+                let system = check(&[("veh.adas", &[ridl]), ("veh.top", &[("top.rsdl", &text)])]);
+                let diagnostic = system
+                    .diagnostics
+                    .iter()
+                    .find(|d| d.code.as_str() == code)
+                    .unwrap_or_else(|| panic!("{code} for `{text}`: {:?}", system.diagnostics));
+                assert_eq!(
+                    diagnostic.message.contains(HINT),
+                    hinted,
+                    "{code} `{reference}`: {}",
+                    diagnostic.message
+                );
+            }
+        }
+    }
+
     /// A `system`, a `distribution` and a `deployment` are in the package
     /// namespace beside a service, as a component is (ADR-0034 decision 2).
     #[test]
