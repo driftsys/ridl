@@ -5,7 +5,7 @@ package veh.engine
 // tokens the ridl profile activates (ridl reference §2).
 
 interface EngineStatus
-service engine.status
+service EngineStatusService
 
 /// Engine speed, published every cycle.
 signal speed: Speed = 0.0 @ 10ms

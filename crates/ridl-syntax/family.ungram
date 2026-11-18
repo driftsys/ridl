@@ -268,13 +268,15 @@ TimingRange =
 // A `service` is the global, published declaration of one or more interfaces
 // (ADR-0015 decision 12) — either naming shapes in a comma-separated list
 // after `:`, or carrying one inline body of interactions for a one-off global
-// contract (§14.5); never both (ADR-0015 decision 14). The dotted global name
-// is reverse-domain, like a package (ADR-0002 §1). The inline body reuses the
+// contract (§14.5); never both (ADR-0015 decision 14). The declared name is
+// one `CamelCase` identifier; the global name is the package name followed by
+// it (ADR-0034). The dotted spelling is still parsed, so that the checker
+// reports it (RIDL-142). The inline body reuses the
 // `InterfaceMember` alternation, so an inline shape runs the same structural
 // pass as an interface. `ServiceDef::shapes()` yields the named shape list;
 // `ServiceDef::inline_members()` yields the inline body's members;
-// `DottedName::segments()` (hand-written in src/ast.rs) reads the name
-// segments. The two generated accessors are form-specific — see the
+// `ServiceDef::declared_name()` and `DottedName::segments()` (hand-written in
+// src/ast.rs) read the name. The two generated accessors are form-specific — see the
 // `ServiceShape` enum in src/ast.rs for the discipline.
 //
 // Commas are REQUIRED between shapes, diverging from the family's
@@ -293,8 +295,10 @@ ServiceDef =
   ( ':' shapes:PathType (',' shapes:PathType)* ','?
   | '{' (inline_members:InterfaceMember ','?)* '}' )
 
-// A dotted global name — `veh.adas.cruise` (ADR-0002 §1). Consumers read the
-// segment tokens through `DottedName::segments()` in src/ast.rs.
+// The name of a service. A declared name has one segment (`Doors`); the
+// dotted spelling (`veh.adas.cruise`) is parsed so that the checker reports
+// it. Consumers read the segment tokens through `DottedName::segments()` in
+// src/ast.rs.
 DottedName =
   'ident' ('.' 'ident')*
 

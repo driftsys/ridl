@@ -3451,56 +3451,62 @@ impl ::core::default::Default for WheelDiagnosticsTickBoundsElement {
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VehHvacCabinReplayTraceParams {}
+pub struct VehClusterHvacCabinReplayTraceParams {}
 #[allow(clippy::derivable_impls)]
-impl ::core::default::Default for VehHvacCabinReplayTraceParams {
+impl ::core::default::Default for VehClusterHvacCabinReplayTraceParams {
     fn default() -> Self {
-        VehHvacCabinReplayTraceParams {}
+        VehClusterHvacCabinReplayTraceParams {
+        }
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VehHvacCabinRebalanceParams {}
+pub struct VehClusterHvacCabinRebalanceParams {}
 #[allow(clippy::derivable_impls)]
-impl ::core::default::Default for VehHvacCabinRebalanceParams {
+impl ::core::default::Default for VehClusterHvacCabinRebalanceParams {
     fn default() -> Self {
-        VehHvacCabinRebalanceParams {}
+        VehClusterHvacCabinRebalanceParams {
+        }
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VehHvacCabinGetBoundsParams {}
+pub struct VehClusterHvacCabinGetBoundsParams {}
 #[allow(clippy::derivable_impls)]
-impl ::core::default::Default for VehHvacCabinGetBoundsParams {
+impl ::core::default::Default for VehClusterHvacCabinGetBoundsParams {
     fn default() -> Self {
-        VehHvacCabinGetBoundsParams {}
+        VehClusterHvacCabinGetBoundsParams {
+        }
     }
 }
 #[derive(Debug, Clone, PartialEq)]
-pub struct VehHvacCabinGetBoundsReply {
+pub struct VehClusterHvacCabinGetBoundsReply {
     pub min: crate::veh::common::Temperature,
     pub max: crate::veh::common::Temperature,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VehHvacCabinGetClimateParams {}
+pub struct VehClusterHvacCabinGetClimateParams {}
 #[allow(clippy::derivable_impls)]
-impl ::core::default::Default for VehHvacCabinGetClimateParams {
+impl ::core::default::Default for VehClusterHvacCabinGetClimateParams {
     fn default() -> Self {
-        VehHvacCabinGetClimateParams {}
+        VehClusterHvacCabinGetClimateParams {
+        }
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VehHvacCabinGetCabinTempParams {}
+pub struct VehClusterHvacCabinGetCabinTempParams {}
 #[allow(clippy::derivable_impls)]
-impl ::core::default::Default for VehHvacCabinGetCabinTempParams {
+impl ::core::default::Default for VehClusterHvacCabinGetCabinTempParams {
     fn default() -> Self {
-        VehHvacCabinGetCabinTempParams {}
+        VehClusterHvacCabinGetCabinTempParams {
+        }
     }
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VehHvacCabinScaledFanParams {}
+pub struct VehClusterHvacCabinScaledFanParams {}
 #[allow(clippy::derivable_impls)]
-impl ::core::default::Default for VehHvacCabinScaledFanParams {
+impl ::core::default::Default for VehClusterHvacCabinScaledFanParams {
     fn default() -> Self {
-        VehHvacCabinScaledFanParams {}
+        VehClusterHvacCabinScaledFanParams {
+        }
     }
 }
 /// `DiagFilter` carries no `Payload<FlatBuffers>` implementation.
@@ -5182,7 +5188,7 @@ for WheelDiagnosticsReadSpanReply {
         __ridl_fb_decode_WheelDiagnosticsReadSpanReply(__view.buf, __view.table)
     }
 }
-/// A `VehHvacCabinReplayTraceParams` value in FlatBuffers bytes, read in place without copying it.
+/// A `VehClusterHvacCabinReplayTraceParams` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -5190,21 +5196,22 @@ for WheelDiagnosticsReadSpanReply {
 /// collection's elements have no one view type to hand back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
-pub struct VehHvacCabinReplayTraceParamsFbView<'a> {
+pub struct VehClusterHvacCabinReplayTraceParamsFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
-impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinReplayTraceParamsFbView<'a> {
+impl<'a> ::ridl_rt::payload::View<'a>
+for VehClusterHvacCabinReplayTraceParamsFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
-impl<'a> VehHvacCabinReplayTraceParamsFbView<'a> {}
+impl<'a> VehClusterHvacCabinReplayTraceParamsFbView<'a> {}
 #[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_encode_VehHvacCabinReplayTraceParams(
-    _value: &VehHvacCabinReplayTraceParams,
+pub(crate) fn __ridl_fb_encode_VehClusterHvacCabinReplayTraceParams(
+    _value: &VehClusterHvacCabinReplayTraceParams,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
     ::ridl_rt::flatbuffers::Pos,
@@ -5213,404 +5220,37 @@ pub(crate) fn __ridl_fb_encode_VehHvacCabinReplayTraceParams(
     builder.push_table(4usize, 4usize, 0u16, &[])
 }
 #[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_verify_VehHvacCabinReplayTraceParams(
+pub(crate) fn __ridl_fb_verify_VehClusterHvacCabinReplayTraceParams(
     _buf: &[::core::primitive::u8],
     _table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_decode_VehHvacCabinReplayTraceParams(
+pub(crate) fn __ridl_fb_decode_VehClusterHvacCabinReplayTraceParams(
     _buf: &[::core::primitive::u8],
     _table: ::core::primitive::usize,
-) -> VehHvacCabinReplayTraceParams {
-    VehHvacCabinReplayTraceParams {}
+) -> VehClusterHvacCabinReplayTraceParams {
+    VehClusterHvacCabinReplayTraceParams {
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
-for VehHvacCabinReplayTraceParams {
-    /// The largest FlatBuffers buffer any legal `VehHvacCabinReplayTraceParams` encodes to: 33 bytes.
+for VehClusterHvacCabinReplayTraceParams {
+    /// The largest FlatBuffers buffer any legal `VehClusterHvacCabinReplayTraceParams` encodes to: 33 bytes.
     const MAX_SIZE: ::core::primitive::usize = 33usize;
     type Buffer = [::core::primitive::u8; 33usize];
     const BUFFER: Self::Buffer = [0u8; 33usize];
-    type View<'a> = VehHvacCabinReplayTraceParamsFbView<'a>;
+    type View<'a> = VehClusterHvacCabinReplayTraceParamsFbView<'a>;
     fn encode<'o>(
         &self,
         out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, VehHvacCabinReplayTraceParamsFbView<'o>>,
+        ::ridl_rt::payload::Encoded<'o, VehClusterHvacCabinReplayTraceParamsFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_VehHvacCabinReplayTraceParams(self, &mut builder)?;
-        let bytes = builder.finish(__root, 8usize)?;
-        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
-        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
-            bytes,
-            view: VehHvacCabinReplayTraceParamsFbView {
-                buf: bytes,
-                table,
-            },
-        })
-    }
-    fn verify(
-        buf: &[::core::primitive::u8],
-    ) -> ::core::result::Result<
-        VehHvacCabinReplayTraceParamsFbView<'_>,
-        ::ridl_rt::payload::VerifyError,
-    > {
-        let table = ::ridl_rt::flatbuffers::root(buf)
-            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_VehHvacCabinReplayTraceParams(buf, table)?;
-        ::core::result::Result::Ok(VehHvacCabinReplayTraceParamsFbView {
-            buf,
-            table,
-        })
-    }
-    fn decode(
-        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
-    ) -> Self {
-        let __view = r.view();
-        __ridl_fb_decode_VehHvacCabinReplayTraceParams(__view.buf, __view.table)
-    }
-}
-/// A `VehHvacCabinRebalanceParams` value in FlatBuffers bytes, read in place without copying it.
-///
-/// A scalar, a string, a byte sequence and a nested table are
-/// read in place and allocate nothing. A union and a collection
-/// are decoded on access instead: a union's arms and a
-/// collection's elements have no one view type to hand back.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(deprecated)]
-pub struct VehHvacCabinRebalanceParamsFbView<'a> {
-    pub(crate) buf: &'a [::core::primitive::u8],
-    pub(crate) table: ::core::primitive::usize,
-}
-#[allow(deprecated)]
-impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinRebalanceParamsFbView<'a> {
-    fn bytes(&self) -> &'a [::core::primitive::u8] {
-        self.buf
-    }
-}
-#[allow(deprecated)]
-impl<'a> VehHvacCabinRebalanceParamsFbView<'a> {}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_encode_VehHvacCabinRebalanceParams(
-    _value: &VehHvacCabinRebalanceParams,
-    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
-) -> ::core::result::Result<
-    ::ridl_rt::flatbuffers::Pos,
-    ::ridl_rt::payload::EncodeError,
-> {
-    builder.push_table(4usize, 4usize, 0u16, &[])
-}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_verify_VehHvacCabinRebalanceParams(
-    _buf: &[::core::primitive::u8],
-    _table: ::core::primitive::usize,
-) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    ::core::result::Result::Ok(())
-}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_decode_VehHvacCabinRebalanceParams(
-    _buf: &[::core::primitive::u8],
-    _table: ::core::primitive::usize,
-) -> VehHvacCabinRebalanceParams {
-    VehHvacCabinRebalanceParams {}
-}
-#[allow(deprecated)]
-impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
-for VehHvacCabinRebalanceParams {
-    /// The largest FlatBuffers buffer any legal `VehHvacCabinRebalanceParams` encodes to: 33 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 33usize;
-    type Buffer = [::core::primitive::u8; 33usize];
-    const BUFFER: Self::Buffer = [0u8; 33usize];
-    type View<'a> = VehHvacCabinRebalanceParamsFbView<'a>;
-    fn encode<'o>(
-        &self,
-        out: &'o mut [::core::primitive::u8],
-    ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, VehHvacCabinRebalanceParamsFbView<'o>>,
-        ::ridl_rt::payload::EncodeError,
-    > {
-        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_VehHvacCabinRebalanceParams(self, &mut builder)?;
-        let bytes = builder.finish(__root, 8usize)?;
-        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
-        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
-            bytes,
-            view: VehHvacCabinRebalanceParamsFbView {
-                buf: bytes,
-                table,
-            },
-        })
-    }
-    fn verify(
-        buf: &[::core::primitive::u8],
-    ) -> ::core::result::Result<
-        VehHvacCabinRebalanceParamsFbView<'_>,
-        ::ridl_rt::payload::VerifyError,
-    > {
-        let table = ::ridl_rt::flatbuffers::root(buf)
-            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_VehHvacCabinRebalanceParams(buf, table)?;
-        ::core::result::Result::Ok(VehHvacCabinRebalanceParamsFbView {
-            buf,
-            table,
-        })
-    }
-    fn decode(
-        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
-    ) -> Self {
-        let __view = r.view();
-        __ridl_fb_decode_VehHvacCabinRebalanceParams(__view.buf, __view.table)
-    }
-}
-/// A `VehHvacCabinGetBoundsParams` value in FlatBuffers bytes, read in place without copying it.
-///
-/// A scalar, a string, a byte sequence and a nested table are
-/// read in place and allocate nothing. A union and a collection
-/// are decoded on access instead: a union's arms and a
-/// collection's elements have no one view type to hand back.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(deprecated)]
-pub struct VehHvacCabinGetBoundsParamsFbView<'a> {
-    pub(crate) buf: &'a [::core::primitive::u8],
-    pub(crate) table: ::core::primitive::usize,
-}
-#[allow(deprecated)]
-impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinGetBoundsParamsFbView<'a> {
-    fn bytes(&self) -> &'a [::core::primitive::u8] {
-        self.buf
-    }
-}
-#[allow(deprecated)]
-impl<'a> VehHvacCabinGetBoundsParamsFbView<'a> {}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_encode_VehHvacCabinGetBoundsParams(
-    _value: &VehHvacCabinGetBoundsParams,
-    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
-) -> ::core::result::Result<
-    ::ridl_rt::flatbuffers::Pos,
-    ::ridl_rt::payload::EncodeError,
-> {
-    builder.push_table(4usize, 4usize, 0u16, &[])
-}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_verify_VehHvacCabinGetBoundsParams(
-    _buf: &[::core::primitive::u8],
-    _table: ::core::primitive::usize,
-) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    ::core::result::Result::Ok(())
-}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_decode_VehHvacCabinGetBoundsParams(
-    _buf: &[::core::primitive::u8],
-    _table: ::core::primitive::usize,
-) -> VehHvacCabinGetBoundsParams {
-    VehHvacCabinGetBoundsParams {}
-}
-#[allow(deprecated)]
-impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
-for VehHvacCabinGetBoundsParams {
-    /// The largest FlatBuffers buffer any legal `VehHvacCabinGetBoundsParams` encodes to: 33 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 33usize;
-    type Buffer = [::core::primitive::u8; 33usize];
-    const BUFFER: Self::Buffer = [0u8; 33usize];
-    type View<'a> = VehHvacCabinGetBoundsParamsFbView<'a>;
-    fn encode<'o>(
-        &self,
-        out: &'o mut [::core::primitive::u8],
-    ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, VehHvacCabinGetBoundsParamsFbView<'o>>,
-        ::ridl_rt::payload::EncodeError,
-    > {
-        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_VehHvacCabinGetBoundsParams(self, &mut builder)?;
-        let bytes = builder.finish(__root, 8usize)?;
-        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
-        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
-            bytes,
-            view: VehHvacCabinGetBoundsParamsFbView {
-                buf: bytes,
-                table,
-            },
-        })
-    }
-    fn verify(
-        buf: &[::core::primitive::u8],
-    ) -> ::core::result::Result<
-        VehHvacCabinGetBoundsParamsFbView<'_>,
-        ::ridl_rt::payload::VerifyError,
-    > {
-        let table = ::ridl_rt::flatbuffers::root(buf)
-            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_VehHvacCabinGetBoundsParams(buf, table)?;
-        ::core::result::Result::Ok(VehHvacCabinGetBoundsParamsFbView {
-            buf,
-            table,
-        })
-    }
-    fn decode(
-        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
-    ) -> Self {
-        let __view = r.view();
-        __ridl_fb_decode_VehHvacCabinGetBoundsParams(__view.buf, __view.table)
-    }
-}
-/// A `VehHvacCabinGetClimateParams` value in FlatBuffers bytes, read in place without copying it.
-///
-/// A scalar, a string, a byte sequence and a nested table are
-/// read in place and allocate nothing. A union and a collection
-/// are decoded on access instead: a union's arms and a
-/// collection's elements have no one view type to hand back.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(deprecated)]
-pub struct VehHvacCabinGetClimateParamsFbView<'a> {
-    pub(crate) buf: &'a [::core::primitive::u8],
-    pub(crate) table: ::core::primitive::usize,
-}
-#[allow(deprecated)]
-impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinGetClimateParamsFbView<'a> {
-    fn bytes(&self) -> &'a [::core::primitive::u8] {
-        self.buf
-    }
-}
-#[allow(deprecated)]
-impl<'a> VehHvacCabinGetClimateParamsFbView<'a> {}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_encode_VehHvacCabinGetClimateParams(
-    _value: &VehHvacCabinGetClimateParams,
-    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
-) -> ::core::result::Result<
-    ::ridl_rt::flatbuffers::Pos,
-    ::ridl_rt::payload::EncodeError,
-> {
-    builder.push_table(4usize, 4usize, 0u16, &[])
-}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_verify_VehHvacCabinGetClimateParams(
-    _buf: &[::core::primitive::u8],
-    _table: ::core::primitive::usize,
-) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    ::core::result::Result::Ok(())
-}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_decode_VehHvacCabinGetClimateParams(
-    _buf: &[::core::primitive::u8],
-    _table: ::core::primitive::usize,
-) -> VehHvacCabinGetClimateParams {
-    VehHvacCabinGetClimateParams {}
-}
-#[allow(deprecated)]
-impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
-for VehHvacCabinGetClimateParams {
-    /// The largest FlatBuffers buffer any legal `VehHvacCabinGetClimateParams` encodes to: 33 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 33usize;
-    type Buffer = [::core::primitive::u8; 33usize];
-    const BUFFER: Self::Buffer = [0u8; 33usize];
-    type View<'a> = VehHvacCabinGetClimateParamsFbView<'a>;
-    fn encode<'o>(
-        &self,
-        out: &'o mut [::core::primitive::u8],
-    ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, VehHvacCabinGetClimateParamsFbView<'o>>,
-        ::ridl_rt::payload::EncodeError,
-    > {
-        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_VehHvacCabinGetClimateParams(self, &mut builder)?;
-        let bytes = builder.finish(__root, 8usize)?;
-        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
-        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
-            bytes,
-            view: VehHvacCabinGetClimateParamsFbView {
-                buf: bytes,
-                table,
-            },
-        })
-    }
-    fn verify(
-        buf: &[::core::primitive::u8],
-    ) -> ::core::result::Result<
-        VehHvacCabinGetClimateParamsFbView<'_>,
-        ::ridl_rt::payload::VerifyError,
-    > {
-        let table = ::ridl_rt::flatbuffers::root(buf)
-            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_VehHvacCabinGetClimateParams(buf, table)?;
-        ::core::result::Result::Ok(VehHvacCabinGetClimateParamsFbView {
-            buf,
-            table,
-        })
-    }
-    fn decode(
-        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
-    ) -> Self {
-        let __view = r.view();
-        __ridl_fb_decode_VehHvacCabinGetClimateParams(__view.buf, __view.table)
-    }
-}
-/// A `VehHvacCabinGetCabinTempParams` value in FlatBuffers bytes, read in place without copying it.
-///
-/// A scalar, a string, a byte sequence and a nested table are
-/// read in place and allocate nothing. A union and a collection
-/// are decoded on access instead: a union's arms and a
-/// collection's elements have no one view type to hand back.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(deprecated)]
-pub struct VehHvacCabinGetCabinTempParamsFbView<'a> {
-    pub(crate) buf: &'a [::core::primitive::u8],
-    pub(crate) table: ::core::primitive::usize,
-}
-#[allow(deprecated)]
-impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinGetCabinTempParamsFbView<'a> {
-    fn bytes(&self) -> &'a [::core::primitive::u8] {
-        self.buf
-    }
-}
-#[allow(deprecated)]
-impl<'a> VehHvacCabinGetCabinTempParamsFbView<'a> {}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_encode_VehHvacCabinGetCabinTempParams(
-    _value: &VehHvacCabinGetCabinTempParams,
-    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
-) -> ::core::result::Result<
-    ::ridl_rt::flatbuffers::Pos,
-    ::ridl_rt::payload::EncodeError,
-> {
-    builder.push_table(4usize, 4usize, 0u16, &[])
-}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_verify_VehHvacCabinGetCabinTempParams(
-    _buf: &[::core::primitive::u8],
-    _table: ::core::primitive::usize,
-) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
-    ::core::result::Result::Ok(())
-}
-#[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_decode_VehHvacCabinGetCabinTempParams(
-    _buf: &[::core::primitive::u8],
-    _table: ::core::primitive::usize,
-) -> VehHvacCabinGetCabinTempParams {
-    VehHvacCabinGetCabinTempParams {}
-}
-#[allow(deprecated)]
-impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
-for VehHvacCabinGetCabinTempParams {
-    /// The largest FlatBuffers buffer any legal `VehHvacCabinGetCabinTempParams` encodes to: 33 bytes.
-    const MAX_SIZE: ::core::primitive::usize = 33usize;
-    type Buffer = [::core::primitive::u8; 33usize];
-    const BUFFER: Self::Buffer = [0u8; 33usize];
-    type View<'a> = VehHvacCabinGetCabinTempParamsFbView<'a>;
-    fn encode<'o>(
-        &self,
-        out: &'o mut [::core::primitive::u8],
-    ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, VehHvacCabinGetCabinTempParamsFbView<'o>>,
-        ::ridl_rt::payload::EncodeError,
-    > {
-        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_VehHvacCabinGetCabinTempParams(
+        let __root = __ridl_fb_encode_VehClusterHvacCabinReplayTraceParams(
             self,
             &mut builder,
         )?;
@@ -5618,7 +5258,7 @@ for VehHvacCabinGetCabinTempParams {
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
             bytes,
-            view: VehHvacCabinGetCabinTempParamsFbView {
+            view: VehClusterHvacCabinReplayTraceParamsFbView {
                 buf: bytes,
                 table,
             },
@@ -5627,13 +5267,13 @@ for VehHvacCabinGetCabinTempParams {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
-        VehHvacCabinGetCabinTempParamsFbView<'_>,
+        VehClusterHvacCabinReplayTraceParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_VehHvacCabinGetCabinTempParams(buf, table)?;
-        ::core::result::Result::Ok(VehHvacCabinGetCabinTempParamsFbView {
+        __ridl_fb_verify_VehClusterHvacCabinReplayTraceParams(buf, table)?;
+        ::core::result::Result::Ok(VehClusterHvacCabinReplayTraceParamsFbView {
             buf,
             table,
         })
@@ -5642,10 +5282,10 @@ for VehHvacCabinGetCabinTempParams {
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_VehHvacCabinGetCabinTempParams(__view.buf, __view.table)
+        __ridl_fb_decode_VehClusterHvacCabinReplayTraceParams(__view.buf, __view.table)
     }
 }
-/// A `VehHvacCabinScaledFanParams` value in FlatBuffers bytes, read in place without copying it.
+/// A `VehClusterHvacCabinRebalanceParams` value in FlatBuffers bytes, read in place without copying it.
 ///
 /// A scalar, a string, a byte sequence and a nested table are
 /// read in place and allocate nothing. A union and a collection
@@ -5653,21 +5293,21 @@ for VehHvacCabinGetCabinTempParams {
 /// collection's elements have no one view type to hand back.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(deprecated)]
-pub struct VehHvacCabinScaledFanParamsFbView<'a> {
+pub struct VehClusterHvacCabinRebalanceParamsFbView<'a> {
     pub(crate) buf: &'a [::core::primitive::u8],
     pub(crate) table: ::core::primitive::usize,
 }
 #[allow(deprecated)]
-impl<'a> ::ridl_rt::payload::View<'a> for VehHvacCabinScaledFanParamsFbView<'a> {
+impl<'a> ::ridl_rt::payload::View<'a> for VehClusterHvacCabinRebalanceParamsFbView<'a> {
     fn bytes(&self) -> &'a [::core::primitive::u8] {
         self.buf
     }
 }
 #[allow(deprecated)]
-impl<'a> VehHvacCabinScaledFanParamsFbView<'a> {}
+impl<'a> VehClusterHvacCabinRebalanceParamsFbView<'a> {}
 #[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_encode_VehHvacCabinScaledFanParams(
-    _value: &VehHvacCabinScaledFanParams,
+pub(crate) fn __ridl_fb_encode_VehClusterHvacCabinRebalanceParams(
+    _value: &VehClusterHvacCabinRebalanceParams,
     builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
 ) -> ::core::result::Result<
     ::ridl_rt::flatbuffers::Pos,
@@ -5676,41 +5316,45 @@ pub(crate) fn __ridl_fb_encode_VehHvacCabinScaledFanParams(
     builder.push_table(4usize, 4usize, 0u16, &[])
 }
 #[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_verify_VehHvacCabinScaledFanParams(
+pub(crate) fn __ridl_fb_verify_VehClusterHvacCabinRebalanceParams(
     _buf: &[::core::primitive::u8],
     _table: ::core::primitive::usize,
 ) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
     ::core::result::Result::Ok(())
 }
 #[allow(deprecated, non_snake_case)]
-pub(crate) fn __ridl_fb_decode_VehHvacCabinScaledFanParams(
+pub(crate) fn __ridl_fb_decode_VehClusterHvacCabinRebalanceParams(
     _buf: &[::core::primitive::u8],
     _table: ::core::primitive::usize,
-) -> VehHvacCabinScaledFanParams {
-    VehHvacCabinScaledFanParams {}
+) -> VehClusterHvacCabinRebalanceParams {
+    VehClusterHvacCabinRebalanceParams {
+    }
 }
 #[allow(deprecated)]
 impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
-for VehHvacCabinScaledFanParams {
-    /// The largest FlatBuffers buffer any legal `VehHvacCabinScaledFanParams` encodes to: 33 bytes.
+for VehClusterHvacCabinRebalanceParams {
+    /// The largest FlatBuffers buffer any legal `VehClusterHvacCabinRebalanceParams` encodes to: 33 bytes.
     const MAX_SIZE: ::core::primitive::usize = 33usize;
     type Buffer = [::core::primitive::u8; 33usize];
     const BUFFER: Self::Buffer = [0u8; 33usize];
-    type View<'a> = VehHvacCabinScaledFanParamsFbView<'a>;
+    type View<'a> = VehClusterHvacCabinRebalanceParamsFbView<'a>;
     fn encode<'o>(
         &self,
         out: &'o mut [::core::primitive::u8],
     ) -> ::core::result::Result<
-        ::ridl_rt::payload::Encoded<'o, VehHvacCabinScaledFanParamsFbView<'o>>,
+        ::ridl_rt::payload::Encoded<'o, VehClusterHvacCabinRebalanceParamsFbView<'o>>,
         ::ridl_rt::payload::EncodeError,
     > {
         let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
-        let __root = __ridl_fb_encode_VehHvacCabinScaledFanParams(self, &mut builder)?;
+        let __root = __ridl_fb_encode_VehClusterHvacCabinRebalanceParams(
+            self,
+            &mut builder,
+        )?;
         let bytes = builder.finish(__root, 8usize)?;
         let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
         ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
             bytes,
-            view: VehHvacCabinScaledFanParamsFbView {
+            view: VehClusterHvacCabinRebalanceParamsFbView {
                 buf: bytes,
                 table,
             },
@@ -5719,13 +5363,13 @@ for VehHvacCabinScaledFanParams {
     fn verify(
         buf: &[::core::primitive::u8],
     ) -> ::core::result::Result<
-        VehHvacCabinScaledFanParamsFbView<'_>,
+        VehClusterHvacCabinRebalanceParamsFbView<'_>,
         ::ridl_rt::payload::VerifyError,
     > {
         let table = ::ridl_rt::flatbuffers::root(buf)
             .map_err(::ridl_rt::payload::VerifyError::Structure)?;
-        __ridl_fb_verify_VehHvacCabinScaledFanParams(buf, table)?;
-        ::core::result::Result::Ok(VehHvacCabinScaledFanParamsFbView {
+        __ridl_fb_verify_VehClusterHvacCabinRebalanceParams(buf, table)?;
+        ::core::result::Result::Ok(VehClusterHvacCabinRebalanceParamsFbView {
             buf,
             table,
         })
@@ -5734,7 +5378,392 @@ for VehHvacCabinScaledFanParams {
         r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
     ) -> Self {
         let __view = r.view();
-        __ridl_fb_decode_VehHvacCabinScaledFanParams(__view.buf, __view.table)
+        __ridl_fb_decode_VehClusterHvacCabinRebalanceParams(__view.buf, __view.table)
+    }
+}
+/// A `VehClusterHvacCabinGetBoundsParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehClusterHvacCabinGetBoundsParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehClusterHvacCabinGetBoundsParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehClusterHvacCabinGetBoundsParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehClusterHvacCabinGetBoundsParams(
+    _value: &VehClusterHvacCabinGetBoundsParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehClusterHvacCabinGetBoundsParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehClusterHvacCabinGetBoundsParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehClusterHvacCabinGetBoundsParams {
+    VehClusterHvacCabinGetBoundsParams {
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehClusterHvacCabinGetBoundsParams {
+    /// The largest FlatBuffers buffer any legal `VehClusterHvacCabinGetBoundsParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehClusterHvacCabinGetBoundsParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehClusterHvacCabinGetBoundsParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehClusterHvacCabinGetBoundsParams(
+            self,
+            &mut builder,
+        )?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehClusterHvacCabinGetBoundsParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehClusterHvacCabinGetBoundsParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehClusterHvacCabinGetBoundsParams(buf, table)?;
+        ::core::result::Result::Ok(VehClusterHvacCabinGetBoundsParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehClusterHvacCabinGetBoundsParams(__view.buf, __view.table)
+    }
+}
+/// A `VehClusterHvacCabinGetClimateParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehClusterHvacCabinGetClimateParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehClusterHvacCabinGetClimateParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehClusterHvacCabinGetClimateParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehClusterHvacCabinGetClimateParams(
+    _value: &VehClusterHvacCabinGetClimateParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehClusterHvacCabinGetClimateParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehClusterHvacCabinGetClimateParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehClusterHvacCabinGetClimateParams {
+    VehClusterHvacCabinGetClimateParams {
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehClusterHvacCabinGetClimateParams {
+    /// The largest FlatBuffers buffer any legal `VehClusterHvacCabinGetClimateParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehClusterHvacCabinGetClimateParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehClusterHvacCabinGetClimateParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehClusterHvacCabinGetClimateParams(
+            self,
+            &mut builder,
+        )?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehClusterHvacCabinGetClimateParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehClusterHvacCabinGetClimateParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehClusterHvacCabinGetClimateParams(buf, table)?;
+        ::core::result::Result::Ok(VehClusterHvacCabinGetClimateParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehClusterHvacCabinGetClimateParams(__view.buf, __view.table)
+    }
+}
+/// A `VehClusterHvacCabinGetCabinTempParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehClusterHvacCabinGetCabinTempParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a>
+for VehClusterHvacCabinGetCabinTempParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehClusterHvacCabinGetCabinTempParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehClusterHvacCabinGetCabinTempParams(
+    _value: &VehClusterHvacCabinGetCabinTempParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehClusterHvacCabinGetCabinTempParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehClusterHvacCabinGetCabinTempParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehClusterHvacCabinGetCabinTempParams {
+    VehClusterHvacCabinGetCabinTempParams {
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehClusterHvacCabinGetCabinTempParams {
+    /// The largest FlatBuffers buffer any legal `VehClusterHvacCabinGetCabinTempParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehClusterHvacCabinGetCabinTempParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehClusterHvacCabinGetCabinTempParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehClusterHvacCabinGetCabinTempParams(
+            self,
+            &mut builder,
+        )?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehClusterHvacCabinGetCabinTempParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehClusterHvacCabinGetCabinTempParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehClusterHvacCabinGetCabinTempParams(buf, table)?;
+        ::core::result::Result::Ok(VehClusterHvacCabinGetCabinTempParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehClusterHvacCabinGetCabinTempParams(__view.buf, __view.table)
+    }
+}
+/// A `VehClusterHvacCabinScaledFanParams` value in FlatBuffers bytes, read in place without copying it.
+///
+/// A scalar, a string, a byte sequence and a nested table are
+/// read in place and allocate nothing. A union and a collection
+/// are decoded on access instead: a union's arms and a
+/// collection's elements have no one view type to hand back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(deprecated)]
+pub struct VehClusterHvacCabinScaledFanParamsFbView<'a> {
+    pub(crate) buf: &'a [::core::primitive::u8],
+    pub(crate) table: ::core::primitive::usize,
+}
+#[allow(deprecated)]
+impl<'a> ::ridl_rt::payload::View<'a> for VehClusterHvacCabinScaledFanParamsFbView<'a> {
+    fn bytes(&self) -> &'a [::core::primitive::u8] {
+        self.buf
+    }
+}
+#[allow(deprecated)]
+impl<'a> VehClusterHvacCabinScaledFanParamsFbView<'a> {}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_encode_VehClusterHvacCabinScaledFanParams(
+    _value: &VehClusterHvacCabinScaledFanParams,
+    builder: &mut ::ridl_rt::flatbuffers::Builder<'_>,
+) -> ::core::result::Result<
+    ::ridl_rt::flatbuffers::Pos,
+    ::ridl_rt::payload::EncodeError,
+> {
+    builder.push_table(4usize, 4usize, 0u16, &[])
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_verify_VehClusterHvacCabinScaledFanParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> ::core::result::Result<(), ::ridl_rt::payload::VerifyError> {
+    ::core::result::Result::Ok(())
+}
+#[allow(deprecated, non_snake_case)]
+pub(crate) fn __ridl_fb_decode_VehClusterHvacCabinScaledFanParams(
+    _buf: &[::core::primitive::u8],
+    _table: ::core::primitive::usize,
+) -> VehClusterHvacCabinScaledFanParams {
+    VehClusterHvacCabinScaledFanParams {
+    }
+}
+#[allow(deprecated)]
+impl ::ridl_rt::payload::Payload<::ridl_rt::encoding::FlatBuffers>
+for VehClusterHvacCabinScaledFanParams {
+    /// The largest FlatBuffers buffer any legal `VehClusterHvacCabinScaledFanParams` encodes to: 33 bytes.
+    const MAX_SIZE: ::core::primitive::usize = 33usize;
+    type Buffer = [::core::primitive::u8; 33usize];
+    const BUFFER: Self::Buffer = [0u8; 33usize];
+    type View<'a> = VehClusterHvacCabinScaledFanParamsFbView<'a>;
+    fn encode<'o>(
+        &self,
+        out: &'o mut [::core::primitive::u8],
+    ) -> ::core::result::Result<
+        ::ridl_rt::payload::Encoded<'o, VehClusterHvacCabinScaledFanParamsFbView<'o>>,
+        ::ridl_rt::payload::EncodeError,
+    > {
+        let mut builder = ::ridl_rt::flatbuffers::Builder::new(out);
+        let __root = __ridl_fb_encode_VehClusterHvacCabinScaledFanParams(
+            self,
+            &mut builder,
+        )?;
+        let bytes = builder.finish(__root, 8usize)?;
+        let table = ::ridl_rt::flatbuffers::root(bytes).unwrap_or(0usize);
+        ::core::result::Result::Ok(::ridl_rt::payload::Encoded {
+            bytes,
+            view: VehClusterHvacCabinScaledFanParamsFbView {
+                buf: bytes,
+                table,
+            },
+        })
+    }
+    fn verify(
+        buf: &[::core::primitive::u8],
+    ) -> ::core::result::Result<
+        VehClusterHvacCabinScaledFanParamsFbView<'_>,
+        ::ridl_rt::payload::VerifyError,
+    > {
+        let table = ::ridl_rt::flatbuffers::root(buf)
+            .map_err(::ridl_rt::payload::VerifyError::Structure)?;
+        __ridl_fb_verify_VehClusterHvacCabinScaledFanParams(buf, table)?;
+        ::core::result::Result::Ok(VehClusterHvacCabinScaledFanParamsFbView {
+            buf,
+            table,
+        })
+    }
+    fn decode(
+        r: ::ridl_rt::payload::Ref<'_, Self, ::ridl_rt::encoding::FlatBuffers>,
+    ) -> Self {
+        let __view = r.view();
+        __ridl_fb_decode_VehClusterHvacCabinScaledFanParams(__view.buf, __view.table)
     }
 }
 /// A `RawWheelSpanSpan` value in FlatBuffers bytes, read in place without copying it.
@@ -6054,8 +6083,8 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            63, 37, 215, 243, 206, 87, 125, 190, 217, 225, 159, 45, 59, 101, 82, 243, 66,
-            205, 231, 41, 232, 129, 7, 158, 106, 136, 194, 198, 214, 206, 82, 130,
+            105, 92, 204, 248, 141, 62, 221, 15, 168, 44, 50, 207, 158, 137, 202, 140,
+            237, 33, 217, 101, 130, 85, 176, 142, 92, 201, 235, 111, 239, 207, 124, 179,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -6685,8 +6714,8 @@ impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            63, 37, 215, 243, 206, 87, 125, 190, 217, 225, 159, 45, 59, 101, 82, 243, 66,
-            205, 231, 41, 232, 129, 7, 158, 106, 136, 194, 198, 214, 206, 82, 130,
+            105, 92, 204, 248, 141, 62, 221, 15, 168, 44, 50, 207, 158, 137, 202, 140,
+            237, 33, 217, 101, 130, 85, 176, 142, 92, 201, 235, 111, 239, 207, 124, 179,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(5);
@@ -6980,8 +7009,8 @@ impl ::ridl_rt::contract::Interface for FaultLog {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            63, 37, 215, 243, 206, 87, 125, 190, 217, 225, 159, 45, 59, 101, 82, 243, 66,
-            205, 231, 41, 232, 129, 7, 158, 106, 136, 194, 198, 214, 206, 82, 130,
+            105, 92, 204, 248, 141, 62, 221, 15, 168, 44, 50, 207, 158, 137, 202, 140,
+            237, 33, 217, 101, 130, 85, 176, 142, 92, 201, 235, 111, 239, 207, 124, 179,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);

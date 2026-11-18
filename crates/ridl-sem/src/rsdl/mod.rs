@@ -11,8 +11,8 @@
 //! language server navigates to it.
 //!
 //! The diagnostics carry a [`FileId`] indexing the workspace's files in
-//! package-then-file order — the order `ridl_core::package::service_catalog`
-//! uses — so a driver remaps both with one list of render ids.
+//! package-then-file order, so a driver remaps them with the render ids it
+//! builds for the package passes.
 
 mod attrs;
 mod closure;
@@ -209,7 +209,7 @@ fn check_depths(
 /// One event of a required interface, with its contract bound or the reason
 /// it has none, as the RSDL-806 message states it.
 struct EventBound {
-    /// `pkg.Interface.event`, or `service.event` for an inline shape.
+    /// `pkg.Interface.event`, or `pkg.Service.event` for an inline shape.
     name: String,
     bound: Result<u32, &'static str>,
 }
@@ -583,9 +583,10 @@ impl Reference {
 /// The role a reference's case reads (rsdl §4 table, general form R7).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReferenceForm {
-    /// `Name` or `pkg.Name`: a component — after `for`, the system; after
-    /// `requires`, an interface. `package` holds the lowercase leading
-    /// segments joined by `.`, `None` for a bare name.
+    /// `Name` or `pkg.Name`: a declaration of any kind, told apart by lookup
+    /// (rsdl §4, ADR-0034 decision 9) — a component, a service, or after
+    /// `for` the system, and after `requires` an interface. `package` holds
+    /// the lowercase leading segments joined by `.`, `None` for a bare name.
     Declared {
         package: Option<String>,
         name: String,
@@ -598,8 +599,6 @@ pub enum ReferenceForm {
         component: String,
         instance: String,
     },
-    /// `pkg.service`: lowercase segments only, a service's global dotted name.
-    Service { name: String },
     /// A shape no row of the rsdl §4 table names. The slot's unknown-name code
     /// reports it.
     Unreadable,
@@ -696,6 +695,22 @@ impl Reporter {
     }
 }
 
+/// The hint a slot's unknown-name message ends with when the reference is
+/// written as the old dotted spelling of a service, which names nothing since
+/// a service has a `CamelCase` declared name (ADR-0034 decision 5): every
+/// segment is lowercase. Empty for any other reference.
+fn old_service_hint(reference: &Reference) -> &'static str {
+    if reference
+        .segments
+        .iter()
+        .all(|segment| is_lowercase_segment(segment))
+    {
+        "; a service is named by its CamelCase name, bare, imported or after its package (ridl §14.5)"
+    } else {
+        ""
+    }
+}
+
 /// `CamelCase_id` (typl Appendix E): an upper-case letter, then letters and
 /// digits.
 fn is_upper_camel(text: &str) -> bool {
@@ -710,8 +725,8 @@ fn is_lower_camel(text: &str) -> bool {
     chars.next().is_some_and(|c| c.is_ascii_lowercase()) && chars.all(|c| c.is_ascii_alphanumeric())
 }
 
-/// A package or service name segment (ADR-0002 §1): a lower-case letter, then
-/// lower-case letters and digits.
+/// A package name segment (ADR-0002 §1): a lower-case letter, then lower-case
+/// letters and digits.
 fn is_lowercase_segment(text: &str) -> bool {
     let mut chars = text.chars();
     chars.next().is_some_and(|c| c.is_ascii_lowercase())
@@ -790,16 +805,19 @@ mod tests {
     /// rsdl reference Appendix A, `system.rsdl`, verbatim.
     pub(super) const SYSTEM: &str = r#"package veh.topology
 
+import veh.adas.AdaptiveCruise
 import veh.adas.CruiseControl
 import veh.adas.LaneAssist
+import veh.adas.LaneKeeping
+import veh.diag.FaultAccess
 
 /// Adaptive cruise, two copies: one per compute node.
 component Cruise [ instances = (primary, backup), labels = (ASIL_B) ] {
-  offers   veh.adas.cruise
+  offers   AdaptiveCruise
   requires LaneAssist
 }
 
-component Lane { offers veh.adas.lane }
+component Lane { offers LaneKeeping }
 
 component Panel {
   requires CruiseControl
@@ -809,12 +827,12 @@ component Panel {
 /// The fleet backend. No implementation in this workspace.
 component Backend [ external ] {
   requires CruiseControl
-  requires veh.diag.access
+  requires FaultAccess
 }
 
-system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }
+system Vehicle { Cruise, Lane, Panel, Backend, FaultAccess }
 
-distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.access }
+distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, FaultAccess }
 distribution Hmi  [ tier = APPLICATION ] { Panel }
 "#;
 
@@ -822,7 +840,7 @@ distribution Hmi  [ tier = APPLICATION ] { Panel }
     pub(super) const PRODUCTION: &str = r#"package veh.topology
 
 deployment Production for Vehicle {
-  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.access }
+  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.FaultAccess }
   machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }
   machine Cloud   [ external ] { Backend }
 }
@@ -868,7 +886,7 @@ deployment Production for Vehicle {
         assert_eq!(vehicle.package, "veh.topology");
         assert_eq!(
             texts(&vehicle.members),
-            ["Cruise", "Lane", "Panel", "Backend", "veh.diag.access"]
+            ["Cruise", "Lane", "Panel", "Backend", "FaultAccess"]
         );
 
         let names: Vec<&str> = system
@@ -878,7 +896,7 @@ deployment Production for Vehicle {
             .collect();
         assert_eq!(names, ["Cruise", "Lane", "Panel", "Backend"]);
         let cruise = &system.components[0];
-        assert_eq!(texts(&cruise.offers), ["veh.adas.cruise"]);
+        assert_eq!(texts(&cruise.offers), ["AdaptiveCruise"]);
         assert_eq!(texts(&cruise.requires), ["LaneAssist"]);
         let instances: Vec<&str> = cruise
             .instances
@@ -893,14 +911,12 @@ deployment Production for Vehicle {
         assert_eq!(system.components[1].instances, None);
         let backend = &system.components[3];
         assert!(backend.external);
-        assert_eq!(
-            texts(&backend.requires),
-            ["CruiseControl", "veh.diag.access"]
-        );
+        assert_eq!(texts(&backend.requires), ["CruiseControl", "FaultAccess"]);
         assert_eq!(
             backend.requires[1].reference.form,
-            ReferenceForm::Service {
-                name: "veh.diag.access".to_string()
+            ReferenceForm::Declared {
+                package: None,
+                name: "FaultAccess".to_string()
             }
         );
 
@@ -979,7 +995,7 @@ deployment Production for Vehicle {
                 &[],
             ),
             (
-                "component C { offers veh.a.b [ someip.serviceId = 4660 ] }",
+                "component C { offers veh.a.B [ someip.serviceId = 4660 ] }",
                 &[],
             ),
             // FORM-106: a key no row and no backend namespace defines.
@@ -1115,8 +1131,8 @@ deployment Production for Vehicle {
     }
 
     /// A diagnostic's file id indexes the workspace's files in
-    /// package-then-file order, the order `service_catalog` uses, so a driver
-    /// remaps both with the same render ids.
+    /// package-then-file order, so a driver remaps it with the render ids it
+    /// builds for the package passes.
     #[test]
     fn diagnostics_index_the_workspace_files_in_package_then_file_order() {
         let first: &[(&str, &str)] = &[
@@ -1160,8 +1176,8 @@ interface LaneAssist {
   signal active: Engaged @[100ms..1s]
 }
 
-service veh.adas.cruise : CruiseControl
-service veh.adas.lane   : LaneAssist
+service AdaptiveCruise : CruiseControl
+service LaneKeeping    : LaneAssist
 "#;
 
     /// rsdl reference Appendix A, `veh/diag/diag.ridl`: one inline-shape
@@ -1170,7 +1186,7 @@ service veh.adas.lane   : LaneAssist
 
 import veh.common.FaultReport
 
-service veh.diag.access {
+service FaultAccess {
   query readFaults(): FaultReport @[..100ms]
 }
 "#;
@@ -1179,11 +1195,11 @@ service veh.diag.access {
     /// a query channel, `Lane` nothing, and `Pair` has two instances.
     pub(super) const SIZED_CLOSURE: &str = "package veh.topology\n\
                                  import veh.adas.LaneAssist\n\
-                                 component Lane { offers veh.adas.lane }\n\
+                                 component Lane { offers veh.adas.LaneKeeping }\n\
                                  component Panel { requires LaneAssist }\n\
-                                 component Backend [ external ] { requires veh.diag.access }\n\
+                                 component Backend [ external ] { requires veh.diag.FaultAccess }\n\
                                  component Pair [ instances = (primary, backup) ] {}\n\
-                                 system Vehicle { Lane, Panel, Backend, Pair, veh.diag.access }\n";
+                                 system Vehicle { Lane, Panel, Backend, Pair, veh.diag.FaultAccess }\n";
 
     /// Checks Appendix A's three contract packages beside `topology`, the files
     /// of the package `veh.topology`.
@@ -1207,7 +1223,7 @@ service veh.diag.access {
     }
 
     /// Appendix A's closure: four declared components and the implicit
-    /// component of `veh.diag.access`, its services with their offering
+    /// component of `veh.diag.FaultAccess`, its services with their offering
     /// components, and its interfaces with their owning services (rsdl §3.1,
     /// §6, §7, and the "Closure" and "Instances" items after the example).
     #[test]
@@ -1234,7 +1250,7 @@ service veh.diag.access {
                 ("Lane", vec!["Unit"], false),
                 ("Panel", vec!["Unit"], false),
                 ("Backend", vec!["Unit"], true),
-                ("veh.diag.access", vec!["Unit"], false),
+                ("veh.diag.FaultAccess", vec!["Unit"], false),
             ]
         );
         assert_eq!(closure.components[0].decl, Some(0));
@@ -1248,9 +1264,9 @@ service veh.diag.access {
         assert_eq!(
             services,
             [
-                ("veh.adas.cruise", &[0][..]),
-                ("veh.adas.lane", &[1][..]),
-                ("veh.diag.access", &[4][..]),
+                ("veh.adas.AdaptiveCruise", &[0][..]),
+                ("veh.adas.LaneKeeping", &[1][..]),
+                ("veh.diag.FaultAccess", &[4][..]),
             ]
         );
         let interfaces: Vec<(String, &[String])> = closure
@@ -1263,15 +1279,15 @@ service veh.diag.access {
             [
                 (
                     "veh.adas.CruiseControl".to_string(),
-                    &["veh.adas.cruise".to_string()][..]
+                    &["veh.adas.AdaptiveCruise".to_string()][..]
                 ),
                 (
                     "veh.adas.LaneAssist".to_string(),
-                    &["veh.adas.lane".to_string()][..]
+                    &["veh.adas.LaneKeeping".to_string()][..]
                 ),
                 (
-                    "veh.diag.access".to_string(),
-                    &["veh.diag.access".to_string()][..]
+                    "veh.diag.FaultAccess".to_string(),
+                    &["veh.diag.FaultAccess".to_string()][..]
                 ),
             ]
         );
@@ -1288,7 +1304,7 @@ service veh.diag.access {
         assert_eq!(
             system.component_lines[3].requires[1],
             Some(InterfaceId::Inline {
-                service: "veh.diag.access".to_string()
+                service: "veh.diag.FaultAccess".to_string()
             })
         );
     }
@@ -1296,10 +1312,10 @@ service veh.diag.access {
     /// The `system` rules (rsdl §3.1, §6, §7), one input per rule.
     #[test]
     fn a_system_lists_each_component_or_lone_service_once() {
-        const COMPONENTS: &str = "component Cruise [ instances = (primary, backup) ] { offers veh.adas.cruise }\n\
-                                  component Lane { offers veh.adas.lane }\n";
+        const COMPONENTS: &str = "component Cruise [ instances = (primary, backup) ] { offers veh.adas.AdaptiveCruise }\n\
+                                  component Lane { offers veh.adas.LaneKeeping }\n";
         let cases: &[(&str, &[&str])] = &[
-            ("system Vehicle { Cruise, Lane, veh.diag.access }", &[]),
+            ("system Vehicle { Cruise, Lane, veh.diag.FaultAccess }", &[]),
             (
                 "system Vehicle { Cruise }\nsystem Bench { Lane }",
                 &["RSDL-601"],
@@ -1310,10 +1326,13 @@ service veh.diag.access {
             ("system Vehicle { Lane, Lane }", &["RSDL-603"]),
             ("system Vehicle { Lane, veh.topology.Lane }", &["RSDL-603"]),
             (
-                "system Vehicle { veh.diag.access, veh.diag.access }",
+                "system Vehicle { veh.diag.FaultAccess, veh.diag.FaultAccess }",
                 &["RSDL-603"],
             ),
-            ("system Vehicle { Lane, veh.adas.cruise }", &["RSDL-504"]),
+            (
+                "system Vehicle { Lane, veh.adas.AdaptiveCruise }",
+                &["RSDL-504"],
+            ),
             ("system Vehicle { Lane.Unit }", &["RSDL-307"]),
         ];
         for (decl, expected) in cases {
@@ -1323,8 +1342,9 @@ service veh.diag.access {
         }
 
         // RSDL-504 names the offerer.
-        let text =
-            format!("package veh.topology\n{COMPONENTS}system Vehicle {{ veh.adas.cruise }}\n");
+        let text = format!(
+            "package veh.topology\n{COMPONENTS}system Vehicle {{ veh.adas.AdaptiveCruise }}\n"
+        );
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert!(
             system.diagnostics[0]
@@ -1342,12 +1362,12 @@ service veh.diag.access {
     fn a_component_line_names_one_service_or_one_interface() {
         let cases: &[(&str, &[&str])] = &[
             (
-                "component C { offers veh.adas.cruise, requires LaneAssist, requires veh.diag.access }",
+                "component C { offers veh.adas.AdaptiveCruise, requires LaneAssist, requires veh.diag.FaultAccess }",
                 &[],
             ),
             ("component C { requires veh.adas.LaneAssist }", &[]),
             (
-                "component C { offers veh.adas.cruise, offers veh.adas.cruise }",
+                "component C { offers veh.adas.AdaptiveCruise, offers veh.adas.AdaptiveCruise }",
                 &["RSDL-309"],
             ),
             (
@@ -1356,11 +1376,14 @@ service veh.diag.access {
             ),
             ("component C { offers Lane }", &["RSDL-310"]),
             ("component C { offers veh.adas.LaneAssist }", &["RSDL-310"]),
-            ("component C { offers veh.adas.brake }", &["RSDL-310"]),
-            ("component C { requires veh.adas.cruise }", &["RSDL-311"]),
+            ("component C { offers veh.adas.Brake }", &["RSDL-310"]),
+            (
+                "component C { requires veh.adas.AdaptiveCruise }",
+                &["RSDL-311"],
+            ),
             ("component C { requires Brake }", &["RSDL-312"]),
             ("component C { requires veh.common.Speed }", &["RSDL-312"]),
-            ("component C { requires veh.adas.brake }", &["RSDL-312"]),
+            ("component C { requires veh.adas.Brake }", &["RSDL-312"]),
             ("component C { requires C.primary }", &["RSDL-312"]),
             ("component C { offers C.Unit }", &["RSDL-307"]),
             (
@@ -1382,7 +1405,7 @@ service veh.diag.access {
         // RSDL-311 lists the service's interfaces.
         let system = check_topology(&[(
             "veh/topology/x.rsdl",
-            "package veh.topology\ncomponent C { requires veh.adas.cruise }\n",
+            "package veh.topology\ncomponent C { requires veh.adas.AdaptiveCruise }\n",
         )]);
         assert!(
             system.diagnostics[0]
@@ -1390,6 +1413,190 @@ service veh.diag.access {
                 .contains("it lists `veh.adas.CruiseControl`"),
             "got: {}",
             system.diagnostics[0].message
+        );
+    }
+
+    #[test]
+    fn offers_resolves_a_service_bare_imported_and_qualified() {
+        let ridl = (
+            "adas.ridl",
+            "package veh.adas\ninterface CruiseControl {}\nservice AdaptiveCruise : CruiseControl\n",
+        );
+        for (import, line) in [
+            ("import veh.adas.AdaptiveCruise\n", "offers AdaptiveCruise"),
+            ("", "offers veh.adas.AdaptiveCruise"),
+        ] {
+            let rsdl = format!(
+                "package veh.top\n{import}component Cruise {{ {line} }}\nsystem V {{ Cruise }}\n"
+            );
+            let system = check(&[
+                ("veh.adas", &[ridl]),
+                ("veh.top", &[("top.rsdl", rsdl.as_str())]),
+            ]);
+            assert!(
+                errors(&system).is_empty(),
+                "`{line}`: {:?}",
+                system.diagnostics
+            );
+        }
+        // A service of the package itself is named bare.
+        let own = (
+            "own.ridl",
+            "package veh.top\ninterface I {}\nservice Own : I\n",
+        );
+        let rsdl = (
+            "top.rsdl",
+            "package veh.top\ncomponent C { offers Own }\nsystem V { C }\n",
+        );
+        let system = check(&[("veh.top", &[own, rsdl])]);
+        assert!(errors(&system).is_empty(), "{:?}", system.diagnostics);
+    }
+
+    #[test]
+    fn a_lone_service_is_a_member_and_a_placement() {
+        let ridl = (
+            "diag.ridl",
+            "package veh.diag\ntype R: integer [0..1]\nservice FaultAccess { query read(): R @[..100ms] }\n",
+        );
+        let rsdl = (
+            "top.rsdl",
+            "package veh.top\nsystem V { veh.diag.FaultAccess }\n\
+             deployment D for V { machine M { veh.diag.FaultAccess } }\n",
+        );
+        let system = check(&[("veh.diag", &[ridl]), ("veh.top", &[rsdl])]);
+        assert!(errors(&system).is_empty(), "{:?}", system.diagnostics);
+    }
+
+    /// A bare name binds the package's own declaration before an import, of
+    /// whatever kind the declaration is.
+    #[test]
+    fn a_local_service_shadows_an_imported_component() {
+        let q = ("q.rsdl", "package q\ncomponent S {}\n");
+        let p_ridl = ("p.ridl", "package p\ninterface I {}\nservice S : I\n");
+        let p_rsdl = (
+            "p.rsdl",
+            "package p\nimport q.S\ncomponent Host { offers S }\nsystem V { Host }\n",
+        );
+        let system = check(&[("q", &[q]), ("p", &[p_ridl, p_rsdl])]);
+        assert!(
+            !codes(&system).contains(&"RSDL-310"),
+            "{:?}",
+            system.diagnostics
+        );
+    }
+
+    /// A local distribution or deployment of the name hides an import as well.
+    #[test]
+    fn a_local_distribution_or_deployment_shadows_an_imported_service() {
+        let a = ("a.ridl", "package fx.a\ninterface I {}\nservice S : I\n");
+        for local in ["distribution S {}", "deployment S for V {}"] {
+            let text = format!(
+                "package fx.b\nimport fx.a.S\n{local}\ncomponent Producer {{ offers S }}\nsystem V {{ Producer }}\n"
+            );
+            let system = check(&[("fx.a", &[a]), ("fx.b", &[("b.rsdl", text.as_str())])]);
+            assert!(
+                codes(&system).contains(&"RSDL-310"),
+                "`{local}`: {:?}",
+                system.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn the_old_dotted_reference_names_nothing_and_says_why() {
+        let ridl = (
+            "adas.ridl",
+            "package veh.adas\ninterface CruiseControl {}\nservice AdaptiveCruise : CruiseControl\n",
+        );
+        let rsdl = (
+            "top.rsdl",
+            "package veh.top\ncomponent Cruise { offers veh.adas.cruise }\nsystem V { Cruise }\n",
+        );
+        let system = check(&[("veh.adas", &[ridl]), ("veh.top", &[rsdl])]);
+        let diagnostic = system
+            .diagnostics
+            .iter()
+            .find(|d| d.code.as_str() == "RSDL-310")
+            .expect("RSDL-310");
+        assert!(
+            diagnostic.message.contains("CamelCase"),
+            "{}",
+            diagnostic.message
+        );
+    }
+
+    /// Every slot that names a service ends its unknown-name message with the
+    /// `CamelCase` hint when the reference is the old dotted spelling, every
+    /// segment lowercase, and without it when one segment is not lowercase
+    /// (ADR-0034 decision 5).
+    #[test]
+    fn every_service_slot_gives_the_old_name_hint_for_an_all_lowercase_reference() {
+        const HINT: &str = "a service is named by its CamelCase name";
+        let ridl = (
+            "adas.ridl",
+            "package veh.adas\ninterface CruiseControl {}\nservice AdaptiveCruise : CruiseControl\n",
+        );
+        for (code, template) in [
+            ("RSDL-312", "component C { requires REF }\nsystem V { C }\n"),
+            ("RSDL-602", "component C {}\nsystem V { C, REF }\n"),
+            (
+                "RSDL-702",
+                "component C {}\nsystem V { C }\ndeployment D for V { machine M { C, REF } }\n",
+            ),
+            (
+                "RSDL-903",
+                "component C {}\nsystem V { C }\ndistribution X { C, REF }\n",
+            ),
+        ] {
+            for (reference, hinted) in [("veh.adas.cruise", true), ("veh.adas.Cruise", false)] {
+                let text = format!("package veh.top\n{}", template.replace("REF", reference));
+                let system = check(&[("veh.adas", &[ridl]), ("veh.top", &[("top.rsdl", &text)])]);
+                let diagnostic = system
+                    .diagnostics
+                    .iter()
+                    .find(|d| d.code.as_str() == code)
+                    .unwrap_or_else(|| panic!("{code} for `{text}`: {:?}", system.diagnostics));
+                assert_eq!(
+                    diagnostic.message.contains(HINT),
+                    hinted,
+                    "{code} `{reference}`: {}",
+                    diagnostic.message
+                );
+            }
+        }
+    }
+
+    /// A `system`, a `distribution` and a `deployment` are in the package
+    /// namespace beside a service, as a component is (ADR-0034 decision 2).
+    #[test]
+    fn a_service_and_a_system_distribution_or_deployment_of_one_name_are_typl_009() {
+        let ridl = ("p.ridl", "package p\ninterface I {}\nservice Cruise : I\n");
+        for rsdl in [
+            "package p\ncomponent C {}\nsystem Cruise { C }\n",
+            "package p\ncomponent C {}\nsystem V { C }\ndistribution Cruise {}\n",
+            "package p\ncomponent C {}\nsystem V { C }\ndeployment Cruise for V {}\n",
+        ] {
+            let system = check(&[("p", &[ridl, ("p.rsdl", rsdl)])]);
+            assert!(
+                codes(&system).contains(&"TYPL-009"),
+                "{rsdl}: {:?}",
+                system.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn a_component_and_a_service_of_one_name_are_typl_009() {
+        let ridl = ("p.ridl", "package p\ninterface I {}\nservice Cruise : I\n");
+        let rsdl = (
+            "p.rsdl",
+            "package p\ncomponent Cruise { offers Cruise }\nsystem V { Cruise }\n",
+        );
+        let system = check(&[("p", &[ridl, rsdl])]);
+        assert!(
+            codes(&system).contains(&"TYPL-009"),
+            "{:?}",
+            system.diagnostics
         );
     }
 
@@ -1555,25 +1762,35 @@ service veh.diag.access {
             })
             .collect();
         let expected = [
-            ("Cruise", "veh.adas.LaneAssist", "veh.adas.lane", "Lane"),
+            (
+                "Cruise",
+                "veh.adas.LaneAssist",
+                "veh.adas.LaneKeeping",
+                "Lane",
+            ),
             (
                 "Panel",
                 "veh.adas.CruiseControl",
-                "veh.adas.cruise",
+                "veh.adas.AdaptiveCruise",
                 "Cruise",
             ),
-            ("Panel", "veh.adas.LaneAssist", "veh.adas.lane", "Lane"),
+            (
+                "Panel",
+                "veh.adas.LaneAssist",
+                "veh.adas.LaneKeeping",
+                "Lane",
+            ),
             (
                 "Backend",
                 "veh.adas.CruiseControl",
-                "veh.adas.cruise",
+                "veh.adas.AdaptiveCruise",
                 "Cruise",
             ),
             (
                 "Backend",
-                "veh.diag.access",
-                "veh.diag.access",
-                "veh.diag.access",
+                "veh.diag.FaultAccess",
+                "veh.diag.FaultAccess",
+                "veh.diag.FaultAccess",
             ),
         ];
         assert_eq!(
@@ -1592,50 +1809,50 @@ service veh.diag.access {
             "package veh.body\n\
              interface Doors {\n  signal locked: boolean @[100ms..1s]\n}\n\
              interface Horn {\n  signal sounding: boolean @[100ms..1s]\n}\n\
-             service veh.body.doors : Doors\n\
-             service veh.body.horn : Horn\n\
-             service veh.body.cabin : Doors, Horn\n\
-             service veh.body.twin : Doors, Horn\n",
+             service DoorsService : Doors\n\
+             service HornService : Horn\n\
+             service Cabin : Doors, Horn\n\
+             service Twin : Doors, Horn\n",
         )];
         let cases: &[(&str, &[&str])] = &[
             // One owning service, one offering component.
             (
-                "component D { offers veh.body.doors }\ncomponent U { requires veh.body.Doors }\nsystem S { D, U }",
+                "component D { offers veh.body.DoorsService }\ncomponent U { requires veh.body.Doors }\nsystem S { D, U }",
                 &[],
             ),
             // A lone service stands for its offering component (rsdl §6).
             (
-                "component U { requires veh.body.Horn }\nsystem S { U, veh.body.horn }",
+                "component U { requires veh.body.Horn }\nsystem S { U, veh.body.HornService }",
                 &[],
             ),
             // RSDL-502: two closure components offer one service.
             (
-                "component D { offers veh.body.doors }\ncomponent E { offers veh.body.doors }\nsystem S { D, E }",
+                "component D { offers veh.body.DoorsService }\ncomponent E { offers veh.body.DoorsService }\nsystem S { D, E }",
                 &["RSDL-502"],
             ),
             // RSDL-408: one interface, two closure services, required or not.
             (
-                "component D { offers veh.body.doors }\ncomponent C { offers veh.body.cabin }\nsystem S { D, C }",
+                "component D { offers veh.body.DoorsService }\ncomponent C { offers veh.body.Cabin }\nsystem S { D, C }",
                 &["RSDL-408"],
             ),
             // RSDL-408 for every interface the two services list.
             (
-                "component C { offers veh.body.cabin }\ncomponent T { offers veh.body.twin }\nsystem S { C, T }",
+                "component C { offers veh.body.Cabin }\ncomponent T { offers veh.body.Twin }\nsystem S { C, T }",
                 &["RSDL-408", "RSDL-408"],
             ),
             // RSDL-403: no closure service lists `Horn`.
             (
-                "component D { offers veh.body.doors }\ncomponent U { requires veh.body.Horn }\nsystem S { D, U }",
+                "component D { offers veh.body.DoorsService }\ncomponent U { requires veh.body.Horn }\nsystem S { D, U }",
                 &["RSDL-403"],
             ),
             // RSDL-308, a rule of one component: it holds with no system.
             (
-                "component H { offers veh.body.horn, requires veh.body.Horn }",
+                "component H { offers veh.body.HornService, requires veh.body.Horn }",
                 &["RSDL-308"],
             ),
             // RSDL-409, a warning: the offering component has two instances.
             (
-                "component H [ instances = (left, right) ] { offers veh.body.horn }\n\
+                "component H [ instances = (left, right) ] { offers veh.body.HornService }\n\
                  component U { requires veh.body.Horn }\nsystem S { H, U }",
                 &["RSDL-409"],
             ),
@@ -1651,7 +1868,7 @@ service veh.diag.access {
         // listing the interface.
         let topology: &[(&str, &str)] = &[(
             "veh/topology/x.rsdl",
-            "package veh.topology\ncomponent H { offers veh.body.horn }\n\
+            "package veh.topology\ncomponent H { offers veh.body.HornService }\n\
              component U { requires veh.body.Horn }\nsystem S { U }\n",
         )];
         let system = check(&[("veh.body", body), ("veh.topology", topology)]);
@@ -1659,7 +1876,9 @@ service veh.diag.access {
             panic!("one diagnostic, got {:?}", system.diagnostics);
         };
         assert!(
-            missing.message.contains("`H` offers `veh.body.horn`"),
+            missing
+                .message
+                .contains("`H` offers `veh.body.HornService`"),
             "got: {}",
             missing.message
         );
@@ -1670,7 +1889,7 @@ service veh.diag.access {
     pub(super) const BENCH: &str = r#"package veh.topology
 
 deployment Bench for Vehicle {
-  machine DevBox { Cruise, Lane, Panel, veh.diag.access, Backend }
+  machine DevBox { Cruise, Lane, Panel, veh.diag.FaultAccess, Backend }
 }
 "#;
 
@@ -1707,7 +1926,7 @@ deployment Bench for Vehicle {
         let production = [
             ("Cruise.primary", "AdasHpc"),
             ("Lane.Unit", "AdasHpc"),
-            ("veh.diag.access.Unit", "AdasHpc"),
+            ("veh.diag.FaultAccess.Unit", "AdasHpc"),
             ("Cruise.backup", "Cockpit"),
             ("Panel.Unit", "Cockpit"),
             ("Backend.Unit", "Cloud"),
@@ -1721,7 +1940,7 @@ deployment Bench for Vehicle {
             ("Cruise.backup", "DevBox"),
             ("Lane.Unit", "DevBox"),
             ("Panel.Unit", "DevBox"),
-            ("veh.diag.access.Unit", "DevBox"),
+            ("veh.diag.FaultAccess.Unit", "DevBox"),
             ("Backend.Unit", "DevBox"),
         ];
         assert_eq!(
@@ -1745,16 +1964,16 @@ deployment Bench for Vehicle {
     /// one input per rule.
     #[test]
     fn a_deployment_places_every_closure_instance_exactly_once() {
-        const CLOSURE: &str = "component Cruise [ instances = (primary, backup) ] { offers veh.adas.cruise }\n\
-                               component Backend [ external ] { requires veh.diag.access }\n\
+        const CLOSURE: &str = "component Cruise [ instances = (primary, backup) ] { offers veh.adas.AdaptiveCruise }\n\
+                               component Backend [ external ] { requires veh.diag.FaultAccess }\n\
                                component Spare {}\n\
-                               system Vehicle { Cruise, Backend, veh.diag.access }\n";
-        const PLACED: &str = "Cruise, veh.diag.access, Backend";
+                               system Vehicle { Cruise, Backend, veh.diag.FaultAccess }\n";
+        const PLACED: &str = "Cruise, veh.diag.FaultAccess, Backend";
         let cases: &[(String, &[&str])] = &[
             // An external component on an on-board machine is a stub (rsdl §9).
             (format!("deployment P for Vehicle {{ machine A {{ {PLACED} }} }}"), &[]),
             (
-                "deployment P for veh.topology.Vehicle {\n  machine A { Cruise.primary, Cruise.backup, veh.diag.access }\n  machine Cloud [ external ] { Backend }\n}".to_string(),
+                "deployment P for veh.topology.Vehicle {\n  machine A { Cruise.primary, Cruise.backup, veh.diag.FaultAccess }\n  machine Cloud [ external ] { Backend }\n}".to_string(),
                 &[],
             ),
             ("deployment P for Nowhere {}".to_string(), &["RSDL-704"]),
@@ -1763,27 +1982,27 @@ deployment Bench for Vehicle {
                 &["RSDL-708"],
             ),
             (
-                "deployment P for Vehicle {\n  machine A { Cruise, veh.diag.access }\n  machine A { Backend }\n}".to_string(),
+                "deployment P for Vehicle {\n  machine A { Cruise, veh.diag.FaultAccess }\n  machine A { Backend }\n}".to_string(),
                 &["RSDL-705"],
             ),
             (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Spare }} }}"), &["RSDL-702"]),
             (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Nothing }} }}"), &["RSDL-702"]),
             (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Cruise.spare }} }}"), &["RSDL-702"]),
             (
-                "deployment P for Vehicle { machine A { Cruise.primary, veh.diag.access, Backend } }".to_string(),
+                "deployment P for Vehicle { machine A { Cruise.primary, veh.diag.FaultAccess, Backend } }".to_string(),
                 &["RSDL-701"],
             ),
             (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Cruise.primary }} }}"), &["RSDL-706"]),
             (
-                "deployment P for Vehicle {\n  machine A { Cruise.primary, veh.diag.access, Backend }\n  machine B { Cruise }\n}".to_string(),
+                "deployment P for Vehicle {\n  machine A { Cruise.primary, veh.diag.FaultAccess, Backend }\n  machine B { Cruise }\n}".to_string(),
                 &["RSDL-706"],
             ),
             (
-                "deployment P for Vehicle {\n  machine A { Backend }\n  machine Cloud [ external ] { Cruise, veh.diag.access }\n}".to_string(),
+                "deployment P for Vehicle {\n  machine A { Backend }\n  machine Cloud [ external ] { Cruise, veh.diag.FaultAccess }\n}".to_string(),
                 &["RSDL-707", "RSDL-707"],
             ),
             (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Cruise.Unit }} }}"), &["RSDL-307"]),
-            (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, veh.adas.cruise }} }}"), &["RSDL-504"]),
+            (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, veh.adas.AdaptiveCruise }} }}"), &["RSDL-504"]),
         ];
         for (deployments, expected) in cases {
             let text = format!("package veh.topology\n{CLOSURE}{deployments}\n");
@@ -1797,7 +2016,7 @@ deployment Bench for Vehicle {
     #[test]
     fn a_placement_error_blocks_its_own_deployment_only() {
         let text = "package veh.topology\n\
-                    component Lane { offers veh.adas.lane }\n\
+                    component Lane { offers veh.adas.LaneKeeping }\n\
                     system Vehicle { Lane }\n\
                     deployment Good for Vehicle { machine A { Lane } }\n\
                     deployment Bad for Vehicle { machine A {} }\n";
@@ -1817,13 +2036,13 @@ deployment Bench for Vehicle {
     /// channel, `Backend` a query channel, `Lane` nothing.
     const SIZED: &str = "package veh.topology\n\
                          import veh.adas.LaneAssist\n\
-                         component Lane { offers veh.adas.lane }\n\
+                         component Lane { offers veh.adas.LaneKeeping }\n\
                          component Panel { requires LaneAssist }\n\
-                         component Backend [ external ] { requires veh.diag.access }\n\
-                         system Vehicle { Lane, Panel, Backend, veh.diag.access }\n";
+                         component Backend [ external ] { requires veh.diag.FaultAccess }\n\
+                         system Vehicle { Lane, Panel, Backend, veh.diag.FaultAccess }\n";
 
     /// Every instance of `SIZED` on one machine.
-    const SIZED_LINES: &str = "Lane, Panel, Backend, veh.diag.access";
+    const SIZED_LINES: &str = "Lane, Panel, Backend, veh.diag.FaultAccess";
 
     const UNSIZED: Sizing = Sizing {
         depth: None,
@@ -1860,7 +2079,7 @@ deployment Bench for Vehicle {
              deployment Prod for Vehicle \
              [ depth = 1, slots = 65536, budget = 18446744073709551615 ] {{\n  \
              machine A {{ Lane, Panel [ depth = 4294967295, slots = 1, budget = 1 ], \
-             Backend, veh.diag.access }}\n}}\n"
+             Backend, veh.diag.FaultAccess }}\n}}\n"
         );
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), Vec::<&str>::new());
@@ -1958,7 +2177,7 @@ deployment Bench for Vehicle {
                 ),
                 format!(
                     "deployment Bad for Vehicle {{ machine A {{ Lane, Panel [ {attribute} ], \
-                     Backend, veh.diag.access }} }}"
+                     Backend, veh.diag.FaultAccess }} }}"
                 ),
             ];
             for bad in sites {
@@ -2184,8 +2403,8 @@ deployment Bench for Vehicle {
             format!(
                 "{}{good}",
                 SIZED.replace(
-                    "offers veh.adas.lane",
-                    "offers veh.adas.lane [ budget = 1 ]"
+                    "offers veh.adas.LaneKeeping",
+                    "offers veh.adas.LaneKeeping [ budget = 1 ]"
                 )
             ),
             format!(
@@ -2204,10 +2423,10 @@ deployment Bench for Vehicle {
                 )
             ),
             format!(
-                "{SIZED}{good}distribution D [ depth = 2 ] {{ Lane, Panel, veh.diag.access }}\n"
+                "{SIZED}{good}distribution D [ depth = 2 ] {{ Lane, Panel, veh.diag.FaultAccess }}\n"
             ),
             format!(
-                "{SIZED}{good}distribution D {{ Lane [ slots = 4 ], Panel, veh.diag.access }}\n"
+                "{SIZED}{good}distribution D {{ Lane [ slots = 4 ], Panel, veh.diag.FaultAccess }}\n"
             ),
         ];
         for text in &cases {
@@ -2228,7 +2447,7 @@ deployment Bench for Vehicle {
         );
         let text = format!(
             "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ labels = (QM) ], \
-             Backend, veh.diag.access }} }}\n"
+             Backend, veh.diag.FaultAccess }} }}\n"
         );
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), ["FORM-107"]);
@@ -2284,7 +2503,7 @@ deployment Bench for Vehicle {
         for attribute in cases {
             let text = format!(
                 "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ {attribute} ], \
-                 Backend, veh.diag.access }} }}\n"
+                 Backend, veh.diag.FaultAccess }} }}\n"
             );
             let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
             assert_eq!(codes(&system), ["FORM-107"], "`{attribute}`");
@@ -2309,7 +2528,7 @@ deployment Bench for Vehicle {
 
         let text = format!(
             "{SIZED}deployment Prod for Vehicle {{ machine A {{ Lane, Panel [ slots = 4, \
-             slots = 5 ], Backend, veh.diag.access }} }}\n"
+             slots = 5 ], Backend, veh.diag.FaultAccess }} }}\n"
         );
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), ["FORM-108"]);
@@ -2339,7 +2558,7 @@ deployment Bench for Vehicle {
     fn a_sizing_key_on_an_instance_that_consumes_nothing_draws_nothing() {
         let text = format!(
             "{SIZED}deployment Prod for Vehicle {{ machine A {{ \
-             Lane [ depth = 2, slots = 4, budget = 1024 ], Panel, Backend, veh.diag.access }} }}\n"
+             Lane [ depth = 2, slots = 4, budget = 1024 ], Panel, Backend, veh.diag.FaultAccess }} }}\n"
         );
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), Vec::<&str>::new());
@@ -2358,7 +2577,7 @@ deployment Bench for Vehicle {
     /// event, `ceil(max / min)`: `Doors.opened` 10, `Trunk.opened` 10,
     /// `Trunk.closed` 5, `Hood.raised` 4 (3.33 rounded up); `Latch.jammed`
     /// and `Spare.idle` are half-open and have none; `Clock.tick` is untimed,
-    /// so the §9.1 defaults give it both bounds. `veh.ev.horn` is an
+    /// so the §9.1 defaults give it both bounds. `veh.ev.Horn` is an
     /// inline-shape service: `honked` has the bound 10 and `stuck` is
     /// half-open.
     const EVENTS: &str = "package veh.ev\n\
@@ -2369,32 +2588,32 @@ deployment Bench for Vehicle {
                           interface Latch {\n  event jammed: boolean @[100ms..]\n}\n\
                           interface Spare {\n  event idle: boolean @[100ms..]\n}\n\
                           interface Clock {\n  event tick: boolean\n}\n\
-                          service veh.ev.doors : Doors\n\
-                          service veh.ev.trunk : Trunk\n\
-                          service veh.ev.hood : Hood\n\
-                          service veh.ev.latch : Latch\n\
-                          service veh.ev.spare : Spare\n\
-                          service veh.ev.clock : Clock\n\
-                          service veh.ev.horn {\n  event honked: boolean @[100ms..1s]\n  \
+                          service DoorsService : Doors\n\
+                          service TrunkService : Trunk\n\
+                          service HoodService : Hood\n\
+                          service LatchService : Latch\n\
+                          service SpareService : Spare\n\
+                          service ClockService : Clock\n\
+                          service Horn {\n  event honked: boolean @[100ms..1s]\n  \
                           event stuck: boolean @[100ms..]\n}\n";
 
     /// The components of the depth tests: `Body` offers every service of
     /// `EVENTS`, each consumer requires one interface (`Klaxon` the inline
-    /// shape of `veh.ev.horn`), and `Cloud` and
+    /// shape of `veh.ev.Horn`), and `Cloud` and
     /// `Remote` are the external ends of a `Latch` link. A test lists in its
     /// `system` the components it needs, so `Body` and `Cloud` never offer
-    /// `veh.ev.latch` in one closure.
+    /// `veh.ev.LatchService` in one closure.
     const EV_TOPOLOGY: &str = "package veh.topology\n\
                                import veh.ev.Doors\n\
                                import veh.ev.Trunk\n\
                                import veh.ev.Hood\n\
                                import veh.ev.Latch\n\
                                import veh.ev.Clock\n\
-                               component Body {\n  offers veh.ev.doors\n  offers veh.ev.trunk\n  \
-                               offers veh.ev.hood\n  offers veh.ev.latch\n  offers veh.ev.spare\n  \
-                               offers veh.ev.clock\n  offers veh.ev.horn\n}\n\
+                               component Body {\n  offers veh.ev.DoorsService\n  offers veh.ev.TrunkService\n  \
+                               offers veh.ev.HoodService\n  offers veh.ev.LatchService\n  offers veh.ev.SpareService\n  \
+                               offers veh.ev.ClockService\n  offers veh.ev.Horn\n}\n\
                                component Panel { requires Doors }\n\
-                               component Klaxon { requires veh.ev.horn }\n\
+                               component Klaxon { requires veh.ev.Horn }\n\
                                component Mirror { requires Doors }\n\
                                component Pair [ instances = (a, b) ] { requires Doors }\n\
                                component Hatch { requires Trunk }\n\
@@ -2402,7 +2621,7 @@ deployment Bench for Vehicle {
                                component Lock { requires Latch }\n\
                                component Dash { requires Clock }\n\
                                component Remote [ external ] { requires Latch }\n\
-                               component Cloud [ external ] { offers veh.ev.latch }\n";
+                               component Cloud [ external ] { offers veh.ev.LatchService }\n";
 
     /// Checks `EVENTS` beside `EV_TOPOLOGY` followed by `topology`, the
     /// system and deployment of one test.
@@ -2772,7 +2991,7 @@ deployment Bench for Vehicle {
     fn a_depth_on_a_placement_that_consumes_only_calls_draws_neither_code() {
         let text = format!(
             "{SIZED}deployment Prod for Vehicle {{ machine A {{ \
-             Lane, Panel, Backend [ depth = 1 ], veh.diag.access }} }}\n"
+             Lane, Panel, Backend [ depth = 1 ], veh.diag.FaultAccess }} }}\n"
         );
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), Vec::<&str>::new());
@@ -2852,7 +3071,7 @@ deployment Bench for Vehicle {
     }
 
     /// rsdl §5: an event of an inline-shape service (ridl §4) is read like one
-    /// of a declared interface; the event is named `service.event`.
+    /// of a declared interface; the event is named `pkg.Service.event`.
     #[test]
     fn an_event_of_an_inline_shape_service_draws_both_codes() {
         let system = check_events(
@@ -2864,7 +3083,7 @@ deployment Bench for Vehicle {
             messages(&system),
             [
                 "`depth = 2` on `Klaxon` in `Prod` is below the contract bound 10 of \
-                 `veh.ev.horn.honked` — the bound is `ceil(max / min)` over the event's timing, \
+                 `veh.ev.Horn.honked` — the bound is `ceil(max / min)` over the event's timing, \
                  and a ring below it can drop occurrences alive at once (rsdl reference §5)"
             ]
         );
@@ -2877,7 +3096,7 @@ deployment Bench for Vehicle {
         assert_eq!(
             messages(&system),
             [
-                "`Klaxon` in `Prod` declares no `depth` for `veh.ev.horn.stuck`, whose timing is \
+                "`Klaxon` in `Prod` declares no `depth` for `veh.ev.Horn.stuck`, whose timing is \
                  an explicit half-open range — a link to an event with no derivable bound takes \
                  its ring depth from `depth = <n>` on the placement line or on the deployment \
                  (rsdl reference §5)"
@@ -2891,7 +3110,7 @@ deployment Bench for Vehicle {
     #[test]
     fn a_redundant_provider_set_draws_rsdl_805_once_per_consumer_instance() {
         let system = check_events(
-            "component Twin [ instances = (a, b) ] { offers veh.ev.doors }\n\
+            "component Twin [ instances = (a, b) ] { offers veh.ev.DoorsService }\n\
              system Vehicle { Twin, Panel }\n\
              deployment Prod for Vehicle { machine A { Twin.a, Twin.b, Panel [ depth = 2 ] } }\n",
         );
@@ -2931,59 +3150,59 @@ deployment Bench for Vehicle {
     /// The distribution rules (rsdl §3.3), one input per rule.
     #[test]
     fn a_distribution_holds_each_implemented_closure_component_once() {
-        const CLOSURE: &str = "component Lane { offers veh.adas.lane }\n\
+        const CLOSURE: &str = "component Lane { offers veh.adas.LaneKeeping }\n\
                                component Panel { requires LaneAssist }\n\
                                component Backend [ external ] {}\n\
                                component Spare {}\n\
-                               system Vehicle { Lane, Panel, Backend, veh.diag.access }\n";
+                               system Vehicle { Lane, Panel, Backend, veh.diag.FaultAccess }\n";
         let cases: &[(&str, &[&str])] = &[
-            ("distribution D { Lane, Panel, veh.diag.access }", &[]),
+            ("distribution D { Lane, Panel, veh.diag.FaultAccess }", &[]),
             // A workspace with no distribution derives no installation.
             ("", &[]),
             ("distribution D { Lane, Panel }", &["RSDL-904"]),
             (
-                "distribution D { Lane, Panel, veh.diag.access, Spare }",
+                "distribution D { Lane, Panel, veh.diag.FaultAccess, Spare }",
                 &["RSDL-903"],
             ),
             (
-                "distribution D { Lane, Panel, veh.diag.access, Nothing }",
+                "distribution D { Lane, Panel, veh.diag.FaultAccess, Nothing }",
                 &["RSDL-903"],
             ),
             (
-                "distribution D { Lane, Panel, veh.diag.access, Lane.Unit }",
+                "distribution D { Lane, Panel, veh.diag.FaultAccess, Lane.Unit }",
                 &["RSDL-307"],
             ),
             (
-                "distribution D { Lane, Panel, veh.diag.access, veh.adas.lane }",
+                "distribution D { Lane, Panel, veh.diag.FaultAccess, veh.adas.LaneKeeping }",
                 &["RSDL-504"],
             ),
             (
-                "distribution D { Lane, Panel, veh.diag.access, Lane }",
+                "distribution D { Lane, Panel, veh.diag.FaultAccess, Lane }",
                 &["RSDL-906"],
             ),
             (
-                "distribution D { Lane, Panel, veh.diag.access }\ndistribution E { Lane }",
+                "distribution D { Lane, Panel, veh.diag.FaultAccess }\ndistribution E { Lane }",
                 &["RSDL-905"],
             ),
             (
-                "distribution D { Lane, Panel, veh.diag.access, Backend }",
+                "distribution D { Lane, Panel, veh.diag.FaultAccess, Backend }",
                 &["RSDL-907"],
             ),
             // RSDL-901: `Panel`, in a `PLATFORM` distribution, requires an
             // interface `Lane` offers, in an `APPLICATION` one.
             (
-                "distribution P [ tier = PLATFORM ] { Panel, veh.diag.access }\n\
+                "distribution P [ tier = PLATFORM ] { Panel, veh.diag.FaultAccess }\n\
                  distribution A [ tier = APPLICATION ] { Lane }",
                 &["RSDL-901"],
             ),
             (
-                "distribution P [ tier = APPLICATION ] { Panel, veh.diag.access }\n\
+                "distribution P [ tier = APPLICATION ] { Panel, veh.diag.FaultAccess }\n\
                  distribution A [ tier = PLATFORM ] { Lane }",
                 &[],
             ),
             // A distribution without `tier` is exempt, on either side.
             (
-                "distribution P [ tier = PLATFORM ] { Panel, veh.diag.access }\ndistribution A { Lane }",
+                "distribution P [ tier = PLATFORM ] { Panel, veh.diag.FaultAccess }\ndistribution A { Lane }",
                 &[],
             ),
         ];

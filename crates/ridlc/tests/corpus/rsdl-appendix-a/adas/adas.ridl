@@ -13,5 +13,5 @@ interface LaneAssist {
   signal active: Engaged @[100ms..1s]
 }
 
-service veh.adas.cruise : CruiseControl
-service veh.adas.lane   : LaneAssist
+service Cruise : CruiseControl
+service Lane   : LaneAssist

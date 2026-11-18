@@ -228,7 +228,7 @@ fn low_cohesion_interface_excludes_standard_packages_and_service_inline_shapes()
     let types = "type A: boolean\ntype B: boolean\ntype C: boolean\ntype D: boolean\ntype E: boolean\ntype F: boolean\ntype G: boolean\n";
     let members = "command a(value: A) @[..1s] command b(value: B) @[..1s] command c(value: C) @[..1s] command d(value: D) @[..1s] command e(value: E) @[..1s] command f(value: F) @[..1s] command g(value: G) @[..1s]";
     let standard = format!("package ridl.std\n{types}interface I {{ {members} }}\n");
-    let user = format!("package a\n{types}service a.example {{ {members} }}\n");
+    let user = format!("package a\n{types}service Example {{ {members} }}\n");
     let (diagnostics, _) =
         design_source_set_with(&[("ridl.std", &standard), ("a", &user)], |checked| {
             let pkg = &mut checked
@@ -418,7 +418,7 @@ fn inconsistent_unit_covers_parameters_and_signals() {
 #[test]
 fn inconsistent_unit_covers_inline_service_event_and_fixed_payloads() {
     let source = format!(
-        "package a\n{TYPES}struct First {{ speed: Speed }}\nservice a.samples {{\n  event speed: Speed @[100ms..1s]\n}}\nservice a.limit {{\n  fixed speed: SpeedMs\n}}\n"
+        "package a\n{TYPES}struct First {{ speed: Speed }}\nservice Samples {{\n  event speed: Speed @[100ms..1s]\n}}\nservice Limit {{\n  fixed speed: SpeedMs\n}}\n"
     );
     let out = workspace(&[("a", &source)]);
     let found = units(&out.diagnostics);
@@ -1256,11 +1256,11 @@ fn package_edges_through_the_real_compiler_count_only_system_requires_and_member
             vec![
                 (
                     "source.ridl",
-                    "package a\ninterface I {}\nservice a.feed: I\n",
+                    "package a\ninterface I {}\nservice Feed: I\n",
                 ),
                 (
                     "component.rsdl",
-                    "package a\ncomponent Producer { offers a.feed }\n",
+                    "package a\ncomponent Producer { offers a.Feed }\n",
                 ),
             ],
         ),
@@ -1269,11 +1269,11 @@ fn package_edges_through_the_real_compiler_count_only_system_requires_and_member
             vec![
                 (
                     "source.ridl",
-                    "package b\ninterface I {}\nservice b.feed: I\n",
+                    "package b\ninterface I {}\nservice Feed: I\n",
                 ),
                 (
                     "component.rsdl",
-                    "package b\ncomponent Producer { offers b.feed }\n",
+                    "package b\ncomponent Producer { offers b.Feed }\n",
                 ),
             ],
         ),
@@ -1282,11 +1282,11 @@ fn package_edges_through_the_real_compiler_count_only_system_requires_and_member
             vec![
                 (
                     "source.ridl",
-                    "package c\ninterface I {}\nservice c.feed: I\n",
+                    "package c\ninterface I {}\nservice Feed: I\n",
                 ),
                 (
                     "component.rsdl",
-                    "package c\ncomponent Producer { offers c.feed }\n",
+                    "package c\ncomponent Producer { offers c.Feed }\n",
                 ),
             ],
         ),
@@ -1295,11 +1295,11 @@ fn package_edges_through_the_real_compiler_count_only_system_requires_and_member
             vec![
                 (
                     "source.ridl",
-                    "package d\ninterface I {}\nservice d.feed: I\n",
+                    "package d\ninterface I {}\nservice Feed: I\n",
                 ),
                 (
                     "component.rsdl",
-                    "package d\ncomponent Producer { offers d.feed }\n",
+                    "package d\ncomponent Producer { offers d.Feed }\n",
                 ),
             ],
         ),

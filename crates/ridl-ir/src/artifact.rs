@@ -17,7 +17,7 @@ pub const DEPLOYMENT_FILE_SUFFIX: &str = ".deployment.binfb";
 /// `file` is the value of the deployment's `file` attribute. When it is
 /// present it is the stem as written. When it is absent the stem is
 /// `<package>.<name>` in ASCII lowercase, so `Development` in
-/// `com.ampere.viewif` gives `com.ampere.viewif.development`.
+/// `com.example.display` gives `com.example.display.development`.
 pub fn deployment_file_stem(package: &str, name: &str, file: Option<&str>) -> String {
     match file {
         Some(file) => file.to_string(),
@@ -65,15 +65,15 @@ mod tests {
     #[test]
     fn the_default_stem_is_the_qualified_name_in_lowercase() {
         assert_eq!(
-            deployment_file_stem("com.ampere.viewif", "Development", None),
-            "com.ampere.viewif.development"
+            deployment_file_stem("com.example.display", "Development", None),
+            "com.example.display.development"
         );
     }
 
     #[test]
     fn a_file_attribute_replaces_the_default_stem() {
         assert_eq!(
-            deployment_file_stem("com.ampere.viewif", "Development", Some("view-dev")),
+            deployment_file_stem("com.example.display", "Development", Some("view-dev")),
             "view-dev"
         );
     }

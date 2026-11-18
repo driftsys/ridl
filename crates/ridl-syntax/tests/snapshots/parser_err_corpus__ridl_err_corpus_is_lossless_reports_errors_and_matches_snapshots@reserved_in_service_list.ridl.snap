@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_err_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/err/reserved_in_service_list.ridl
 ---
-SourceFile@0..465
+SourceFile@0..456
   LineComment@0..77 "// A `reserved` entry ..."
   Whitespace@77..78 "\n"
   LineComment@78..154 "// of interface refer ..."
@@ -41,51 +41,47 @@ SourceFile@0..465
     Whitespace@334..335 "\n"
     RBrace@335..336 "}"
   Whitespace@336..338 "\n\n"
-  ServiceDef@338..375
+  ServiceDef@338..366
     ServiceKw@338..345 "service"
     Whitespace@345..346 " "
-    DottedName@346..360
-      Ident@346..349 "veh"
-      Dot@349..350 "."
-      Ident@350..354 "body"
-      Dot@354..355 "."
-      Ident@355..360 "doors"
-    Whitespace@360..361 " "
-    Colon@361..362 ":"
-    Whitespace@362..363 " "
-    PathType@363..374
-      QualifiedName@363..374
-        Ident@363..374 "DoorControl"
-    Comma@374..375 ","
-  Whitespace@375..376 " "
-  ErrorNode@376..412
-    ReservedKw@376..384 "reserved"
-    Whitespace@384..385 " "
-    Ident@385..399 "LegacyDoorDiag"
-    Comma@399..400 ","
-    Whitespace@400..401 " "
-    Ident@401..412 "HealthBlock"
-  Whitespace@412..414 "\n\n"
-  InterfaceDef@414..464
-    InterfaceKw@414..423 "interface"
-    Whitespace@423..424 " "
-    Name@424..435
-      Ident@424..435 "HealthBlock"
-    Whitespace@435..436 " "
-    LBrace@436..437 "{"
-    Whitespace@437..440 "\n  "
-    SignalDef@440..462
-      SignalKw@440..446 "signal"
-      Whitespace@446..447 " "
-      Name@447..452
-        Ident@447..452 "alive"
-      Whitespace@452..453 " "
-      Colon@453..454 ":"
-      Whitespace@454..455 " "
-      PrimitiveType@455..462
-        BooleanKw@455..462 "boolean"
-    Whitespace@462..463 "\n"
-    RBrace@463..464 "}"
-  Whitespace@464..465 "\n"
+    DottedName@346..351
+      Ident@346..351 "Doors"
+    Whitespace@351..352 " "
+    Colon@352..353 ":"
+    Whitespace@353..354 " "
+    PathType@354..365
+      QualifiedName@354..365
+        Ident@354..365 "DoorControl"
+    Comma@365..366 ","
+  Whitespace@366..367 " "
+  ErrorNode@367..403
+    ReservedKw@367..375 "reserved"
+    Whitespace@375..376 " "
+    Ident@376..390 "LegacyDoorDiag"
+    Comma@390..391 ","
+    Whitespace@391..392 " "
+    Ident@392..403 "HealthBlock"
+  Whitespace@403..405 "\n\n"
+  InterfaceDef@405..455
+    InterfaceKw@405..414 "interface"
+    Whitespace@414..415 " "
+    Name@415..426
+      Ident@415..426 "HealthBlock"
+    Whitespace@426..427 " "
+    LBrace@427..428 "{"
+    Whitespace@428..431 "\n  "
+    SignalDef@431..453
+      SignalKw@431..437 "signal"
+      Whitespace@437..438 " "
+      Name@438..443
+        Ident@438..443 "alive"
+      Whitespace@443..444 " "
+      Colon@444..445 ":"
+      Whitespace@445..446 " "
+      PrimitiveType@446..453
+        BooleanKw@446..453 "boolean"
+    Whitespace@453..454 "\n"
+    RBrace@454..455 "}"
+  Whitespace@455..456 "\n"
 errors:
-  FORM-102 376..384 unexpected token at top level
+  FORM-102 367..375 unexpected token at top level

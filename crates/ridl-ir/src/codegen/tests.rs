@@ -2402,7 +2402,7 @@ fn populated_deployment() -> v1::Deployment {
                 number: 1,
                 inline: true,
                 provisional: true,
-                service: "veh.cabin.climate".to_string(),
+                service: "veh.cabin.Climate".to_string(),
             }],
         }],
         instances: vec![v1::Instance {
@@ -2509,7 +2509,7 @@ fn a_populated_deployment_section_renders_the_keys_a_plugin_reads() {
             "number": 1,
             "inline": true,
             "provisional": true,
-            "service": "veh.cabin.climate"
+            "service": "veh.cabin.Climate"
           }
         ]
       }
@@ -5846,4 +5846,29 @@ fn enum_slot_width_matches_the_flatbuffers_projection() {
         }
     }
     assert!(enum_slots > 0, "the fixture must exercise an enum slot");
+}
+
+#[test]
+fn a_service_global_name_reaches_the_codegen_model() {
+    let package = v2::Package {
+        name: "veh.cluster".to_owned(),
+        services: vec![v2::Service {
+            name: "veh.cluster.HvacCabin".to_owned(),
+            shapes: vec![v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::Inline(v2::Interface::default())),
+            }],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let model = lower(&package, &[]);
+    let name = model.services[0].name.as_ref().unwrap();
+    assert_eq!(name.dotted, "veh.cluster.HvacCabin");
+    assert_eq!(name.segments, ["veh", "cluster", "HvacCabin"]);
+    assert_eq!(name.joined_camel, "VehClusterHvacCabin");
+    assert_eq!(name.underscored, "veh_cluster_HvacCabin");
+    assert_eq!(
+        model.interfaces[0].identity,
+        Some(v1::interface::Identity::Service(name.clone()))
+    );
 }

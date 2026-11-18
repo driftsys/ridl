@@ -833,9 +833,9 @@ impl ServerState {
     /// in the same file order) and rewrites the spans onto those ids with
     /// [`remap_diagnostics`] before conversion.
     ///
-    /// The workspace-wide passes — the service catalog and the rsdl system
-    /// query (rsdl reference v0.2) — run once over the workspace afterwards,
-    /// through the `check_workspace` that `ridlc` calls too.
+    /// The workspace-wide pass — the rsdl system query (rsdl reference v0.2) —
+    /// runs once over the workspace afterwards, through the `check_workspace`
+    /// that `ridlc` calls too.
     fn analyze(&self) -> Batch {
         let db = &self.db;
         let mut sources = SourceMap::new();
@@ -917,8 +917,8 @@ impl ServerState {
             ));
             checked.push(checked_package);
         }
-        // The workspace-wide passes — the service catalog and the rsdl system
-        // query — run once over the workspace, as in `ridlc`; a standalone
+        // The workspace-wide pass — the rsdl system query — runs once over the
+        // workspace, as in `ridlc`; a standalone
         // overlay is outside it. RSDL-804 is raised by the driver, not the
         // query: the server configures no backend, as the command line does
         // not, so no namespace is claimed and every backend key draws the
@@ -1180,7 +1180,20 @@ impl ServerState {
         let path = convert::uri_to_path(&params.text_document_position_params.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let info = if profile_of_path(&path) == Profile::Rsdl {
+        let info = if let Some(located) =
+            nav::service_import_at(&self.db, self.workspace, self.std, package, file, offset)
+        {
+            hover::HoverInfo {
+                markdown: hover::symbol_markdown(
+                    &self.db,
+                    self.workspace,
+                    self.std,
+                    package,
+                    &located.symbol,
+                ),
+                range: located.reference,
+            }
+        } else if profile_of_path(&path) == Profile::Rsdl {
             // An rsdl declaration is a doc carrier too: a doc link in its
             // doc shows the target's hover (ADR-0026).
             rsdl::hover(&self.db, self.workspace, self.std, package, file, offset).or_else(
@@ -1221,7 +1234,11 @@ impl ServerState {
         let path = convert::uri_to_path(&params.text_document_position_params.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let site = if profile_of_path(&path) == Profile::Rsdl {
+        let site = if let Some(located) =
+            nav::service_import_at(&self.db, self.workspace, self.std, package, file, offset)
+        {
+            Some((located.symbol.file, located.symbol.range))
+        } else if profile_of_path(&path) == Profile::Rsdl {
             rsdl::definition(&self.db, self.workspace, self.std, file, offset)
         } else {
             nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)
@@ -1268,7 +1285,11 @@ impl ServerState {
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
         let include_declaration = params.context.include_declaration;
-        let located = if profile_of_path(&path) == Profile::Rsdl {
+        let located = if let Some(located) =
+            nav::service_import_at(&self.db, self.workspace, self.std, package, file, offset)
+        {
+            Some(located.symbol)
+        } else if profile_of_path(&path) == Profile::Rsdl {
             match rsdl::references(&self.db, self.workspace, self.std, file, offset) {
                 Some(rsdl::References::Rsdl {
                     declaration,
@@ -1295,7 +1316,10 @@ impl ServerState {
                     file,
                     offset,
                 )?;
-                link.target.member.is_none().then_some(link.target.symbol)?
+                let on_service = link.target.symbol.kind == ridl_sem::SymbolKind::Service
+                    && nav::symbol_segment(&link.candidate, &link.target, file.text(&self.db))
+                        .is_some_and(|range| range.contains_inclusive(offset));
+                (link.target.member.is_none() || on_service).then_some(link.target.symbol)?
             }
         };
 
@@ -1412,7 +1436,7 @@ impl ServerState {
     /// renameable symbol, so the client can validate before applying.
     ///
     /// In an `.rsdl` file, the name of a system, component, instance or
-    /// declared interface under the cursor; nothing on a service or on an rsdl
+    /// declared interface or service under the cursor; nothing on an rsdl
     /// reference the checker binds to nothing.
     fn prepare_rename(
         &mut self,
@@ -1442,9 +1466,8 @@ impl ServerState {
     /// LSP error response.
     ///
     /// In an `.rsdl` file, a system, component or instance is renamed with its
-    /// rsdl references and import lines, and a declared interface by the ridl
-    /// rename; a service, and an rsdl reference the checker binds to nothing,
-    /// are not renamed.
+    /// rsdl references and import lines, and a declared interface or service by
+    /// the ridl rename. An unbound rsdl reference is not renamed.
     fn rename(
         &mut self,
         params: &lt::RenameParams,

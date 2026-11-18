@@ -32,7 +32,7 @@ fn text_of(reference: Option<Reference>) -> String {
         .collect()
 }
 
-/// rsdl reference Appendix A, `system.rsdl`, verbatim.
+/// rsdl reference Appendix A, `system.rsdl`, with qualified service references.
 const SYSTEM: &str = r#"package veh.topology
 
 import veh.adas.CruiseControl
@@ -40,11 +40,11 @@ import veh.adas.LaneAssist
 
 /// Adaptive cruise, two copies: one per compute node.
 component Cruise [ instances = (primary, backup), labels = (ASIL_B) ] {
-  offers   veh.adas.cruise
+  offers   veh.adas.AdaptiveCruise
   requires LaneAssist
 }
 
-component Lane { offers veh.adas.lane }
+component Lane { offers veh.adas.LaneKeeping }
 
 component Panel {
   requires CruiseControl
@@ -54,12 +54,12 @@ component Panel {
 /// The fleet backend. No implementation in this workspace.
 component Backend [ external ] {
   requires CruiseControl
-  requires veh.diag.access
+  requires veh.diag.FaultAccess
 }
 
-system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }
+system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.FaultAccess }
 
-distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.access }
+distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.FaultAccess }
 distribution Hmi  [ tier = APPLICATION ] { Panel }
 "#;
 
@@ -67,7 +67,7 @@ distribution Hmi  [ tier = APPLICATION ] { Panel }
 const PRODUCTION: &str = r#"package veh.topology
 
 deployment Production for Vehicle {
-  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.access }
+  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.FaultAccess }
   machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }
   machine Cloud   [ external ] { Backend }
 }
@@ -93,7 +93,7 @@ fn components_expose_their_lines_attributes_and_doc_comments() {
         [
             (
                 Some(ComponentLineKind::Offers),
-                "veh.adas.cruise".to_string()
+                "veh.adas.AdaptiveCruise".to_string()
             ),
             (Some(ComponentLineKind::Requires), "LaneAssist".to_string()),
         ],
@@ -125,7 +125,7 @@ fn systems_and_distributions_hold_member_lines() {
             .lines()
             .map(|line| text_of(line.reference()))
             .collect::<Vec<_>>(),
-        ["Cruise", "Lane", "Panel", "Backend", "veh.diag.access"],
+        ["Cruise", "Lane", "Panel", "Backend", "veh.diag.FaultAccess"],
     );
 
     let distributions: Vec<_> = file.distributions().collect();
@@ -158,7 +158,7 @@ fn a_deployment_names_its_system_and_holds_machines_with_placement_lines() {
             .lines()
             .map(|line| text_of(line.reference()))
             .collect::<Vec<_>>(),
-        ["Cruise.primary", "Lane", "veh.diag.access"],
+        ["Cruise.primary", "Lane", "veh.diag.FaultAccess"],
     );
 
     // `Panel [ linux.cpuset = (2, 3) ]`: the backend key on a placement line.

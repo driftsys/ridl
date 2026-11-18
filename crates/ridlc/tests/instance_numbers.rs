@@ -37,7 +37,7 @@ fn the_corpus_system_carries_the_locked_numbers() {
         ]
     );
     assert_eq!(
-        numbers_of(&system, "veh.ego.status"),
+        numbers_of(&system, "veh.ego.Status"),
         [("Unit".to_string(), 3, false)]
     );
 }

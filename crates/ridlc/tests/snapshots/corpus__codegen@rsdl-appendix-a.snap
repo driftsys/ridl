@@ -435,14 +435,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "services": [
     {
       "name": {
-        "dotted": "veh.adas.cruise",
+        "dotted": "veh.adas.Cruise",
         "segments": [
           "veh",
           "adas",
-          "cruise"
+          "Cruise"
         ],
         "joinedCamel": "VehAdasCruise",
-        "underscored": "veh_adas_cruise"
+        "underscored": "veh_adas_Cruise"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -457,14 +457,14 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     },
     {
       "name": {
-        "dotted": "veh.adas.lane",
+        "dotted": "veh.adas.Lane",
         "segments": [
           "veh",
           "adas",
-          "lane"
+          "Lane"
         ],
         "joinedCamel": "VehAdasLane",
-        "underscored": "veh_adas_lane"
+        "underscored": "veh_adas_Lane"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -480,7 +480,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "catalog": {
     "package": "veh",
-    "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
+    "hash": "44KXTttHtFkzD1NjuwAVBtIeuU38hSXKwBqI3Rud95E=",
     "retired": [],
     "compatible": []
   },
@@ -1012,7 +1012,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "services": [],
   "catalog": {
     "package": "veh",
-    "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
+    "hash": "44KXTttHtFkzD1NjuwAVBtIeuU38hSXKwBqI3Rud95E=",
     "retired": [],
     "compatible": []
   },
@@ -1436,28 +1436,28 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "since": [],
       "rules": [],
       "service": {
-        "dotted": "veh.diag.access",
+        "dotted": "veh.diag.Access",
         "segments": [
           "veh",
           "diag",
-          "access"
+          "Access"
         ],
         "joinedCamel": "VehDiagAccess",
-        "underscored": "veh_diag_access"
+        "underscored": "veh_diag_Access"
       }
     }
   ],
   "services": [
     {
       "name": {
-        "dotted": "veh.diag.access",
+        "dotted": "veh.diag.Access",
         "segments": [
           "veh",
           "diag",
-          "access"
+          "Access"
         ],
         "joinedCamel": "VehDiagAccess",
-        "underscored": "veh_diag_access"
+        "underscored": "veh_diag_Access"
       },
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
@@ -1472,7 +1472,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   ],
   "catalog": {
     "package": "veh",
-    "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
+    "hash": "44KXTttHtFkzD1NjuwAVBtIeuU38hSXKwBqI3Rud95E=",
     "retired": [],
     "compatible": []
   },
@@ -1627,7 +1627,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "services": [],
   "catalog": {
     "package": "veh",
-    "hash": "lJ/A1xcXiHvJmhNNG8aqjkDJe21IyYJgZFy7xHoNpNo=",
+    "hash": "44KXTttHtFkzD1NjuwAVBtIeuU38hSXKwBqI3Rud95E=",
     "retired": [],
     "compatible": []
   },

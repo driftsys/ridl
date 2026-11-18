@@ -716,7 +716,7 @@ fn a_stream_response_has_absent_sizes_and_a_spelled_type_name() {
 fn an_inline_service_shape_is_an_interface_under_the_service_name() {
     let mut package = package();
     package.services.push(Service {
-        name: "veh.cluster.hvac".to_owned(),
+        name: "veh.cluster.Hvac".to_owned(),
         shapes: vec![ServiceShape {
             kind: Some(service_shape::Kind::Inline(Interface {
                 number: 2,
@@ -739,7 +739,7 @@ fn an_inline_service_shape_is_an_interface_under_the_service_name() {
     let interfaces = catalog.interfaces().unwrap();
     assert_eq!(interfaces.len(), 2);
     let hvac = interfaces.get(1).unwrap().unwrap();
-    assert_eq!(hvac.name().unwrap(), "veh.cluster.hvac");
+    assert_eq!(hvac.name().unwrap(), "veh.cluster.Hvac");
     assert_eq!(hvac.number().unwrap(), 2);
     assert!(hvac.provisional().unwrap());
     assert_eq!(hvac.members().unwrap().len(), 1);

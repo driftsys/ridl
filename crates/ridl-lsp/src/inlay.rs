@@ -95,7 +95,7 @@ pub fn inlay_hints(
         }
     }
     for shape in source.shapes() {
-        shape_hints(ir, &shape, &mut hints);
+        shape_hints(ir, pkg.name(db), &shape, &mut hints);
     }
     hints.retain(|hint| range.contains_inclusive(hint.offset));
     hints
@@ -297,10 +297,10 @@ fn unit_backing(type_def: &v2::TypeDef) -> Option<String> {
 /// that matters to wire identity, so it carries its own ordinal sequence and
 /// gets the same hints. Both halves are one function because both the AST walk
 /// (`SourceFile::shapes`) and the IR lookup (`Package::shapes`) key the two
-/// forms on the same identity — an interface's own name, a service's dotted
-/// one.
-fn shape_hints(ir: &v2::Package, shape: &InterfaceShape, out: &mut Vec<InlayHint>) {
-    let Some(name) = shape.identity() else {
+/// forms on the same identity — an interface's own name, a service's global
+/// name, the package name followed by the declared name.
+fn shape_hints(ir: &v2::Package, package: &str, shape: &InterfaceShape, out: &mut Vec<InlayHint>) {
+    let Some(name) = shape.identity(package) else {
         return;
     };
     let Some(found) = ir.shapes().find(|found| found.name == name) else {

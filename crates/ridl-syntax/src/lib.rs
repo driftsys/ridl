@@ -6,6 +6,7 @@ mod lexer;
 mod parser;
 mod syntax_kind;
 
+pub use ast::is_camel_case_id;
 pub use keywords::Profile;
 pub use lexer::{Token, lex};
 pub use parser::{Parse, SyntaxError, parse};

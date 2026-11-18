@@ -251,32 +251,60 @@ fn a_fixed_is_checked_against_a_declared_limit() {
 #[test]
 fn an_inline_service_is_keyed_by_its_short_name() {
     let source = "package demo\ntype Payload: bytes [0..1000]\n\
-                  service demo.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
-    let diagnostics = check(source, "[limits.interaction]\n\"svc.sig\" = 10\n");
+                  service Svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let diagnostics = check(source, "[limits.interaction]\n\"Svc.sig\" = 10\n");
     let found = with("RIDL-151", &diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
-    assert!(found[0].message.contains("`svc.sig`"), "{found:?}");
+    assert!(found[0].message.contains("`Svc.sig`"), "{found:?}");
     assert!(with("RIDL-152", &diagnostics).is_empty(), "{diagnostics:?}");
-    // The dotted form is not a key.
-    let diagnostics = check(source, "[limits.interaction]\n\"demo.svc.sig\" = 10\n");
+    // The global name is not a key.
+    let diagnostics = check(source, "[limits.interaction]\n\"demo.Svc.sig\" = 10\n");
     assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
     assert_eq!(with("RIDL-152", &diagnostics).len(), 1, "{diagnostics:?}");
 }
 
+/// ADR-0034 decision 4: a key names an inline shape by the declared name of its
+/// service, without the package; the global name, written with the package, is
+/// no key.
 #[test]
-fn a_short_name_shared_by_two_shapes_is_ambiguous() {
-    let source = "package demo\ntype Payload: bytes [0..1000]\n\
-                  service demo.a.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n\
-                  service demo.b.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
-    let diagnostics = check(source, "[limits.interaction]\n\"svc.sig\" = 10\n");
-    let found = with("RIDL-152", &diagnostics);
+fn an_inline_service_key_leaves_out_the_package_of_the_global_name() {
+    let root = "package demo\n";
+    let sub = "package demo.hvac\ntype Payload: bytes [0..1000]\n\
+               service Cabin {\n  signal temperature: Payload @[10ms..100ms]\n}\n";
+    let run_with_key = |key: &str| {
+        run_with(
+            &[Member {
+                name: "demo",
+                source: root,
+                manifest: &format!("[limits.interaction]\n\"{key}\" = 10\n"),
+            }],
+            PROTO3,
+            &[("hvac/m.ridl", sub)],
+        )
+        .diagnostics
+    };
+    let diagnostics = run_with_key("Cabin.temperature");
+    assert_eq!(with("RIDL-151", &diagnostics).len(), 1, "{diagnostics:?}");
+    assert!(with("RIDL-152", &diagnostics).is_empty(), "{diagnostics:?}");
+    let diagnostics = run_with_key("demo.hvac.Cabin.temperature");
+    assert_eq!(with("RIDL-152", &diagnostics).len(), 1, "{diagnostics:?}");
+}
+
+/// The member sites of an inline shape are keyed by the service's global name,
+/// as the IR names the shape; a payload above the ceiling in one is RIDL-157.
+#[test]
+fn an_inline_service_payload_above_the_ceiling_draws_ridl_157() {
+    let source = "package demo\ntype Text: string [0..4032]\n\
+                  struct Huge { a: Text, b: Text }\n\
+                  service Cabin {\n  signal blob: Huge @[10ms..100ms]\n}\n";
+    let diagnostics = check(source, "");
+    let found = with("RIDL-157", &diagnostics);
     assert_eq!(found.len(), 1, "{diagnostics:?}");
-    assert!(found[0].message.contains("ambiguous"), "{found:?}");
-    // The entry applies to neither shape.
-    assert!(with("RIDL-151", &diagnostics).is_empty(), "{diagnostics:?}");
-    // A kind entry still applies to both.
-    let diagnostics = check(source, "[limits.kind]\nsignal = 10\n");
-    assert_eq!(with("RIDL-151", &diagnostics).len(), 2, "{diagnostics:?}");
+    let range = found[0].primary.range;
+    assert_eq!(
+        &source[usize::from(range.start())..usize::from(range.end())],
+        "blob"
+    );
 }
 
 #[test]
@@ -562,6 +590,33 @@ fn a_short_name_shared_by_two_packages_of_a_unit_is_ambiguous() {
                 interface Same {\n  signal sig: Payload @[10ms..100ms]\n}\n";
     let sub = "package demo.sub\ntype Payload: bytes [0..1000]\n\
                interface Same {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let member = Member {
+        name: "demo",
+        source: main,
+        manifest: "[limits.interaction]\n\"Same.sig\" = 10\n",
+    };
+    let result = run_with(&[member], PROTO3, &[("sub/s.ridl", sub)]);
+    let found = with("RIDL-152", &result.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", result.diagnostics);
+    assert!(
+        found[0]
+            .message
+            .contains("ambiguous: more than one interface or inline service of the unit"),
+        "{found:?}"
+    );
+    assert!(
+        with("RIDL-151", &result.diagnostics).is_empty(),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn an_inline_service_short_name_shared_by_two_packages_of_a_unit_is_ambiguous() {
+    let main = "package demo\ntype Payload: bytes [0..1000]\n\
+                service Same {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let sub = "package demo.sub\ntype Payload: bytes [0..1000]\n\
+               service Same {\n  signal sig: Payload @[10ms..100ms]\n}\n";
     let member = Member {
         name: "demo",
         source: main,

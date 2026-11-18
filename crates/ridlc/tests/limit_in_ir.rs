@@ -11,7 +11,7 @@ use ridlc::{WorkspaceOutput, compile_workspace};
 const SOURCE: &str = "package demo\ntype Payload: bytes [0..100]\n\
                       interface Iface {\n  signal sig: Payload @[10ms..100ms]\n  \
                       event ev: Payload\n  query ask(): Payload\n}\n\
-                      service demo.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+                      service Svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
 
 /// Compiles a one-package workspace whose manifest ends with `limits`, with
 /// `source` as its only file.
@@ -76,14 +76,14 @@ fn a_name_entry_is_recorded_in_the_ir() {
     assert_eq!(limit(&output, "Iface.sig"), Some(300));
     assert_eq!(limit(&output, "Iface.ev"), None);
     assert_eq!(limit(&output, "Iface.ask"), None);
-    assert_eq!(limit(&output, "svc.sig"), None);
+    assert_eq!(limit(&output, "Svc.sig"), None);
 }
 
 #[test]
 fn an_inline_service_entry_is_recorded_in_the_ir() {
-    let output = compile(SOURCE, "[limits.interaction]\n\"svc.sig\" = 250\n");
+    let output = compile(SOURCE, "[limits.interaction]\n\"Svc.sig\" = 250\n");
     assert_eq!(errors(&output), Vec::<String>::new());
-    assert_eq!(limit(&output, "svc.sig"), Some(250));
+    assert_eq!(limit(&output, "Svc.sig"), Some(250));
     assert_eq!(limit(&output, "Iface.sig"), None);
 }
 
@@ -98,7 +98,7 @@ fn kind_and_default_are_recorded() {
     // The name beats the kind, and the kind beats the default.
     assert_eq!(limit(&output, "Iface.ev"), Some(200));
     assert_eq!(limit(&output, "Iface.sig"), Some(300));
-    assert_eq!(limit(&output, "svc.sig"), Some(300));
+    assert_eq!(limit(&output, "Svc.sig"), Some(300));
     assert_eq!(limit(&output, "Iface.ask"), Some(400));
 }
 
@@ -124,28 +124,6 @@ fn a_table_that_reaches_nothing_leaves_the_catalog_hash_unchanged() {
     // A limit that does reach an interaction changes the hash.
     let reached = compile(SOURCE, "[limits.interaction]\n\"Iface.sig\" = 300\n");
     assert_ne!(hash(&without), hash(&reached));
-}
-
-#[test]
-fn an_ambiguous_short_name_falls_back_to_kind() {
-    // Two inline services share the short name `svc`, so no name entry can
-    // apply to either; the kind entry still does.
-    let source = "package demo\ntype Payload: bytes [0..100]\n\
-                  service demo.a.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n\
-                  service demo.b.svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
-    let output = compile(
-        source,
-        "[limits.kind]\nsignal = 300\n[limits.interaction]\n\"svc.sig\" = 10\n",
-    );
-    let limits = limits_of(&output);
-    assert_eq!(limits.len(), 2);
-    assert!(
-        limits.iter().all(|(_, limit)| *limit == Some(300)),
-        "{limits:?}"
-    );
-    // With no kind or default entry, nothing applies.
-    let output = compile(source, "[limits.interaction]\n\"svc.sig\" = 10\n");
-    assert!(limits_of(&output).iter().all(|(_, limit)| limit.is_none()));
 }
 
 #[test]
@@ -176,6 +154,43 @@ fn a_name_is_ambiguous_across_the_packages_of_a_unit() {
         }
     }
     assert_eq!(seen, 2);
+}
+
+/// Two inline-shape services of one unit share the declared name `Svc` in
+/// two packages, so the key `Svc.sig` is ambiguous and applies to neither;
+/// the kind entry still does, and with no kind entry nothing applies.
+#[test]
+fn an_inline_service_short_name_is_ambiguous_across_the_packages_of_a_unit() {
+    let main = "package demo\ntype Payload: bytes [0..100]\n\
+                service Svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let sub = "package demo.sub\ntype Payload: bytes [0..100]\n\
+               service Svc {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    for (kind, expected) in [("[limits.kind]\nsignal = 300\n", Some(300)), ("", None)] {
+        let dir = tempfile::tempdir().expect("a temp dir");
+        std::fs::write(
+            dir.path().join("ridl.toml"),
+            format!(
+                "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n\
+                 {kind}[limits.interaction]\n\"Svc.sig\" = 10\n"
+            ),
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("m.ridl"), main).unwrap();
+        std::fs::create_dir(dir.path().join("sub")).unwrap();
+        std::fs::write(dir.path().join("sub/s.ridl"), sub).unwrap();
+        let mut db = RidlDatabase::default();
+        let output = compile_workspace(&mut db, dir.path()).unwrap();
+        let mut seen = 0;
+        for package in &output.checked {
+            for shape in package.ir.shapes() {
+                for decl in &shape.interface.interactions {
+                    assert_eq!(decl.limit, expected, "{}.{}", shape.name, decl.name);
+                    seen += 1;
+                }
+            }
+        }
+        assert_eq!(seen, 2);
+    }
 }
 
 #[test]

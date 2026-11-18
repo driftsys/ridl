@@ -247,25 +247,7 @@ async fn ridl_check_and_check_format_json_agree() {
     .expect("ridl_check_and_check_format_json_agree did not finish within the timeout");
 }
 
-/// The two faces agree on a diagnostic of the service catalog, a
-/// workspace-wide pass: RIDL-140, whose label points at the first declaration
-/// (issue #345).
-#[tokio::test]
-async fn ridl_check_and_check_format_json_agree_on_the_service_catalog() {
-    tokio::time::timeout(
-        TIMEOUT,
-        assert_faces_agree(
-            "dup.ridl",
-            "package p\ninterface I {}\nservice p.s : I\nservice p.s : I\n",
-            "ridl",
-            &["RIDL-140"],
-        ),
-    )
-    .await
-    .expect("the service catalog agreement test did not finish within the timeout");
-}
-
-/// The two faces agree on a diagnostic of the rsdl system query, the other
+/// The two faces agree on a diagnostic of the rsdl system query, a
 /// workspace-wide pass: RSDL-602, a system member line that names nothing.
 #[tokio::test]
 async fn ridl_check_and_check_format_json_agree_on_the_rsdl_system() {
@@ -721,7 +703,7 @@ async fn every_tool_leaves_the_tree_unchanged() {
                 "ridl_references" => {
                     assert_eq!(output["target"], "fx.a.Speed");
                     assert_eq!(output["references"].as_array().unwrap().len(), 1);
-                    assert_eq!(output["references"][0]["declaration"], "fx.b.diag");
+                    assert_eq!(output["references"][0]["declaration"], "fx.b.Diag");
                 }
                 "ridl_dependencies" => {
                     assert_eq!(output["packages"].as_array().unwrap().len(), 3);

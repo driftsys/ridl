@@ -108,26 +108,29 @@ pub(crate) fn lint_package(checker: &mut Checker<'_>, files: &[InputFile]) {
 
 /// The interaction scopes of the package, in file then declaration order.
 ///
-/// Interfaces are filtered through the resolver's first-wins rule so a losing
-/// duplicate is not linted twice; a `service` contributes only when it carries
-/// an inline shape, since a named reference points at an interface already
-/// collected in its own right.
+/// Interfaces and services are filtered through the resolver's first-wins rule
+/// so a losing duplicate is not linted twice; a `service` contributes only when
+/// it carries an inline shape, since a named reference points at an interface
+/// already collected in its own right, and only when it has a declared name.
 fn collect_scopes(checker: &Checker<'_>, files: &[InputFile]) -> Vec<Scope> {
     let mut scopes = Vec::new();
     for (index, file) in files.iter().enumerate() {
         let source = source_file(checker.db, *file);
         for shape in source.shapes() {
-            // The first-wins filter applies to `interface` declarations only:
-            // a service's dotted name lives in the catalog namespace, not the
-            // type namespace the resolver arbitrates.
-            if let ast::InterfaceShape::Interface(def) = &shape
-                && !checker.is_winner(*file, def)
-            {
+            // The resolver's first-wins rule applies to an interface and to a
+            // service alike: a loser is TYPL-009 and does not lower. A service
+            // in the old form has no declared name (RIDL-142), binds nothing
+            // and is not a scope.
+            let winner = match &shape {
+                ast::InterfaceShape::Interface(def) => checker.is_winner(*file, def),
+                ast::InterfaceShape::ServiceInline(def) => checker.is_winning_service(*file, def),
+            };
+            if !winner {
                 continue;
             }
             scopes.push(Scope {
                 file: index,
-                name: shape.identity().unwrap_or_default(),
+                name: shape.identity(&checker.package_name).unwrap_or_default(),
                 members: shape.members().collect(),
             });
         }
@@ -880,7 +883,7 @@ struct AuditRecord {{
     fn lints_reach_inline_service_shapes() {
         let checked = check_ridl(&format!(
             "{PRELUDE}
-service veh.drive {{
+service Drive {{
   query setGear(position: GearPosition): Speed @[..50ms]
 }}
 "
@@ -921,6 +924,53 @@ interface Drive {
             1,
             "the losing re-declaration must not draw its own RIDL-404: {:?}",
             checked.diagnostics,
+        );
+    }
+
+    /// A losing duplicate inline-shape service is linted once, as a losing
+    /// interface is: the loser is TYPL-009 and does not lower.
+    #[test]
+    fn a_losing_duplicate_inline_service_is_not_linted_twice() {
+        let winner = format!(
+            "{PRELUDE}
+service Drive {{
+  query setGear(position: GearPosition): Speed @[..50ms]
+}}
+"
+        );
+        let loser = "package app
+service Drive {
+  query setGear(position: GearPosition): Speed @[..50ms]
+}
+";
+        let checked = check_ridl_files(&[("a.ridl", &winner), ("b.ridl", loser)]);
+        assert_eq!(
+            codes(&checked)
+                .iter()
+                .filter(|code| **code == "RIDL-404")
+                .count(),
+            1,
+            "{:?}",
+            checked.diagnostics,
+        );
+    }
+
+    /// An inline-shape service in the old form binds nothing (RIDL-142) and is
+    /// not linted: it has no global name to be a scope of.
+    #[test]
+    fn an_old_form_inline_service_is_not_linted() {
+        let checked = check_ridl(&format!(
+            "{PRELUDE}
+service drive {{
+  query setGear(position: GearPosition): Speed @[..50ms]
+}}
+"
+        ));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-142"],
+            "{:?}",
+            checked.diagnostics
         );
     }
 }

@@ -533,7 +533,7 @@ pub fn corpus() -> Vec<CorpusEntry> {
         signal!("veh.cluster.WheelHistory.wheelTemp", temperature()),
         signal!("veh.cluster.WheelHistory.wheelSlipRate", ratio()),
         signal!("veh.cluster.WheelSummary.wheelHealth", fan()),
-        signal!("veh.cluster.wheels.ticks", fan()),
+        signal!("veh.cluster.Wheels.ticks", fan()),
         entry!(
             "veh.cluster.WheelDiagnostics.wheelTicks",
             Kind::Signal,
@@ -547,11 +547,11 @@ pub fn corpus() -> Vec<CorpusEntry> {
             )
             }
         ),
-        signal!("veh.hvac.cabin.cabinTemp", temperature()),
-        signal!("veh.hvac.cabin.targetTemp", temperature()),
-        signal!("veh.hvac.cabin.blowerDuty", ratio()),
-        signal!("veh.hvac.cabin.fanLevel", fan()),
-        signal!("veh.hvac.cabin.compressorLoad", ratio()),
+        signal!("veh.cluster.HvacCabin.cabinTemp", temperature()),
+        signal!("veh.cluster.HvacCabin.targetTemp", temperature()),
+        signal!("veh.cluster.HvacCabin.blowerDuty", ratio()),
+        signal!("veh.cluster.HvacCabin.fanLevel", fan()),
+        signal!("veh.cluster.HvacCabin.compressorLoad", ratio()),
         signal!(
             "veh.cabin.Cabin.temperature",
             cabin::Temperature::new(21).unwrap()

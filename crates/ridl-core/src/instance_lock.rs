@@ -10,7 +10,7 @@
 //! next 5
 //! veh.adas.Cruise/primary 1
 //! veh.adas.Cruise/backup 2
-//! veh.ego.status/Unit 3
+//! veh.ego.Status/Unit 3
 //! veh.adas.Lane/left 4 retired
 //! ```
 //!
@@ -195,7 +195,7 @@ mod tests {
 next 5
 veh.adas.Cruise/primary 1
 veh.adas.Cruise/backup 2
-veh.ego.status/Unit 3
+veh.ego.Status/Unit 3
 veh.adas.Lane/left 4 retired
 ";
 
@@ -211,7 +211,7 @@ veh.adas.Lane/left 4 retired
     fn a_key_is_a_dotted_component_a_slash_and_an_instance() {
         for good in [
             "veh.adas.Cruise/primary",
-            "veh.ego.status/Unit",
+            "veh.ego.Status/Unit",
             "a.B/x1",
             "a.B/unit",
         ] {
@@ -314,8 +314,8 @@ veh.adas.Lane/left 4 retired
     #[test]
     fn a_single_key_rename_retire_and_live_work_on_the_instance_table() {
         let mut lock = parse(EXAMPLE).unwrap();
-        let old: InstanceKey = "veh.ego.status/Unit".parse().unwrap();
-        let new: InstanceKey = "veh.ego.state/Unit".parse().unwrap();
+        let old: InstanceKey = "veh.ego.Status/Unit".parse().unwrap();
+        let new: InstanceKey = "veh.ego.State/Unit".parse().unwrap();
         assert_eq!(lock.rename(&old, new.clone()), Ok(3));
         assert!(lock.live(&new).is_some());
         assert_eq!(lock.retire(&new), Ok(3));

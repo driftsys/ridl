@@ -1,12 +1,12 @@
 package p
 
-service veh.adas.cruise: CruiseControl
+service Cruise: CruiseControl
 
-service veh.body.doors: DoorControl, DiagBlock
+service Doors: DoorControl, DiagBlock
 
-service veh.body.composite: DoorControl, MotorControl
+service Composite: DoorControl, MotorControl
 
-service veh.hvac.cabin {
+service Cabin {
   signal temperature: Temperature @[1s..10s]
   // next
   command setTarget(t: Temperature)

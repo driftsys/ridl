@@ -186,11 +186,9 @@ const ALLOWED: &[Allowed] = &[
     Allowed {
         path: "crates/ridl-core/src/package.rs",
         lines: 1,
-        why: "`package_names` collects the names a type reference can bind to. \
-              Services are omitted on purpose: ridl §14.5 makes every segment \
-              of a service name lowercase, so no service name can be spelled \
-              where a CamelCase type name is expected, and a service/type \
-              collision cannot be written",
+        why: "`package_names` collects every declaration name of the \
+              package, a service's declared name included, so that a local \
+              declaration shadows an import of the same name",
     },
     Allowed {
         path: "crates/ridl-descriptor/src/generated.rs",
@@ -357,8 +355,9 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/codegen/tests.rs",
-        lines: 8,
-        why: "one test fixture sets a package's named interfaces and reads \
+        lines: 9,
+        why: "the global-service-name test reads the model interface identity; \
+              one test fixture sets a package's named interfaces and reads \
               the lowered model's own `Model.interfaces` field back, to pin \
               that the model copies the interaction's family and an intent \
               command's shape; a third walks the same fixture's interfaces to \
@@ -618,7 +617,7 @@ An inline shape's `Interface.name` is \"\" and its `Interface.visibility` is \
 VISIBILITY_UNSPECIFIED, both by construction (ridl §14.5). Reading either \
 through `InterfaceShape` defeats the walk that exists to avoid them: use \
 `shape.name` for the identity — the interface's own name, or the owning \
-service's dotted one — and `shape.visibility()` for the authoritative \
+service's global name — and `shape.visibility()` for the authoritative \
 visibility, which is the owning `Service`'s for an inline shape.";
 
 /// The guarded spellings: the needle, the table justifying it, and what the

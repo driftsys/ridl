@@ -70,20 +70,17 @@ fn codes(run: &ridlc::CliRun) -> Vec<&'static str> {
 }
 
 #[test]
-fn a_duplicate_service_name_is_ridl_140() {
-    // The service catalog is a workspace-wide pass: a single file is a
-    // one-package workspace, and the catalog still runs over it (issue #345).
-    let source = "package p\n/// An interface.\ninterface I {}\n/// A service.\nservice p.s : I\n\
-                  /// The same service again.\nservice p.s : I\n";
+fn a_duplicate_service_name_is_typl_009() {
+    // A service is a symbol of its package, so a second declaration of its
+    // name is the resolver's duplicate-declaration error.
+    let source = "package p\n/// An interface.\ninterface I {}\n/// A service.\nservice S : I\n\
+                  /// The same service again.\nservice S : I\n";
     let run = ridlc::check_source("dup.ridl", source);
-    assert_eq!(codes(&run), ["RIDL-140"], "{:?}", run.diagnostics);
+    assert_eq!(codes(&run), ["TYPL-009"], "{:?}", run.diagnostics);
 
     let json = to_json(&run.diagnostics, &run.sources);
     assert_eq!(json[0].span.path, "dup.ridl");
     assert_eq!(json[0].span.start.line, 7);
-    assert_eq!(json[0].labels.len(), 1, "the first declaration is labelled");
-    assert_eq!(json[0].labels[0].span.path, "dup.ridl");
-    assert_eq!(json[0].labels[0].span.start.line, 5);
 }
 
 #[test]

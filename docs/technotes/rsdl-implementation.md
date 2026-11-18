@@ -16,8 +16,8 @@ declarations, and the checks are a single salsa query,
 `ridl_sem::check_system(db, ws, std)`, over every `.rsdl` file of the workspace.
 Every driver that reports diagnostics — `ridlc`, which `ridl check` and the
 `ridl_check` MCP tool share, the language server, and the corpus runner — calls
-it through `ridl_sem::check_workspace`, which runs the service catalog and this
-query together, so a workspace-wide diagnostic reaches every face.
+it through `ridl_sem::check_workspace`, which runs this query, so a
+workspace-wide diagnostic reaches every face.
 
 It is workspace-level because the closure is (rsdl §3.1): a component declared
 in one package offers a service declared in another and is placed by a
@@ -43,7 +43,7 @@ Two things in the model are **not** in any source file:
 
 - **the implicit component** (rsdl §6) — a lone service that no `component`
   declares stands for a component of its own, and it exists as a model entry
-  with the service's dotted name as its identity;
+  with the service's global name as its identity;
 - **the unit instance** (rsdl §7) — a component that declares no `instances` has
   exactly one, named `Unit` (`ridl_sem::rsdl::UNIT_INSTANCE`). `Unit` is never
   written in source; a written `Unit` is kept in the model only so that its
@@ -146,7 +146,7 @@ The corpus entry `rsdl-appendix-a` carries the reviewed snapshot of a lowered
 system, `corpus__system@rsdl-appendix-a.snap`; it is the only entry that gets
 one, because it is the only clean entry that declares a `system`. The entry is
 one unit, `veh`, so its system has one region, named `veh`, whose interfaces are
-`adas.CruiseControl`, `adas.LaneAssist` and the inline shape `veh.diag.access`.
+`adas.CruiseControl`, `adas.LaneAssist` and the inline shape `veh.diag.Access`.
 
 ## `ridl diff` at the system
 

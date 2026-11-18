@@ -228,8 +228,9 @@ fn place_one(
                     reference.site,
                     format!(
                         "`{}` {why} — a machine places closure components, their instances and \
-                         the lone services the system lists (rsdl reference §9)",
-                        reference.text()
+                         the lone services the system lists (rsdl reference §9){}",
+                        reference.text(),
+                        super::old_service_hint(reference)
                     ),
                 );
                 continue;

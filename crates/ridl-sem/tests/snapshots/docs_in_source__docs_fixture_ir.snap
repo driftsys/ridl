@@ -635,7 +635,7 @@ expression: json
   ],
   "services": [
     {
-      "name": "veh.adas.cruise",
+      "name": "veh.adas.Cruise",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "The published cruise service, over [CruiseControl].",
       "labels": [],
@@ -717,7 +717,7 @@ expression: json
       ],
       "offers": [
         {
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "attributes": [],
           "doc": "Lists [CruiseControl.target].",
           "links": [
@@ -779,7 +779,7 @@ expression: json
             "name": "CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producer": "veh.topology.Cruise",
           "attributes": [],
           "doc": "Needs [CruiseControl].",
@@ -819,7 +819,7 @@ expression: json
   ],
   "producers": [
     {
-      "service": "veh.adas.cruise",
+      "service": "veh.adas.Cruise",
       "component": "veh.topology.Cruise",
       "instances": [
         "Unit"
@@ -850,7 +850,7 @@ expression: json
           "inline": false,
           "number": 1,
           "provisional": true,
-          "service": "veh.adas.cruise"
+          "service": "veh.adas.Cruise"
         }
       ],
       "hash": ""
@@ -950,7 +950,7 @@ expression: json
             "name": "CruiseControl",
             "inline": false
           },
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "consumer": {
             "component": "veh.topology.Panel",
             "instance": "Unit",
@@ -971,7 +971,7 @@ expression: json
           "memberOrdinal": 1,
           "interface": "CruiseControl",
           "member": "target",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -986,7 +986,7 @@ expression: json
           "memberOrdinal": 2,
           "interface": "CruiseControl",
           "member": "moved",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -1001,7 +1001,7 @@ expression: json
           "memberOrdinal": 3,
           "interface": "CruiseControl",
           "member": "setLever",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -1016,7 +1016,7 @@ expression: json
           "memberOrdinal": 4,
           "interface": "CruiseControl",
           "member": "pose",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",
@@ -1031,7 +1031,7 @@ expression: json
           "memberOrdinal": 5,
           "interface": "CruiseControl",
           "member": "maxSpeed",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.Cruise",
           "producers": [
             {
               "component": "veh.topology.Cruise",

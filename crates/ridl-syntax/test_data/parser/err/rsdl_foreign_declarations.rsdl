@@ -8,10 +8,10 @@ internal struct Fault { count: integer [0..255] }
 interface LaneAssist {
   signal active: boolean @[100ms..1s]
 }
-service veh.diag.access {
+service DiagAccess {
   query readFaults(): FaultReport @[..100ms]
 }
 open enum Mode { OFF = 0, ON = 1 }
 internal open enum Gear { PARK = 0, DRIVE = 1 }
 
-component Lane { offers veh.adas.lane }
+component Lane { offers veh.adas.LaneKeeping }

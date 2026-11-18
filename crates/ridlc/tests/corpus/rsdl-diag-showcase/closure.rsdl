@@ -4,20 +4,20 @@ package rsdl.showcase
 // and `Showcase` (attributes.rsdl) is declared first. The body is not read.
 system Second { Lane }
 
-// `Chassis` offers `rsdl.showcase.chassis`, so that service stands for no
+// `Chassis` offers `ChassisService`, so that service stands for no
 // component: listing it in `Showcase` is RSDL-504 (§6).
-component Chassis { offers rsdl.showcase.chassis }
+component Chassis { offers ChassisService }
 
 // The rules of one component hold for a component the system does not list
 // (§3.1, §3.2).
 component Lines {
   // RSDL-309: the same service on a second `offers` line.
-  offers rsdl.showcase.status
-  offers rsdl.showcase.status
+  offers Status
+  offers Status
   // RSDL-310: `offers` names a service, and `Lane` is a component.
   offers Lane
-  // RSDL-311: `rsdl.showcase.chassis` lists two interfaces.
-  requires rsdl.showcase.chassis
+  // RSDL-311: `ChassisService` lists two interfaces.
+  requires ChassisService
   // RSDL-312: `Wheel` is neither an interface nor a service with an inline
   // shape.
   requires Wheel

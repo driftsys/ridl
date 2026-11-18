@@ -19,7 +19,7 @@ use super::distribution::DistributionFacts;
 use super::resolve::{ResolvedRequire, requires_own_service};
 use super::{
     CheckedSystem, ComponentDecl, MemberRef, Reference, ReferenceForm, Reporter, Site,
-    UNIT_INSTANCE,
+    UNIT_INSTANCE, old_service_hint,
 };
 use crate::resolve::{
     Resolution, SymbolKind, declared_symbols, qualified_segments, resolve_package, source_file,
@@ -27,7 +27,7 @@ use crate::resolve::{
 
 /// A closure component's identity (rsdl §6): a declared component by its
 /// package and name, or the implicit component of a lone service, named by the
-/// service's dotted name.
+/// service's global name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ComponentId {
     Declared { package: String, name: String },
@@ -36,7 +36,7 @@ pub enum ComponentId {
 
 impl ComponentId {
     /// The name a diagnostic prints: the declared name, or the service's
-    /// dotted name.
+    /// global name.
     pub fn text(&self) -> &str {
         match self {
             Self::Declared { name, .. } => name,
@@ -47,8 +47,8 @@ impl ComponentId {
 
 /// An interface's identity (rsdl §3.2, §8): a declared `interface` by its
 /// package and name, or the inline shape of a service, named by the service's
-/// dotted name (ridl §14.5). The two stay apart because a one-segment service
-/// name may be spelled like an interface.
+/// global name (ridl §14.5). The variants preserve whether the shape comes
+/// from an interface declaration or a service body.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum InterfaceId {
     Declared { package: String, name: String },
@@ -56,7 +56,7 @@ pub enum InterfaceId {
 }
 
 impl InterfaceId {
-    /// `pkg.Name` for a declared interface; the service's dotted name for an
+    /// `pkg.Name` for a declared interface; the service's global name for an
     /// inline shape.
     pub fn text(&self) -> String {
         match self {
@@ -71,7 +71,7 @@ impl InterfaceId {
 /// RSDL-307, RSDL-308, RSDL-309, RSDL-310, RSDL-311 or RSDL-312.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ComponentLines {
-    /// The dotted name of the service each `offers` line names.
+    /// The global name of the service each `offers` line names.
     pub offers: Vec<Option<String>>,
     /// The interface each `requires` line names.
     pub requires: Vec<Option<InterfaceId>>,
@@ -83,7 +83,7 @@ pub struct Closure {
     /// The closure components, in the order the system lists them.
     pub components: Vec<ClosureComponent>,
     /// The closure services — every service a closure component offers — by
-    /// dotted name.
+    /// global name.
     pub services: BTreeMap<String, ClosureService>,
     /// The closure interfaces — every interface a closure service lists —
     /// each with the closure services that list it, in service name order.
@@ -122,7 +122,7 @@ pub struct ClosureComponent {
 
 impl ClosureComponent {
     /// The qualified name: `pkg.Name` for a declared component, the service's
-    /// dotted name for an implicit one. It equals `v2::Component::qualified_name`
+    /// global name for an implicit one. It equals `v2::Component::qualified_name`
     /// of the lowered component.
     pub fn qualified_name(&self) -> String {
         match &self.id {
@@ -189,6 +189,9 @@ pub(super) struct Lookup<'a> {
     pub(super) catalog: &'a ServiceCatalog,
     components: HashMap<(String, String), usize>,
     systems: HashMap<(String, String), usize>,
+    /// The distributions and deployments by package and name: package-level
+    /// declarations that bind no reference, but shadow an import of their name.
+    other_declarations: HashSet<(String, String)>,
     /// Per package: each local name an import binds, to the imported package
     /// path and name. Imports bind package-wide (ADR-0002 §2).
     imports: HashMap<String, HashMap<String, (String, String)>>,
@@ -222,6 +225,17 @@ impl<'a> Lookup<'a> {
                 .entry((decl.package.clone(), decl.name.name.clone()))
                 .or_insert(index);
         }
+        let other_declarations = system
+            .distributions
+            .iter()
+            .map(|decl| (decl.package.clone(), decl.name.name.clone()))
+            .chain(
+                system
+                    .deployments
+                    .iter()
+                    .map(|decl| (decl.package.clone(), decl.name.name.clone())),
+            )
+            .collect();
         let packages: HashSet<&String> = system
             .systems
             .iter()
@@ -245,6 +259,7 @@ impl<'a> Lookup<'a> {
             catalog,
             components,
             systems,
+            other_declarations,
             imports,
             resolutions,
             declared_offerer: HashMap::new(),
@@ -265,65 +280,99 @@ impl<'a> Lookup<'a> {
     /// The declared component a `Name` or `pkg.Name` reference written in
     /// package `from` names, as an index into `CheckedSystem::components`.
     pub(super) fn component(&self, from: &str, package: Option<&str>, name: &str) -> Option<usize> {
-        self.declared(&self.components, from, package, name)
+        match self.bind(from, package, name)? {
+            Bound::Component(index) => Some(index),
+            _ => None,
+        }
     }
 
     /// The declared system a `for` reference written in package `from` names,
     /// as an index into `CheckedSystem::systems`.
     pub(super) fn system(&self, from: &str, package: Option<&str>, name: &str) -> Option<usize> {
-        self.declared(&self.systems, from, package, name)
+        match self.bind(from, package, name)? {
+            Bound::System(index) => Some(index),
+            _ => None,
+        }
     }
 
-    /// rsdl §4 and typl §3.2: a qualified name binds the declaration of that
-    /// package; a bare name binds a declaration of `from`, then an import of
-    /// `from`.
-    fn declared(
-        &self,
-        index: &HashMap<(String, String), usize>,
-        from: &str,
-        package: Option<&str>,
-        name: &str,
-    ) -> Option<usize> {
-        let key = match package {
+    /// The declaration a `Name` or `pkg.Name` reference written in package
+    /// `from` binds, of whatever kind (rsdl §4, ADR-0034 decision 9). A
+    /// qualified name binds the declaration of that package. A bare name
+    /// binds a declaration of `from` first, of any kind, and an import of
+    /// `from` only when `from` declares no such name (typl §3.2); each slot
+    /// then checks the kind it accepts, so a local service hides an imported
+    /// component of its name.
+    pub(super) fn bind(&self, from: &str, package: Option<&str>, name: &str) -> Option<Bound> {
+        let (package, name) = match package {
             Some(package) => (package.to_string(), name.to_string()),
             None => {
-                let local = (from.to_string(), name.to_string());
-                if index.contains_key(&local) {
-                    local
+                if self.declares(from, name) {
+                    (from.to_string(), name.to_string())
                 } else {
                     self.imports.get(from)?.get(name)?.clone()
                 }
             }
         };
-        index.get(&key).copied()
+        self.bound_in(from, &package, &name)
     }
 
-    /// The interface a `Name` or `pkg.Name` reference written in package `from`
-    /// names: a bare name through the package's resolved names (its own
-    /// declarations and its imports), a qualified name in that package, not
-    /// `internal` unless declared in `from` (typl §3.3).
-    pub(super) fn interface(
-        &self,
-        from: &str,
-        package: Option<&str>,
-        name: &str,
-    ) -> Option<InterfaceId> {
-        let symbol = match package {
-            None => self.resolutions.get(from)?.symbols.get(name)?.clone(),
-            Some(package) => {
-                let target = package_of(self.db, self.ws, package.to_string())?;
-                let symbol = declared_symbols(self.db, target).get(name)?.clone();
-                if symbol.internal && symbol.package != from {
-                    return None;
-                }
-                symbol
-            }
-        };
-        (symbol.kind == SymbolKind::Interface).then_some(InterfaceId::Declared {
-            package: symbol.package,
-            name: symbol.name,
-        })
+    /// Whether package `package` declares `name`: a component, a system, a
+    /// distribution, a deployment, or a vocabulary declaration its resolver
+    /// bound.
+    fn declares(&self, package: &str, name: &str) -> bool {
+        let key = (package.to_string(), name.to_string());
+        self.components.contains_key(&key)
+            || self.systems.contains_key(&key)
+            || self.other_declarations.contains(&key)
+            || self
+                .resolutions
+                .get(package)
+                .and_then(|resolution| resolution.symbols.get(name))
+                .is_some_and(|symbol| symbol.package == package)
     }
+
+    /// The declaration `name` of package `package`, as seen from `from`: a
+    /// component or system first, then a service or an interface that is not
+    /// `internal` unless declared in `from`.
+    fn bound_in(&self, from: &str, package: &str, name: &str) -> Option<Bound> {
+        let key = (package.to_string(), name.to_string());
+        if let Some(&index) = self.components.get(&key) {
+            return Some(Bound::Component(index));
+        }
+        if let Some(&index) = self.systems.get(&key) {
+            return Some(Bound::System(index));
+        }
+        let target = package_of(self.db, self.ws, package.to_string())?;
+        let symbol = declared_symbols(self.db, target).get(name)?.clone();
+        if symbol.internal && symbol.package != from {
+            return None;
+        }
+        match symbol.kind {
+            SymbolKind::Service => Some(Bound::Service(format!(
+                "{}.{}",
+                symbol.package, symbol.name
+            ))),
+            SymbolKind::Interface => Some(Bound::Interface(InterfaceId::Declared {
+                package: symbol.package,
+                name: symbol.name,
+            })),
+            _ => None,
+        }
+    }
+}
+
+/// What a reference binds (rsdl §4): the declaration, of whichever kind the
+/// lookup finds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) enum Bound {
+    /// A declared component, as an index into `CheckedSystem::components`.
+    Component(usize),
+    /// A declared system, as an index into `CheckedSystem::systems`.
+    System(usize),
+    /// A service, by its global name.
+    Service(String),
+    /// A declared interface.
+    Interface(InterfaceId),
 }
 
 /// The interfaces a catalog service lists (rsdl §8 step 1): its inline shape,
@@ -393,21 +442,22 @@ pub(super) fn component_lines(
             let mut services = HashSet::new();
             let mut offers = Vec::new();
             for line in &component.offers {
-                let service = offered_service(lookup, line, reporter).filter(|service| {
-                    let first = services.insert(service.clone());
-                    if !first {
-                        reporter.error(
-                            DiagCode::RSDL_309,
-                            line.reference.site,
-                            format!(
-                                "`{}` offers `{service}` twice — one `offers` line per service \
+                let service =
+                    offered_service(lookup, &component.package, line, reporter).filter(|service| {
+                        let first = services.insert(service.clone());
+                        if !first {
+                            reporter.error(
+                                DiagCode::RSDL_309,
+                                line.reference.site,
+                                format!(
+                                    "`{}` offers `{service}` twice — one `offers` line per service \
                                  (rsdl reference §3.2)",
-                                component.name.name
-                            ),
-                        );
-                    }
-                    first
-                });
+                                    component.name.name
+                                ),
+                            );
+                        }
+                        first
+                    });
                 offers.push(service);
             }
             let mut interfaces = HashSet::new();
@@ -440,34 +490,43 @@ pub(super) fn component_lines(
         .collect()
 }
 
-/// The service an `offers` line names (rsdl §3.2, §4): a `pkg.service`
-/// reference to a service the catalog holds. Anything else is RSDL-310.
-fn offered_service(lookup: &Lookup, line: &MemberRef, reporter: &mut Reporter) -> Option<String> {
+/// The service an `offers` line names (rsdl §3.2, §4): a `Name` or `pkg.Name`
+/// reference binding a service the catalog holds. Anything else is RSDL-310.
+fn offered_service(
+    lookup: &Lookup,
+    package: &str,
+    line: &MemberRef,
+    reporter: &mut Reporter,
+) -> Option<String> {
     let reference = &line.reference;
     if written_unit(reference, reporter) {
         return None;
     }
-    if let ReferenceForm::Service { name } = &reference.form
-        && lookup.catalog.entries.contains_key(name)
+    if let ReferenceForm::Declared {
+        package: written,
+        name,
+    } = &reference.form
+        && let Some(Bound::Service(service)) = lookup.bind(package, written.as_deref(), name)
+        && lookup.catalog.entries.contains_key(&service)
     {
-        return Some(name.clone());
+        return Some(service);
     }
     reporter.error(
         DiagCode::RSDL_310,
         reference.site,
         format!(
-            "`{}` is not a service — `offers` names one service by its dotted name, such as \
-             `veh.adas.cruise` (rsdl reference §3.2)",
-            reference.text()
+            "`{}` is not a service — `offers` names one service by its name, such as \
+             `AdaptiveCruise` or `veh.adas.AdaptiveCruise` (rsdl reference §3.2){}",
+            reference.text(),
+            old_service_hint(reference)
         ),
     );
     None
 }
 
 /// The interface a `requires` line names (rsdl §3.2, §4): `Name` or `pkg.Name`
-/// resolving to an interface, or `pkg.service` naming a service with an inline
-/// shape. A service with a list of shapes is RSDL-311; anything else is
-/// RSDL-312.
+/// binding an interface, or a service with an inline shape. A service with a
+/// list of shapes is RSDL-311; anything else is RSDL-312.
 fn required_interface(
     lookup: &Lookup,
     package: &str,
@@ -478,51 +537,49 @@ fn required_interface(
     if written_unit(reference, reporter) {
         return None;
     }
-    match &reference.form {
-        ReferenceForm::Declared {
-            package: written,
-            name,
-        } => {
-            if let Some(interface) = lookup.interface(package, written.as_deref(), name) {
-                return Some(interface);
-            }
-        }
-        ReferenceForm::Service { name } => {
-            if let Some(entry) = lookup.catalog.entries.get(name) {
-                if entry.inline {
-                    return Some(InterfaceId::Inline {
-                        service: name.clone(),
-                    });
+    if let ReferenceForm::Declared {
+        package: written,
+        name,
+    } = &reference.form
+    {
+        match lookup.bind(package, written.as_deref(), name) {
+            Some(Bound::Interface(interface)) => return Some(interface),
+            Some(Bound::Service(service)) => {
+                if let Some(entry) = lookup.catalog.entries.get(&service) {
+                    if entry.inline {
+                        return Some(InterfaceId::Inline { service });
+                    }
+                    let listed: Vec<String> = service_interfaces(&service, entry)
+                        .iter()
+                        .map(|interface| format!("`{}`", interface.text()))
+                        .collect();
+                    reporter.error(
+                        DiagCode::RSDL_311,
+                        reference.site,
+                        format!(
+                            "`{service}` is a service with a list of interfaces, and `requires` \
+                             names one interface — it lists {} (rsdl reference §3.2)",
+                            if listed.is_empty() {
+                                "no interface".to_string()
+                            } else {
+                                listed.join(", ")
+                            }
+                        ),
+                    );
+                    return None;
                 }
-                let listed: Vec<String> = service_interfaces(name, entry)
-                    .iter()
-                    .map(|interface| format!("`{}`", interface.text()))
-                    .collect();
-                reporter.error(
-                    DiagCode::RSDL_311,
-                    reference.site,
-                    format!(
-                        "`{name}` is a service with a list of interfaces, and `requires` names one \
-                         interface — it lists {} (rsdl reference §3.2)",
-                        if listed.is_empty() {
-                            "no interface".to_string()
-                        } else {
-                            listed.join(", ")
-                        }
-                    ),
-                );
-                return None;
             }
+            _ => {}
         }
-        ReferenceForm::Instance { .. } | ReferenceForm::Unreadable => {}
     }
     reporter.error(
         DiagCode::RSDL_312,
         reference.site,
         format!(
             "`{}` is neither an interface nor a service with an inline shape — `requires` names \
-             one interface (rsdl reference §3.2)",
-            reference.text()
+             one interface (rsdl reference §3.2){}",
+            reference.text(),
+            old_service_hint(reference)
         ),
     );
     None
@@ -611,9 +668,28 @@ pub(super) fn member_target(
         return None;
     }
     Some(match &reference.form {
-        ReferenceForm::Declared { package, name } => lookup
-            .component(from, package.as_deref(), name)
-            .map_or(MemberTarget::Unknown, MemberTarget::Component),
+        ReferenceForm::Declared { package, name } => {
+            match lookup.bind(from, package.as_deref(), name) {
+                Some(Bound::Component(decl)) => MemberTarget::Component(decl),
+                Some(Bound::Service(service)) if lookup.catalog.entries.contains_key(&service) => {
+                    if let Some(&offerer) = lookup.declared_offerer.get(&service) {
+                        let offerer = &system.components[offerer].name.name;
+                        reporter.error(
+                            DiagCode::RSDL_504,
+                            reference.site,
+                            format!(
+                                "`{service}` is offered by the component `{offerer}`, so the \
+                                 service does not stand for a component — write `{offerer}` \
+                                 (rsdl reference §6)"
+                            ),
+                        );
+                        return None;
+                    }
+                    MemberTarget::Implicit(service)
+                }
+                _ => MemberTarget::Unknown,
+            }
+        }
         ReferenceForm::Instance {
             package,
             component,
@@ -623,22 +699,7 @@ pub(super) fn member_target(
             .map_or(MemberTarget::Unknown, |decl| {
                 MemberTarget::Instance(decl, instance.clone())
             }),
-        ReferenceForm::Service { name } if lookup.catalog.entries.contains_key(name) => {
-            if let Some(&offerer) = lookup.declared_offerer.get(name) {
-                let offerer = &system.components[offerer].name.name;
-                reporter.error(
-                    DiagCode::RSDL_504,
-                    reference.site,
-                    format!(
-                        "`{name}` is offered by the component `{offerer}`, so the service does not \
-                         stand for a component — write `{offerer}` (rsdl reference §6)"
-                    ),
-                );
-                return None;
-            }
-            MemberTarget::Implicit(name.clone())
-        }
-        ReferenceForm::Service { .. } | ReferenceForm::Unreadable => MemberTarget::Unknown,
+        ReferenceForm::Unreadable => MemberTarget::Unknown,
     })
 }
 
@@ -702,8 +763,9 @@ pub(super) fn closure(
                     reference.site,
                     format!(
                         "`{}` is not a component or a service — a `system` lists components and \
-                         lone services (rsdl reference §3.1)",
-                        reference.text()
+                         lone services (rsdl reference §3.1){}",
+                        reference.text(),
+                        old_service_hint(reference)
                     ),
                 );
                 continue;

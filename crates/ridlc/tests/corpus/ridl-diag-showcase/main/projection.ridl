@@ -18,7 +18,7 @@ interface Projection {
 /// shape, so RIDL-149 applies to its members too (ADR-0016 decision 4) —
 /// see `inline_shape.ridl` for the other per-member checks proved the same
 /// way.
-service diag.showcase.projection {
+service ProjectionInline {
   signal parseHTTPResponse : Ratio @[100ms..1s]
   signal parseHttpResponse : Ratio @[100ms..1s]
 }

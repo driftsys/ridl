@@ -9,8 +9,8 @@ system Showcase [ owner = "fleet" ] {
   Nothing
   // RSDL-603 (§3.1): `Lane` is listed a second time.
   rsdl.showcase.Lane
-  // RSDL-504 (§6): `Chassis` (closure.rsdl) offers `rsdl.showcase.chassis`.
-  rsdl.showcase.chassis
+  // RSDL-504 (§6): `Chassis` (closure.rsdl) offers `ChassisService`.
+  ChassisService
   // RSDL-307 (§7): the unit instance is never written.
   Lane.Unit
   // The closure components of resolution.rsdl and distribution.rsdl.

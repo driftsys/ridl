@@ -19,7 +19,7 @@ use ridl_core::db::{InputFile, parse_file};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_sem::docs::{self, LinkCandidate};
 use ridl_sem::{LinkTarget, Resolution, Symbol, resolve_doc_link, resolve_package};
-use ridl_syntax::ast::{AstNode, Import, QualifiedName, SourceFile};
+use ridl_syntax::ast::{AstNode, Import, QualifiedName, ServiceDef, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{TextRange, TextSize, TokenAtOffset};
 
@@ -106,6 +106,19 @@ pub fn import_at(
     })
 }
 
+/// The imported service name under the cursor, excluding package and alias tokens.
+pub(crate) fn service_import_at(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    file: InputFile,
+    offset: TextSize,
+) -> Option<Located> {
+    import_at(db, ws, std, pkg, file, offset)
+        .filter(|located| located.symbol.kind == ridl_sem::SymbolKind::Service)
+}
+
 /// The final path segment token of a qualified name — its last non-trivia,
 /// non-`.` token. This is the imported symbol name in an `import` path and the
 /// referenced name in a qualified reference (the only part rename rewrites).
@@ -138,7 +151,24 @@ pub fn find_references(
         let resolution = resolve_package(db, ws, pkg, std);
         for &file in pkg.files(db) {
             let source = source_file(db, file);
-            for reference in references_in(&source) {
+            if target.kind == ridl_sem::SymbolKind::Service {
+                for import in source.imports() {
+                    let Some(token) = import
+                        .qualified_name()
+                        .and_then(|name| last_segment_token(&name))
+                    else {
+                        continue;
+                    };
+                    if let Some(located) =
+                        service_import_at(db, ws, std, pkg, file, token.text_range().start())
+                        && located.symbol.package == target.package
+                        && located.symbol.name == target.name
+                    {
+                        out.push((file, located.reference));
+                    }
+                }
+            }
+            for reference in references_in(&source, target.kind == ridl_sem::SymbolKind::Service) {
                 if let Some(symbol) = resolve_reference(db, ws, std, pkg, &resolution, &reference)
                     && symbol.package == target.package
                     && symbol.name == target.name
@@ -147,6 +177,15 @@ pub fn find_references(
                 }
             }
         }
+    }
+    if target.kind == ridl_sem::SymbolKind::Service {
+        let system = ridl_sem::rsdl::check_system(db, ws, std);
+        let target = ridl_sem::rsdl::Target::Service(format!("{}.{}", target.package, target.name));
+        out.extend(
+            ridl_sem::rsdl::references(db, ws, std, &system, &target)
+                .into_iter()
+                .map(|found| (found.reference.site.file, found.range)),
+        );
     }
     out
 }
@@ -318,8 +357,48 @@ pub(crate) fn canonical_site(
         return None;
     }
     let symbol = declared(package, name)?;
-    let site = member_name_range(db, &symbol, member).unwrap_or(symbol.range);
-    Some((symbol.file, site))
+    member_site(db, ws, std, pkg, &symbol, member).or(Some((symbol.file, symbol.range)))
+}
+
+/// A service member lives in its inline body or in one of its listed interfaces.
+fn member_site(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    symbol: &Symbol,
+    member: &str,
+) -> Option<(InputFile, TextRange)> {
+    if let Some(range) = member_name_range(db, symbol, member) {
+        return Some((symbol.file, range));
+    }
+    let source = source_file(db, symbol.file);
+    let service = source.services().find(|service| {
+        service
+            .declared_name()
+            .is_some_and(|name| name.text_range() == symbol.range)
+    })?;
+    let owner = if pkg.name(db) == &symbol.package {
+        pkg
+    } else {
+        package_of(db, ws, symbol.package.clone())?
+    };
+    let resolution = resolve_package(db, ws, owner, std);
+    for shape in service.shapes() {
+        let Some(qualified) = shape.qualified_name() else {
+            continue;
+        };
+        let segments = qualified_segments(qualified.syntax());
+        let Ok(target) = resolve_doc_link(db, ws, std, owner, &resolution, &segments) else {
+            continue;
+        };
+        if target.symbol.kind == ridl_sem::SymbolKind::Interface
+            && let Some(range) = member_name_range(db, &target.symbol, member)
+        {
+            return Some((target.symbol.file, range));
+        }
+    }
+    None
 }
 
 /// The range of the member name `member` inside the declaration whose name is
@@ -334,7 +413,7 @@ fn member_name_range(db: &dyn salsa::Database, symbol: &Symbol, member: &str) ->
     };
     let own = own
         .ancestors()
-        .find(|node| node.kind() == SyntaxKind::Name)?;
+        .find(|node| matches!(node.kind(), SyntaxKind::Name | SyntaxKind::DottedName))?;
     let declaration = own.parent()?;
     declaration
         .children()
@@ -373,6 +452,14 @@ fn is_member_kind(kind: SyntaxKind) -> bool {
 fn reference_at(token: &SyntaxToken) -> Option<Reference> {
     for node in token.parent_ancestors() {
         match node.kind() {
+            SyntaxKind::DottedName => {
+                let service = ServiceDef::cast(node.parent()?)?;
+                let name = service.declared_name()?;
+                return Some(Reference {
+                    segments: vec![name.text().to_string()],
+                    range: name.text_range(),
+                });
+            }
             SyntaxKind::QualifiedName => {
                 if node
                     .ancestors()
@@ -415,15 +502,15 @@ fn reference_at(token: &SyntaxToken) -> Option<Reference> {
 /// Every type reference and named-constant reference in the file, in source
 /// order — the references [`find_references`] resolves. Declaration names and
 /// `package`/`import` paths are excluded.
-fn references_in(source: &SourceFile) -> Vec<Reference> {
+fn references_in(source: &SourceFile, skip_rsdl: bool) -> Vec<Reference> {
     let mut out = Vec::new();
     for node in source.syntax().descendants() {
         match node.kind() {
             SyntaxKind::QualifiedName => {
-                if node
-                    .ancestors()
-                    .any(|a| matches!(a.kind(), SyntaxKind::PackageDecl | SyntaxKind::Import))
-                {
+                if node.ancestors().any(|a| {
+                    matches!(a.kind(), SyntaxKind::PackageDecl | SyntaxKind::Import)
+                        || (skip_rsdl && a.kind() == SyntaxKind::Reference)
+                }) {
                     continue;
                 }
                 let qualified = QualifiedName::cast(node.clone()).expect("kind checked");
@@ -521,14 +608,8 @@ pub(crate) fn qualified_segments(node: &SyntaxNode) -> Vec<String> {
     segments
 }
 
-/// Whether a syntax kind is a top-level definition kind: the six typl shapes
-/// plus `interface`, which shares the one declaration namespace with them (the
-/// resolver enters interface names as [`SymbolKind::Interface`] symbols, so a
-/// service's shape reference and an interface's own name both resolve).
-///
-/// `service` is deliberately absent: a service's dotted name lives in the
-/// workspace catalog namespace, not the declaration namespace, and is never a
-/// symbol.
+/// Whether a `Name` node belongs to a package-level declaration.
+/// A service uses `DottedName` and is handled through `declared_name` instead.
 fn is_definition(kind: SyntaxKind) -> bool {
     matches!(
         kind,

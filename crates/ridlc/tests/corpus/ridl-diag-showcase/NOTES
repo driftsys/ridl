@@ -14,9 +14,10 @@ Three members, because one package cannot provoke everything:
   Its `interfaces.lock` holds a live entry, `Legacy`, that no file declares,
   which is RIDL-409 on the entry's own line; the package has declarations
   without an entry too, so the message names both `--rename` and `--retire`.
-- `twin/` — package `diag.twin`. It republishes the service name
-  `diag.showcase.duplicate`, because the service catalog is a workspace-wide
-  namespace and RIDL-140 cannot be provoked from a single package.
+- `twin/` — package `diag.twin`. It publishes a service of its own, `Echo`
+  (global name `diag.twin.Echo`), beside the `diag.ridl` member's services:
+  a service name is in its package's namespace, so no workspace-wide clash can
+  be provoked (RIDL-140 is retired).
 - `badlock/` — package `diag.badlock`. Its `interfaces.lock` is malformed
   (`next` is not above the entry's number), which is RIDL-410 on the lock
   file's own line. The lock is per unit, so the code needs a workspace member
@@ -67,7 +68,8 @@ review caught and no single-clause fixture could have. Keep both clauses.
   positions: `fixed` timing and the `fixed` attribute block — `command` and
   `query` left this rule when ADR-0015 admitted the range form on them), 107,
   108, 109, 110, 112 (both spellings: a bare query, and `@[20ms..]` declaring
-  a throttle with no response bound), 140, 141, 143, 144 (a member name
+  a throttle with no response bound), 141, 142 (a service declared with a
+  dotted name, from `main/services.ridl`), 143, 144 (a member name
   duplicated across a service's composed interfaces), 145 (the same interface
   listed twice in one shape list),
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,

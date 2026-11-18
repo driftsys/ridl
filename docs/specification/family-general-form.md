@@ -123,15 +123,15 @@ kw Name relation? [ attrs ]? "{" member* "}"
 | rmdl (planned) | `model`                                                        | not decided                                                              |
 | rsdl           | `system`, `component`, `distribution`, `deployment`, `machine` | `for SystemRef` (`deployment`)                                           |
 
-A `service` is either a named list —
-`service veh.body.doors: DoorControl,
-DiagBlock` — or one inline body of
-interactions, never both (ridl §14.5). It takes no attribute block.
+A `service` is either a named list — `service Doors: DoorControl, DiagBlock` —
+or one inline body of interactions, never both (ridl §14.5). Its name is one
+`CamelCase` identifier, like every other container's, and its global name is its
+package followed by that name. It takes no attribute block.
 
 ```ridl
 enumset WarningFlags: Warning
-service veh.adas.cruise: CruiseControl
-service veh.body.doors: DoorControl, DiagBlock
+service AdaptiveCruise: CruiseControl
+service Doors: DoorControl, DiagBlock
 ```
 
 **Relation rule:** `:` is used when the relation is _backed-by / typed-as_
@@ -165,7 +165,7 @@ signal.
 _is typed as / backed by_. Declarations, parameters, tuple fields, union arms,
 map entries (`[Label: Name; 0..32]`), enumset derivation, callable returns. No
 other use exists or may be added, with one decided exception: the composition
-list of a ridl `service` (`service name: A, B`) uses the colon to introduce the
+list of a ridl `service` (`service Name: A, B`) uses the colon to introduce the
 interfaces that the service composes. The exception is closed: it covers that
 list and nothing else (ridl §14.5, Appendix C; ADR-0015 decision 12).
 
@@ -204,10 +204,12 @@ shapes inline; they reference typl vocabulary. Contract lines read as domain
 sentences, not structure dumps. (The inline fallible return `T | E` respects
 this: both arms are named types; only the union container is structural — §6.1.)
 
-**R7 — Case is role.** `CamelCase` = types and containers; `camelCase` = members
-and interactions; `SCREAMING_SNAKE` = constants and enum values; `lowercase.dot`
-= packages and service names. No exceptions, so case alone identifies what a
-name denotes.
+**R7 — Case is role.** `CamelCase` = types and containers, services included;
+`camelCase` = members and interactions; `SCREAMING_SNAKE` = constants and enum
+values; `lowercase.dot` = packages. No exceptions, so case alone identifies the
+role of a name; which declaration a `CamelCase` name denotes is found by lookup
+in its package's namespace (amended by ADR-0034, which retired the
+`lowercase.dot` service name).
 
 **R8 — Separator discipline.** Newline and comma interchangeable in every block;
 trailing comma legal; no semicolons anywhere. (The `;` inside collection bounds

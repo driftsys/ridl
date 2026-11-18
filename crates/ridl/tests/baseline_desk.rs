@@ -138,7 +138,7 @@ interface DoorBlock {
 interface HealthBlock {
   signal uptime: Speed @10ms
 }
-service veh.cluster.doors : DoorBlock, HealthBlock
+service Doors : DoorBlock, HealthBlock
 ";
 
 /// The two shapes swap places — the shape-list reading of the §6.3 tidying:
@@ -151,7 +151,7 @@ interface DoorBlock {
 interface HealthBlock {
   signal uptime: Speed @10ms
 }
-service veh.cluster.doors : HealthBlock, DoorBlock
+service Doors : HealthBlock, DoorBlock
 ";
 
 /// A shape inserted ahead of the two the baseline numbers.
@@ -166,7 +166,7 @@ interface HealthBlock {
 interface NewBlock {
   signal fresh: Speed @10ms
 }
-service veh.cluster.doors : NewBlock, DoorBlock, HealthBlock
+service Doors : NewBlock, DoorBlock, HealthBlock
 ";
 
 /// `HealthBlock` dropped from the list without a tombstone. The interface
@@ -179,7 +179,7 @@ interface DoorBlock {
 interface HealthBlock {
   signal uptime: Speed @10ms
 }
-service veh.cluster.doors : DoorBlock
+service Doors : DoorBlock
 ";
 
 /// A shape whose field names a type from the standard package. Every other
@@ -347,6 +347,47 @@ fn check_flags_a_reorder_against_the_baseline() {
         code, 0,
         "a warning never moves the exit code of an otherwise clean check:\n{stderr}",
     );
+}
+
+/// An interaction removed from a service's inline shape is reported with a span
+/// on the service's declared name: the diff path carries the service's global
+/// name, so the index of the source must be keyed by it, not by the name as
+/// written.
+#[test]
+fn check_spans_the_declared_name_of_an_inline_service_shape() {
+    const PUBLISHED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+service Cabin {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+    let dir = TempDir::new("inline-removal");
+    let root = package_workspace(&dir, PUBLISHED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+type DoorState: integer [0..1]
+service Cabin {
+  event doorClosed: DoorState @[100ms..1s]
+}
+",
+    );
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    let block = ridl_407_block(&stderr, "doorOpened");
+    assert!(
+        block.contains("┌─") && block.contains("service Cabin {"),
+        "the removal spans the inline shape's service:\n{block}"
+    );
+    assert!(
+        block.contains("cluster.ridl:3:9"),
+        "the span starts at the declared name:\n{block}"
+    );
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
 }
 
 /// A non-tombstoned removal is ordinal-affecting too, and is reported even
@@ -2396,7 +2437,7 @@ fn ridl_407_block<'a>(stderr: &'a str, name: &str) -> &'a str {
 /// code stays 0 — the desk check informs, `ridl diff` gates.
 ///
 /// The inline-shape case is pinned separately because its span falls on a
-/// different construct — the service's dotted name rather than an interface
+/// different construct — the service's declared name rather than an interface
 /// name: see [`inline_shape_removal_spans_the_service_name`].
 #[test]
 fn check_reports_ordinal_drift_against_the_committed_baseline() {
@@ -2540,8 +2581,8 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
 ///
 /// `DeclIndex::build` now walks `SourceFile::shapes()`, which yields an
 /// `interface` declaration and a service's inline shape alike, so the fallback
-/// covers both. The span for an inline shape lands on the service's dotted
-/// name, which is the identity its diff paths carry.
+/// covers both. The span for an inline shape lands on the service's declared
+/// name; the diff path carries its global name.
 #[test]
 fn inline_shape_removal_spans_the_service_name() {
     let (_, _, stderr) = ridl(&["check".as_ref(), "tests/baseline-corpus".as_ref()]);
@@ -2549,7 +2590,7 @@ fn inline_shape_removal_spans_the_service_name() {
     let inline = ridl_407_block(&stderr, "setEcoMode");
     assert!(
         inline.starts_with(
-            "warning[RIDL-407]: `setEcoMode` is gone in `corpus.baseline.hvac` but the \
+            "warning[RIDL-407]: `setEcoMode` is gone in `corpus.baseline.Hvac` but the \
              published baseline still declares it."
         ),
         "the inline-shape removal is reported, naming the service it left:\n{stderr}"
@@ -2560,27 +2601,26 @@ fn inline_shape_removal_spans_the_service_name() {
          regression, back:\n{inline}"
     );
     assert!(
-        inline.contains("service corpus.baseline.hvac {"),
+        inline.contains("service Hvac {"),
         "the fallback span points at the service's own declaration:\n{inline}"
     );
-    // The span starts on the dotted name, not on the `service` keyword and not
-    // at the head of the declaration: the name is the identity the diff path
-    // carries. The COLUMN is what pins that — a caret-run assertion would
+    // The span starts on the declared name, not on the `service` keyword and not
+    // at the head of the declaration. The COLUMN is what pins that — a caret-run assertion would
     // still pass on a span widened leftwards to the keyword, because the
     // widened run is longer and `contains` matches any prefix of it.
     assert!(
         inline.contains("cluster.ridl:48:9"),
-        "the span starts at the dotted name, column 9 — not column 1, where \
+        "the span starts at the declared name, column 9 — not column 1, where \
          the `service` keyword is:\n{inline}"
     );
-    // A caret run of at least 20, which with the column above pins the left
+    // A caret run of at least 4, which with the column above pins the left
     // edge exactly and the width as a floor. The exact right edge is
     // `shape_identity_range_covers_the_declared_name`'s job — a two-character
-    // rightward widening still satisfies a `contains` on 20 carets, and that
+    // rightward widening still satisfies a `contains` on 4 carets, and that
     // unit test does fail on it.
     assert!(
-        inline.contains("^^^^^^^^^^^^^^^^^^^^"),
-        "the underline covers `corpus.baseline.hvac`, the 20-character dotted \
+        inline.contains("^^^^"),
+        "the underline covers `Hvac`, the four-character declared \
          name:\n{inline}"
     );
 

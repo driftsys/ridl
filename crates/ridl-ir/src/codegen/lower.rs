@@ -226,7 +226,7 @@ impl Path {
     /// interface (ADR-0016).
     ///
     /// The owner is the declared interface name, or the owning service's
-    /// dotted name for a service's inline shape, so the Rust name composes
+    /// global name for a service's inline shape, so the Rust name composes
     /// both transforms: `joined_camel` joins the dotted segments, and
     /// `camel_case` removes any underscore.
     fn interaction(

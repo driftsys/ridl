@@ -976,8 +976,9 @@ contains a control character, which means a C0, DEL or C1 character (U+0085
 included), U+2028 or U+2029, other than a tab and a line break; `ridl check`
 reports it too. MANI-012 is an error when the manifest of a workspace member
 sets the key: only the root sets it. MANI-013 is an error when a `ridl.toml`
-sits inside the tree of a unit, and MANI-014 is an error when two units declare
-the same source package.
+sits inside the tree of a unit, MANI-014 is an error when two units declare the
+same source package, and MANI-023 is an error when two directories of one unit,
+such as `a.b/` and `a/b/`, give the same package name.
 
 A build overwrites a `lib.rs` or `Cargo.toml` in the output directory only when
 the file begins with this marker, or with the marker an earlier release wrote
@@ -1189,10 +1190,9 @@ default ceiling of that kind, so `default = 4096` gives a `signal` the limit
 default ceiling of its kind, up to 65,280 bytes; a `fixed` is not raised,
 because its default ceiling is already the largest. No value is above 65,280. A
 key of `[limits.interaction]` is the short name of the interface, or of the
-inline `service` (the last segment of its dotted name), then `.`, then the
-member; neither the package nor a dotted service name is part of it. When two
-interfaces or inline services of one unit share a short name, a key that uses
-the name is ambiguous.
+inline `service` (its declared name), then `.`, then the member; neither the
+package nor a global service name is part of it. When two interfaces or inline
+services of one unit share a short name, a key that uses the name is ambiguous.
 
 An unknown kind in `[limits.kind]` is MANI-021. MANI-022 is a `[limits.kind]`
 value above the default ceiling of its kind, a `default` or a
@@ -1910,12 +1910,12 @@ A named-form service's list is a set of interfaces: an interface joining it is
 `service_interface_added`, one leaving it `service_interface_removed`, a reorder
 no change, and both are compatible, because an interface's number comes from its
 unit's `interfaces.lock` and the routing key does not contain the service. A
-removal is still visible in source — the `service.member` addresses of that
+removal is still visible in source — the `Service.member` addresses of that
 interface stop resolving under the service — so the text report lists it under a
 heading, shared with `interface_renamed`, printed once as a line ending in a
 colon, after every change that has no heading. The JSON report carries the
 category word and no heading field. With `interface K` added and `J` dropped
-from `service veh.cluster.dash : I, J`:
+from `service Dash : I, J`:
 
 ```sh
 ridl diff dash-old.ridl dash-new.ridl
@@ -1925,7 +1925,7 @@ ridl diff dash-old.ridl dash-new.ridl
 compatible
   [compatible] decl_added veh.cluster/K: (absent) -> interface
 compatible on the wire, visible in source:
-  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
+  [compatible] service_interface_removed veh.cluster/veh.cluster.Dash/J: J -> (removed)
 ```
 
 An interface is matched by its number from the unit's `interfaces.lock`, within
@@ -1948,7 +1948,7 @@ both sides of a change are catalog names, so an interface moved between two
 sibling packages of one unit keeps its number and is reported as
 `interface_renamed`, from the old catalog name to the new one. With `J` renamed
 to `Jay` on its number, the lock beside each file recording it, and `Jay` no
-longer listed in `service veh.cluster.dash : I, J`:
+longer listed in `service Dash : I, J`:
 
 ```sh
 ridl diff old/dash.ridl new/dash.ridl
@@ -1958,7 +1958,7 @@ ridl diff old/dash.ridl new/dash.ridl
 compatible
 compatible on the wire, visible in source:
   [compatible] interface_renamed veh.cluster/Jay: J -> Jay
-  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
+  [compatible] service_interface_removed veh.cluster/veh.cluster.Dash/J: J -> (removed)
 ```
 
 An interface matched by name across a provisional old side has its number and
@@ -2242,9 +2242,8 @@ the word `retired` after the number when the interface is gone. Every entry's
 number must be below `next`, including a line restored from version control. An
 interface of a subpackage is keyed by its name relative to the unit, such as
 `cluster.Speed`. A service's inline shape is an interface too and is keyed
-`service:` followed by the service's full dotted name. Only `ridl lock` writes
-the file: the compiler reads it beside the sources, and `ridl fmt` never touches
-it.
+`service:` followed by the service's global name. Only `ridl lock` writes the
+file: the compiler reads it beside the sources, and `ridl fmt` never touches it.
 
 Every form of `ridl lock` that writes, and `ridl lock merge`, prepares the lock
 files to be written before replacing any; if a replacement fails, it attempts to
@@ -2340,13 +2339,13 @@ the provisional numbers `ridl check` showed, which is the byte order of the key
 text, so the number written is the number checked. The file is written only when
 a number is allocated, and only when `PATH` resolves to the workspace root: a
 `PATH` inside a member allocates no instance. Over a system with
-`Cruise [ instances = (primary, backup) ]` and a lone service `veh.status`, in
+`Cruise [ instances = (primary, backup) ]` and a lone service `veh.Status`, in
 package `veh`:
 
 ```text
 allocated veh.Cruise/backup 1
 allocated veh.Cruise/primary 2
-allocated veh.status/Unit 3
+allocated veh.Status/Unit 3
 ```
 
 ```text
@@ -2354,7 +2353,7 @@ allocated veh.status/Unit 3
 next 4
 veh.Cruise/backup 1
 veh.Cruise/primary 2
-veh.status/Unit 3
+veh.Status/Unit 3
 ```
 
 A live entry whose instance is gone from the system is RSDL-314, and plain
@@ -2381,6 +2380,26 @@ it exits 2 with
 `` `instances.lock` belongs to the workspace root: run `ridl
 lock <root>` ``
 when `PATH` is inside a member.
+
+**Renaming a service.** An inline shape uses a `service:` key in its unit's
+`interfaces.lock`. After renaming the declaration, keep its interface number by
+running the rename in the directory of that unit:
+
+```sh
+ridl lock <unit-directory> --rename service:veh.hvac.cabin=service:veh.cluster.HvacCabin
+```
+
+A lone service also has an implicit component in the system. Keep its instance
+numbers by renaming that component at the workspace root:
+
+```sh
+ridl lock <workspace-root> --rename veh.hvac.cabin=veh.cluster.HvacCabin
+```
+
+These edits keep the numbers already assigned in the locks. They do not allocate
+numbers. See [Service declaration names](stability.md#service-declaration-names)
+for the complete migration procedure and the changes to catalog hashes and
+transport identities.
 
 **The merge driver.** Two branches that each edited `interfaces.lock` or
 `instances.lock` merge through `ridl lock merge`, a three-way merge over entries
@@ -2536,8 +2555,10 @@ Options:
 - `ridl_check` checks workspace files or a source text.
 - `ridl_explain` explains a diagnostic code or diff category.
 - `ridl_resolve` resolves a declaration and its location.
-- `ridl_describe_type` describes a non-interface declaration.
-- `ridl_list_interactions` lists an interface's interactions.
+- `ridl_describe_type` describes a declaration that is not an interface or a
+  service.
+- `ridl_list_interactions` lists an interface's or an inline service's
+  interactions.
 - `ridl_references` lists declarations and interactions using a declaration.
 - `ridl_dependencies` lists package dependencies and dependents.
 - `ridl_metrics` reports package coupling and interface cohesion groups.

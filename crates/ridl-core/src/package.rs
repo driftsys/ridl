@@ -20,7 +20,6 @@ use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::TextRange;
 
 use crate::db::InputFile;
-use crate::diag::{DiagCode, Diagnostic, Label, Severity, SourceMap, Span};
 use crate::instance_lock::InstanceLock;
 use crate::interface_lock::InterfaceLock;
 use crate::manifest::TimingDefaults;
@@ -195,44 +194,35 @@ pub struct CatalogEntry {
 }
 
 /// The system-wide service catalog: every `service` declaration across the
-/// workspace keyed by its dotted global name (ridl §14.5).
+/// workspace keyed by its global name, the declaring package followed by the
+/// declared name (ridl §14.5).
 ///
-/// The catalog is the flat global namespace the whole system agrees on. A
-/// dotted name declared twice anywhere in the workspace is a RIDL-140 error
-/// (both declarations labeled). The diagnostics carry a [`FileId`] indexing
-/// the workspace's files in package-then-file order — the order
-/// [`service_catalog`] interns them — so a driver remaps them onto its render
-/// [`SourceMap`] exactly as it does the package-scoped passes.
+/// A service is a symbol of its package (ADR-0034), so its global name is
+/// unique unless two packages share a name, which the loader refuses (MANI-014
+/// for two units, MANI-023 for two directories of one unit), and a second
+/// declaration of one name in a package is TYPL-009. The catalog
+/// therefore reports nothing. A service written in the dotted or lowercase
+/// form has no declared name (RIDL-142) and is not in the catalog, and neither
+/// is a service that an earlier declaration of its package names (a typl
+/// definition, an interface or a service, in file then source order): it is
+/// the TYPL-009 loser.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ServiceCatalog {
     pub entries: BTreeMap<String, CatalogEntry>,
-    pub diagnostics: Vec<Diagnostic>,
 }
 
-/// Builds the workspace-wide [`ServiceCatalog`] and reports the RIDL-140
-/// duplicate-name diagnostics (ridl §14.5, §16.4).
+/// Builds the workspace-wide [`ServiceCatalog`] (ridl §14.5).
 ///
 /// The `std` package is threaded in for signature parity with the
 /// package-scoped passes (`resolve_package`, `check_package`); `ridl.std`
-/// declares no services, so it contributes nothing here. The catalog owns the
-/// global namespace: a service's dotted name is deliberately not a
-/// [`SymbolKind`](../../ridl_sem/resolve/enum.SymbolKind.html) — it lives in
-/// this namespace, not the type namespace — so the resolver never sees it and
-/// the catalog is the sole authority on service uniqueness.
+/// declares no services, so it contributes nothing here.
 #[salsa::tracked(returns(clone))]
 pub fn service_catalog(db: &dyn salsa::Database, ws: Workspace, std: Package) -> ServiceCatalog {
     // `ridl.std` carries no services; the parameter keeps the signature
     // uniform with the package-scoped passes the callers already drive.
     let _ = std;
 
-    // Diagnostics point into the workspace's files; their FileId indexes every
-    // file in package-then-file order, the order interned here. A driver
-    // rebuilds the same order to remap onto its render source map.
-    let mut sources = SourceMap::new();
-
     let mut entries: BTreeMap<String, CatalogEntry> = BTreeMap::new();
-    let mut first_span: HashMap<String, Span> = HashMap::new();
-    let mut diagnostics = Vec::new();
 
     for package in ws.packages(db) {
         let package_name = package.name(db).clone();
@@ -240,57 +230,39 @@ pub fn service_catalog(db: &dyn salsa::Database, ws: Workspace, std: Package) ->
         // declarations and imports are collected across every file of the
         // package, and a local declaration shadows an import.
         let names = package_names(db, package);
+        // The names already declared in the package, in the resolver's order:
+        // file order, then source order. A service whose name an earlier
+        // declaration of any vocabulary kind holds is TYPL-009 and is not in
+        // the catalog, as it is not in the IR.
+        let mut declared_before: HashSet<String> = HashSet::new();
         for file in package.files(db) {
-            let file_id = sources.file_id(file.path(db), file.text(db));
             let source = service_source(db, *file);
-            for service in source.services() {
-                let Some(dotted) = service.name() else {
-                    continue;
-                };
-                let name = significant_node_text(dotted.syntax());
-                if name.is_empty() {
-                    continue;
+            for node in source.syntax().children() {
+                if let Some(service) = ServiceDef::cast(node.clone()) {
+                    let Some(declared) = service.declared_name() else {
+                        continue;
+                    };
+                    if !declared_before.insert(declared.text().to_string()) {
+                        continue;
+                    }
+                    entries.insert(
+                        format!("{package_name}.{}", declared.text()),
+                        CatalogEntry {
+                            package: package_name.clone(),
+                            interface_refs: canonical_interface_refs(&names, &service),
+                            inline: service.colon_token().is_none(),
+                        },
+                    );
+                } else if is_vocabulary_declaration(&node)
+                    && let Some(name) = declaration_name(&node)
+                {
+                    declared_before.insert(name);
                 }
-                let span = Span {
-                    file: file_id,
-                    range: dotted.syntax().text_range(),
-                };
-                if let Some(&first) = first_span.get(&name) {
-                    // RIDL-140: the flat global namespace already holds this
-                    // name. Label both declarations (the first via a secondary
-                    // label, the duplicate as the primary span).
-                    diagnostics.push(Diagnostic {
-                        code: DiagCode::RIDL_140,
-                        severity: Severity::Error,
-                        message: format!(
-                            "duplicate service name `{name}` — the service catalog is a flat global namespace"
-                        ),
-                        primary: span,
-                        labels: vec![Label {
-                            span: first,
-                            message: format!("`{name}` is first declared here"),
-                        }],
-                        fixits: Vec::new(),
-                    });
-                    continue;
-                }
-                first_span.insert(name.clone(), span);
-                entries.insert(
-                    name,
-                    CatalogEntry {
-                        package: package_name.clone(),
-                        interface_refs: canonical_interface_refs(&names, &service),
-                        inline: service.colon_token().is_none(),
-                    },
-                );
             }
         }
     }
 
-    ServiceCatalog {
-        entries,
-        diagnostics,
-    }
+    ServiceCatalog { entries }
 }
 
 /// The parsed [`SourceFile`] of one input, through the memoized parse query.
@@ -359,6 +331,11 @@ fn package_names(db: &dyn salsa::Database, package: &Package) -> PackageNames {
                 locals.insert(name);
             }
         }
+        for service in source.services() {
+            if let Some(declared) = service.declared_name() {
+                locals.insert(declared.text().to_string());
+            }
+        }
         for import in source.imports() {
             let Some(qualified) = import.qualified_name() else {
                 continue;
@@ -375,6 +352,13 @@ fn package_names(db: &dyn salsa::Database, package: &Package) -> PackageNames {
         }
     }
     PackageNames { locals, imports }
+}
+
+/// Whether `node` is a typl definition or an `interface`: a declaration the
+/// resolver binds beside a service.
+fn is_vocabulary_declaration(node: &SyntaxNode) -> bool {
+    ridl_syntax::ast::Definition::cast(node.clone()).is_some()
+        || ridl_syntax::ast::InterfaceDef::cast(node.clone()).is_some()
 }
 
 /// The identifier of a declaration's `Name` child.
@@ -471,35 +455,126 @@ mod tests {
     }
 
     #[test]
-    fn service_catalog_flags_a_duplicate_name_across_packages() {
+    fn service_catalog_keys_each_service_under_its_package() {
         use crate::std_lib::std_package;
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
-        // Two packages both declare `veh.adas.cruise` — the flat global
-        // namespace forbids it (RIDL-140).
-        let adas = ridl_package(
-            &db,
-            "veh.adas",
-            "package veh.adas\nservice veh.adas.cruise : Foo\n",
-        );
-        let redundant = ridl_package(
-            &db,
-            "veh.redundant",
-            "package veh.redundant\nservice veh.adas.cruise : Bar\n",
-        );
-        let ws = Workspace::new(&db, vec![adas, redundant], BTreeMap::new());
+        let a = ridl_package(&db, "a", "package a\nservice S : Foo\n");
+        let b = ridl_package(&db, "b", "package b\nservice S : Bar\n");
+        let ws = Workspace::new(&db, vec![a, b], BTreeMap::new());
 
         let catalog = service_catalog(&db, ws, std);
 
-        assert_eq!(catalog.diagnostics.len(), 1);
-        let diagnostic = &catalog.diagnostics[0];
-        assert_eq!(diagnostic.code, DiagCode::RIDL_140);
-        // Both declarations are labeled: the duplicate as the primary span, the
-        // first via one secondary label.
-        assert_eq!(diagnostic.labels.len(), 1);
-        // The name survives in the catalog once (the first declaration).
-        assert!(catalog.entries.contains_key("veh.adas.cruise"));
-        assert_eq!(catalog.entries["veh.adas.cruise"].package, "veh.adas");
+        assert_eq!(
+            catalog.entries.keys().collect::<Vec<_>>(),
+            ["a.S", "b.S"],
+            "one declared name in two packages is two global names"
+        );
+        assert_eq!(catalog.entries["a.S"].package, "a");
+        assert_eq!(catalog.entries["b.S"].package, "b");
+    }
+
+    #[test]
+    fn service_catalog_skips_a_service_without_a_declared_name() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let old = ridl_package(
+            &db,
+            "veh.adas",
+            "package veh.adas\nservice veh.adas.cruise : Foo\nservice cruise : Foo\n",
+        );
+        let ws = Workspace::new(&db, vec![old], BTreeMap::new());
+
+        assert!(service_catalog(&db, ws, std).entries.is_empty());
+    }
+
+    /// The resolver binds the first declaration of a name in the package; a
+    /// second `service` of that name is TYPL-009 and does not enter the
+    /// catalog, so the entry is the first one's.
+    #[test]
+    fn service_catalog_keeps_the_first_service_of_a_name() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(&db, "a", "package a\nservice S : Foo\nservice S : Bar\n");
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+
+        assert_eq!(
+            service_catalog(&db, ws, std).entries["a.S"].interface_refs,
+            ["Foo"]
+        );
+    }
+
+    /// A service that loses TYPL-009 to an earlier interface of the same name
+    /// is not in the catalog.
+    #[test]
+    fn service_catalog_skips_a_service_that_an_earlier_interface_names() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(&db, "a", "package a\ninterface S {}\nservice S : Foo\n");
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+
+        assert!(service_catalog(&db, ws, std).entries.is_empty());
+    }
+
+    /// A service that loses TYPL-009 to an earlier typl definition of the same
+    /// name is not in the catalog.
+    #[test]
+    fn service_catalog_skips_a_service_that_an_earlier_definition_names() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(&db, "a", "package a\ntype S: u8\nservice S : Foo\n");
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+
+        assert!(service_catalog(&db, ws, std).entries.is_empty());
+    }
+
+    /// The first service of a name wins across the files of one package, in
+    /// file order, not only within one file.
+    #[test]
+    fn service_catalog_keeps_the_first_service_of_a_name_across_files() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = Package::new(
+            &db,
+            "a".to_string(),
+            "a".to_string(),
+            vec![
+                file(&db, "a/one.ridl", "package a\nservice S : Foo\n"),
+                file(&db, "a/two.ridl", "package a\nservice S : Bar\n"),
+            ],
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            TimingDefaults::default(),
+            None,
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+
+        assert_eq!(
+            service_catalog(&db, ws, std).entries["a.S"].interface_refs,
+            ["Foo"]
+        );
+    }
+
+    /// A declared service name is a local of its package, so it shadows an
+    /// import of the same name and a shape reference to it stays bare.
+    #[test]
+    fn service_catalog_reads_a_local_service_name_before_an_import() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let other = ridl_package(&db, "b", "package b\ninterface S {}\n");
+        let pkg = ridl_package(&db, "a", "package a\nimport b.S\nservice S : S\n");
+        let ws = Workspace::new(&db, vec![other, pkg], BTreeMap::new());
+
+        assert_eq!(
+            service_catalog(&db, ws, std).entries["a.S"].interface_refs,
+            ["S"]
+        );
     }
 
     #[test]
@@ -515,14 +590,13 @@ mod tests {
         let adas = ridl_package(
             &db,
             "veh.adas",
-            "package veh.adas\nimport veh.common.CruiseControl\nservice veh.adas.cruise : CruiseControl\n",
+            "package veh.adas\nimport veh.common.CruiseControl\nservice Cruise : CruiseControl\n",
         );
         let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
 
         let catalog = service_catalog(&db, ws, std);
 
-        assert!(catalog.diagnostics.is_empty());
-        let entry = &catalog.entries["veh.adas.cruise"];
+        let entry = &catalog.entries["veh.adas.Cruise"];
         assert_eq!(entry.package, "veh.adas");
         // The bare `CruiseControl` reference canonicalizes to its full
         // `pkg.Name` path through the declaring file's import.
@@ -546,14 +620,13 @@ mod tests {
             "veh.body",
             "package veh.body\nimport veh.common.DiagBlock\n\
              interface DoorControl {\n  signal locked : boolean\n}\n\
-             service veh.body.doors : DoorControl, DiagBlock\n",
+             service Doors : DoorControl, DiagBlock\n",
         );
         let ws = Workspace::new(&db, vec![common, body], BTreeMap::new());
 
         let catalog = service_catalog(&db, ws, std);
 
-        assert!(catalog.diagnostics.is_empty());
-        let entry = &catalog.entries["veh.body.doors"];
+        let entry = &catalog.entries["veh.body.Doors"];
         assert_eq!(
             entry.interface_refs,
             ["DoorControl", "veh.common.DiagBlock"],
@@ -570,14 +643,13 @@ mod tests {
         let hvac = ridl_package(
             &db,
             "veh.hvac",
-            "package veh.hvac\nservice veh.hvac.cabin {\n  signal temperature : boolean\n}\n",
+            "package veh.hvac\nservice Cabin {\n  signal temperature : boolean\n}\n",
         );
         let ws = Workspace::new(&db, vec![hvac], BTreeMap::new());
 
         let catalog = service_catalog(&db, ws, std);
 
-        assert!(catalog.diagnostics.is_empty());
-        let entry = &catalog.entries["veh.hvac.cabin"];
+        let entry = &catalog.entries["veh.hvac.Cabin"];
         assert_eq!(entry.package, "veh.hvac");
         assert_eq!(entry.interface_refs, Vec::<String>::new());
         assert!(entry.inline);
@@ -593,13 +665,13 @@ mod tests {
         let body = ridl_package(
             &db,
             "veh.body",
-            "package veh.body\nservice veh.body.legacy : reserved LegacyDoorDiag\n",
+            "package veh.body\nservice Legacy : reserved LegacyDoorDiag\n",
         );
         let ws = Workspace::new(&db, vec![body], BTreeMap::new());
 
         let catalog = service_catalog(&db, ws, std);
 
-        let entry = &catalog.entries["veh.body.legacy"];
+        let entry = &catalog.entries["veh.body.Legacy"];
         assert_eq!(entry.interface_refs, Vec::<String>::new());
         assert!(!entry.inline);
     }

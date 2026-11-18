@@ -1854,11 +1854,11 @@ fn a_typl_fence_is_verified() {
 fn an_rsdl_fence_is_verified() {
     let contract = "```ridl\npackage zz.contract\n\ntype Level : integer [0..7]\n\n\
                     interface Fan {\n  signal level : Level @[100ms..1s]\n}\n\n\
-                    service zz.contract.fan : Fan\n```\n\n";
+                    service FanService : Fan\n```\n\n";
     let clean = book_of(
         "rsdl-clean",
         &format!(
-            "{contract}```rsdl\npackage zz.plan\n\ncomponent Blower {{ offers zz.contract.fan }}\n\n\
+            "{contract}```rsdl\npackage zz.plan\n\ncomponent Blower {{ offers zz.contract.FanService }}\n\n\
              system Plant {{ Blower }}\n```\n"
         ),
     );
@@ -1871,7 +1871,7 @@ fn an_rsdl_fence_is_verified() {
     let broken = book_of(
         "rsdl-broken",
         &format!(
-            "{contract}```rsdl\npackage zz.plan\n\ncomponent Blower {{ offers zz.contract.fam }}\n```\n"
+            "{contract}```rsdl\npackage zz.plan\n\ncomponent Blower {{ offers zz.contract.Fam }}\n```\n"
         ),
     );
     let report = verify_book(broken.path()).expect_err("a broken rsdl block must be rejected");

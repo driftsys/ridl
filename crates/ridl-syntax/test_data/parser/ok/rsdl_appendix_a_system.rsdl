@@ -6,11 +6,11 @@ import veh.adas.LaneAssist
 
 /// Adaptive cruise, two copies: one per compute node.
 component Cruise [ instances = (primary, backup), labels = (ASIL_B) ] {
-  offers   veh.adas.cruise
+  offers   veh.adas.AdaptiveCruise
   requires LaneAssist
 }
 
-component Lane { offers veh.adas.lane }
+component Lane { offers veh.adas.LaneKeeping }
 
 component Panel {
   requires CruiseControl
@@ -20,10 +20,10 @@ component Panel {
 /// The fleet backend. No implementation in this workspace.
 component Backend [ external ] {
   requires CruiseControl
-  requires veh.diag.access
+  requires veh.diag.FaultAccess
 }
 
-system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }
+system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.FaultAccess }
 
-distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.access }
+distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.FaultAccess }
 distribution Hmi  [ tier = APPLICATION ] { Panel }

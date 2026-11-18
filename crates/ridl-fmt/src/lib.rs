@@ -1846,12 +1846,12 @@ mod tests {
         for width in [100, 60, 40] {
             for (source, expected) in [
                 (
-                    "system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }",
-                    "system Vehicle {\n  Cruise\n  Lane\n  Panel\n  Backend\n  veh.diag.access\n}",
+                    "system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.Access }",
+                    "system Vehicle {\n  Cruise\n  Lane\n  Panel\n  Backend\n  veh.diag.Access\n}",
                 ),
                 (
-                    "distribution Adas [tier=PLATFORM] { Cruise, Lane, veh.diag.access, }",
-                    "distribution Adas [ tier = PLATFORM ] {\n  Cruise\n  Lane\n  veh.diag.access\n}",
+                    "distribution Adas [tier=PLATFORM] { Cruise, Lane, veh.diag.Access, }",
+                    "distribution Adas [ tier = PLATFORM ] {\n  Cruise\n  Lane\n  veh.diag.Access\n}",
                 ),
                 (
                     "component Panel { requires  CruiseControl, requires LaneAssist, }",
@@ -1988,9 +1988,9 @@ mod tests {
 
     #[test]
     fn rsdl_component_header_width_counts_the_opening_brace() {
-        let source = "package p\ncomponent Cruise [instances=(primary,backup,),deprecated=\"use Cruise2\",rust.crate=\"cruise\",someip.serviceId=4660,linux.realtime,] { offers veh.adas.cruise }\n";
-        let block = "package p\n\ncomponent Cruise [\n  instances = (primary, backup)\n  deprecated = \"use Cruise2\"\n  rust.crate = \"cruise\"\n  someip.serviceId = 4660\n  linux.realtime\n] {\n  offers veh.adas.cruise\n}\n";
-        let inline = "package p\n\ncomponent Cruise [ instances = (primary, backup), deprecated = \"use Cruise2\", rust.crate = \"cruise\", someip.serviceId = 4660, linux.realtime ] {\n  offers veh.adas.cruise\n}\n";
+        let source = "package p\ncomponent Cruise [instances=(primary,backup,),deprecated=\"use Cruise2\",rust.crate=\"cruise\",someip.serviceId=4660,linux.realtime,] { offers veh.adas.AdaptiveCruise }\n";
+        let block = "package p\n\ncomponent Cruise [\n  instances = (primary, backup)\n  deprecated = \"use Cruise2\"\n  rust.crate = \"cruise\"\n  someip.serviceId = 4660\n  linux.realtime\n] {\n  offers veh.adas.AdaptiveCruise\n}\n";
+        let inline = "package p\n\ncomponent Cruise [ instances = (primary, backup), deprecated = \"use Cruise2\", rust.crate = \"cruise\", someip.serviceId = 4660, linux.realtime ] {\n  offers veh.adas.AdaptiveCruise\n}\n";
         for (width, expected) in [(143, block), (144, inline)] {
             assert_profile_format(
                 source,
@@ -2001,10 +2001,16 @@ mod tests {
                 },
             );
         }
-        let empty_source = source.replace("{ offers veh.adas.cruise }", "{}");
+        let empty_source = source.replace("{ offers veh.adas.AdaptiveCruise }", "{}");
         for (width, expected) in [
-            (144, block.replace("{\n  offers veh.adas.cruise\n}", "{}")),
-            (145, inline.replace("{\n  offers veh.adas.cruise\n}", "{}")),
+            (
+                144,
+                block.replace("{\n  offers veh.adas.AdaptiveCruise\n}", "{}"),
+            ),
+            (
+                145,
+                inline.replace("{\n  offers veh.adas.AdaptiveCruise\n}", "{}"),
+            ),
         ] {
             assert_profile_format(
                 &empty_source,
@@ -2021,24 +2027,24 @@ mod tests {
     fn rsdl_container_comments_keep_their_positions() {
         for (source, expected) in [
             (
-                "component  Cruise { // brace\n offers   veh.adas.cruise\n // next\n requires LaneAssist\n}",
-                "component Cruise { // brace\n  offers veh.adas.cruise\n  // next\n  requires LaneAssist\n}",
+                "component  Cruise { // brace\n offers   veh.adas.AdaptiveCruise\n // next\n requires LaneAssist\n}",
+                "component Cruise { // brace\n  offers veh.adas.AdaptiveCruise\n  // next\n  requires LaneAssist\n}",
             ),
             (
                 "component  Cruise /* header */ [ external ] { requires LaneAssist }",
                 "component  Cruise /* header */ [ external ] {\n  requires LaneAssist\n}",
             ),
             (
-                "component  Cruise // header\n{ offers veh.adas.cruise }",
-                "component  Cruise // header\n{\n  offers veh.adas.cruise\n}",
+                "component  Cruise // header\n{ offers veh.adas.AdaptiveCruise }",
+                "component  Cruise // header\n{\n  offers veh.adas.AdaptiveCruise\n}",
             ),
             (
                 "component Cruise [instances= /* value */ (primary,backup)] { requires LaneAssist }",
                 "component Cruise [instances= /* value */ (primary,backup)] {\n  requires LaneAssist\n}",
             ),
             (
-                "component C { offers a /* ref */ .b [external] }",
-                "component C {\n  offers a /* ref */ .b [ external ]\n}",
+                "component C { offers a /* ref */ .B [external] }",
+                "component C {\n  offers a /* ref */ .B [ external ]\n}",
             ),
             (
                 "system S { Cruise /* line */ [external] }",
@@ -2147,8 +2153,8 @@ mod tests {
 
     #[test]
     fn rsdl_deployment_places_nested_machine_members_on_separate_lines() {
-        let source = "package p\ndeployment Production for Vehicle {\n machine AdasHpc [labels=(ASIL_B)] {Cruise.primary, Lane, veh.diag.access}\n machine Cockpit {Cruise.backup, Panel [linux.cpuset=(2,3)]}\n machine Cloud [external] { Backend }\n}\n";
-        let expected = "package p\n\ndeployment Production for Vehicle {\n  machine AdasHpc [ labels = (ASIL_B) ] {\n    Cruise.primary\n    Lane\n    veh.diag.access\n  }\n  machine Cockpit {\n    Cruise.backup\n    Panel [ linux.cpuset = (2, 3) ]\n  }\n  machine Cloud [ external ] {\n    Backend\n  }\n}\n";
+        let source = "package p\ndeployment Production for Vehicle {\n machine AdasHpc [labels=(ASIL_B)] {Cruise.primary, Lane, veh.diag.Access}\n machine Cockpit {Cruise.backup, Panel [linux.cpuset=(2,3)]}\n machine Cloud [external] { Backend }\n}\n";
+        let expected = "package p\n\ndeployment Production for Vehicle {\n  machine AdasHpc [ labels = (ASIL_B) ] {\n    Cruise.primary\n    Lane\n    veh.diag.Access\n  }\n  machine Cockpit {\n    Cruise.backup\n    Panel [ linux.cpuset = (2, 3) ]\n  }\n  machine Cloud [ external ] {\n    Backend\n  }\n}\n";
         for width in [100, 60, 40] {
             let expected = if width == 40 {
                 expected.replace(
@@ -2504,8 +2510,8 @@ mod tests {
                 },
             );
             assert_profile_format(
-                "package p\ninterface  I {signal  s:T}\nservice  veh.named : I,\nservice  veh.inline {signal  s:T}\n",
-                "package p\n\ninterface I {\n  signal s: T\n}\n\nservice veh.named: I\n\nservice veh.inline {\n  signal s: T\n}\n",
+                "package p\ninterface  I {signal  s:T}\nservice  Named : I,\nservice  Inline {signal  s:T}\n",
+                "package p\n\ninterface I {\n  signal s: T\n}\n\nservice Named: I\n\nservice Inline {\n  signal s: T\n}\n",
                 Profile::Ridl,
                 &FormatOptions {
                     max_line_length: Some(width),
@@ -3063,10 +3069,10 @@ mod tests {
                 for trailing in ["// member", "/* member */", "/* member\nmore */"] {
                     assert_profile_format(
                         &format!(
-                            "package p\nservice veh.control {{\n  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n}}\n"
+                            "package p\nservice Control {{\n  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n}}\n"
                         ),
                         &format!(
-                            "package p\n\nservice veh.control {{\n  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n}}\n"
+                            "package p\n\nservice Control {{\n  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n}}\n"
                         ),
                         Profile::Ridl,
                         &FormatOptions {
@@ -3084,10 +3090,10 @@ mod tests {
             for comment in ["/* attribute */", "/** attribute */"] {
                 assert_profile_format(
                     &format!(
-                        "package p\nservice veh.control {{\n  query  q():T [persist] {comment} @ 10ms // member\n}}\n"
+                        "package p\nservice Control {{\n  query  q():T [persist] {comment} @ 10ms // member\n}}\n"
                     ),
                     &format!(
-                        "package p\n\nservice veh.control {{\n  query q(): T @10ms [ persist ] {comment} // member\n}}\n"
+                        "package p\n\nservice Control {{\n  query q(): T @10ms [ persist ] {comment} // member\n}}\n"
                     ),
                     Profile::Ridl,
                     &FormatOptions {
@@ -3350,7 +3356,7 @@ mod tests {
 
     #[test]
     fn review_header_line_comments_keep_the_opening_brace_on_a_new_line() {
-        for header in ["interface I", "service p.s"] {
+        for header in ["interface I", "service S"] {
             assert_profile_format(
                 &format!("package p\n{header} /** header */ {{ signal s:T }}\n"),
                 &format!("package p\n\n{header} /** header */ {{\n  signal s: T\n}}\n"),
@@ -3380,7 +3386,7 @@ mod tests {
 
     #[test]
     fn review_separator_comments_remain_separate_in_bodies_and_attributes() {
-        for header in ["interface I", "service p.s"] {
+        for header in ["interface I", "service S"] {
             assert_profile_format(
                 &format!(
                     "package p\n{header} {{ signal a:T // first\n , /* second\nthird */\n signal b:U }}\n"
@@ -3477,9 +3483,9 @@ mod tests {
     #[test]
     fn ridl_broken_services_return_parse_errors() {
         for input in [
-            "package p\nservice p.s: First Second\n",
-            "package p\nservice p.s: \n",
-            "package p\nservice p.s { signal s: T\n",
+            "package p\nservice S: First Second\n",
+            "package p\nservice S: \n",
+            "package p\nservice S { signal s: T\n",
         ] {
             let parsed = ridl_syntax::parse(input, Profile::Ridl);
             assert!(!parsed.errors().is_empty(), "the fixture must be malformed");
@@ -3494,12 +3500,12 @@ mod tests {
     #[test]
     fn ridl_named_services_keep_required_commas_and_remove_trailing_commas() {
         for source in [
-            "service veh.body.doors : DoorControl, DiagBlock",
-            "service veh.body.doors : DoorControl, DiagBlock,",
+            "service Doors : DoorControl, DiagBlock",
+            "service Doors : DoorControl, DiagBlock,",
         ] {
             assert_profile_format(
                 &format!("package p\n{source}\n"),
-                "package p\n\nservice veh.body.doors: DoorControl, DiagBlock\n",
+                "package p\n\nservice Doors: DoorControl, DiagBlock\n",
                 Profile::Ridl,
                 &FormatOptions::default(),
             );
@@ -3509,12 +3515,12 @@ mod tests {
     #[test]
     fn ridl_named_service_shape_list_breaks_after_the_colon() {
         for source in [
-            "service veh.body.composite : DoorControl, MotorControl",
-            "service veh.body.composite : DoorControl, MotorControl,",
+            "service Composite : DoorControl, MotorControl",
+            "service Composite : DoorControl, MotorControl,",
         ] {
             assert_profile_format(
                 &format!("package p\n{source} // shapes\n"),
-                "package p\n\nservice veh.body.composite:\n  DoorControl,\n  MotorControl // shapes\n",
+                "package p\n\nservice Composite:\n  DoorControl,\n  MotorControl // shapes\n",
                 Profile::Ridl,
                 &FormatOptions {
                     max_line_length: Some(40),
@@ -3525,7 +3531,7 @@ mod tests {
 
     #[test]
     fn ridl_service_shape_list_obeys_the_exact_width_and_off() {
-        let inline = "service p.s: Alpha, Beta";
+        let inline = "service S: Alpha, Beta";
         for width in [Some(inline.chars().count()), None] {
             assert_profile_format(
                 &format!("package p\n{inline}, // trailing comment beyond the width\n"),
@@ -3538,7 +3544,7 @@ mod tests {
         }
         assert_profile_format(
             &format!("package p\n{inline}\n"),
-            "package p\n\nservice p.s:\n  Alpha,\n  Beta\n",
+            "package p\n\nservice S:\n  Alpha,\n  Beta\n",
             Profile::Ridl,
             &FormatOptions {
                 max_line_length: Some(inline.chars().count() - 1),
@@ -3549,9 +3555,9 @@ mod tests {
     #[test]
     fn ridl_service_shape_list_with_a_comment_remains_verbatim() {
         for source in [
-            "service veh.body.doors : DoorControl, /* shape */ DiagBlock,",
-            "service veh.body.doors : DoorControl, // shape\n DiagBlock,",
-            "service veh.body.doors : veh /* path */ . DoorControl, DiagBlock,",
+            "service Doors : DoorControl, /* shape */ DiagBlock,",
+            "service Doors : DoorControl, // shape\n DiagBlock,",
+            "service Doors : veh /* path */ . DoorControl, DiagBlock,",
         ] {
             assert_profile_format(
                 &format!("package p\n{source}\n"),
@@ -3569,16 +3575,16 @@ mod tests {
         for comma in ["", ","] {
             assert_profile_format(
                 &format!(
-                    "package p\nservice veh.hvac.cabin {{ signal  temperature : Temperature @[ 1s .. 10s ]{comma}\n // callable\n command setTarget(t : Temperature) [require t>0] @10ms{comma} }}\n"
+                    "package p\nservice Cabin {{ signal  temperature : Temperature @[ 1s .. 10s ]{comma}\n // callable\n command setTarget(t : Temperature) [require t>0] @10ms{comma} }}\n"
                 ),
-                "package p\n\nservice veh.hvac.cabin {\n  signal temperature: Temperature @[1s..10s]\n  // callable\n  command setTarget(t: Temperature) @10ms [\n    require t > 0\n  ]\n}\n",
+                "package p\n\nservice Cabin {\n  signal temperature: Temperature @[1s..10s]\n  // callable\n  command setTarget(t: Temperature) @10ms [\n    require t > 0\n  ]\n}\n",
                 Profile::Ridl,
                 &FormatOptions::default(),
             );
         }
         assert_profile_format(
-            "package p\nservice veh.empty {}\n",
-            "package p\n\nservice veh.empty {}\n",
+            "package p\nservice Empty {}\n",
+            "package p\n\nservice Empty {}\n",
             Profile::Ridl,
             &FormatOptions::default(),
         );
@@ -3587,8 +3593,8 @@ mod tests {
     #[test]
     fn ridl_inline_service_keeps_header_and_brace_comments() {
         assert_profile_format(
-            "package p\nservice  veh.body /* header */ { // brace\n signal s:T }\n",
-            "package p\n\nservice  veh.body /* header */ { // brace\n  signal s: T\n}\n",
+            "package p\nservice  Body /* header */ { // brace\n signal s:T }\n",
+            "package p\n\nservice  Body /* header */ { // brace\n  signal s: T\n}\n",
             Profile::Ridl,
             &FormatOptions::default(),
         );

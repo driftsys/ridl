@@ -100,12 +100,12 @@ interface FaultLog {
 // --- the named-reference form (ridl §14.5) ---
 
 /// The cluster's published vehicle-status contract.
-service veh.cluster.status : VehicleStatus
+service Status : VehicleStatus
 
 /// A redundant twin over the same interface shape — one interface, many
 /// services (ridl §14.0). Both services carry the identical member set; only
 /// the global address differs.
-service veh.cluster.standby : VehicleStatus
+service Standby : VehicleStatus
 
 // --- the inline-shape form (ridl §14.5) ---
 
@@ -113,7 +113,7 @@ service veh.cluster.standby : VehicleStatus
  * Cabin climate — a one-off global contract, declared inline.
  * @labels QM, PRIVATE
  */
-service veh.hvac.cabin {
+service HvacCabin {
 
   /// Strict periodic — signal only (ridl §9).
   signal cabinTemp : Temperature @1s
@@ -184,7 +184,7 @@ service veh.hvac.cabin {
 
   // The rest of the guaranteed expression subset (ridl §13). One property per
   // clause, so a regression names itself. Appended at the end so the ordinals
-  // above — and the synthesized transport identity `veh.hvac.cabin#13` — do
+  // above — and the synthesized transport identity `veh.cluster.HvacCabin#13` — do
   // not move.
 
   /// Boolean conjunction.

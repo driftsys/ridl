@@ -802,18 +802,18 @@ expression: log
               }
             },
             {
-              "id": "RIDL-140",
+              "id": "RIDL-141",
               "shortDescription": {
-                "text": "duplicate `service` name across the workspace"
+                "text": "`service` names a type that is not an `interface`"
               },
               "defaultConfiguration": {
                 "level": "error"
               }
             },
             {
-              "id": "RIDL-141",
+              "id": "RIDL-142",
               "shortDescription": {
-                "text": "`service` names a type that is not an `interface`"
+                "text": "`service` declared name is not one `CamelCase_id`"
               },
               "defaultConfiguration": {
                 "level": "error"
@@ -1740,6 +1740,15 @@ expression: log
               }
             },
             {
+              "id": "MANI-023",
+              "shortDescription": {
+                "text": "two directories of one unit give the same package name"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1905,7 +1914,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 187,
+          "ruleIndex": 188,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

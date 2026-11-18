@@ -1,5 +1,5 @@
-// A reserved word in each container-name position: the interface name and a
-// segment of a service's dotted global name.
+// A reserved word in each container-name position: the interface name and
+// the service name.
 
 package app
 
@@ -9,4 +9,4 @@ interface state {
   signal a : Speed @10ms
 }
 
-service veh.a.component : state
+service component : state

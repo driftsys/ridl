@@ -251,7 +251,7 @@ impl RidlMcp {
             Err(error) => Ok(error.into_result()),
         }
     }
-    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::DescribeOutput>(), description = "Describe a non-interface declaration in canonical IR JSON. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::DescribeOutput>(), description = "Describe a declaration that is not an interface or a service in canonical IR JSON. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
     async fn ridl_describe_type(
         &self,
         Parameters(input): Parameters<query::NameInput>,
@@ -271,7 +271,7 @@ impl RidlMcp {
             Err(error) => Ok(error.into_result()),
         }
     }
-    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::InteractionsOutput>(), description = "List an interface and its interactions in source order. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
+    #[tool(output_schema = rmcp::handler::server::common::schema_for_output::<query::InteractionsOutput>(), description = "List an interface, or the inline shape of a service, and its interactions in source order. Pass the workspace root as `path`; overlays apply unsaved text. Read-only and offline.")]
     async fn ridl_list_interactions(
         &self,
         Parameters(input): Parameters<query::InterfaceInput>,
@@ -392,8 +392,8 @@ impl ServerHandler for RidlMcp {
                 "ridl_check: check workspace files or one source text.\n\
                  ridl_explain: explain a diagnostic code or diff category.\n\
                  ridl_resolve: resolve a declaration and its location.\n\
-                 ridl_describe_type: describe a non-interface declaration.\n\
-                 ridl_list_interactions: list an interface's interactions.\n\
+                 ridl_describe_type: describe a declaration that is not an interface or a service.\n\
+                 ridl_list_interactions: list an interface's or an inline service's interactions.\n\
                  ridl_references: list declarations and interactions using a declaration.\n\
                  ridl_dependencies: list package dependencies and dependents.\n\
                  ridl_metrics: report package coupling and interface cohesion.\n\

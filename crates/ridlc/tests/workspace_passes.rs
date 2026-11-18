@@ -7,8 +7,9 @@ use ridl_core::Frozen;
 use ridl_core::diag::to_json;
 
 /// A two-member workspace whose first member carries an `interfaces.lock`:
-/// the RIDL-140 and RSDL-602 raised in the second member are reported on the
-/// second member's files, not moved by one file onto the lock.
+/// the RSDL-602 raised in the second member is reported on the second member's
+/// files, not moved by one file onto the lock. Both members declare `service Svc`,
+/// which are two global names (`a.Svc`, `b.Svc`) and draw nothing.
 #[test]
 fn a_lock_in_an_earlier_package_does_not_move_the_workspace_diagnostics() {
     let dir = tempfile::tempdir().expect("a temp dir");
@@ -24,13 +25,13 @@ fn a_lock_in_an_earlier_package_does_not_move_the_workspace_diagnostics() {
             &format!("[package]\nname = \"{member}\"\nversion = \"1.0.0\"\n"),
         );
     }
-    write("a/a.ridl", "package a\ninterface I {}\nservice x.s : I\n");
+    write("a/a.ridl", "package a\ninterface I {}\nservice Svc : I\n");
     // What `ridl lock` writes for `a/a.ridl`.
     write(
         "a/interfaces.lock",
         "# interfaces.lock — written by ridl lock; do not edit by hand.\nnext 2\nI 1\n",
     );
-    write("b/b.ridl", "package b\ninterface J {}\nservice x.s : J\n");
+    write("b/b.ridl", "package b\ninterface J {}\nservice Svc : J\n");
     write("b/sys.rsdl", "package b\nsystem S { Missing }\n");
 
     let run = ridlc::run_check(dir.path(), Frozen::Yes).expect("the workspace loads");
@@ -52,14 +53,8 @@ fn a_lock_in_an_earlier_package_does_not_move_the_workspace_diagnostics() {
         })
         .collect();
     let path = |relative: &str| dir.path().join(relative).display().to_string();
-    let (a, b, sys) = (path("a/a.ridl"), path("b/b.ridl"), path("b/sys.rsdl"));
-    assert_eq!(
-        found,
-        [
-            ("RIDL-140", b.as_str(), a.as_str()),
-            ("RSDL-602", sys.as_str(), ""),
-        ],
-    );
+    let sys = path("b/sys.rsdl");
+    assert_eq!(found, [("RSDL-602", sys.as_str(), "")]);
 }
 
 /// `ridlc::std_ir` checks `ridl.std` in an empty workspace, and

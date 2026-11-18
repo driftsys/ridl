@@ -56,9 +56,9 @@ into `generate` is
 
 An `internal` interface's descriptors are `pub(crate)` (see "The consumer
 face"). For each named interface reached through `Package::shapes()` (a
-service's inline shape is skipped — its identity name is a dotted service name,
-not a single Rust identifier, and descriptors for one are a follow-up), the
-emitter writes:
+service's inline shape is skipped — its identity name is the global service
+name, not a single Rust identifier, and descriptors for one are a follow-up),
+the emitter writes:
 
 - a unit struct with an `Interface` impl carrying `CATALOG`, `NUMBER`,
   `PROVISIONAL`, `NAME` and `MEMBERS`, and one `Sizes<E>` impl per encoding the

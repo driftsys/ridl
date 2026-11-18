@@ -3,10 +3,10 @@
 //!
 //! Each directory under `corpus/` is a real package (or workspace) with its own
 //! `ridl.toml`. This runner compiles every entry end to end — load, parse,
-//! resolve, check, lower to IR v2, run the workspace-wide service catalog, and
-//! generate Rust and TypeScript — and snapshots four artifacts per entry: the
-//! rendered diagnostics, the IR v2 JSON, the generated Rust, and the generated
-//! TypeScript. `insta::glob!` drives one iteration per entry.
+//! resolve, check, lower to IR v2, run the workspace-wide system
+//! checks, and generate Rust and TypeScript — and snapshots four artifacts per
+//! entry: the rendered diagnostics, the IR v2 JSON, the generated Rust, and the
+//! generated TypeScript. `insta::glob!` drives one iteration per entry.
 //!
 //! The diagnostics are snapshotted for every entry. The IR JSON and generated
 //! code are snapshotted only for an entry that compiles without error
@@ -183,11 +183,10 @@ fn compile_entry(entry: &Path) -> Compiled {
         checked_irs.push((name, checked.ir));
     }
 
-    // The workspace-wide passes — the service catalog and the rsdl
-    // system query — driven through `ridl_sem::check_workspace`, as
-    // `ridlc::compile_workspace` drives them: their diagnostics span the whole
-    // workspace, so their FileIds index every source file in package-then-file
-    // order. That order is rebuilt here and remapped onto the render source
+    // The workspace-wide pass — the rsdl system query — driven through
+    // `ridl_sem::check_workspace`, as `ridlc::compile_workspace` drives it:
+    // its diagnostics span the whole workspace, so their FileIds index every
+    // source file in package-then-file order. That order is rebuilt here and remapped onto the render source
     // map. Without this the runner would compile a workspace the real pipeline
     // rejects and snapshot it as clean.
     //
@@ -454,7 +453,7 @@ fn veh_cluster_payloads_fit_the_default_ceilings() {
 /// interchange encodings unchanged — the list is package data the encodings
 /// must carry, not a lowering-only view. The
 /// generation halves of the same claim are the `services-workspace` Rust and
-/// TypeScript snapshots, which carry `fleet.vehicle.cockpit`'s rows.
+/// TypeScript snapshots, which carry `fleet.vehicle.Cockpit`'s rows.
 #[test]
 fn a_composed_service_compiles_and_round_trips_through_the_ir() {
     let mut db = RidlDatabase::default();
@@ -483,7 +482,7 @@ fn a_composed_service_compiles_and_round_trips_through_the_ir() {
         .ir
         .services
         .iter()
-        .find(|service| service.name == "fleet.vehicle.cockpit")
+        .find(|service| service.name == "fleet.vehicle.Cockpit")
         .expect("the composed service lowers");
     let references: Vec<String> = cockpit
         .shapes
@@ -572,8 +571,8 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-109", Showcase),
     ("RIDL-110", Showcase),
     ("RIDL-112", Showcase),
-    ("RIDL-140", Showcase),
     ("RIDL-141", Showcase),
+    ("RIDL-142", Showcase),
     ("RIDL-143", Showcase),
     ("RIDL-144", Showcase),
     ("RIDL-145", Showcase),
@@ -1222,7 +1221,8 @@ fn rsdl_reference_rules_match_the_catalogue_summaries() {
 
 /// The codes a reference table specifies that the catalogue has no entry for,
 /// each with the reason: the codes the checker does not emit yet, the codes
-/// the lock retired, the retired lint RIDL-150, and the retired error RIDL-158.
+/// the lock retired, the retired lint RIDL-150, and the retired errors RIDL-140
+/// and RIDL-158.
 /// Each code is a prefix and a number, because the guard that finds code
 /// literals in Rust sources (`codes_written_as_string_literals_are_all_catalogued`)
 /// reads a quoted code as an emitted one, and none of these is catalogued.
@@ -1251,6 +1251,11 @@ const DEFERRED_OR_RETIRED: &[(&str, u16, &str)] = &[
         "TYPL",
         403,
         "deferred: the `@labels` combination check is not emitted (driftsys/ridl#172)",
+    ),
+    (
+        "RIDL",
+        140,
+        "retired: a service name is in its package's namespace (ADR-0034 decision 6)",
     ),
     (
         "RIDL",
@@ -1558,8 +1563,8 @@ fn showcase_pins_every_severity() {
         ("RIDL-109", Severity::Error),
         ("RIDL-110", Severity::Error),
         ("RIDL-112", Severity::Warning),
-        ("RIDL-140", Severity::Error),
         ("RIDL-141", Severity::Error),
+        ("RIDL-142", Severity::Error),
         ("RIDL-143", Severity::Error),
         ("RIDL-144", Severity::Error),
         ("RIDL-145", Severity::Error),
@@ -2516,7 +2521,7 @@ fn tombstones_hold_their_ordinals_in_both_interaction_stores() {
     let ir = checked_ir(Path::new("tests/corpus/veh-cluster"), "veh.cluster");
 
     // `Package::shapes` keys a named interface on its own name and an inline
-    // shape on the owning service's dotted name, so one lookup finds both.
+    // shape on the owning service's global name, so one lookup finds both.
     let named = ir
         .shapes()
         .find(|shape| shape.name == "WheelHistory")
@@ -2524,7 +2529,7 @@ fn tombstones_hold_their_ordinals_in_both_interaction_stores() {
         .interface;
     let inline = ir
         .shapes()
-        .find(|shape| shape.name == "veh.cluster.wheels")
+        .find(|shape| shape.name == "veh.cluster.Wheels")
         .expect("the tombstone inline shape is in the corpus")
         .interface;
 
@@ -2786,7 +2791,7 @@ fn reserved_accepts_every_meaningful_form() {
          union U {\n  x : L\n  reserved oldArm\n  y : L\n}\n\
          interface I {\n  signal a : L @1s\n  reserved legacyTemp\n  reserved 3\n  \
          signal b : L @1s\n}\n\
-         service app.svc {\n  signal c : L @1s\n  reserved legacyRate\n  reserved 3\n  \
+         service Svc {\n  signal c : L @1s\n  reserved legacyRate\n  reserved 3\n  \
          signal d : L @1s\n}\n";
     let output = ridlc::compile("app.ridl", source);
 

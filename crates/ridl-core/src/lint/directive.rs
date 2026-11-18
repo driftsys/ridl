@@ -656,7 +656,7 @@ mod tests {
     fn rsdl_member_line_is_a_target() {
         // An `offers` line is a `ComponentLine`; a bare member reference in a
         // `system` body is a `MemberLine`. Both are carriers.
-        let text = "package p\n\nsystem Vehicle {\n  // lint: allow missing-docs -- r\n  Climate\n}\n\ncomponent Climate {\n  // lint: allow missing-docs -- r\n  offers p.control\n}\n";
+        let text = "package p\n\nsystem Vehicle {\n  // lint: allow missing-docs -- r\n  Climate\n}\n\ncomponent Climate {\n  // lint: allow missing-docs -- r\n  offers p.Control\n}\n";
         let found = directives(text, Profile::Rsdl);
         assert_eq!(found.len(), 2);
         let member = node_range(text, Profile::Rsdl, SyntaxKind::MemberLine);

@@ -18,7 +18,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       "since": []
     },
     {
-      "component": "veh.ego.status",
+      "component": "veh.ego.Status",
       "attributes": [],
       "doc": "",
       "links": [],
@@ -38,7 +38,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       ],
       "offers": [
         {
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.CruiseService",
           "attributes": [],
           "doc": "",
           "links": [],
@@ -67,7 +67,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       ]
     },
     {
-      "name": "veh.ego.status",
+      "name": "veh.ego.Status",
       "package": "",
       "implicit": true,
       "external": false,
@@ -76,7 +76,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       ],
       "offers": [
         {
-          "service": "veh.ego.status",
+          "service": "veh.ego.Status",
           "attributes": [],
           "doc": "",
           "links": [],
@@ -102,7 +102,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
   ],
   "producers": [
     {
-      "service": "veh.adas.cruise",
+      "service": "veh.adas.CruiseService",
       "component": "veh.adas.Cruise",
       "instances": [
         "primary",
@@ -111,8 +111,8 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       "notYetRealizable": true
     },
     {
-      "service": "veh.ego.status",
-      "component": "veh.ego.status",
+      "service": "veh.ego.Status",
+      "component": "veh.ego.Status",
       "instances": [
         "Unit"
       ],
@@ -126,7 +126,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       "regions": []
     },
     {
-      "component": "veh.ego.status",
+      "component": "veh.ego.Status",
       "external": false,
       "regions": []
     }
@@ -136,27 +136,27 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       "catalog": "veh.adas",
       "interfaces": [
         {
-          "name": "veh.adas.cruise",
+          "name": "veh.adas.CruiseService",
           "inline": true,
           "number": 1,
           "provisional": true,
-          "service": "veh.adas.cruise"
+          "service": "veh.adas.CruiseService"
         }
       ],
-      "hash": "jrEDJYpcqYAicg1izSh9HlgbR0+nBc4WjRsSSmrg61I="
+      "hash": "Y805IaH4uPTVlZszUipVOvtfpzncaXU2Gnbp9KEncPM="
     },
     {
       "catalog": "veh.ego",
       "interfaces": [
         {
-          "name": "veh.ego.status",
+          "name": "veh.ego.Status",
           "inline": true,
           "number": 1,
           "provisional": true,
-          "service": "veh.ego.status"
+          "service": "veh.ego.Status"
         }
       ],
-      "hash": "YP5bC/ShuCE/A4as6VufGJLPmSEyI39kosGyv3/e5vE="
+      "hash": "B055V+PJy5yDYwqbxxS3QPEoifgyvytdOpVgN8g1YUM="
     }
   ],
   "distributions": [],
@@ -192,7 +192,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
           "attributes": []
         },
         {
-          "component": "veh.ego.status",
+          "component": "veh.ego.Status",
           "instance": "Unit",
           "machine": "Box",
           "attributes": []
@@ -204,9 +204,9 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
           "catalog": "veh.adas",
           "interfaceNumber": 1,
           "memberOrdinal": 1,
-          "interface": "veh.adas.cruise",
+          "interface": "veh.adas.CruiseService",
           "member": "engaged",
-          "service": "veh.adas.cruise",
+          "service": "veh.adas.CruiseService",
           "producers": [
             {
               "component": "veh.adas.Cruise",
@@ -224,12 +224,12 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
           "catalog": "veh.ego",
           "interfaceNumber": 1,
           "memberOrdinal": 1,
-          "interface": "veh.ego.status",
+          "interface": "veh.ego.Status",
           "member": "moving",
-          "service": "veh.ego.status",
+          "service": "veh.ego.Status",
           "producers": [
             {
-              "component": "veh.ego.status",
+              "component": "veh.ego.Status",
               "instance": "Unit",
               "machine": "Box"
             }

@@ -242,13 +242,13 @@ fn a_remote_unit_catalog_is_embedded_in_the_deployment() {
         COMMON_UNIT[0],
         (
             "common.ridl",
-            "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  signal s: Speed @10ms\n}\n\nservice veh.common.probes: Probe\n",
+            "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  signal s: Speed @10ms\n}\n\nservice Probes: Probe\n",
         ),
     ]));
     let root = consumer(&dir, stub.url());
     dir.write(
         "app/system.rsdl",
-        "package app\n\nimport veh.common.Probe\n\nsystem Rig { Source, Sink }\n\ncomponent Source { offers veh.common.probes }\ncomponent Sink { requires Probe }\n\ndeployment Bench for Rig {\n  machine Host { Source, Sink }\n}\n",
+        "package app\n\nimport veh.common.Probe\n\nsystem Rig { Source, Sink }\n\ncomponent Source { offers veh.common.Probes }\ncomponent Sink { requires Probe }\n\ndeployment Bench for Rig {\n  machine Host { Source, Sink }\n}\n",
     );
     let (code, _, stderr) = ridl(
         &root,
@@ -298,11 +298,11 @@ fn lock_numbers_a_remote_component_in_the_root_lock_only() {
         COMMON_UNIT[0],
         (
             "common.ridl",
-            "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  signal s: Speed @10ms\n}\n\nservice veh.common.probes: Probe\n",
+            "package veh.common\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n\ninterface Probe {\n  signal s: Speed @10ms\n}\n\nservice Probes: Probe\n",
         ),
         (
             "source.rsdl",
-            "package veh.common\n\ncomponent Source { offers veh.common.probes }\n",
+            "package veh.common\n\ncomponent Source { offers Probes }\n",
         ),
     ]));
     let root = consumer(&dir, stub.url());

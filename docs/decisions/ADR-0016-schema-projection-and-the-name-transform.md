@@ -478,6 +478,11 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
    number: a per-unit `interfaces.lock`, written by `ridl lock` alone (the lock
    design, applying rsdl decision D-7).
 
+   **Amendment (2026-11-18, [ADR-0034](ADR-0034-service-declaration-names.md)
+   decisions 2 and 6).** The service catalog is no longer a flat global
+   namespace: a service is a symbol of its package, its global name is the
+   package followed by its declared name, and RIDL-140 is retired.
+
 9. **Ratified — note §7.3, a `fixed` interaction gets a real field in the store
    table, not a placeholder.** A `fixed` is a value a consumer reads, and a
    field in the store table is the plain accessor ridl §8 already promises. It

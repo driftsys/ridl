@@ -15,8 +15,9 @@ use std::path::Path;
 
 use ridl_descriptor::hash::catalog_hash;
 
-/// Pinned on the first run; see ADR-0014 decision 15 for the rule on moving it.
-const CORPUS_HASH: &str = "56125edbeccc92f72cf0a7beaee18d4c9340b1db0a6a8bc45c826df3ef29a71b";
+/// The fixture uses the global service name introduced by ADR-0034.
+/// Its rename changes the hash input; ADR-0014 decision 15 governs this pin.
+const CORPUS_HASH: &str = "a11f2751c7d972044ef03e56fcb6c719e6ef06ca5e798c8890ef4eaf6bd6a77e";
 
 /// The corpus snapshot was published before shapes carried a number (`"number"`
 /// does not occur in the file). The pin must cover the numbers, so the test

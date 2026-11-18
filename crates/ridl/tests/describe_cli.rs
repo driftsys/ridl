@@ -339,7 +339,7 @@ interface Clock {\n\
 
 /// A package whose one interface shape is a service's inline body still has
 /// a catalog: the descriptor is written and names the interface after the
-/// service's dotted name. The descriptor is named after the unit, while a
+/// service's global name. The descriptor is named after the unit, while a
 /// single-file build names the IR dump after the file stem.
 #[test]
 fn a_service_inline_body_alone_gets_a_descriptor() {
@@ -348,7 +348,7 @@ fn a_service_inline_body_alone_gets_a_descriptor() {
         "hvac.ridl",
         "package veh.hvac\n\
 type Temp: Cel [-40.0..125.0 step 0.1]\n\
-service veh.hvac.cabin {\n\
+service Cabin {\n\
   signal cabinTemp: Temp @[500ms..5s]\n\
 }\n",
     );
@@ -368,7 +368,7 @@ service veh.hvac.cabin {\n\
         .iter()
         .map(|interface| interface.unwrap().name().unwrap())
         .collect();
-    assert_eq!(names, vec!["veh.hvac.cabin"]);
+    assert_eq!(names, vec!["veh.hvac.Cabin"]);
 }
 
 #[test]

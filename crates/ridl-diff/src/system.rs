@@ -679,7 +679,7 @@ fn line_attrs(
     );
 }
 
-/// `catalog.Name` for a declared interface, the service's dotted name for an
+/// `catalog.Name` for a declared interface, the service's global name for an
 /// inline shape.
 fn interface_text(interface: Option<&InterfaceRef>) -> String {
     match interface {
@@ -782,7 +782,7 @@ mod tests {
                 component(
                     "Cruise",
                     &["primary", "backup"],
-                    &["veh.adas.cruise"],
+                    &["veh.adas.Cruise"],
                     &["LaneAssist"],
                 ),
                 component("Panel", &["Unit"], &[], &["CruiseControl"]),
@@ -1036,7 +1036,7 @@ mod tests {
                 "composition changed: veh.topology.Vehicle/veh.topology.Cruise/attributes: \
                  [] -> [ deb.section = net ]",
                 "composition changed: veh.topology.Cruise/deprecated: (absent) -> \"use Cruise2\"",
-                "composition changed: veh.topology.Cruise/offers/veh.adas.cruise/attributes: \
+                "composition changed: veh.topology.Cruise/offers/veh.adas.Cruise/attributes: \
                  [] -> [ someip.serviceId = 4660 ]",
                 "composition changed: veh.topology.Cruise/requires/veh.adas.LaneAssist/attributes: \
                  [] -> [ someip.clientId = 17 ]",
@@ -1170,7 +1170,7 @@ mod tests {
         let mut new = old.clone();
         let cruise = &mut new.components[0];
         cruise.offers.push(v2::Offer {
-            service: "veh.adas.brake".to_string(),
+            service: "veh.adas.Brake".to_string(),
             attributes: signed(),
             ..Default::default()
         });
@@ -1186,11 +1186,11 @@ mod tests {
         assert_eq!(
             lines(&diff_systems(&old, &new)),
             [
-                "composition changed: veh.topology.Cruise/offers/veh.adas.brake: \
-                 (absent) -> offers veh.adas.brake",
+                "composition changed: veh.topology.Cruise/offers/veh.adas.Brake: \
+                 (absent) -> offers veh.adas.Brake",
                 "composition changed: veh.topology.Cruise/requires/veh.adas.Brake: \
                  (absent) -> requires veh.adas.Brake",
-                "composition changed: veh.topology.Cruise/offers/veh.adas.brake/attributes: \
+                "composition changed: veh.topology.Cruise/offers/veh.adas.Brake/attributes: \
                  [] -> [ sign.key = release ]",
                 "composition changed: veh.topology.Cruise/requires/veh.adas.Brake/attributes: \
                  [] -> [ sign.key = release ]",
@@ -1199,11 +1199,11 @@ mod tests {
         assert_eq!(
             lines(&diff_systems(&new, &old)),
             [
-                "composition changed: veh.topology.Cruise/offers/veh.adas.brake: \
-                 offers veh.adas.brake -> (removed)",
+                "composition changed: veh.topology.Cruise/offers/veh.adas.Brake: \
+                 offers veh.adas.Brake -> (removed)",
                 "composition changed: veh.topology.Cruise/requires/veh.adas.Brake: \
                  requires veh.adas.Brake -> (removed)",
-                "composition changed: veh.topology.Cruise/offers/veh.adas.brake/attributes: \
+                "composition changed: veh.topology.Cruise/offers/veh.adas.Brake/attributes: \
                  [ sign.key = release ] -> []",
                 "composition changed: veh.topology.Cruise/requires/veh.adas.Brake/attributes: \
                  [ sign.key = release ] -> []",
@@ -1213,7 +1213,7 @@ mod tests {
         // The lines of a component added to the closure are not listed one by
         // one: the component is listed, and its keys are not compared.
         let mut grown = old.clone();
-        let mut gauge = component("Gauge", &["Unit"], &["veh.adas.gauge"], &["LaneAssist"]);
+        let mut gauge = component("Gauge", &["Unit"], &["veh.adas.Gauge"], &["LaneAssist"]);
         gauge.offers[0].attributes = signed();
         gauge.requires[0].attributes = signed();
         grown.components.push(gauge);
@@ -1548,7 +1548,7 @@ mod tests {
         new.components[0].requires.clear();
         new.components[1].external = true;
         new.components[1].offers.push(v2::Offer {
-            service: "veh.hmi.panel".to_string(),
+            service: "veh.hmi.Panel".to_string(),
             attributes: Vec::new(),
             doc: String::new(),
             links: Vec::new(),
@@ -1556,15 +1556,15 @@ mod tests {
             since: Vec::new(),
         });
         new.components
-            .push(component("Lane", &["Unit"], &["veh.adas.lane"], &[]));
+            .push(component("Lane", &["Unit"], &["veh.adas.Lane"], &[]));
         assert_eq!(
             lines(&diff_systems(&old, &new)),
             [
                 "composition changed: veh.topology.Cruise/requires/veh.adas.LaneAssist: \
                  requires veh.adas.LaneAssist -> (removed)",
                 "composition changed: veh.topology.Cruise/instances: (primary, backup) -> (Unit)",
-                "composition changed: veh.topology.Panel/offers/veh.hmi.panel: \
-                 (absent) -> offers veh.hmi.panel",
+                "composition changed: veh.topology.Panel/offers/veh.hmi.Panel: \
+                 (absent) -> offers veh.hmi.Panel",
                 "composition changed: veh.topology.Panel/external: false -> true",
                 "composition changed: veh.topology.Lane: (absent) -> in the closure",
             ]

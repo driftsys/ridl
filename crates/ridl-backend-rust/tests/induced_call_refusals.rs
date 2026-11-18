@@ -262,12 +262,12 @@ interface Healthy {
 }
 
 /// `package` with `Pump` moved into the inline shape of the service
-/// `face.calls.pump`, which has no declared name.
+/// `face.calls.Pump`, whose inline shape has no declared name.
 fn package_with_pump_as_a_service_shape(ty: v2::FieldType) -> v2::Package {
     let mut package = package(ty);
     let pump = package.interfaces.remove(0);
     package.services.push(v2::Service {
-        name: "face.calls.pump".to_string(),
+        name: "face.calls.Pump".to_string(),
         shapes: vec![v2::ServiceShape {
             kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
                 name: String::new(),
@@ -342,7 +342,7 @@ fn a_tuple_parameter_named_params_has_a_distinct_wrapper() {
 /// root: it gets a `Payload<Proto3>` as it gets a `Payload<FlatBuffers>`,
 /// although the shape has no declared name, because the FlatBuffers
 /// projection roots every induced tuple that crosses the wire whatever its
-/// interface's identity. The tuple is named from the service's dotted name.
+/// interface's identity. The tuple is named from the service's global name.
 #[test]
 fn a_bounded_induced_request_of_a_service_shape_is_a_root() {
     let package = package_with_pump_as_a_service_shape(v2::FieldType {
