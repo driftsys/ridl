@@ -1018,3 +1018,10 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0031](../decisions/ADR-0031-podbuf-projection-rules.md),
   [the codegen plugins design record](../design/codegen-plugins.md), the typl
   reference §17 and [the roadmap](../ROADMAP.md).
+- **2026-10-01-portable-match-patterns-design.md** — the first design note for
+  driftsys/ridl#597 (approach A: ECMA-262 with the `u` flag, and a rewrite of
+  each pattern to a portable form). It was never implemented. The owner replaced
+  it on 2026-11-18 with the I-Regexp design,
+  [`docs/wip/2026-11-18-i-regexp-match-patterns-design.md`](../wip/2026-11-18-i-regexp-match-patterns-design.md).
+  Archived verbatim on 2026-11-18. Its measurements of `regress` against the
+  `regex` crate are still valid for release 0.20.
