@@ -28,9 +28,9 @@ Today a service is declared with a dotted, reverse-domain global name, and every
 segment of that name must be lowercase:
 
 ```ridl,ignore
-package com.example.safety.sfar
+package com.example.safety.alerts
 
-service com.example.safety.sfar.telltales : SafetyTelltaleStatus
+service com.example.safety.alerts.telltales : SafetyTelltaleStatus
 ```
 
 The checker reports a segment that is not lowercase with an error that has no
@@ -76,9 +76,9 @@ already TYPL-009.
    joined by `.`. Both forms use it:
 
    ```ridl,ignore
-   package com.example.safety.sfar
+   package com.example.safety.alerts
 
-   /// Safety telltale state provided to SFAR.
+   /// Safety telltale state provided to the alert monitor.
    service SafetyTelltales : SafetyTelltaleStatus
    ```
 
@@ -91,7 +91,7 @@ already TYPL-009.
    }
    ```
 
-   The global names are `com.example.safety.sfar.SafetyTelltales` and
+   The global names are `com.example.safety.alerts.SafetyTelltales` and
    `com.example.hmi.climate.CabinClimate`. A declaration uses either an
    interface list or an inline shape, never both (ADR-0015 decision 14,
    unchanged).
@@ -115,7 +115,7 @@ already TYPL-009.
 
 3. **A service is referred to as an interface is.** A reference to a service is
    a path: the bare name in its own package, the bare name after an `import`
-   (`import com.example.safety.sfar.SafetyTelltales`), or the fully qualified
+   (`import com.example.safety.alerts.SafetyTelltales`), or the fully qualified
    global name. The places that take a service name are:
 
    | Place                                                     | What it takes                                                                      |
