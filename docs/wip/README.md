@@ -393,11 +393,12 @@ and was not archived. The reason is stated once per file or group.
 - **2026-09-21-nested-interface-design.md** — a design note that had not
   graduated into an amendment of ADR-0015. It was taken on 2026-10-26 as E2.14
   (driftsys/ridl#1084).
-- **2026-10-01-portable-match-patterns-design.md** — a design note for an
-  amendment of the typl reference. driftsys/ridl#597 was closed by mistake when
-  its design PR merged (PR #615) and was reopened on 2026-11-18. Approach A was
-  chosen and nothing is implemented. The note stays in `docs/wip/` until the fix
-  lands.
+- **2026-11-18-i-regexp-match-patterns-design.md** — the design note for
+  driftsys/ridl#597: a `match` pattern is an I-Regexp (RFC 9485) that matches
+  the whole value, and a string type may carry several `match` clauses. The
+  owner accepted the proposal on 2026-11-18 and nothing is implemented. It
+  replaces the approach A note, which is in [`../archive/`](../archive/). The
+  note stays in `docs/wip/` until the fix lands.
 
 The streams stage 5b plan (`2026-11-04-streams-stage-5b-plan.md`) was archived
 on 2026-11-04, once the work landed (driftsys/ridl#1241);
