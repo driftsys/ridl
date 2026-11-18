@@ -1,3 +1,16 @@
+//! Text transformations for source pattern literals and regex engines.
+//!
+//! A delimiter pair is removed only when the input starts and ends with `/`.
+//! A delimiter escape is a backslash followed by `/` within an escape pair;
+//! other escape pairs keep their backslash. An unescaped `[` opens a class
+//! and an unescaped `]` closes it. Incomplete delimiter pairs, classes and
+//! trailing escapes are preserved without syntax validation.
+
+/// Remove a complete `/…/` delimiter pair and decode delimiter escapes `\/`.
+///
+/// Escape pairs are read from left to right, so an escaped backslash does not
+/// escape a following slash. Other escapes are unchanged. Incomplete delimiter
+/// pairs and a trailing backslash are returned unchanged; classes are not parsed.
 pub fn pattern_text(literal: &str) -> String {
     let body = literal
         .strip_prefix('/')
@@ -22,6 +35,12 @@ pub fn pattern_text(literal: &str) -> String {
     text
 }
 
+/// Decode the literal with [`pattern_text`] and replace each unescaped `.`
+/// outside a class with `[^\n\r]`.
+///
+/// A class runs from an unescaped `[` to an unescaped `]`; escaped brackets do
+/// not change that state. Incomplete delimiters, unclosed class text and trailing
+/// escapes are preserved without validation.
 pub fn normalised_pattern(literal: &str) -> String {
     let text = pattern_text(literal);
     let mut normalised = String::with_capacity(text.len());
@@ -50,14 +69,23 @@ pub fn normalised_pattern(literal: &str) -> String {
     normalised
 }
 
+/// Wrap normalised text in `\A(?:…)\z` for a whole-value Rust regex match.
+/// The input is embedded unchanged, including incomplete syntax; this function
+/// neither removes delimiters nor decodes escapes or parses classes.
 pub fn rust_engine_text(normalised: &str) -> String {
     format!(r"\A(?:{normalised})\z")
 }
 
+/// Wrap normalised text in `^(?:…)$` for a whole-value search-engine match.
+/// The input is embedded unchanged, including incomplete syntax; this function
+/// neither removes delimiters nor decodes escapes or parses classes.
 pub fn search_engine_text(normalised: &str) -> String {
     format!("^(?:{normalised})$")
 }
 
+/// Wrap the source body in `/^(?:…)$/` for the compatibility IR field.
+/// Remove delimiters only as a complete `/…/` pair, keeping delimiter escapes
+/// `\/`, dots and class text unchanged. Incomplete input is embedded unchanged.
 pub fn deprecated_ir_literal(literal: &str) -> String {
     let body = literal
         .strip_prefix('/')
