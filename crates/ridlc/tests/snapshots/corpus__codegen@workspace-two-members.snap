@@ -276,6 +276,43 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "SpeedBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      },
+      {
+        "name": "TemperatureBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 1
+      }
+    ],
+    "refused": []
   }
 }
 
@@ -534,5 +571,26 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
     ],
     "refused": [],
     "boxes": []
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "ClusterReading",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "speed"
+          }
+        ],
+        "structDeclaration": 0
+      }
+    ],
+    "refused": []
   }
 }

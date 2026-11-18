@@ -3711,6 +3711,414 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "SpeedBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      },
+      {
+        "name": "TemperatureBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 1
+      },
+      {
+        "name": "RPMBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 2
+      },
+      {
+        "name": "RatioBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 3
+      },
+      {
+        "name": "CounterBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 4
+      },
+      {
+        "name": "GainBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 5
+      },
+      {
+        "name": "GearPositionBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "enumeration": {
+                "type": {
+                  "reference": "GearPosition",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 10,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 10
+      },
+      {
+        "name": "WarningBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "enumeration": {
+                "type": {
+                  "reference": "Warning",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 11,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 11
+      },
+      {
+        "name": "WarningFlagsBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 12
+      },
+      {
+        "name": "SpeedLimitPayload",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "limit"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "actual"
+          }
+        ],
+        "structDeclaration": 13
+      },
+      {
+        "name": "DriverProfile",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "text": true
+            },
+            "field": "name"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "speed"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "override"
+          },
+          {
+            "number": 4,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "gears"
+          }
+        ],
+        "structDeclaration": 14
+      },
+      {
+        "name": "SensorBounds",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "message": {
+                "message": 16
+              }
+            },
+            "field": "range"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "array": {
+                "element": {
+                  "scalar": {
+                    "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                    "wireType": "PROTO3_WIRE_TYPE_I32"
+                  }
+                },
+                "packed": true
+              }
+            },
+            "field": "readings"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "array": {
+                "element": {
+                  "text": true
+                },
+                "packed": false
+              }
+            },
+            "field": "labels"
+          },
+          {
+            "number": 4,
+            "wire": {
+              "map": {
+                "key": {
+                  "text": true
+                },
+                "value": {
+                  "text": true
+                }
+              }
+            },
+            "field": "meta"
+          }
+        ],
+        "structDeclaration": 15
+      },
+      {
+        "name": "SensorResult",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "message": {
+                "message": 13
+              }
+            },
+            "arm": "ok"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "message": {
+                "message": 14
+              }
+            },
+            "arm": "err"
+          }
+        ],
+        "unionDeclaration": 16
+      },
+      {
+        "name": "SensorReading",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "value"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT64",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "timestamp"
+          }
+        ],
+        "structDeclaration": 17
+      },
+      {
+        "name": "SensorFault",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "code"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "text": true
+            },
+            "field": "message"
+          }
+        ],
+        "structDeclaration": 18
+      },
+      {
+        "name": "RawWheelFrame",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "ticks"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "bytes": true
+            },
+            "field": "frame"
+          }
+        ],
+        "structDeclaration": 19
+      },
+      {
+        "name": "SensorBoundsRange",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 0
+      }
+    ],
+    "refused": []
   }
 }
 
@@ -13107,5 +13515,486 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "DoorPayload",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "sensorId"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_BOOL",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "isOpen"
+          }
+        ],
+        "structDeclaration": 0
+      },
+      {
+        "name": "DiagFilter",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "severity"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "text": true
+            },
+            "field": "category"
+          }
+        ],
+        "structDeclaration": 1
+      },
+      {
+        "name": "FaultEvent",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "code"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "text": true
+            },
+            "field": "message"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT64",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "timestamp"
+          }
+        ],
+        "structDeclaration": 2
+      },
+      {
+        "name": "DiagErrorBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "enumeration": {
+                "type": {
+                  "reference": "DiagError",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 3
+      },
+      {
+        "name": "FaultPage",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "array": {
+                "element": {
+                  "message": {
+                    "message": 2
+                  }
+                },
+                "packed": false
+              }
+            },
+            "field": "faults"
+          }
+        ],
+        "structDeclaration": 4
+      },
+      {
+        "name": "RawTickCountBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 5
+      },
+      {
+        "name": "RawWheelSpan",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "message": {
+                "message": 13
+              }
+            },
+            "field": "span"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "array": {
+                "element": {
+                  "message": {
+                    "message": 14
+                  }
+                },
+                "packed": false
+              }
+            },
+            "field": "bursts"
+          }
+        ],
+        "structDeclaration": 6
+      },
+      {
+        "name": "FanLevelBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 7
+      },
+      {
+        "name": "FilterState",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "hoursRun"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_BOOL",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "clogged"
+          }
+        ],
+        "structDeclaration": 8
+      },
+      {
+        "name": "ClimateReport",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "cabin"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "setpoint"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "fan"
+          }
+        ],
+        "structDeclaration": 9
+      },
+      {
+        "name": "HvacErrorBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "enumeration": {
+                "type": {
+                  "reference": "HvacError",
+                  "resolved": true,
+                  "package": "veh.cluster",
+                  "foreign": false,
+                  "index": 10,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 10
+      },
+      {
+        "name": "FanTagBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "text": true
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 14
+      },
+      {
+        "name": "FaultResult",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "message": {
+                "message": 2
+              }
+            },
+            "arm": "single"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "message": {
+                "message": 4
+              }
+            },
+            "arm": "page"
+          }
+        ],
+        "unionDeclaration": 17
+      },
+      {
+        "name": "RawWheelSpanSpan",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 0
+      },
+      {
+        "name": "RawWheelSpanBurstsElement",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 1
+      },
+      {
+        "name": "WheelDiagnosticsReadTicksParams",
+        "fields": [],
+        "tuple": 2
+      },
+      {
+        "name": "WheelDiagnosticsReadSpanParams",
+        "fields": [],
+        "tuple": 3
+      },
+      {
+        "name": "WheelDiagnosticsReadSpanReply",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 4
+      },
+      {
+        "name": "WheelDiagnosticsTickBoundsElement",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 5
+      },
+      {
+        "name": "VehClusterHvacCabinReplayTraceParams",
+        "fields": [],
+        "tuple": 6
+      },
+      {
+        "name": "VehClusterHvacCabinRebalanceParams",
+        "fields": [],
+        "tuple": 7
+      },
+      {
+        "name": "VehClusterHvacCabinGetBoundsParams",
+        "fields": [],
+        "tuple": 8
+      },
+      {
+        "name": "VehClusterHvacCabinGetBoundsReply",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 9
+      },
+      {
+        "name": "VehClusterHvacCabinGetClimateParams",
+        "fields": [],
+        "tuple": 10
+      },
+      {
+        "name": "VehClusterHvacCabinGetCabinTempParams",
+        "fields": [],
+        "tuple": 11
+      },
+      {
+        "name": "VehClusterHvacCabinScaledFanParams",
+        "fields": [],
+        "tuple": 12
+      }
+    ],
+    "refused": []
   }
 }

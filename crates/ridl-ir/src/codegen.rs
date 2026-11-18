@@ -67,6 +67,7 @@ mod lower;
 mod names;
 mod path;
 mod podbuf;
+mod proto3;
 mod resolve;
 mod unbounded;
 pub mod wire;

@@ -1679,6 +1679,140 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "DoorIdBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      },
+      {
+        "name": "PercentBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 1
+      },
+      {
+        "name": "OdometerBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 2
+      },
+      {
+        "name": "LockStateBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "enumeration": {
+                "type": {
+                  "reference": "LockState",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 3
+      },
+      {
+        "name": "DoorReport",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "door"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "enumeration": {
+                "type": {
+                  "reference": "LockState",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 3,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "field": "locked"
+          }
+        ],
+        "structDeclaration": 4
+      },
+      {
+        "name": "DoorFaultBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "enumeration": {
+                "type": {
+                  "reference": "DoorFault",
+                  "resolved": true,
+                  "package": "fleet.contracts",
+                  "foreign": false,
+                  "index": 5,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 5
+      },
+      {
+        "name": "TelemetryFuelLevelParams",
+        "fields": [],
+        "tuple": 0
+      }
+    ],
+    "refused": []
   }
 }
 
@@ -1861,6 +1995,33 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "DoorFaultBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "enumeration": {
+                "type": {
+                  "reference": "DoorFault",
+                  "resolved": true,
+                  "package": "fleet.legacy",
+                  "foreign": false,
+                  "index": 0,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      }
+    ],
+    "refused": []
   }
 }
 
@@ -3326,5 +3487,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
     "heads": [],
     "refused": [],
     "boxes": []
+  },
+  "proto3": {
+    "messages": [],
+    "refused": []
   }
 }
