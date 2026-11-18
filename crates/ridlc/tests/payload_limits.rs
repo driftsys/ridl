@@ -612,6 +612,33 @@ fn a_short_name_shared_by_two_packages_of_a_unit_is_ambiguous() {
 }
 
 #[test]
+fn an_inline_service_short_name_shared_by_two_packages_of_a_unit_is_ambiguous() {
+    let main = "package demo\ntype Payload: bytes [0..1000]\n\
+                service Same {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let sub = "package demo.sub\ntype Payload: bytes [0..1000]\n\
+               service Same {\n  signal sig: Payload @[10ms..100ms]\n}\n";
+    let member = Member {
+        name: "demo",
+        source: main,
+        manifest: "[limits.interaction]\n\"Same.sig\" = 10\n",
+    };
+    let result = run_with(&[member], PROTO3, &[("sub/s.ridl", sub)]);
+    let found = with("RIDL-152", &result.diagnostics);
+    assert_eq!(found.len(), 1, "{:?}", result.diagnostics);
+    assert!(
+        found[0]
+            .message
+            .contains("ambiguous: more than one interface or inline service of the unit"),
+        "{found:?}"
+    );
+    assert!(
+        with("RIDL-151", &result.diagnostics).is_empty(),
+        "{:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn a_tombstone_is_not_an_interaction_of_the_unit() {
     let source = "package demo\ntype Payload: bytes [0..1000]\n\
                   interface Iface {\n  signal sig: Payload @[10ms..100ms]\n  reserved old\n}\n";
