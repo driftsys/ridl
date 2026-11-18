@@ -2162,10 +2162,10 @@ service Status : VehicleStatus
 ";
 
 /// `TOMBSTONED_REMOVAL_BEHIND_A_NAMED_SERVICE` with the interface renamed to
-/// `status` — the named-form service's own name — and `doorClosed` declared
-/// live again at the end. After `ridl lock --rename`, the change's path names
-/// a container that is, in the published IR, a named-form service and no
-/// shape at all.
+/// `status` and `doorClosed` declared live again at the end. The test gives
+/// the published service the historical identity `status`. After
+/// `ridl lock --rename`, the change's path names that named-form service,
+/// which has no shape of its own in the published IR.
 const RENAMED_TO_ITS_SERVICE_NAME_TOMBSTONE_REDECLARED: &str = "package veh.cluster
 type DoorState: integer [0..1]
 interface status {
@@ -2405,14 +2405,29 @@ fn a_tombstone_in_an_interface_beside_a_service_still_names_its_ordinal() {
 /// container is. The walk emitted the change from a tombstone it read on the
 /// published side, so no second lookup can sanction it — and a rule that
 /// admitted a container resolving to a named-form service published this
-/// case: the interface renamed to its service's own name, so the change's
-/// path names a service that is no shape in the published IR.
+/// case: the interface is renamed to the service's historical identity
+/// `status`, so `veh.cluster/status/doorClosed` names a service that has no
+/// shape of its own in the published IR.
 #[test]
 fn a_redeclaration_in_an_interface_renamed_to_its_service_name_is_refused() {
     let dir = TempDir::new("gate-renamed-to-service-name");
     let root = package_workspace(&dir, TOMBSTONED_REMOVAL_BEHIND_A_NAMED_SERVICE);
     publish(&root);
+    // Model publication before service declarations became package symbols.
+    // Historical snapshots have no current context fingerprint.
+    let path = snapshot(&root);
+    let mut package: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(package["services"][0]["name"], "veh.cluster.Status");
+    package["services"][0]["name"] = "status".into();
+    std::fs::write(path, serde_json::to_string_pretty(&package).unwrap()).unwrap();
+    std::fs::remove_file(root.join(".ridl/baseline/context.json")).unwrap();
     let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+    let published: serde_json::Value = serde_json::from_slice(&before).unwrap();
+    assert_eq!(
+        published["services"][0]["name"], "status",
+        "the renamed interface must resolve to the published named-form service",
+    );
 
     dir.write(
         "cluster.ridl",
