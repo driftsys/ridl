@@ -81,7 +81,7 @@ struct Lowering<'a> {
 
 impl<'a> Lowering<'a> {
     /// The qualified name of the closure component at `index`: `pkg.Name`,
-    /// or the service's dotted name for an implicit component. It equals
+    /// or the service's global name for an implicit component. It equals
     /// `v2::Component::qualified_name` of the lowered component.
     fn component_name(&self, index: usize) -> String {
         self.closure.components[index].qualified_name()

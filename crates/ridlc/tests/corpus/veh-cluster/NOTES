@@ -24,10 +24,10 @@ and §14.5 needs both service forms exercised.
 - **The inline shape carries the whole surface.** A service's inline shape is
   an `Interface` stored under `Service.shape`, outside `Package.interfaces`, so
   a consumer that walks `package.interfaces` alone skips it silently — the
-  shape of five separate E2 defects. `veh.cluster.HvacCabin` therefore holds all five
-  interaction kinds, every timing mode, contracts including one that reads
-  `result`, an inline `T | E` fallible return, streams in both positions, a
-  `reserved` tombstone, a deprecated member, and both `fixed` forms. The IR,
+  shape of five separate E2 defects. `veh.cluster.HvacCabin` therefore holds
+  all five interaction kinds, every timing mode, contracts including one that
+  reads `result`, an inline `T | E` fallible return, streams in both positions,
+  a `reserved` tombstone, a deprecated member, and both `fixed` forms. The IR,
   Rust and TypeScript snapshots record what each consumer made of them.
 - **Every timing mode.** Strict periodic (`@1s`, `@500us`), a range with both
   bounds, lower-bound-only, upper-bound-only, and one untimed interaction whose
@@ -42,16 +42,16 @@ and §14.5 needs both service forms exercised.
   `VehicleStatus`. `cluster/evolution.ridl` adds the *nameless* form,
   `reserved <ordinal>`, in a named interface and in an inline shape — the two
   stores lower through separate loops. The load-bearing consumer is
-  `crates/ridl-diff/src/classify.rs::slots`, which folds tombstones into the ordinal
-  sequence so a freed slot never looks free; without that a new interaction
-  reusing a retired wire identity classifies as a clean append.
+  `crates/ridl-diff/src/classify.rs::slots`, which folds tombstones into the
+  ordinal sequence so a freed slot never looks free; without that a new
+  interaction reusing a retired wire identity classifies as a clean append.
 - **The whole guaranteed expression subset.** Comparison, boolean connectives,
   enum access, tuple-field access and duration comparison come from Appendix A
   and the inline shape; conjunction, arithmetic over a parameter, arithmetic
   over `result`, and a reference to a declared `const` (`MAX_FAN`) are the three
-  members appended at the end of `veh.cluster.HvacCabin`. They are appended rather than
-  inserted so the ordinals above — and the synthesized transport identity
-  `veh.cluster.HvacCabin#13` — do not move.
+  members appended at the end of `veh.cluster.HvacCabin`. They are appended
+  rather than inserted so the ordinals above — and the synthesized transport
+  identity `veh.cluster.HvacCabin#13` — do not move.
 
   _What this entry does not isolate._ Appendix A's
   `require position != GearPosition.PARK` references an **imported** name from a

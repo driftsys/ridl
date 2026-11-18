@@ -1433,7 +1433,7 @@ fn an_inline_shape_frozen_as_another_number_is_interface_number_changed() {
 /// An inline shape is an interface with its own number (lock design §3), so
 /// it follows that number across a rename of its service: the shape is
 /// `InterfaceRenamed` and its body is diffed, while the service itself — which
-/// is identified by its dotted name, D-7 — is a removal plus an addition.
+/// is identified by its global name, D-7 — is a removal plus an addition.
 #[test]
 fn an_inline_shape_follows_its_number_across_a_service_rename() {
     let old = package(
@@ -1494,7 +1494,7 @@ fn an_inline_shape_follows_its_number_across_a_service_rename() {
     assert_eq!(
         report.verdict,
         Verdict::Breaking,
-        "a service is identified by its dotted name, so the rename of the service is breaking \
+        "a service is identified by its global name, so the rename of the service is breaking \
          even though its shape kept its number"
     );
 }

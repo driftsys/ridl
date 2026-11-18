@@ -2874,7 +2874,7 @@ fn load_snapshots(
 /// (ridl §14.0, §14.5); the two are indexed together through
 /// `SourceFile::shapes`, because a diff path names either one the same way. A
 /// named-form service is indexed as well: its shape-list elements under the
-/// interface names its diff paths carry, and the service's dotted name as the
+/// interface names its diff paths carry, and the service's global name as the
 /// fallback for an element that is gone. A struct or union body is indexed
 /// separately, from `SourceFile::definitions` (see [`Self::build`]).
 #[derive(Default)]
@@ -2892,7 +2892,7 @@ struct DeclIndex {
     /// `(package, container)` to the container's declared name. This is the
     /// fallback for a removed member, whose own declaration no longer exists
     /// in the source being checked. A service — inline or named-form — is
-    /// keyed by its dotted name, exactly as its diff paths are.
+    /// keyed by its global name, exactly as its diff paths are.
     shapes: BTreeMap<(String, String), (String, TextRange)>,
     /// The package each indexed directory declares, by the directory's path
     /// as [`directory_of`] spells it. A unit's `interfaces.lock` sits in the
@@ -3143,7 +3143,7 @@ impl DeclIndex {
     }
 
     /// The span of a shape's declared name — an `interface` declaration's
-    /// name, or a service's dotted name for its inline shape — or a detached
+    /// name, or a service's declared name for its inline shape — or a detached
     /// span when the source does not declare it.
     fn shape_span(&self, package: &str, shape: &str, sources: &mut SourceMap) -> Span {
         let Some((path, range)) = self.shapes.get(&(package.to_string(), shape.to_string())) else {

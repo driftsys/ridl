@@ -995,7 +995,7 @@ deployment Production for Vehicle {
                 &[],
             ),
             (
-                "component C { offers veh.a.b [ someip.serviceId = 4660 ] }",
+                "component C { offers veh.a.B [ someip.serviceId = 4660 ] }",
                 &[],
             ),
             // FORM-106: a key no row and no backend namespace defines.
@@ -1376,14 +1376,14 @@ service FaultAccess {
             ),
             ("component C { offers Lane }", &["RSDL-310"]),
             ("component C { offers veh.adas.LaneAssist }", &["RSDL-310"]),
-            ("component C { offers veh.adas.brake }", &["RSDL-310"]),
+            ("component C { offers veh.adas.Brake }", &["RSDL-310"]),
             (
                 "component C { requires veh.adas.AdaptiveCruise }",
                 &["RSDL-311"],
             ),
             ("component C { requires Brake }", &["RSDL-312"]),
             ("component C { requires veh.common.Speed }", &["RSDL-312"]),
-            ("component C { requires veh.adas.brake }", &["RSDL-312"]),
+            ("component C { requires veh.adas.Brake }", &["RSDL-312"]),
             ("component C { requires C.primary }", &["RSDL-312"]),
             ("component C { offers C.Unit }", &["RSDL-307"]),
             (

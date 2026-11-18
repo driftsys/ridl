@@ -77,10 +77,10 @@ pub fn deployment(version: u32, embedded: Vec<u8>) -> Deployment {
         interfaces: vec![DeployedInterface {
             catalog: "veh".to_owned(),
             number: 3,
-            name: "Cabin".to_owned(),
+            name: "veh.Cabin".to_owned(),
             inline: true,
             provisional: true,
-            service: "cabin".to_owned(),
+            service: "veh.Cabin".to_owned(),
         }],
         machines: vec![Machine {
             name: "hpc".to_owned(),
@@ -113,7 +113,7 @@ pub fn deployment(version: u32, embedded: Vec<u8>) -> Deployment {
         links: vec![Link {
             catalog: "veh".to_owned(),
             number: 3,
-            service: "cabin".to_owned(),
+            service: "veh.Cabin".to_owned(),
             consumer: Box::new(endpoint("Ui")),
             producer: Box::new(endpoint("Climate")),
             crossing: Crossing::OffBoard,
@@ -123,9 +123,9 @@ pub fn deployment(version: u32, embedded: Vec<u8>) -> Deployment {
             catalog: "veh".to_owned(),
             number: 3,
             ordinal: 2,
-            interface: "Cabin".to_owned(),
+            interface: "veh.Cabin".to_owned(),
             member: "temperature".to_owned(),
-            service: "cabin".to_owned(),
+            service: "veh.Cabin".to_owned(),
             producers: vec![endpoint("Climate")],
         }],
         surface: vec![Surface {

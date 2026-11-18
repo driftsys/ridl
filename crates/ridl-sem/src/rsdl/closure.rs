@@ -27,7 +27,7 @@ use crate::resolve::{
 
 /// A closure component's identity (rsdl §6): a declared component by its
 /// package and name, or the implicit component of a lone service, named by the
-/// service's dotted name.
+/// service's global name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ComponentId {
     Declared { package: String, name: String },
@@ -36,7 +36,7 @@ pub enum ComponentId {
 
 impl ComponentId {
     /// The name a diagnostic prints: the declared name, or the service's
-    /// dotted name.
+    /// global name.
     pub fn text(&self) -> &str {
         match self {
             Self::Declared { name, .. } => name,
@@ -47,8 +47,8 @@ impl ComponentId {
 
 /// An interface's identity (rsdl §3.2, §8): a declared `interface` by its
 /// package and name, or the inline shape of a service, named by the service's
-/// dotted name (ridl §14.5). The two stay apart because a one-segment service
-/// name may be spelled like an interface.
+/// global name (ridl §14.5). The variants preserve whether the shape comes
+/// from an interface declaration or a service body.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum InterfaceId {
     Declared { package: String, name: String },
@@ -56,7 +56,7 @@ pub enum InterfaceId {
 }
 
 impl InterfaceId {
-    /// `pkg.Name` for a declared interface; the service's dotted name for an
+    /// `pkg.Name` for a declared interface; the service's global name for an
     /// inline shape.
     pub fn text(&self) -> String {
         match self {
@@ -71,7 +71,7 @@ impl InterfaceId {
 /// RSDL-307, RSDL-308, RSDL-309, RSDL-310, RSDL-311 or RSDL-312.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ComponentLines {
-    /// The dotted name of the service each `offers` line names.
+    /// The global name of the service each `offers` line names.
     pub offers: Vec<Option<String>>,
     /// The interface each `requires` line names.
     pub requires: Vec<Option<InterfaceId>>,
@@ -83,7 +83,7 @@ pub struct Closure {
     /// The closure components, in the order the system lists them.
     pub components: Vec<ClosureComponent>,
     /// The closure services — every service a closure component offers — by
-    /// dotted name.
+    /// global name.
     pub services: BTreeMap<String, ClosureService>,
     /// The closure interfaces — every interface a closure service lists —
     /// each with the closure services that list it, in service name order.
@@ -122,7 +122,7 @@ pub struct ClosureComponent {
 
 impl ClosureComponent {
     /// The qualified name: `pkg.Name` for a declared component, the service's
-    /// dotted name for an implicit one. It equals `v2::Component::qualified_name`
+    /// global name for an implicit one. It equals `v2::Component::qualified_name`
     /// of the lowered component.
     pub fn qualified_name(&self) -> String {
         match &self.id {

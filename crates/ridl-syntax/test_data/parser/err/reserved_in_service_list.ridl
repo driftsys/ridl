@@ -8,7 +8,7 @@ interface DoorControl {
   signal locked : boolean
 }
 
-service veh.body.doors : DoorControl, reserved LegacyDoorDiag, HealthBlock
+service Doors : DoorControl, reserved LegacyDoorDiag, HealthBlock
 
 interface HealthBlock {
   signal alive : boolean

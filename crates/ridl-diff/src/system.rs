@@ -679,7 +679,7 @@ fn line_attrs(
     );
 }
 
-/// `catalog.Name` for a declared interface, the service's dotted name for an
+/// `catalog.Name` for a declared interface, the service's global name for an
 /// inline shape.
 fn interface_text(interface: Option<&InterfaceRef>) -> String {
     match interface {

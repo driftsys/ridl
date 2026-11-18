@@ -907,7 +907,7 @@ mod tests {
                     interface Cruise {\n  command set(v: V) @[..50ms]\n  \
                     signal spd: V @10ms\n  event evt: V @[10ms..1s]\n  \
                     query get(): V @[..50ms]\n  fixed fx: V\n}\n\
-                    service demo.cruise {\n  /// A level.\n  signal level: V @10ms\n}\n\
+                    service CruiseService {\n  /// A level.\n  signal level: V @10ms\n}\n\
                     /// Old.\n\
                     struct Old {\n  /// A.\n  a: boolean\n  reserved b\n}\n\
                     /// @since 1.0\n\
@@ -918,11 +918,11 @@ mod tests {
             [
                 "BIT",
                 "Cruise",
+                "CruiseService",
                 "PARK",
                 "Pose",
                 "Tagged",
                 "arm",
-                "demo.cruise",
                 "evt",
                 "fx",
                 "get",
@@ -967,7 +967,7 @@ mod tests {
     #[test]
     fn missing_docs_rsdl() {
         let text = "package demo\n\
-                    component Lane {\n  offers veh.adas.lane\n}\n\
+                    component Lane {\n  offers veh.adas.LaneKeeping\n}\n\
                     system Vehicle {\n  Lane\n}\n\
                     distribution All { Lane }\n\
                     deployment Prod for Vehicle {\n  machine Box { Lane }\n}\n";

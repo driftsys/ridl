@@ -99,13 +99,13 @@ interface Climate {
   signal cabinTemperature : Temperature @[100ms..1s]
 }
 
-service skill.intro.cabin.control : Climate
+service Control : Climate
 ```
 
 ```rsdl
 package skill.intro.cabin
 
-component ClimateControl { offers skill.intro.cabin.control }
+component ClimateControl { offers Control }
 
 system Cabin { ClimateControl }
 ```

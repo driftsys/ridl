@@ -1009,12 +1009,12 @@ fn a_deployment_with_no_for_clause_exits_two_not_panics() {
         "ws/lane.ridl",
         "package veh.demo\n\ntype Flag: boolean\n\n\
          interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
-         service veh.demo.lane : LaneAssist\n",
+         service LaneService : LaneAssist\n",
     );
     dir.write(
         "ws/topology.rsdl",
         "package veh.demo\n\n\
-         component Lane { offers veh.demo.lane }\n\
+         component Lane { offers LaneService }\n\
          component Panel { requires LaneAssist }\n\
          system Vehicle { Lane, Panel }\n\
          deployment Desk {\n\
@@ -1049,13 +1049,13 @@ fn placed_workspace(dir: &TempDir, root: &str, machine: &str) -> PathBuf {
         &format!("{root}/lane.ridl"),
         "package veh.demo\n\ntype Flag: boolean\n\n\
          interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
-         service veh.demo.lane : LaneAssist\n",
+         service LaneService : LaneAssist\n",
     );
     dir.write(
         &format!("{root}/topology.rsdl"),
         &format!(
             "package veh.demo\n\n\
-             component Lane {{ offers veh.demo.lane }}\n\
+             component Lane {{ offers LaneService }}\n\
              component Panel {{ requires LaneAssist }}\n\
              system Vehicle {{ Lane, Panel }}\n\
              deployment Desk for Vehicle {{\n\
@@ -1276,20 +1276,17 @@ fn format_json_matches_the_schema_and_exit_code() {
 fn a_service_set_removal_renders_under_the_heading() {
     const HEADER: &str = "package veh.cluster\ntype T: integer [0..10]\ninterface I {\n  signal a: T @10ms\n}\ninterface J {\n  signal b: T @10ms\n}\n";
     let dir = TempDir::new("service-set");
-    let old = dir.write(
-        "old.ridl",
-        &format!("{HEADER}service veh.cluster.dash : I, J\n"),
-    );
+    let old = dir.write("old.ridl", &format!("{HEADER}service Dash : I, J\n"));
     let new = dir.write(
         "new.ridl",
-        &format!("{HEADER}interface K {{\n  signal c: T @10ms\n}}\nservice veh.cluster.dash : I\n"),
+        &format!("{HEADER}interface K {{\n  signal c: T @10ms\n}}\nservice Dash : I\n"),
     );
 
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     assert_eq!(code, 0, "a set removal is compatible, stderr:\n{stderr}");
     assert_eq!(
         stdout,
-        "compatible\n  [compatible] decl_added veh.cluster/K: (absent) -> interface\ncompatible on the wire, visible in source:\n  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)\n"
+        "compatible\n  [compatible] decl_added veh.cluster/K: (absent) -> interface\ncompatible on the wire, visible in source:\n  [compatible] service_interface_removed veh.cluster/veh.cluster.Dash/J: J -> (removed)\n"
     );
 }
 
@@ -1306,9 +1303,7 @@ fn the_text_report_groups_renames_and_set_removals_under_one_heading() {
     let dir = TempDir::new("renamed-by-number");
     let old = dir.write(
         "old/dash.ridl",
-        &format!(
-            "{TYPES}interface J {{\n  signal b: T @10ms\n}}\nservice veh.cluster.dash : I, J\n"
-        ),
+        &format!("{TYPES}interface J {{\n  signal b: T @10ms\n}}\nservice Dash : I, J\n"),
     );
     dir.write(
         "old/interfaces.lock",
@@ -1316,9 +1311,7 @@ fn the_text_report_groups_renames_and_set_removals_under_one_heading() {
     );
     let new = dir.write(
         "new/dash.ridl",
-        &format!(
-            "{TYPES}interface Jay {{\n  signal b: T @10ms\n}}\nservice veh.cluster.dash : I\n"
-        ),
+        &format!("{TYPES}interface Jay {{\n  signal b: T @10ms\n}}\nservice Dash : I\n"),
     );
     dir.write(
         "new/interfaces.lock",
@@ -1332,7 +1325,7 @@ fn the_text_report_groups_renames_and_set_removals_under_one_heading() {
     );
     assert_eq!(
         stdout,
-        "compatible\ncompatible on the wire, visible in source:\n  [compatible] interface_renamed veh.cluster/Jay: J -> Jay\n  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)\n"
+        "compatible\ncompatible on the wire, visible in source:\n  [compatible] interface_renamed veh.cluster/Jay: J -> Jay\n  [compatible] service_interface_removed veh.cluster/veh.cluster.Dash/J: J -> (removed)\n"
     );
 }
 

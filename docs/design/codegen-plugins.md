@@ -750,7 +750,7 @@ guide for a plugin author, and its "Reading order" section is the reading list.
 5. **Tuple names differ between the Rust backend and the wire backends.** The
    Rust backend spells an induced tuple with `camel_case` and nests it by field
    name; the proto3 and FlatBuffers backends nest by `Field<N>` and spell a
-   service's dotted name with their own `type_name`. The model carries
+   service's global name with their own `type_name`. The model carries
    `DottedName.joined_camel` and both induced-name rules, so each backend reads
    its own. Pinning one rule is an
    [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)

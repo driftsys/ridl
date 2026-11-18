@@ -283,7 +283,7 @@ pub(crate) fn lower_package(
 /// design §3, §4, §8) runs once per unit in [`unit_numbering`]; this query
 /// folds the unit's result into the package: each shape takes the number of
 /// its lock key (the catalog name, [`v2::relative_name`], for a declared
-/// interface; the service's dotted name for an inline shape),
+/// interface; the service's global name for an inline shape),
 /// `Package.retired` takes the retired entries this package owns, each
 /// spelled as its lock key, and the unit's anchor package reports one
 /// RIDL-409 per live entry with no declaration, on the entry's line of the
@@ -457,7 +457,7 @@ pub fn unit_numbering(
 /// unit `unit`, its number (lock design §3).
 ///
 /// A shape whose lock key — the catalog name for a declared interface, or
-/// `service:` followed by the service's dotted name for an inline shape — has
+/// `service:` followed by the service's global name for an inline shape — has
 /// a live entry in `lock` is frozen at the entry's number. Every other shape
 /// is provisional: it takes the numbers from the lock's `next` upward (from 1
 /// with no lock), in byte order of the key's name, an interface before an
@@ -727,7 +727,7 @@ pub(crate) struct Checker<'db> {
     /// cleared after; empty everywhere else.
     interface_signals: Vec<(String, ExprType)>,
     /// The name the observer stubs of the interface being lowered are scoped
-    /// to: the declared interface name, or a service's dotted global
+    /// to: the declared interface name, or a service's global
     /// name for an inline shape, which has no name of its own. Set and cleared
     /// alongside [`Checker::interface_signals`].
     interface_name: String,
@@ -16050,7 +16050,7 @@ interface VehicleStatus {
     }
 
     /// A service the parser recovered without a name does not lower either.
-    /// A service is published at its dotted global name, so an empty
+    /// A service is published at its global name, so an empty
     /// `Service.name` would publish at the empty address — the same defect
     /// class as an empty `Decl.name`, and reachable from both service forms.
     /// FORM-101 already reports it, so no second diagnostic is raised.
@@ -16371,7 +16371,7 @@ interface VehicleStatus {
         // on one of its interactions may read the shape's own signals exactly
         // as it may inside an `interface` body (ridl §13). Reading one is
         // clean, and it lowers as a canonical signal ref scoped to the
-        // service's dotted global name.
+        // service's global name.
         let checked = check_ridl(
             "app",
             &format!(
@@ -16811,7 +16811,7 @@ service Rear { signal r : State @[100ms..1s] }
     }
 
     /// Design §3: a declaration with no entry takes the numbers from `next`
-    /// upward in byte order of the name (`Cabin` < `Zone` < `veh.hvac.rear`),
+    /// upward in byte order of the name (`Cabin` < `Zone` < `veh.hvac.Rear`),
     /// whatever the file order; with no lock at all, from 1.
     #[test]
     fn provisional_numbers_follow_byte_order_from_next() {
@@ -16884,7 +16884,7 @@ service Cabin { signal s : State @[100ms..1s] }
     }
 
     /// Design §3: the inline shape's number is written on the `Interface`
-    /// inside the service's `INLINE` slot, keyed by the service's dotted
+    /// inside the service's `INLINE` slot, keyed by the service's global
     /// name; the service itself has no number.
     #[test]
     fn an_inline_shape_is_numbered_under_its_service_key() {

@@ -1698,7 +1698,7 @@ fn a_service_removed_is_breaking() {
     assert_row(&old, &new, Category::DeclRemoved, Verdict::Breaking);
 }
 
-/// The classifier resolves a member path under a service's dotted name into
+/// The classifier resolves a member path under a service's global name into
 /// the service's inline shape. That shape is not in `Package.interfaces`, so
 /// `find_interface` walks `Package::shapes()`; without it the append guard
 /// cannot see which slot the new interaction took, and every append inside an

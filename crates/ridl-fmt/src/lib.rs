@@ -1846,12 +1846,12 @@ mod tests {
         for width in [100, 60, 40] {
             for (source, expected) in [
                 (
-                    "system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }",
-                    "system Vehicle {\n  Cruise\n  Lane\n  Panel\n  Backend\n  veh.diag.access\n}",
+                    "system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.Access }",
+                    "system Vehicle {\n  Cruise\n  Lane\n  Panel\n  Backend\n  veh.diag.Access\n}",
                 ),
                 (
-                    "distribution Adas [tier=PLATFORM] { Cruise, Lane, veh.diag.access, }",
-                    "distribution Adas [ tier = PLATFORM ] {\n  Cruise\n  Lane\n  veh.diag.access\n}",
+                    "distribution Adas [tier=PLATFORM] { Cruise, Lane, veh.diag.Access, }",
+                    "distribution Adas [ tier = PLATFORM ] {\n  Cruise\n  Lane\n  veh.diag.Access\n}",
                 ),
                 (
                     "component Panel { requires  CruiseControl, requires LaneAssist, }",
@@ -2153,8 +2153,8 @@ mod tests {
 
     #[test]
     fn rsdl_deployment_places_nested_machine_members_on_separate_lines() {
-        let source = "package p\ndeployment Production for Vehicle {\n machine AdasHpc [labels=(ASIL_B)] {Cruise.primary, Lane, veh.diag.access}\n machine Cockpit {Cruise.backup, Panel [linux.cpuset=(2,3)]}\n machine Cloud [external] { Backend }\n}\n";
-        let expected = "package p\n\ndeployment Production for Vehicle {\n  machine AdasHpc [ labels = (ASIL_B) ] {\n    Cruise.primary\n    Lane\n    veh.diag.access\n  }\n  machine Cockpit {\n    Cruise.backup\n    Panel [ linux.cpuset = (2, 3) ]\n  }\n  machine Cloud [ external ] {\n    Backend\n  }\n}\n";
+        let source = "package p\ndeployment Production for Vehicle {\n machine AdasHpc [labels=(ASIL_B)] {Cruise.primary, Lane, veh.diag.Access}\n machine Cockpit {Cruise.backup, Panel [linux.cpuset=(2,3)]}\n machine Cloud [external] { Backend }\n}\n";
+        let expected = "package p\n\ndeployment Production for Vehicle {\n  machine AdasHpc [ labels = (ASIL_B) ] {\n    Cruise.primary\n    Lane\n    veh.diag.Access\n  }\n  machine Cockpit {\n    Cruise.backup\n    Panel [ linux.cpuset = (2, 3) ]\n  }\n  machine Cloud [ external ] {\n    Backend\n  }\n}\n";
         for width in [100, 60, 40] {
             let expected = if width == 40 {
                 expected.replace(

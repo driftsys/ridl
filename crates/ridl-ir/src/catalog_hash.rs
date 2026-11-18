@@ -39,7 +39,7 @@ pub fn reachable_decls<'a>(unit: &str, packages: &[&'a Package]) -> BTreeMap<Str
 /// The exact input of the hash, one IR package named after the unit: every
 /// interface shape of every package of the unit under its catalog name
 /// (`Package::catalog_name`: the declared name relative to the unit, or the
-/// owning service's dotted global name for an inline shape), with the
+/// owning service's global name for an inline shape), with the
 /// owning service's visibility for an inline shape, the IR's `number` and
 /// `provisional`, and its interactions, in (number, name) order because the
 /// lock makes the number the identity; the reached declarations under their
@@ -1146,7 +1146,7 @@ mod tests {
         p.interfaces.clear();
         let before = hash_of(&p, &fw);
         p.services
-            .push(inline_service("p.hvac", vec![signal("temp", "Point")]));
+            .push(inline_service("p.Hvac", vec![signal("temp", "Point")]));
         let reached: Vec<String> = reachable_decls("p", &[&p, &fw]).into_keys().collect();
         assert_eq!(reached, vec!["fw.Unit", "p.Coord", "p.Point"]);
         assert_ne!(hash_of(&p, &fw), before);
@@ -1185,12 +1185,12 @@ mod tests {
         let (mut p, fw) = fixture();
         p.interfaces.clear();
         p.services
-            .push(inline_service("p.hvac", vec![signal("temp", "Point")]));
+            .push(inline_service("p.Hvac", vec![signal("temp", "Point")]));
         let before = hash_of(&p, &fw);
         p.services[0].visibility = Visibility::Internal as i32;
         assert_ne!(hash_of(&p, &fw), before);
         let reduced = reduced_unit("p", &[&p, &fw]);
-        assert_eq!(reduced.interfaces[0].name, "p.hvac");
+        assert_eq!(reduced.interfaces[0].name, "p.Hvac");
         assert_eq!(
             reduced.interfaces[0].visibility,
             Visibility::Internal as i32
@@ -1905,7 +1905,7 @@ mod tests {
     /// `I` — a signal of the struct `S`, an event of the union `U`, a
     /// command whose parameter is the enum `E` and whose contract names the
     /// constant `C`, a query of the enum set `F` returning the scalar `T`,
-    /// and a fixed member of `T` — and the service `svc` with an inline
+    /// and a fixed member of `T` — and the service `p.Svc` with an inline
     /// shape holding a signal of `S`.
     fn every_carrier_fixture() -> Package {
         let field = Field {
@@ -2016,7 +2016,7 @@ mod tests {
                 number: 1,
                 ..Default::default()
             }],
-            services: vec![inline_service("svc", vec![signal("t", "S")])],
+            services: vec![inline_service("p.Svc", vec![signal("t", "S")])],
             ..Default::default()
         }
     }
@@ -2036,7 +2036,7 @@ mod tests {
     fn inline_shape_of(package: &mut Package) -> &mut Interface {
         match &mut package.services[0].shapes[0].kind {
             Some(service_shape::Kind::Inline(interface)) => interface,
-            _ => panic!("svc has no inline shape"),
+            _ => panic!("p.Svc has no inline shape"),
         }
     }
 

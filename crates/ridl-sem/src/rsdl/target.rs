@@ -29,7 +29,7 @@ pub enum Target {
     /// [`CheckedSystem::components`], and the instance, as an index into that
     /// component's `instances` list.
     Instance { component: usize, instance: usize },
-    /// A `service`, by its dotted name.
+    /// A `service`, by its global name.
     Service(String),
     /// A declared `interface`, or the inline shape of a service (rsdl §3.2).
     Interface(InterfaceId),
@@ -87,7 +87,7 @@ pub fn reference_at(
 
 /// Whether two targets name the same declaration. A service and the inline
 /// shape of that service are one declaration: both are written as the
-/// service's dotted name.
+/// service's global name.
 pub fn same_declaration(a: &Target, b: &Target) -> bool {
     fn service(target: &Target) -> Option<&str> {
         match target {

@@ -10,7 +10,7 @@ interface VehicleStatus {
   event doorOpened : DoorPayload @[50ms..500ms]
 }
 
-service veh.err.status {
+service Status {
   signal currentSpeed : Speed @10ms
   reserved 2.5
   event doorOpened : DoorPayload @[50ms..500ms]

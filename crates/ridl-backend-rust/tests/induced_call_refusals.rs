@@ -342,7 +342,7 @@ fn a_tuple_parameter_named_params_has_a_distinct_wrapper() {
 /// root: it gets a `Payload<Proto3>` as it gets a `Payload<FlatBuffers>`,
 /// although the shape has no declared name, because the FlatBuffers
 /// projection roots every induced tuple that crosses the wire whatever its
-/// interface's identity. The tuple is named from the service's dotted name.
+/// interface's identity. The tuple is named from the service's global name.
 #[test]
 fn a_bounded_induced_request_of_a_service_shape_is_a_root() {
     let package = package_with_pump_as_a_service_shape(v2::FieldType {

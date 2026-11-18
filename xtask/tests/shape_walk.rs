@@ -187,10 +187,9 @@ const ALLOWED: &[Allowed] = &[
         path: "crates/ridl-core/src/package.rs",
         lines: 1,
         why: "`package_names` collects the names a type reference can bind to. \
-              Services are omitted on purpose: ridl §14.5 makes every segment \
-              of a service name lowercase, so no service name can be spelled \
-              where a CamelCase type name is expected, and a service/type \
-              collision cannot be written",
+              Services are omitted on purpose: a service is not a type. \
+              Services share the package declaration namespace and the \
+              resolver rejects a service/type name collision with TYPL-009",
     },
     Allowed {
         path: "crates/ridl-descriptor/src/generated.rs",
@@ -619,7 +618,7 @@ An inline shape's `Interface.name` is \"\" and its `Interface.visibility` is \
 VISIBILITY_UNSPECIFIED, both by construction (ridl §14.5). Reading either \
 through `InterfaceShape` defeats the walk that exists to avoid them: use \
 `shape.name` for the identity — the interface's own name, or the owning \
-service's dotted one — and `shape.visibility()` for the authoritative \
+service's global name — and `shape.visibility()` for the authoritative \
 visibility, which is the owning `Service`'s for an inline shape.";
 
 /// The guarded spellings: the needle, the table justifying it, and what the

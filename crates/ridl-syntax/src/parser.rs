@@ -2897,7 +2897,7 @@ mod tests {
     // declaration, with the rsdl declaration after it still parsed.
     #[test]
     fn rsdl_profile_parses_its_declarations_and_rejects_the_others() {
-        let clean = "package p\nsystem Vehicle { Cruise, veh.diag.access }\n";
+        let clean = "package p\nsystem Vehicle { Cruise, veh.diag.FaultAccess }\n";
         assert_eq!(parse(clean, Profile::Rsdl).errors(), &[]);
 
         for foreign in [
@@ -2905,7 +2905,7 @@ mod tests {
             "internal type Speed: km/h",
             "struct S { a: integer [0..1] }",
             "interface I { signal s: S @10ms }",
-            "service veh.a.b : I",
+            "service VehAB : I",
         ] {
             let input = format!("package p\n{foreign}\nsystem Vehicle {{ Cruise }}\n");
             let parsed = parse(&input, Profile::Rsdl);
@@ -3196,7 +3196,7 @@ interface I {{
             ),
             (
                 Profile::Ridl,
-                "service p.svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
+                "service Svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
             ),
         ];
         for (profile, shape) in bodies {
@@ -3270,7 +3270,7 @@ interface I {{
             ),
             (
                 Profile::Ridl,
-                "service p.svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
+                "service Svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
             ),
         ];
         for (profile, shape) in bodies {
@@ -3307,7 +3307,7 @@ interface I {{
     /// no connection to the mistake.
     #[test]
     fn a_missing_comma_ends_the_shape_list_at_the_next_identifier() {
-        let input = "package p\nservice p.svc : DoorControl\nStruct Foo {\n  a : X\n}\n";
+        let input = "package p\nservice Svc : DoorControl\nStruct Foo {\n  a : X\n}\n";
         let parsed = parse(input, Profile::Ridl);
         assert_eq!(
             parsed.syntax().text().to_string(),
@@ -3346,7 +3346,7 @@ interface I {{
     /// stray keyword is reported, and nothing after it joins the list.
     #[test]
     fn a_shape_list_admits_a_trailing_comma_and_ends_before_reserved() {
-        let input = "package p\nservice p.svc : DoorControl, MotorControl,\n";
+        let input = "package p\nservice Svc : DoorControl, MotorControl,\n";
         let parsed = parse(input, Profile::Ridl);
         assert!(
             parsed.errors().is_empty(),
@@ -3358,7 +3358,7 @@ interface I {{
             [SyntaxKind::PathType, SyntaxKind::PathType]
         );
 
-        let input = "package p\nservice p.svc : DoorControl, reserved LegacyDiag, MotorControl,\n";
+        let input = "package p\nservice Svc : DoorControl, reserved LegacyDiag, MotorControl,\n";
         let parsed = parse(input, Profile::Ridl);
         assert!(
             !parsed.errors().is_empty(),

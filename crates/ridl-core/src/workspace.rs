@@ -3372,7 +3372,7 @@ mod tests {
 # interfaces.lock — written by ridl lock; do not edit by hand.
 next 3
 Cabin 1
-service:veh.common.climate 2
+service:veh.common.Climate 2
 ";
 
     /// A well-formed `interfaces.lock` beside the sources rides on the
@@ -3404,7 +3404,7 @@ service:veh.common.climate 2
         assert_eq!(lock.lock.entries.len(), 2);
         assert_eq!(
             lock.lock.entries[1].key,
-            crate::interface_lock::LockKey::Service("veh.common.climate".to_string())
+            crate::interface_lock::LockKey::Service("veh.common.Climate".to_string())
         );
     }
 

@@ -138,7 +138,7 @@ interface DoorBlock {
 interface HealthBlock {
   signal uptime: Speed @10ms
 }
-service veh.cluster.doors : DoorBlock, HealthBlock
+service Doors : DoorBlock, HealthBlock
 ";
 
 /// The two shapes swap places — the shape-list reading of the §6.3 tidying:
@@ -151,7 +151,7 @@ interface DoorBlock {
 interface HealthBlock {
   signal uptime: Speed @10ms
 }
-service veh.cluster.doors : HealthBlock, DoorBlock
+service Doors : HealthBlock, DoorBlock
 ";
 
 /// A shape inserted ahead of the two the baseline numbers.
@@ -166,7 +166,7 @@ interface HealthBlock {
 interface NewBlock {
   signal fresh: Speed @10ms
 }
-service veh.cluster.doors : NewBlock, DoorBlock, HealthBlock
+service Doors : NewBlock, DoorBlock, HealthBlock
 ";
 
 /// `HealthBlock` dropped from the list without a tombstone. The interface
@@ -179,7 +179,7 @@ interface DoorBlock {
 interface HealthBlock {
   signal uptime: Speed @10ms
 }
-service veh.cluster.doors : DoorBlock
+service Doors : DoorBlock
 ";
 
 /// A shape whose field names a type from the standard package. Every other

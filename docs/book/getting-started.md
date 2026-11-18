@@ -1072,18 +1072,20 @@ A `service` is a global, named, published declaration of one or more of them —
 the catalog entry that gives contracts a concrete identity in the system. The
 specification defines its members as addressed `service.member`; no runtime
 resolves such an address today, so read it as the naming scheme a deployment
-will use. Service names are unique across the system and always public, and that
-uniqueness the compiler does enforce (`RIDL-140`).
+will use. A service is public and is declared with one `CamelCase` name. Its
+global name is the package followed by that declared name: `Status` in package
+`veh.cluster` is `veh.cluster.Status`. It shares the package namespace with
+types and interfaces, so a repeated declaration name draws `TYPL-009`.
 
 ```ridl
 package veh.cluster
 import veh.common.Temperature
 
-service veh.cluster.status: VehicleStatus
+service Status: VehicleStatus
 
-service veh.cluster.dash: VehicleStatus, Warnings
+service Dash: VehicleStatus, Warnings
 
-service veh.cluster.hvac {
+service Hvac {
   signal temperature: Temperature @[1s..10s]
   command setTarget(temp: Temperature) @[..50ms]
 }
@@ -1114,10 +1116,10 @@ contract's wire identity.
 | Construct                                      | Convention        | Example                        |
 | ---------------------------------------------- | ----------------- | ------------------------------ |
 | `type`, `struct`, `enum`, `enumset`, `union`   | `CamelCase`       | `VehicleSpeed`, `WarningFlags` |
-| Interfaces                                     | `CamelCase`       | `VehicleStatus`                |
+| Interfaces and services                        | `CamelCase`       | `VehicleStatus`                |
 | Interactions, fields, tuple fields, parameters | `camelCase`       | `currentSpeed`                 |
 | Enum values, enumset bits, constants           | `SCREAMING_SNAKE` | `PARK`, `MAX_SPEED`            |
-| Packages and service names                     | `lowercase.dot`   | `veh.common`                   |
+| Packages                                       | `lowercase.dot`   | `veh.common`                   |
 
 Beyond spelling: name signals and fixed values as nouns (`currentSpeed`), events
 as past-tense occurrences (`doorOpened`), commands as imperatives (`setGear`),

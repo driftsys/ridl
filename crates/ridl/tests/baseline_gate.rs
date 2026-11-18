@@ -776,7 +776,7 @@ fn baseline_refuses_a_dropped_tombstone_in_an_inline_service() {
     assert!(
         stderr.contains("records `doorClosed` in `veh.cluster.Doors` as retired (ordinal 2)")
             && stderr.contains("dropped the tombstone"),
-        "the inline body's tombstone is found under the service's dotted name:\n{stderr}",
+        "the inline body's tombstone is found under the service's global name:\n{stderr}",
     );
 }
 

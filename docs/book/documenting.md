@@ -138,7 +138,7 @@ The five rsdl declarations are carriers, and so is each line of their bodies:
 /// The cruise control computer in the front zone.
 component CruiseEcu {
   /// The function the driver controls with the steering column lever.
-  offers docs.cruise.control
+  offers docs.cruise.Control
 }
 ```
 

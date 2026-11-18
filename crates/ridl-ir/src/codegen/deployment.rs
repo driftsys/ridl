@@ -358,7 +358,7 @@ fn inline_of(system: &v2::System, route: &v2::Route) -> bool {
 ///
 /// The interface is found in the package the route names as its catalog, by
 /// its identity name alone — the interface's own name, or the owning
-/// service's dotted name for an inline shape. That name is unique within a
+/// service's global name for an inline shape. That name is unique within a
 /// catalog, so it is the whole key. The interface number is deliberately not
 /// part of it: a package set whose numbers differ from the lowered system's,
 /// which a stale or differently locked package gives, would then match
@@ -2009,10 +2009,10 @@ mod tests {
     }
 
     #[test]
-    fn an_inline_service_shape_is_matched_by_its_dotted_name() {
+    fn an_inline_service_shape_is_matched_by_its_global_name() {
         // The interface moves into the service's inline shape, where
         // `Interface.name` is empty and the identity name is the service's
-        // dotted name (ridl §14.5).
+        // global name (ridl §14.5).
         let mut package = package();
         let mut interface = package.interfaces.remove(0);
         interface.name = String::new();

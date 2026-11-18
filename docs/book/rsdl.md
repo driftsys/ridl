@@ -41,17 +41,17 @@ interface Seats {
   signal heated: Heated @[100ms..1s]
 }
 
-service veh.climate.control: Climate
+service Control: Climate
 
-service veh.climate.seats: Seats
+service SeatsService: Seats
 
-service veh.climate.diag {
+service Diag {
   query readTemperature(): Temperature @[..100ms]
 }
 ```
 
-`veh.climate.diag` declares its contract inline rather than naming a reusable
-interface, so its dotted name is also the name of its one interface.
+`veh.climate.Diag` declares its contract inline rather than naming a reusable
+interface, so its global name is also the name of its one interface.
 
 ## Components
 
@@ -65,12 +65,12 @@ import veh.climate.Seats
 
 /// Runs the climate loop. Two copies, one per zone controller.
 component ClimateControl [ instances = (front, rear) ] {
-  offers veh.climate.control
+  offers veh.climate.Control
   requires Seats
 }
 
 component SeatHeating {
-  offers veh.climate.seats
+  offers veh.climate.SeatsService
 }
 
 component Dashboard {
@@ -81,7 +81,7 @@ component Dashboard {
 /// The phone app. No implementation in this workspace.
 component PhoneApp [ external ] {
   requires Climate
-  requires veh.climate.diag
+  requires veh.climate.Diag
 }
 ```
 
@@ -111,11 +111,11 @@ system Cabin {
   SeatHeating
   Dashboard
   PhoneApp
-  veh.climate.diag
+  veh.climate.Diag
 }
 ```
 
-`veh.climate.diag` is a lone service that no declared component offers, so it
+`veh.climate.Diag` is a lone service that no declared component offers, so it
 stands for an implicit component of that name, with one `Unit` instance. Writing
 a `component` for it would say nothing the service does not already say.
 
@@ -130,7 +130,7 @@ package veh.cabin
 distribution Comfort [ tier = PLATFORM ] {
   ClimateControl
   SeatHeating
-  veh.climate.diag
+  veh.climate.Diag
 }
 
 distribution Display [ tier = APPLICATION ] {
@@ -156,7 +156,7 @@ deployment Car for Cabin {
   machine ZoneFront [ labels = (ASIL_A) ] {
     ClimateControl.front
     SeatHeating
-    veh.climate.diag
+    veh.climate.Diag
   }
   machine ZoneRear {
     ClimateControl.rear
@@ -174,7 +174,7 @@ deployment Bench for Cabin {
     ClimateControl
     SeatHeating
     Dashboard
-    veh.climate.diag
+    veh.climate.Diag
     PhoneApp
   }
 }
@@ -231,19 +231,19 @@ the closure:
 - **The components**, with their instances, their `offers` and `requires` lines,
   and their `external` flag.
 - **The producers** — for each service, the component that offers it and that
-  component's instances. `veh.climate.control` is marked not yet realizable,
+  component's instances. `veh.climate.Control` is marked not yet realizable,
   because `ClimateControl` has more than one instance.
 - **The grants** — per component, the catalog regions its requirements reach.
   `PhoneApp` reaches `veh.climate`, and its grant is lowered with the `external`
   flag: it is derived here, and enforcing it is the external side's business.
   `SeatHeating` requires nothing, so its grant is empty.
 - **The region map** — one region per catalog the closure reaches, here
-  `veh.climate`, holding `Climate`, `Seats` and `veh.climate.diag` with the
+  `veh.climate`, holding `Climate`, `Seats` and `veh.climate.Diag` with the
   number each takes from the unit's `interfaces.lock`. A region is one per unit,
   and the interface names in a region, like those in a route, are catalog names:
   the name relative to the unit, such as `Climate` for an interface of the
   unit's root package or `cluster.Speed` for one of a subpackage. An inline
-  shape keeps its global name, so `veh.climate.diag` appears under that name.
+  shape keeps its global name, so `veh.climate.Diag` appears under that name.
   Each region also carries the catalog hash, computed by ridl over the unit's
   interfaces, their numbers and every type they reach: the same hash
   `--emit catalog` writes in the unit's descriptor.

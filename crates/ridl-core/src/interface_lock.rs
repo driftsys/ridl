@@ -26,7 +26,7 @@
 //!   An entry's number never changes and no entry is ever removed (lock
 //!   design §4): a rename rewrites the key in place, a retire adds the word.
 //! - The key is a declared interface's catalog name, or `service:` followed by
-//!   the dotted name of the service whose inline shape the entry numbers (lock
+//!   the global name of the service whose inline shape the entry numbers (lock
 //!   design §3). A catalog name is the interface's source package path
 //!   relative to the unit, then its name, joined by `.` (`cluster.Speed`); an
 //!   interface of the unit's root source package keeps its short name. The
@@ -73,7 +73,7 @@ pub const HEADER: &str = "# interfaces.lock — written by ridl lock; do not edi
 pub enum LockKey {
     /// A declared `interface`, by its name.
     Interface(String),
-    /// A service's inline shape, by the service's dotted name (without the
+    /// A service's inline shape, by the service's global name (without the
     /// `service:` prefix).
     Service(String),
 }

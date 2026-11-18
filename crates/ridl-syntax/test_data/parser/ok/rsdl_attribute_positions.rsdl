@@ -17,7 +17,7 @@ component Cruise [
   linux.realtime,
 ] {
   /// The service this component offers.
-  offers veh.adas.cruise [ someip.instanceId = 1 ],
+  offers veh.adas.AdaptiveCruise [ someip.instanceId = 1 ],
   requires veh.adas.LaneAssist [ dds.reliable ],
 }
 

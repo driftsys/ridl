@@ -719,7 +719,7 @@ fn contracts_inside_a_service_with_an_inline_shape_are_reported() {
         "app.ridl",
         "package app\n\
 type Speed : km/h [0.0..250.0 step 0.5]\n\
-service app.cruise {\n\
+service Cruise {\n\
   command overshoot(desired: Speed) [ require desired > 300.0 ] @[..50ms]\n\
   query peek(): Speed [ ensure result >= 0.0 ] @[..50ms]\n\
 }\n",
@@ -756,7 +756,7 @@ type Speed : km/h [0.0..250.0 step 0.5]\n\
 interface Cruise {\n\
   command overshoot(desired: Speed) [ require desired > 300.0 ] @[..50ms]\n\
 }\n\
-service app.cruise : Cruise\n",
+service CruiseService : Cruise\n",
     );
     let (code, stdout, stderr) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
     assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");

@@ -236,7 +236,7 @@ impl Namespace {
 }
 
 /// A dotted address becomes one CamelCase FlatBuffers identifier:
-/// `corpus.baseline.hvac` gives `CorpusBaselineHvac`. A named interface has
+/// `corpus.baseline.Hvac` gives `CorpusBaselineHvac`. A named interface has
 /// no dots, so its name passes through unchanged.
 fn type_name(dotted: &str) -> String {
     dotted

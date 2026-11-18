@@ -6,7 +6,7 @@ package app
 
 type Speed : km/h [0.0..300.0 step 0.5]
 
-service veh.a.b {
+service VehAB {
   signal : Speed @10ms
   event : Speed @[1s..2s]
   command (g: Speed)

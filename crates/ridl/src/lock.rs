@@ -762,7 +762,7 @@ fn write_locks_with(
 }
 
 /// The lock key of one shape of `package`: `service:` and the service's
-/// dotted name for an inline shape, else the interface's name in the catalog
+/// global name for an inline shape, else the interface's name in the catalog
 /// of its unit (lock design §3), such as `cluster.Speed` for an interface of
 /// a subpackage.
 pub(crate) fn shape_key(package: &v2::Package, shape: &v2::InterfaceShape<'_>) -> LockKey {

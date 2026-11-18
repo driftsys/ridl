@@ -2523,7 +2523,7 @@ fn hover_on_a_service_shows_its_interface_and_the_posture_note() {
 }
 
 /// Hover on an interaction inside a service's *inline* shape works, and names
-/// the interaction under the service's dotted global name.
+/// the interaction under the service's global name.
 ///
 /// The shape holding it is not in `Package.interfaces` — it lives inside
 /// `Service.shape` — so the lookup behind this hover walks `Package::shapes()`.
@@ -2544,7 +2544,7 @@ fn hover_on_an_interaction_inside_an_inline_service_shape_names_the_service() {
     );
     assert!(
         signal.contains("signal veh.cluster.Cabin.temperature"),
-        "the owner is the service's dotted name, not the empty inline shape \
+        "the owner is the service's global name, not the empty inline shape \
          name: {signal}",
     );
     assert!(

@@ -518,7 +518,7 @@ message Interface {
   oneof identity {
     // An `interface` declaration.
     Spellings declared = 10;
-    // A service's inline shape: the service's dotted name.
+    // A service's inline shape: the service's global name.
     DottedName service = 11;
   }
   // Numbered after the oneof: 16–19 stay open for it.
