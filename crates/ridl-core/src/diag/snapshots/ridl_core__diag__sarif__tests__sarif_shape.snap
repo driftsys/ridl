@@ -1740,6 +1740,15 @@ expression: log
               }
             },
             {
+              "id": "MANI-023",
+              "shortDescription": {
+                "text": "two directories of one unit give the same package name"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1905,7 +1914,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 187,
+          "ruleIndex": 188,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

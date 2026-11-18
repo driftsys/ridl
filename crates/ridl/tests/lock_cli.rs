@@ -804,3 +804,40 @@ fn retire_over_a_workspace_of_two_units_exits_two() {
     assert!(!root.join("hvac/interfaces.lock").exists());
     assert!(!root.join("door/interfaces.lock").exists());
 }
+
+/// Two directories of one unit, `a.b/` and `a/b/`, give the package `x.a.b`,
+/// and each declares `service S`. The loader refuses the second directory
+/// with MANI-023, so `ridl check` reports it and `ridl lock` exits 1 with the
+/// same error and writes nothing, instead of allocating one key twice.
+#[test]
+fn two_directories_giving_one_package_name_are_refused_by_check_and_lock() {
+    let dir = TempDir::new("one-name-two-dirs");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"x\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "x.typl",
+        "package x\n\n/// T.\ntype Level: integer [0..10]\n",
+    );
+    dir.write(
+        "a.b/s.ridl",
+        "package x.a.b\n\nimport x.Level\n\n/// First.\nservice S {\n  /// A.\n  signal a: Level @[100ms..1s]\n}\n",
+    );
+    dir.write(
+        "a/b/t.ridl",
+        "package x.a.b\n\nimport x.Level\n\n/// Second.\nservice S {\n  /// B.\n  command b(v: Level) @[..50ms]\n}\n",
+    );
+    let root = dir.path().to_path_buf();
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[MANI-023]"), "stderr:\n{stderr}");
+
+    let (code, stdout, stderr) = lock(&root, &[]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert_eq!(stdout, "");
+    assert!(stderr.contains("error[MANI-023]"), "stderr:\n{stderr}");
+    assert!(!stderr.contains("panicked"), "stderr:\n{stderr}");
+    assert!(!root.join("interfaces.lock").exists());
+}

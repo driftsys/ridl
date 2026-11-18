@@ -976,8 +976,9 @@ contains a control character, which means a C0, DEL or C1 character (U+0085
 included), U+2028 or U+2029, other than a tab and a line break; `ridl check`
 reports it too. MANI-012 is an error when the manifest of a workspace member
 sets the key: only the root sets it. MANI-013 is an error when a `ridl.toml`
-sits inside the tree of a unit, and MANI-014 is an error when two units declare
-the same source package.
+sits inside the tree of a unit, MANI-014 is an error when two units declare the
+same source package, and MANI-023 is an error when two directories of one unit,
+such as `a.b/` and `a/b/`, give the same package name.
 
 A build overwrites a `lib.rs` or `Cargo.toml` in the output directory only when
 the file begins with this marker, or with the marker an earlier release wrote

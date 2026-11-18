@@ -7,6 +7,12 @@ on driftsys/ridl#1390 and its two comments, and from the decisions the owner
 delegated for that issue. The documents in "Documents amended" are changed with
 the acceptance of this record, in the pull request that builds it.
 
+Decision 6 was amended on 2026-11-18 by the owner's ruling on the review of the
+pull request that builds this record: two directories of one unit that give one
+package name (`a.b/` and `a/b/`) are refused when the unit loads (MANI-023), so
+two packages of one name cannot load and the premise of the retirement of
+RIDL-140 holds.
+
 Scope: the name a `service` declaration carries, the namespace that name lives
 in, how every other declaration refers to a service, the diagnostic for the
 dotted form, the `interfaces.lock` key of an inline shape, and every generated
@@ -63,9 +69,9 @@ the only key of the workspace service catalog (`service_catalog` in
 `crates/ridl-core/src/package.rs`), and the catalog exists because the dotted
 name is not in any package's namespace: it is the only place where two equal
 service names can be detected, which is RIDL-140. A name scoped by its package
-is unique because package names are unique (a source package belongs to one
-unit, MANI-014), and a second declaration of the same name in one package is
-already TYPL-009.
+is unique when package names are unique (a source package belongs to one unit,
+MANI-014), and a second declaration of the same name in one package is already
+TYPL-009.
 
 ## Decision
 
@@ -199,11 +205,15 @@ already TYPL-009.
    no migration command; the fix-it and these messages are the migration aid.
 
 6. **RIDL-140 is retired.** With decision 2, two services can have one global
-   name only if two packages have one name, and MANI-014 refuses that before
-   checking. Within one package the clash is TYPL-009. RIDL-140 can no longer be
-   raised, so it leaves the catalogue and its number is kept reserved, as
-   RIDL-146 to RIDL-148, RIDL-150 and RIDL-158 are (ADR-0008 decision 13).
-   `service_catalog` keeps the global names as its keys and reports nothing.
+   name only if two packages have one name. Two packages of one name cannot
+   load: MANI-014 refuses two units that declare one source package, and
+   MANI-023 refuses two directories of one unit that give one package name
+   (`a.b/` and `a/b/`), for every declaration kind; the second directory is not
+   loaded. Both are raised when the unit loads, before checking. Within one
+   package the clash is TYPL-009. RIDL-140 can no longer be raised, so it leaves
+   the catalogue and its number is kept reserved, as RIDL-146 to RIDL-148,
+   RIDL-150 and RIDL-158 are (ADR-0008 decision 13). `service_catalog` keeps the
+   global names as its keys and reports nothing.
 
 7. **The lock keys follow the global name.** The `interfaces.lock` entry of an
    inline shape is keyed `service:` followed by the global name:
@@ -383,7 +393,8 @@ already TYPL-009.
 ## References
 
 - driftsys/ridl#1390 — the issue and its two comments.
-- [ADR-0002](ADR-0002-module-system.md) §1 — packages, units, MANI-014.
+- [ADR-0002](ADR-0002-module-system.md) §1 — packages, units, MANI-014,
+  MANI-023.
 - [ADR-0008](ADR-0008-e2-execution.md) decisions 4, 13 and 21.
 - [ADR-0015](ADR-0015-qos-absorption-and-rpc-bounds.md) decisions 12 to 16.
 - [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) — the name

@@ -194,7 +194,8 @@ macro_rules! diag_codes {
 ///
 /// RIDL-140 (a duplicate `service` name across the workspace) was retired
 /// (ADR-0034 decision 6): a service is a symbol of its package, so its global
-/// name is unique unless two packages share a name, which MANI-014 refuses, and
+/// name is unique unless two packages share a name, which MANI-014 (two units)
+/// and MANI-023 (two directories of one unit) refuse when the unit loads, and
 /// a second declaration of a name within a package is TYPL-009.
 pub const RETIRED_RIDL_CODES: &[u16] = &[140, 146, 147, 148, 150, 158, 415];
 
@@ -1609,6 +1610,13 @@ diag_codes! {
         /// up is MANI-015.
         MANI_022 = "MANI-022", Error,
             "payload limit above what its entry may give";
+
+        /// Two directories of one unit give the same source package name, for
+        /// example `a.b/` and `a/b/` (ADR-0002 §1). Reported on the unit's
+        /// `[package] name`; the directory reached second in the walk, which
+        /// visits directories in name order, is not loaded.
+        MANI_023 = "MANI-023", Error,
+            "two directories of one unit give the same package name";
 
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
