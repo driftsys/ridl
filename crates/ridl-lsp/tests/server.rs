@@ -7719,6 +7719,7 @@ fn service_rename_respects_rsdl_binding_and_namespace_collisions() {
         );
     }
     let declaration_edits = edits_for(&edit, &contracts);
+    assert_eq!(declaration_edits.len(), 2, "{declaration_edits:?}");
     for occurrence in [0, 1] {
         let range = range_of(SERVICE_NAMES, "Inline", occurrence);
         assert!(
