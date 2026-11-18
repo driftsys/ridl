@@ -88,10 +88,8 @@ pub enum GenerateError {
 /// (`Number.MAX_SAFE_INTEGER`, 2^53 - 1).
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
-/// Generates the TypeScript module for `package`: the typl surface first, in
-/// declaration order, then the ridl interaction layer ([`interact`]) — the
-/// interaction faces reference the typl types above them, so the reading
-/// order matches the dependency order.
+/// Generates the TypeScript module for `package`: the typl surface, in
+/// declaration order. An interface and its interactions emit nothing.
 ///
 /// The doc comments are read from the codegen model of `package` lowered
 /// alone, so a doc link to a declaration of another package renders as a
@@ -1455,10 +1453,7 @@ fn map_init(ctx: &Ctx, map: &v2::MapType, slot: &Slot) -> Option<String> {
 
 /// `Array.from({ length: n }, () => body)` — the one place this backend emits
 /// an arrow function **expression**, so the rule below cannot be missed by a
-/// later call site. Arrow **types** are a separate matter: [`interact`] writes
-/// two of them into the prelude's handle interfaces
-/// (`subscribe(fn: (value: T, …) => void): () => void`), which are type
-/// annotations with no body and no parse ambiguity to resolve.
+/// later call site. The backend emits no arrow types.
 ///
 /// A concise arrow body that starts with `{` is parsed as a **block**, not as
 /// an object literal: `() => { first: x }` is a block holding a labelled
