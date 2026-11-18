@@ -3,14 +3,16 @@
 //! A delimiter pair is removed only when the input starts and ends with `/`.
 //! A delimiter escape is a backslash followed by `/` within an escape pair;
 //! other escape pairs keep their backslash. An unescaped `[` opens a class
-//! and an unescaped `]` closes it. Incomplete delimiter pairs, classes and
-//! trailing escapes are preserved without syntax validation.
+//! and an unescaped `]` closes it. Delimiter escapes are decoded even when the
+//! delimiter pair is incomplete. Classes and trailing escapes are preserved
+//! without syntax validation.
 
 /// Remove a complete `/…/` delimiter pair and decode delimiter escapes `\/`.
 ///
 /// Escape pairs are read from left to right, so an escaped backslash does not
-/// escape a following slash. Other escapes are unchanged. Incomplete delimiter
-/// pairs and a trailing backslash are returned unchanged; classes are not parsed.
+/// escape a following slash. Other escapes and a trailing backslash are unchanged.
+/// Incomplete delimiter pairs are kept, but delimiter escapes are decoded even
+/// when the pair is incomplete; classes are not parsed.
 pub fn pattern_text(literal: &str) -> String {
     let body = literal
         .strip_prefix('/')
