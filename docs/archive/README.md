@@ -984,8 +984,9 @@ provenance. Nothing here is normative — the current references live in
   records. Since that header was written, instances are also numbered
   (`instances.lock`, reference §7), the rsdl-owned attribute keys also include
   `depth`, `slots`, `budget`, `file` and `deprecated` (reference §5), the lock
-  and the catalog are per unit, and `D-2` and `D-9` are reopened by roadmap rows
-  E6.20 and E6.21 and by the proposed ADR-0033. The durable records are
+  and the catalog are per unit, and `D-2` is reopened by roadmap row E6.20, and
+  roadmap row E6.21 with the proposed ADR-0033 would change the "one system per
+  workspace" point of `D-9`. The durable records are
   [the rsdl reference](../specification/rsdl-language-reference.md),
   [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md),
   [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 15,
