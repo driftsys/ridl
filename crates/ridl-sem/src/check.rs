@@ -4576,11 +4576,12 @@ impl Checker<'_> {
     }
 
     /// The name RIDL-142 suggests for each old-form service of the package,
-    /// keyed by the file index and the start of the written name. The
-    /// declarations are read in the package's file order and in source order
-    /// within a file; a suggestion is also taken when an earlier old-form
-    /// declaration was given it, because a declaration that draws RIDL-142
-    /// binds nothing (ADR-0034 decision 5).
+    /// keyed by the file index and the start of the written name. A name is
+    /// taken when the package binds it (a declaration, an import, or a
+    /// `ridl.std` name). The declarations are read in the package's file order
+    /// and in source order within a file; a suggestion is also taken when an
+    /// earlier old-form declaration was given it, because a declaration that
+    /// draws RIDL-142 binds nothing (ADR-0034 decision 5).
     fn suggest_old_service_names(
         &self,
         files: &[InputFile],
@@ -4617,14 +4618,13 @@ impl Checker<'_> {
                 if written.is_empty() {
                     continue;
                 }
+                // A name is taken when the package already binds it: its own
+                // declarations, its imports (by alias or imported name) and the
+                // `ridl.std` names every package sees without an import.
                 let suggested = suggested_service_name(&self.package_name, &written, &|name| {
                     given.contains(name)
                         || declared.contains(name)
-                        || self
-                            .resolution
-                            .symbols
-                            .get(name)
-                            .is_some_and(|symbol| symbol.package == self.package_name)
+                        || self.resolution.symbols.contains_key(name)
                 });
                 given.insert(suggested.clone());
                 suggestions.insert((index, dotted.syntax().text_range().start()), suggested);
@@ -6339,7 +6339,7 @@ fn regex_crate_refusal(error: &regex::Error) -> String {
 /// split at `_`, written with an upper-case first letter and joined. When
 /// `taken` holds the result, the first of the result followed by `Service`,
 /// `Service2`, `Service3`, … that it does not hold. A name that would not
-/// start with a letter is prefixed with `Service`, so the rule is total.
+/// start with an upper-case letter is prefixed with `Service`, so the rule is total.
 pub(crate) fn suggested_service_name(
     package: &str,
     written: &str,
@@ -16585,6 +16585,99 @@ interface VehicleStatus {
         }
     }
 
+    /// A result that does not start with an upper-case letter is prefixed
+    /// with `Service`, so the rule always gives a `CamelCase` name.
+    #[test]
+    fn the_suggestion_prefixes_service_when_it_does_not_start_upper_case() {
+        assert_eq!(suggested_service_name("p", "2d", &|_| false), "Service2d");
+        assert_eq!(suggested_service_name("p", "_", &|_| false), "Service");
+    }
+
+    /// An existing `CamelCase` service of the package is a declaration of the
+    /// package, so a suggestion equal to its name is taken.
+    #[test]
+    fn the_suggestion_avoids_an_existing_camel_case_service() {
+        let checked = check_ridl(
+            "veh.cabin",
+            "package veh.cabin\ninterface I {}\nservice Control : I\nservice control : I\n",
+        );
+        let diagnostic = checked
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .expect("RIDL-142");
+        assert_eq!(diagnostic.fixits[0].replacement, "ControlService");
+    }
+
+    /// The suggestions follow the package's file order: the old-form service
+    /// of the first file is given `Control`, the one of the second file
+    /// `ControlService`.
+    #[test]
+    fn the_suggestions_follow_the_file_order() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_files(
+            &db,
+            "veh.cabin",
+            &[
+                (
+                    "a.ridl",
+                    "package veh.cabin\ninterface I {}\nservice control : I\n",
+                ),
+                (
+                    "b.ridl",
+                    "package veh.cabin\nservice veh.cabin.control : I\n",
+                ),
+            ],
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        let suggested: Vec<(&str, &str)> = checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .map(|diagnostic| {
+                let written = if diagnostic.message.starts_with("`control`") {
+                    "control"
+                } else {
+                    "veh.cabin.control"
+                };
+                (written, diagnostic.fixits[0].replacement.as_str())
+            })
+            .collect();
+        assert!(suggested.contains(&("control", "Control")), "{suggested:?}");
+        assert!(
+            suggested.contains(&("veh.cabin.control", "ControlService")),
+            "{suggested:?}"
+        );
+    }
+
+    /// Two files of one package each declare `service S` at the same offset.
+    /// The resolver binds the first; the second is TYPL-009 and is not
+    /// checked, although its name range equals the winner's: its unknown
+    /// shape draws no RIDL-141.
+    #[test]
+    fn a_duplicate_service_in_another_file_at_the_same_offset_is_not_checked() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_files(
+            &db,
+            "app",
+            &[
+                ("a.ridl", "package app\nservice S : I\ninterface I {}\n"),
+                ("b.ridl", "package app\nservice S : Missing\n"),
+            ],
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        assert!(
+            !codes(&checked).contains(&"RIDL-141"),
+            "{:?}",
+            checked.diagnostics
+        );
+        assert_eq!(checked.ir.services.len(), 1);
+    }
+
     #[test]
     fn the_suggestion_appends_service_on_a_clash() {
         let checked = check_ridl(
@@ -16643,6 +16736,68 @@ interface VehicleStatus {
             .find(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
             .expect("RIDL-142");
         assert_eq!(diagnostic.fixits[0].replacement, "ControlService");
+    }
+
+    /// The RIDL-142 fix-it of the first `ridl.toml` migration case:
+    /// `import veh.common.Cabin` binds `Cabin` in `veh.hvac`, so the suggestion
+    /// for `veh.hvac.cabin` is not `Cabin` (ADR-0034 decision 5 step 3).
+    fn suggestion_beside_an_import(import: &str) -> String {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = ridl_package(
+            &db,
+            "veh.common",
+            "package veh.common\ntype Level: integer [0..10]\n\
+             interface Cabin { signal level: Level @[100ms..1s] }\n\
+             interface Zone { signal zone: Level @[100ms..1s] }\n",
+        );
+        let hvac = ridl_package(
+            &db,
+            "veh.hvac",
+            &format!("package veh.hvac\n{import}\nservice veh.hvac.cabin : Zone\n"),
+        );
+        let ws = Workspace::new(&db, vec![common, hvac], BTreeMap::new());
+        let checked = check_package(&db, ws, hvac, std);
+        checked
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .expect("RIDL-142")
+            .fixits[0]
+            .replacement
+            .clone()
+    }
+
+    #[test]
+    fn the_suggestion_avoids_an_imported_name() {
+        assert_eq!(
+            suggestion_beside_an_import("import veh.common.Cabin\nimport veh.common.Zone"),
+            "CabinService"
+        );
+    }
+
+    #[test]
+    fn the_suggestion_avoids_an_import_alias() {
+        assert_eq!(
+            suggestion_beside_an_import("import veh.common.Zone\nimport veh.common.Level as Cabin"),
+            "CabinService"
+        );
+    }
+
+    /// `ridl.std` declares `Message`, which every package sees without an
+    /// import, so the suggestion for an inline `message` is not `Message`.
+    #[test]
+    fn the_suggestion_avoids_a_std_name() {
+        let checked = check_ridl(
+            "veh.diag",
+            "package veh.diag\nservice message {\n  signal latest: Message @[100ms..1s]\n}\n",
+        );
+        let diagnostic = checked
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == DiagCode::RIDL_142)
+            .expect("RIDL-142");
+        assert_eq!(diagnostic.fixits[0].replacement, "MessageService");
     }
 
     #[test]

@@ -1525,6 +1525,25 @@ service FaultAccess {
         );
     }
 
+    /// A `system`, a `distribution` and a `deployment` are in the package
+    /// namespace beside a service, as a component is (ADR-0034 decision 2).
+    #[test]
+    fn a_service_and_a_system_distribution_or_deployment_of_one_name_are_typl_009() {
+        let ridl = ("p.ridl", "package p\ninterface I {}\nservice Cruise : I\n");
+        for rsdl in [
+            "package p\ncomponent C {}\nsystem Cruise { C }\n",
+            "package p\ncomponent C {}\nsystem V { C }\ndistribution Cruise {}\n",
+            "package p\ncomponent C {}\nsystem V { C }\ndeployment Cruise for V {}\n",
+        ] {
+            let system = check(&[("p", &[ridl, ("p.rsdl", rsdl)])]);
+            assert!(
+                codes(&system).contains(&"TYPL-009"),
+                "{rsdl}: {:?}",
+                system.diagnostics
+            );
+        }
+    }
+
     #[test]
     fn a_component_and_a_service_of_one_name_are_typl_009() {
         let ridl = ("p.ridl", "package p\ninterface I {}\nservice Cruise : I\n");

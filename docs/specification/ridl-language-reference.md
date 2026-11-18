@@ -1652,13 +1652,15 @@ service Mirrors : MirrorControl
   the package name (the last segment when nothing is left), each split at `_`,
   written with an upper-case first letter and joined — `veh.body.doors` in
   package `veh.body` gives `Doors`, and `veh.hvac.cabin` in package
-  `veh.cluster` gives `HvacCabin`. When the result is taken — declared in the
-  package, or already suggested for an earlier RIDL-142 declaration of the
-  package, in file order and then source order — the first free name of the
-  result followed by `Service`, `Service2`, `Service3`, … is suggested, so every
-  RIDL-142 carries a fix-it (ADR-0034 decision 5). A declaration that draws
-  RIDL-142 binds nothing, so a reference to it draws the unknown-name code of
-  its slot.
+  `veh.cluster` gives `HvacCabin`; a result that does not start with an
+  upper-case letter is preceded by `Service`. When the result is taken — bound
+  in the package by a declaration, by an import (its alias or its imported name)
+  or as a `ridl.std` name, or already suggested for an earlier RIDL-142
+  declaration of the package, in file order and then source order — the first
+  free name of the result followed by `Service`, `Service2`, `Service3`, … is
+  suggested, so every RIDL-142 carries a fix-it (ADR-0034 decision 5). A
+  declaration that draws RIDL-142 binds nothing, so a reference to it draws the
+  unknown-name code of its slot.
 - A service is **always public**: it takes no `internal` modifier, and every
   shape it lists must be public too. Publishing an `internal` interface at a
   global address is RIDL-143, reported against the offending list element — the

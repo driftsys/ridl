@@ -176,14 +176,21 @@ TYPL-009.
    1. Drop the longest run of leading segments that equal the leading segments
       of the package name. When nothing is left, keep the last segment.
    2. Split each remaining segment at `_`, write each part with its first letter
-      in upper case, and join every part.
-   3. The result is taken when a declaration of the package already has it, or
-      when the suggestion for an earlier RIDL-142 declaration of the same
-      package has it. Earlier means before in the package's file order, the
-      order the checker reads its files, and in source order within a file. A
-      declaration that draws RIDL-142 binds nothing, so without the second
-      clause two old-form services, such as `veh.cabin.control` and `control` in
-      package `veh.cabin`, would both be told to become `Control`.
+      in upper case, and join every part. When the result does not start with an
+      upper-case letter (a part starts with a digit, or nothing is left), put
+      `Service` before it.
+   3. The result is taken when the package already binds it, or when the
+      suggestion for an earlier RIDL-142 declaration of the same package has it.
+      The package binds the names of its declarations, the names its imports
+      bind (the alias, or the imported name when there is no alias), and the
+      `ridl.std` names every package sees without an import (`Message`). So
+      `service veh.hvac.cabin : Cabin` beside `import veh.common.Cabin` is told
+      to become `CabinService`, not `Cabin`, which would refer to itself.
+      Earlier means before in the package's file order, the order the checker
+      reads its files, and in source order within a file. A declaration that
+      draws RIDL-142 binds nothing, so without the second clause two old-form
+      services, such as `veh.cabin.control` and `control` in package
+      `veh.cabin`, would both be told to become `Control`.
    4. While the result is taken, try in turn the result followed by `Service`,
       `Service2`, `Service3` and so on, and keep the first that is not taken.
       The rule always gives a name, so every RIDL-142 carries a fix-it.
