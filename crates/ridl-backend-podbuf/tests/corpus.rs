@@ -5,7 +5,24 @@ mod support;
 
 #[test]
 fn the_veh_cluster_headers_are_pinned() {
-    let packages = support::corpus("veh-cluster");
+    let path =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ridlc/tests/corpus/veh-cluster");
+    let mut db = ridl_core::RidlDatabase::default();
+    let output = ridlc::compile_workspace(&mut db, &path).expect("load the corpus");
+    assert!(
+        !output
+            .diagnostics
+            .iter()
+            .any(|diagnostic| { diagnostic.severity == ridl_core::diag::Severity::Error }),
+        "the corpus must compile before its headers are compared: {:?}",
+        output.diagnostics
+    );
+    let mut packages: Vec<_> = output
+        .checked
+        .into_iter()
+        .map(|checked| checked.ir)
+        .collect();
+    packages.push(output.std_ir);
     insta::assert_snapshot!("veh_cluster", support::header(&packages, "veh.cluster"));
     insta::assert_snapshot!("veh_common", support::header(&packages, "veh.common"));
 }

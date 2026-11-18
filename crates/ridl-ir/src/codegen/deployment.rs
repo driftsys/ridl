@@ -483,7 +483,7 @@ mod tests {
 
     const CATALOG: &str = "veh.cabin";
     const INTERFACE: &str = "Climate";
-    const SERVICE: &str = "veh.cabin.climate";
+    const SERVICE: &str = "veh.cabin.Climate";
     const PROVIDER: &str = "veh.cabin.Provider";
     const DASH: &str = "veh.cabin.Dash";
     const LOGGER: &str = "veh.cabin.Logger";
@@ -2068,7 +2068,7 @@ mod tests {
     // cannot show that a channel lists the links of its own interface only.
 
     const HORN: &str = "Horn";
-    const HORN_SERVICE: &str = "veh.cabin.horn";
+    const HORN_SERVICE: &str = "veh.cabin.Horn";
     const PANEL: &str = "veh.cabin.Panel";
     const TELEMETRY: &str = "veh.cabin.Telemetry";
     /// The ordinal of `Climate.setLevel`, the command member of the
@@ -2765,7 +2765,7 @@ mod tests {
                     inline: true,
                     number: 1,
                     provisional: false,
-                    service: "veh.aaa.climate".to_string(),
+                    service: "veh.aaa.Climate".to_string(),
                 }],
                 hash: vec![9; 32],
             },
@@ -2789,7 +2789,7 @@ mod tests {
     fn what_an_instance_offers_is_in_region_order_then_interface_number_order() {
         const AUX: &str = "Aux";
         const AUX_CATALOG: &str = "veh.zzz";
-        const AUX_SERVICE: &str = "veh.zzz.aux";
+        const AUX_SERVICE: &str = "veh.zzz.Aux";
 
         let package = two_interface_package();
         let mut system = two_interface_system();

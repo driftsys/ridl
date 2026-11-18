@@ -262,14 +262,14 @@ mod tests {
     #[test]
     fn references_from_services() {
         let out = references(&snap(), &input("Status")).unwrap();
-        assert_eq!(pairs(&out), [("fx.b", "fx.b.status", None)]);
+        assert_eq!(pairs(&out), [("fx.b", "fx.b.StatusService", None)]);
         assert!(out.references[0].location.is_none());
         let out = references(&snap(), &input("Speed")).unwrap();
         assert_eq!(
             pairs(&out),
             [
                 ("fx.b", "Status", Some("speed")),
-                ("fx.b", "fx.b.diag", Some("readSpeed"))
+                ("fx.b", "fx.b.Diag", Some("readSpeed"))
             ]
         );
         assert!(out.references[1].location.is_none());
@@ -293,7 +293,7 @@ mod tests {
             [
                 ("fx.b", "Status", Some("readSpeed")),
                 ("fx.b", "Status", Some("speed")),
-                ("fx.b", "fx.b.diag", Some("readSpeed"))
+                ("fx.b", "fx.b.Diag", Some("readSpeed"))
             ]
         );
     }

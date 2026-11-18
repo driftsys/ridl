@@ -122,14 +122,14 @@ fn check_inside_a_member_still_reports_the_root_instance_lock() {
 
 // ---- `ridl lock` and `ridl lock merge` over `instances.lock` ----
 
-/// `SYSTEM` with a lone service, which numbers as `veh.status/Unit`.
+/// `SYSTEM` with a lone service, which numbers as `veh.Status/Unit`.
 const LOCK_SYSTEM: &str = "package veh\n\
                            component Cruise [ instances = (primary, backup) ] {}\n\
-                           system Vehicle { Cruise, veh.status }\n";
+                           system Vehicle { Cruise, Status }\n";
 
 /// The lone service of `LOCK_SYSTEM`.
 const STATUS_SERVICE: &str =
-    "package veh\ntype Flag: integer [0..1]\nservice veh.status { signal a: Flag @[100ms..1s] }\n";
+    "package veh\ntype Flag: integer [0..1]\nservice Status { signal a: Flag @[100ms..1s] }\n";
 
 /// A one-package workspace on `LOCK_SYSTEM`, with the given `instances.lock`
 /// body, or none.
@@ -176,19 +176,17 @@ fn plain_lock_allocates_every_instance_in_key_byte_order() {
         &[
             "allocated veh.Cruise/backup 1",
             "allocated veh.Cruise/primary 2",
-            "allocated veh.status/Unit 3",
+            "allocated veh.Status/Unit 3",
         ],
     );
     assert_eq!(
         lock_text(&dir),
-        format!("{HEADER}next 4\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.status/Unit 3\n")
+        format!("{HEADER}next 4\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.Status/Unit 3\n")
     );
 }
 
-/// Two lone services whose keys sort one way as text and the other way field
-/// by field: `veh.cruise.x/Unit` comes first as text, because `.` sorts
-/// before `/`, but component `veh.cruise` comes before `veh.cruise.x`. The
-/// checker numbers in text order, and `ridl lock` must write those numbers.
+/// Two lone services of one package are numbered in the byte order of their
+/// keys, and `ridl lock` must write the numbers the checker assigns.
 #[test]
 fn plain_lock_writes_the_numbers_in_key_text_order() {
     let dir = TempDir::new("text-order");
@@ -197,25 +195,25 @@ fn plain_lock_writes_the_numbers_in_key_text_order() {
         "services.ridl",
         "package veh\n\
          type Flag: integer [0..1]\n\
-         service veh.cruise { signal a: Flag @[100ms..1s] }\n\
-         service veh.cruise.x { signal b: Flag @[100ms..1s] }\n",
+         service CruiseX { signal b: Flag @[100ms..1s] }\n\
+         service Cruise { signal a: Flag @[100ms..1s] }\n",
     );
     dir.write(
         "system.rsdl",
-        "package veh\nsystem Vehicle { veh.cruise, veh.cruise.x }\n",
+        "package veh\nsystem Vehicle { CruiseX, Cruise }\n",
     );
     let (code, stdout, stderr) = run_lock(&dir, &[]);
     assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
     assert_in_order(
         &stdout,
         &[
-            "allocated veh.cruise.x/Unit 1",
-            "allocated veh.cruise/Unit 2",
+            "allocated veh.Cruise/Unit 1",
+            "allocated veh.CruiseX/Unit 2",
         ],
     );
     assert_eq!(
         lock_text(&dir),
-        format!("{HEADER}next 3\nveh.cruise.x/Unit 1\nveh.cruise/Unit 2\n")
+        format!("{HEADER}next 3\nveh.Cruise/Unit 1\nveh.CruiseX/Unit 2\n")
     );
 }
 
@@ -256,7 +254,7 @@ fn plain_lock_refuses_an_orphan_instance_entry() {
 
 /// The lock for `LOCK_SYSTEM` after plain `ridl lock`.
 fn allocated_lock() -> String {
-    format!("{HEADER}next 4\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.status/Unit 3\n")
+    format!("{HEADER}next 4\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.Status/Unit 3\n")
 }
 
 #[test]
@@ -272,7 +270,7 @@ fn retire_an_instance_marks_its_line_retired() {
     assert_eq!(
         lock_text(&dir),
         format!(
-            "{HEADER}next 4\nveh.Cruise/backup 1 retired\nveh.Cruise/primary 2\nveh.status/Unit 3\n"
+            "{HEADER}next 4\nveh.Cruise/backup 1 retired\nveh.Cruise/primary 2\nveh.Status/Unit 3\n"
         )
     );
 }
@@ -364,12 +362,12 @@ fn second_lock_write_failure_restores_interfaces_and_removes_temporaries() {
     let dir = lock_workspace(
         "second-write-failure",
         Some(&format!(
-            "{HEADER}next 5\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.status/Unit 3\nveh.Cruise/spare 4\n"
+            "{HEADER}next 5\nveh.Cruise/backup 1\nveh.Cruise/primary 2\nveh.Status/Unit 3\nveh.Cruise/spare 4\n"
         )),
     );
     let interface_path = dir.write(
         "interfaces.lock",
-        "# preserve this comment\nnext 3\nservice:veh.status 1\nUnused 2\n",
+        "# preserve this comment\nnext 3\nservice:veh.Status 1\nUnused 2\n",
     );
     let interface_before = std::fs::read(&interface_path).unwrap();
     let instance_path = dir.path().join("instances.lock");
@@ -434,10 +432,7 @@ fn rename_onto_a_key_that_is_no_instance_exits_two() {
 #[test]
 fn rename_a_component_onto_one_not_in_the_system_exits_two() {
     let dir = lock_workspace("rename-component-ghost", Some(&allocated_lock()));
-    dir.write(
-        "system.rsdl",
-        "package veh\nsystem Vehicle { veh.status }\n",
-    );
+    dir.write("system.rsdl", "package veh\nsystem Vehicle { Status }\n");
     let (code, _, stderr) = run_lock(&dir, &["--rename", "veh.Cruise=veh.Ghost"]);
     assert_eq!(code, 2, "{stderr}");
     assert!(
@@ -473,7 +468,7 @@ fn retire_of_a_component_still_in_the_system_exits_two() {
 #[test]
 fn rename_a_component_moves_every_entry_with_its_number() {
     let lock = format!(
-        "{HEADER}next 5\nveh.Cruise/primary 2\nveh.Cruise/backup 1\nveh.Cruise/old 4 retired\nveh.status/Unit 3\n"
+        "{HEADER}next 5\nveh.Cruise/primary 2\nveh.Cruise/backup 1\nveh.Cruise/old 4 retired\nveh.Status/Unit 3\n"
     );
     let dir = lock_workspace("rename-component", Some(&lock));
     dir.write("system.rsdl", &LOCK_SYSTEM.replace("Cruise", "Speed"));
@@ -493,10 +488,7 @@ fn rename_a_component_moves_every_entry_with_its_number() {
 #[test]
 fn retire_a_component_retires_all_its_instances() {
     let dir = lock_workspace("retire-component", Some(&allocated_lock()));
-    dir.write(
-        "system.rsdl",
-        "package veh\nsystem Vehicle { veh.status }\n",
-    );
+    dir.write("system.rsdl", "package veh\nsystem Vehicle { Status }\n");
     let (code, stdout, stderr) = run_lock(&dir, &["--retire", "veh.Cruise"]);
     assert_eq!(code, 0, "{stderr}");
     assert!(stdout.contains("retired veh.Cruise/backup 1"), "{stdout}");
@@ -504,7 +496,7 @@ fn retire_a_component_retires_all_its_instances() {
     assert_eq!(
         lock_text(&dir),
         format!(
-            "{HEADER}next 4\nveh.Cruise/backup 1 retired\nveh.Cruise/primary 2 retired\nveh.status/Unit 3\n"
+            "{HEADER}next 4\nveh.Cruise/backup 1 retired\nveh.Cruise/primary 2 retired\nveh.Status/Unit 3\n"
         )
     );
 }
@@ -613,4 +605,75 @@ fn interface_only_edit_preserves_instance_lock_bytes() {
         std::fs::read(dir.path().join("instances.lock")).unwrap(),
         before
     );
+}
+
+// ---- the key of an implicit component is the global name of its service ----
+
+const EGO_MANIFEST: &str = "[package]\nname = \"veh.ego\"\nversion = \"1.0.0\"\n";
+const EGO_SYSTEM: &str = "package veh.ego\nsystem Vehicle { Status }\n";
+const EGO_SERVICE: &str = "package veh.ego\ntype Flag: integer [0..1]\n\
+                           service Status { signal a: Flag @[100ms..1s] }\n";
+const EGO_OLD_LOCK: &str = "next 4\nveh.ego.status/Unit 3\n";
+
+/// ADR-0033 decision 7: the implicit component of a lone service moves to the
+/// global name of the service and keeps its number.
+#[test]
+fn rename_moves_an_implicit_component_to_the_global_name() {
+    let dir = TempDir::new("rename-implicit");
+    dir.write("ridl.toml", EGO_MANIFEST);
+    dir.write("system.rsdl", EGO_SYSTEM);
+    dir.write("status.ridl", EGO_SERVICE);
+    dir.write("instances.lock", &format!("{HEADER}{EGO_OLD_LOCK}"));
+    let (code, stdout, stderr) = run_lock(&dir, &["--rename", "veh.ego.status=veh.ego.Status"]);
+    assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
+    assert_eq!(
+        lock_text(&dir),
+        format!("{HEADER}next 4\nveh.ego.Status/Unit 3\n")
+    );
+}
+
+/// The instance rename of the migration is refused from a member directory.
+#[test]
+fn renaming_an_implicit_component_from_a_member_directory_exits_two() {
+    let dir = TempDir::new("rename-implicit-member");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"ego\"]\n");
+    dir.write("ego/ridl.toml", EGO_MANIFEST);
+    dir.write("ego/system.rsdl", EGO_SYSTEM);
+    dir.write("ego/status.ridl", EGO_SERVICE);
+    dir.write("instances.lock", &format!("{HEADER}{EGO_OLD_LOCK}"));
+    let member = dir.path().join("ego");
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        member.as_os_str(),
+        "--rename".as_ref(),
+        "veh.ego.status=veh.ego.Status".as_ref(),
+    ]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stderr.contains("belongs to the workspace root"), "{stderr}");
+}
+
+/// The `service:` rename of the migration is refused at the root of a workspace
+/// of more than one unit.
+#[test]
+fn renaming_a_service_key_at_the_root_of_two_units_exits_two() {
+    let dir = TempDir::new("rename-service-two-units");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"ego\", \"door\"]\n");
+    dir.write("ego/ridl.toml", EGO_MANIFEST);
+    dir.write("ego/system.rsdl", EGO_SYSTEM);
+    dir.write("ego/status.ridl", EGO_SERVICE);
+    dir.write(
+        "door/ridl.toml",
+        "[package]\nname = \"veh.door\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "door/door.ridl",
+        "package veh.door\ntype Flag: integer [0..1]\n\
+         service Door { signal a: Flag @[100ms..1s] }\n",
+    );
+    let (code, _, stderr) = run_lock(
+        &dir,
+        &["--rename", "service:veh.ego.status=service:veh.ego.Status"],
+    );
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stderr.contains("name the unit directory"), "{stderr}");
 }

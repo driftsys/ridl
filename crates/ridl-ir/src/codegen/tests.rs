@@ -2402,7 +2402,7 @@ fn populated_deployment() -> v1::Deployment {
                 number: 1,
                 inline: true,
                 provisional: true,
-                service: "veh.cabin.climate".to_string(),
+                service: "veh.cabin.Climate".to_string(),
             }],
         }],
         instances: vec![v1::Instance {
@@ -2509,7 +2509,7 @@ fn a_populated_deployment_section_renders_the_keys_a_plugin_reads() {
             "number": 1,
             "inline": true,
             "provisional": true,
-            "service": "veh.cabin.climate"
+            "service": "veh.cabin.Climate"
           }
         ]
       }

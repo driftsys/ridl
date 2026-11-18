@@ -136,7 +136,7 @@ mod tests {
     #[test]
     fn an_inline_service_shape_is_numbered_under_the_service_name() {
         let mut package = package(vec![interface("A", 1, false)]);
-        package.services.push(inline_service("p.hvac", 3));
+        package.services.push(inline_service("p.Hvac", 3));
         assert_eq!(
             numbered_shapes("p", &[&package]).unwrap(),
             vec![
@@ -146,7 +146,7 @@ mod tests {
                     provisional: false
                 },
                 Numbered {
-                    name: "p.hvac".to_owned(),
+                    name: "p.Hvac".to_owned(),
                     number: 3,
                     provisional: true
                 },
@@ -194,7 +194,7 @@ mod tests {
         cluster.unit = "u".to_owned();
         let mut root = package(vec![interface("Session", 2, true)]);
         root.name = "u".to_owned();
-        root.services.push(inline_service("veh.x", 3));
+        root.services.push(inline_service("u.X", 3));
         let mut other = package(vec![interface("Other", 1, false)]);
         other.name = "w".to_owned();
         // Its name extends the unit's, but it is the root of its own unit.
@@ -206,6 +206,6 @@ mod tests {
             .into_iter()
             .map(|n| n.name)
             .collect();
-        assert_eq!(names, ["cluster.Speed", "Session", "veh.x"]);
+        assert_eq!(names, ["cluster.Speed", "Session", "u.X"]);
     }
 }

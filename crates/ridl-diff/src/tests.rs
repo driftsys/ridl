@@ -1365,7 +1365,7 @@ fn an_inline_shape_frozen_in_place_is_interface_frozen() {
     let old = package(
         vec![],
         vec![provisional_inline_service(
-            "veh.cluster.hvac",
+            "veh.cluster.Hvac",
             5,
             door_opened("DoorState"),
         )],
@@ -1374,7 +1374,7 @@ fn an_inline_shape_frozen_in_place_is_interface_frozen() {
     let new = package(
         vec![],
         vec![inline_service(
-            "veh.cluster.hvac",
+            "veh.cluster.Hvac",
             5,
             door_opened("DoorState"),
         )],
@@ -1385,7 +1385,7 @@ fn an_inline_shape_frozen_in_place_is_interface_frozen() {
     assert_eq!(
         report.changes,
         vec![change(
-            "veh.cluster/veh.cluster.hvac",
+            "veh.cluster/veh.cluster.Hvac",
             Category::InterfaceFrozen,
             Verdict::Compatible,
             Some("5 (provisional)"),
@@ -1401,7 +1401,7 @@ fn an_inline_shape_frozen_as_another_number_is_interface_number_changed() {
     let old = package(
         vec![],
         vec![provisional_inline_service(
-            "veh.cluster.hvac",
+            "veh.cluster.Hvac",
             6,
             door_opened("DoorState"),
         )],
@@ -1410,7 +1410,7 @@ fn an_inline_shape_frozen_as_another_number_is_interface_number_changed() {
     let new = package(
         vec![],
         vec![inline_service(
-            "veh.cluster.hvac",
+            "veh.cluster.Hvac",
             5,
             door_opened("DoorState"),
         )],
@@ -1421,7 +1421,7 @@ fn an_inline_shape_frozen_as_another_number_is_interface_number_changed() {
     assert_eq!(
         report.changes,
         vec![change(
-            "veh.cluster/veh.cluster.hvac",
+            "veh.cluster/veh.cluster.Hvac",
             Category::InterfaceNumberChanged,
             Verdict::Breaking,
             Some("6 (provisional)"),
@@ -1439,7 +1439,7 @@ fn an_inline_shape_follows_its_number_across_a_service_rename() {
     let old = package(
         vec![],
         vec![inline_service(
-            "veh.cluster.hvac",
+            "veh.cluster.Hvac",
             5,
             vec![event("cabinTemp", 1, "DoorState")],
         )],
@@ -1448,7 +1448,7 @@ fn an_inline_shape_follows_its_number_across_a_service_rename() {
     let new = package(
         vec![],
         vec![inline_service(
-            "veh.cluster.climate",
+            "veh.cluster.Climate",
             5,
             vec![
                 event("cabinTemp", 1, "DoorState"),
@@ -1462,28 +1462,28 @@ fn an_inline_shape_follows_its_number_across_a_service_rename() {
         report.changes,
         vec![
             change(
-                "veh.cluster/veh.cluster.climate",
+                "veh.cluster/veh.cluster.Climate",
                 Category::InterfaceRenamed,
                 Verdict::Compatible,
-                Some("veh.cluster.hvac"),
-                Some("veh.cluster.climate"),
+                Some("veh.cluster.Hvac"),
+                Some("veh.cluster.Climate"),
             ),
             change(
-                "veh.cluster/veh.cluster.climate/filterClogged",
+                "veh.cluster/veh.cluster.Climate/filterClogged",
                 Category::InteractionAppended,
                 Verdict::Compatible,
                 None,
                 Some("event filterClogged"),
             ),
             change(
-                "veh.cluster/veh.cluster.hvac",
+                "veh.cluster/veh.cluster.Hvac",
                 Category::DeclRemoved,
                 Verdict::Breaking,
                 Some("service"),
                 None,
             ),
             change(
-                "veh.cluster/veh.cluster.climate",
+                "veh.cluster/veh.cluster.Climate",
                 Category::DeclAdded,
                 Verdict::Compatible,
                 None,
@@ -1684,7 +1684,7 @@ fn a_see_change_on_a_declaration_or_a_service_is_doc_only() {
         ..Default::default()
     });
     old.services.push(v2::Service {
-        name: "veh.cluster.control".to_string(),
+        name: "veh.cluster.Control".to_string(),
         ..Default::default()
     });
 
@@ -1696,7 +1696,7 @@ fn a_see_change_on_a_declaration_or_a_service_is_doc_only() {
     on_service.services[0].see.push(see);
     only_doc_only(
         &diff_packages(&old, &on_service),
-        "veh.cluster/veh.cluster.control",
+        "veh.cluster/veh.cluster.Control",
     );
 }
 

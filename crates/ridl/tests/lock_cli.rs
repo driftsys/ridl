@@ -88,7 +88,7 @@ interface Cabin { signal c : State @[100ms..1s] }
 const CABIN_AND_REAR: &str = "package veh.hvac
 type State: integer [0..1]
 interface Cabin { signal c : State @[100ms..1s] }
-service veh.hvac.rear { signal r : State @[100ms..1s] }
+service Rear { signal r : State @[100ms..1s] }
 ";
 
 /// `Cabin` beside a type whose bounds are inverted — TYPL-104, a compile
@@ -641,14 +641,45 @@ fn an_inline_shape_allocates_under_its_service_key() {
     assert_eq!(code, 0, "stderr:\n{stderr}");
     assert_eq!(
         stdout,
-        "allocated Cabin 1\nallocated service:veh.hvac.rear 2\n"
+        "allocated Cabin 1\nallocated service:veh.hvac.Rear 2\n"
     );
     assert_eq!(
         read_lock(&root),
-        format!("{HEADER}next 3\nCabin 1\nservice:veh.hvac.rear 2\n")
+        format!("{HEADER}next 3\nCabin 1\nservice:veh.hvac.Rear 2\n")
     );
     let (code, stderr) = check(&root);
     assert_eq!(code, 0, "stderr:\n{stderr}");
+}
+
+/// ADR-0033 decision 7: an inline shape's entry moves to the global name and
+/// keeps its number.
+#[test]
+fn rename_moves_an_inline_shape_key_to_the_global_name() {
+    let dir = TempDir::new("rename-service-key");
+    let root = package_workspace(
+        &dir,
+        "package veh.hvac\ntype L: integer [0..1]\n\
+         service Rear { signal t : L @[100ms..1s] }\n",
+    );
+    dir.write(
+        "interfaces.lock",
+        &format!("{HEADER}next 2\nservice:veh.hvac.rear 1\n"),
+    );
+
+    let (code, stdout, stderr) = lock(
+        &root,
+        &["--rename", "service:veh.hvac.rear=service:veh.hvac.Rear"],
+    );
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert_eq!(
+        stdout,
+        "renamed service:veh.hvac.rear service:veh.hvac.Rear 1\n"
+    );
+    assert_eq!(
+        read_lock(&root),
+        format!("{HEADER}next 2\nservice:veh.hvac.Rear 1\n")
+    );
+    assert_eq!(check(&root).0, 0);
 }
 
 /// A unit holds one lock, at its manifest directory, whose keys are the
@@ -673,32 +704,37 @@ fn plain_lock_writes_one_file_at_the_unit_root_with_relative_keys() {
 }
 
 /// The allocation order is the byte order of the name over the unit, not
-/// the whole lock key: the root's inline service `alpha` is keyed
-/// `service:alpha`, which sorts before `cluster.Speed` by name and after it
-/// by whole key.
+/// the whole lock key: the inline service `Alpha` of the root is keyed
+/// `service:veh.hmi.Alpha`, which sorts after `tango.Speed` by name and before
+/// it by whole key.
 #[test]
 fn plain_lock_allocates_in_name_byte_order_not_whole_key_order() {
     let dir = TempDir::new("unit-byte-order-key");
-    let root = unit_with_subpackage(
-        &dir,
-        "package veh.hmi\ntype Level: integer [0..9]\nservice alpha { signal z : Level @[100ms..1s] }\n",
-        HMI_SPEED,
+    dir.write("ridl.toml", HMI_MANIFEST);
+    dir.write(
+        "hmi.ridl",
+        "package veh.hmi\ntype Level: integer [0..9]\nservice Alpha { signal z : Level @[100ms..1s] }\n",
     );
+    dir.write(
+        "tango/speed.ridl",
+        &HMI_SPEED.replace("veh.hmi.cluster", "veh.hmi.tango"),
+    );
+    let root = dir.path().to_path_buf();
 
     let (code, stdout, stderr) = lock(&root, &[]);
     assert_eq!(code, 0, "stderr:\n{stderr}");
     assert_eq!(
         stdout,
-        "allocated service:alpha 1\nallocated cluster.Speed 2\n"
+        "allocated tango.Speed 1\nallocated service:veh.hmi.Alpha 2\n"
     );
     assert_eq!(
         read_lock(&root),
-        format!("{HEADER}next 3\nservice:alpha 1\ncluster.Speed 2\n")
+        format!("{HEADER}next 3\ntango.Speed 1\nservice:veh.hmi.Alpha 2\n")
     );
 }
 
 /// The allocation order is the byte order of the name over the unit, not
-/// the package order: the root's inline service `zone` sorts after
+/// the package order: the root's inline service `Zone` sorts after
 /// `cluster.Speed` by name, although its package `veh.hmi` sorts before
 /// `veh.hmi.cluster`.
 #[test]
@@ -706,7 +742,7 @@ fn plain_lock_allocates_in_name_byte_order_not_package_order() {
     let dir = TempDir::new("unit-byte-order-package");
     let root = unit_with_subpackage(
         &dir,
-        "package veh.hmi\ntype Level: integer [0..9]\nservice zone { signal z : Level @[100ms..1s] }\n",
+        "package veh.hmi\ntype Level: integer [0..9]\nservice Zone { signal z : Level @[100ms..1s] }\n",
         HMI_SPEED,
     );
 
@@ -714,11 +750,11 @@ fn plain_lock_allocates_in_name_byte_order_not_package_order() {
     assert_eq!(code, 0, "stderr:\n{stderr}");
     assert_eq!(
         stdout,
-        "allocated cluster.Speed 1\nallocated service:zone 2\n"
+        "allocated cluster.Speed 1\nallocated service:veh.hmi.Zone 2\n"
     );
     assert_eq!(
         read_lock(&root),
-        format!("{HEADER}next 3\ncluster.Speed 1\nservice:zone 2\n")
+        format!("{HEADER}next 3\ncluster.Speed 1\nservice:veh.hmi.Zone 2\n")
     );
 }
 

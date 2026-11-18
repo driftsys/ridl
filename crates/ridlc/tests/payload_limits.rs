@@ -263,6 +263,33 @@ fn an_inline_service_is_keyed_by_its_short_name() {
     assert_eq!(with("RIDL-152", &diagnostics).len(), 1, "{diagnostics:?}");
 }
 
+/// ADR-0033 decision 4: a key names an inline shape by the declared name of its
+/// service, without the package; the global name, written with the package, is
+/// no key.
+#[test]
+fn an_inline_service_key_leaves_out_the_package_of_the_global_name() {
+    let root = "package demo\n";
+    let sub = "package demo.hvac\ntype Payload: bytes [0..1000]\n\
+               service Cabin {\n  signal temperature: Payload @[10ms..100ms]\n}\n";
+    let run_with_key = |key: &str| {
+        run_with(
+            &[Member {
+                name: "demo",
+                source: root,
+                manifest: &format!("[limits.interaction]\n\"{key}\" = 10\n"),
+            }],
+            PROTO3,
+            &[("hvac/m.ridl", sub)],
+        )
+        .diagnostics
+    };
+    let diagnostics = run_with_key("Cabin.temperature");
+    assert_eq!(with("RIDL-151", &diagnostics).len(), 1, "{diagnostics:?}");
+    assert!(with("RIDL-152", &diagnostics).is_empty(), "{diagnostics:?}");
+    let diagnostics = run_with_key("demo.hvac.Cabin.temperature");
+    assert_eq!(with("RIDL-152", &diagnostics).len(), 1, "{diagnostics:?}");
+}
+
 /// The member sites of an inline shape are keyed by the service's global name,
 /// as the IR names the shape; a payload above the ceiling in one is RIDL-157.
 #[test]

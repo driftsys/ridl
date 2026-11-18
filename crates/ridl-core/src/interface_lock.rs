@@ -12,7 +12,7 @@
 //! LaneAssist 2 retired
 //! LaneKeeping 3
 //! DoorControl 4
-//! service:veh.hvac.cabin 5
+//! service:veh.hvac.Cabin 5
 //! ```
 //!
 //! - The first content line is `next N`: N is greater than every number in
@@ -68,7 +68,7 @@ pub const HEADER: &str = "# interfaces.lock — written by ridl lock; do not edi
 ///
 /// Its text form (`Display`, `FromStr`) is the token the file holds and the
 /// spelling `ridl lock`'s flags take: `LaneAssist` for a declared interface,
-/// `service:veh.hvac.cabin` for the inline shape of a service.
+/// `service:veh.hvac.Cabin` for the inline shape of a service.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum LockKey {
     /// A declared `interface`, by its name.
@@ -727,7 +727,7 @@ CruiseControl 1
 LaneAssist 2 retired
 LaneKeeping 3
 DoorControl 4
-service:veh.hvac.cabin 5
+service:veh.hvac.Cabin 5
 ";
 
     #[test]
@@ -788,7 +788,7 @@ service:veh.hvac.cabin 5
         assert!(lock.entries[1].retired, "`LaneAssist 2 retired` is retired");
         assert_eq!(
             lock.entries[4].key,
-            LockKey::Service("veh.hvac.cabin".to_string()),
+            LockKey::Service("veh.hvac.Cabin".to_string()),
             "the `service:` prefix keys the inline shape"
         );
 
@@ -815,7 +815,7 @@ service:veh.hvac.cabin 5
         );
         assert_eq!(
             lock.entries[4].range,
-            line_range(EXAMPLE, "service:veh.hvac.cabin 5")
+            line_range(EXAMPLE, "service:veh.hvac.Cabin 5")
         );
     }
 
@@ -1031,7 +1031,7 @@ C 3
     fn lock_key_display_and_from_str_agree() {
         for text in [
             "CruiseControl",
-            "service:veh.hvac.cabin",
+            "service:veh.hvac.Cabin",
             "cabin",
             "service:cabin",
             "A_B9",
@@ -1186,7 +1186,7 @@ C 3
             Err(LockEditError::KeyAlreadyLive(key("CruiseControl")))
         );
         assert_eq!(
-            lock.rename(&key("service:veh.hvac.cabin"), key("service:veh.hvac.rear")),
+            lock.rename(&key("service:veh.hvac.Cabin"), key("service:veh.hvac.Rear")),
             Ok(5),
             "a service rename is an entry rename (§3)"
         );

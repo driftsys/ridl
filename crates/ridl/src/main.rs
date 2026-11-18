@@ -3451,6 +3451,123 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
 mod tests {
     use super::*;
 
+    /// Historical IR can hold two shapes under one name even though current
+    /// source declarations cannot. Search both for the retired interaction.
+    #[test]
+    fn historical_same_name_shapes_find_the_tombstone_in_either_shape() {
+        use ridl_ir::v2;
+
+        let tombstone = v2::Decl {
+            ordinal: 2,
+            kind: Some(v2::decl::Kind::ReservedSlot(v2::Reserved {
+                ordinal: 2,
+                name: Some("doorClosed".into()),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        for in_service in [false, true] {
+            let published = [v2::Package {
+                name: "veh.cluster".into(),
+                interfaces: vec![v2::Interface {
+                    name: "doors".into(),
+                    interactions: if in_service {
+                        vec![]
+                    } else {
+                        vec![tombstone.clone()]
+                    },
+                    ..Default::default()
+                }],
+                services: vec![v2::Service {
+                    name: "doors".into(),
+                    shapes: vec![v2::ServiceShape {
+                        kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
+                            interactions: if in_service {
+                                vec![tombstone.clone()]
+                            } else {
+                                vec![]
+                            },
+                            ..Default::default()
+                        })),
+                    }],
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }];
+            let path = "veh.cluster/doors/doorClosed";
+            assert_eq!(
+                published_ordinal(&published, path),
+                Some(2),
+                "in service: {in_service}"
+            );
+            assert!(
+                published_reserves(&published, path),
+                "in service: {in_service}"
+            );
+        }
+    }
+
+    /// The diff uses global service names; the source writes only the declared
+    /// name. Both listed references and the declaration fallback need that key.
+    #[test]
+    fn named_service_diff_paths_render_at_the_declaration_and_references() {
+        const BEFORE: &str =
+            "package veh.cluster\ninterface I {}\ninterface J {}\nservice Doors : I, J\n";
+        const AFTER: &str =
+            "package veh.cluster\ninterface I {}\ninterface J {}\nservice Doors : I\n";
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("cluster.ridl");
+        let before = ridlc::compile("cluster.ridl", BEFORE);
+        let after = ridlc::compile("cluster.ridl", AFTER);
+        for output in [&before, &after] {
+            assert!(
+                !output
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.severity == Severity::Error),
+                "{}",
+                render(&output.diagnostics, &output.sources)
+            );
+        }
+        let report = ridl_diff::diff_packages(&before.package, &after.package);
+        let removal = report
+            .changes
+            .iter()
+            .find(|change| change.category == ridl_diff::Category::ServiceInterfaceRemoved)
+            .expect("the diff records the removed reference");
+        assert_eq!(removal.path, "veh.cluster/veh.cluster.Doors/J");
+
+        // The old source still has the reference; the new source falls back
+        // to the declaration. Pin the range as well as the rendered line.
+        for (source, selected, column) in [(BEFORE, "J", 20), (AFTER, "Doors", 9)] {
+            std::fs::write(&path, source).unwrap();
+            let index = DeclIndex::build(&path);
+            let mut sources = SourceMap::default();
+            let span = index.span_of(&removal.path, &mut sources);
+            assert_ne!(span.file, FileId::DETACHED);
+            assert_eq!(
+                &source[std::ops::Range::<usize>::from(span.range)],
+                selected
+            );
+            let rendered = render(
+                &[Diagnostic {
+                    code: DiagCode(""),
+                    severity: Severity::Info,
+                    message: removal.path.clone(),
+                    primary: span,
+                    labels: Vec::new(),
+                    fixits: Vec::new(),
+                }],
+                &sources,
+            );
+            assert!(
+                rendered.contains(&format!("cluster.ridl:4:{column}")),
+                "{rendered}"
+            );
+            assert!(rendered.contains("service Doors : I"), "{rendered}");
+        }
+    }
+
     #[test]
     fn a_fresh_provisional_number_does_not_keep_a_published_identity() {
         let published = ridl_ir::v2::Package {

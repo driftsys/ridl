@@ -203,7 +203,7 @@ interface VehicleStatus {
 /// shape is reached through `Package::shapes`, not `Package::interfaces`.
 const INLINE_SERVICE_TOMBSTONED: &str = "package veh.cluster
 type DoorState: integer [0..1]
-service veh.cluster.doors {
+service Doors {
   event doorOpened: DoorState @[100ms..1s]
   reserved doorClosed
   event doorLocked: DoorState @[100ms..1s]
@@ -213,7 +213,7 @@ service veh.cluster.doors {
 /// `INLINE_SERVICE_TOMBSTONED` with the tombstone dropped.
 const INLINE_SERVICE_TOMBSTONE_DROPPED: &str = "package veh.cluster
 type DoorState: integer [0..1]
-service veh.cluster.doors {
+service Doors {
   event doorOpened: DoorState @[100ms..1s]
   event doorLocked: DoorState @[100ms..1s]
 }
@@ -273,14 +273,14 @@ type DoorState: integer [0..1]
 interface VehicleStatus {
   event doorOpened: DoorState @[100ms..1s]
 }
-service veh.cluster.status : VehicleStatus
+service Status : VehicleStatus
 ";
 
-/// Two components, fully placed: `Cluster` offers `veh.cluster.status`,
+/// Two components, fully placed: `Cluster` offers `veh.cluster.Status`,
 /// `Panel` requires `VehicleStatus`, and both are placed on a machine of
 /// `Desk` (rsdl reference §9).
 const PLACED_TOPOLOGY: &str = "package veh.cluster
-component Cluster { offers veh.cluster.status }
+component Cluster { offers veh.cluster.Status }
 component Panel { requires VehicleStatus }
 system Vehicle { Cluster, Panel }
 deployment Desk for Vehicle {
@@ -292,7 +292,7 @@ deployment Desk for Vehicle {
 /// `PLACED_TOPOLOGY` with `Panel`'s machine line removed: `Panel.Unit` is
 /// placed on no machine of `Desk`, RSDL-701 (rsdl reference §9).
 const UNPLACED_TOPOLOGY: &str = "package veh.cluster
-component Cluster { offers veh.cluster.status }
+component Cluster { offers veh.cluster.Status }
 component Panel { requires VehicleStatus }
 system Vehicle { Cluster, Panel }
 deployment Desk for Vehicle {
@@ -774,7 +774,7 @@ fn baseline_refuses_a_dropped_tombstone_in_an_inline_service() {
         "dropping a tombstone from an inline body is still a refusal:\n{stderr}",
     );
     assert!(
-        stderr.contains("records `doorClosed` in `veh.cluster.doors` as retired (ordinal 2)")
+        stderr.contains("records `doorClosed` in `veh.cluster.Doors` as retired (ordinal 2)")
             && stderr.contains("dropped the tombstone"),
         "the inline body's tombstone is found under the service's dotted name:\n{stderr}",
     );
@@ -848,7 +848,7 @@ interface Doors {
 interface Lights {
   event lightOn: DoorState @[100ms..1s]
 }
-service veh.cluster.dash : Doors, Lights
+service Dash : Doors, Lights
 ";
 
 /// `NAMED_SERVICE_TWO` with `Lights` dropped from the service's list. The
@@ -861,7 +861,7 @@ interface Doors {
 interface Lights {
   event lightOn: DoorState @[100ms..1s]
 }
-service veh.cluster.dash : Doors
+service Dash : Doors
 ";
 
 /// `NAMED_SERVICE_TWO` with the service deleted and both interfaces kept.
@@ -939,10 +939,10 @@ interface VehicleStatus {
 }
 ";
 
-/// An inline-form service `doors`, numbered `service:doors 1`.
+/// An inline-form service `Doors`, numbered `service:veh.cluster.Doors 1`.
 const SERVICE_INLINE: &str = "package veh.cluster
 type DoorState: integer [0..1]
-service veh.cluster.doors {
+service Doors {
   event doorOpened: DoorState @[100ms..1s]
 }
 ";
@@ -954,7 +954,7 @@ type DoorState: integer [0..1]
 interface doors {
   event doorOpened: DoorState @[100ms..1s]
 }
-service veh.cluster.doors : doors
+service Doors : doors
 ";
 
 /// A service switched from the inline to the named form is not refused by the
@@ -973,7 +973,7 @@ fn baseline_publishes_a_service_switched_from_inline_to_named_form() {
         "lock".as_ref(),
         root.as_os_str(),
         "--rename".as_ref(),
-        "service:veh.cluster.doors=doors".as_ref(),
+        "service:veh.cluster.Doors=doors".as_ref(),
     ]);
     assert_eq!(code, 0, "the rename is recorded: {stderr}");
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
@@ -1510,20 +1510,33 @@ fn an_interface_moved_to_another_package_of_the_unit_is_not_refused() {
     assert!(!stderr.contains("RIDL-412"), "stderr:\n{stderr}");
 }
 
-/// A declared interface `doors` and an inline-form service `doors`: two
-/// shapes with one name. Plain `ridl lock` numbers them `doors 1` and
-/// `service:doors 2`, `next 3`.
+/// A declared interface `doors` and an inline-form service `Doors`: two
+/// shapes. Plain `ridl lock` numbers them `doors 1` and
+/// `service:veh.cluster.Doors 2`, `next 3`.
 const DOORS_TWICE: &str = "package veh.cluster
 type DoorState: integer [0..1]
 interface doors {
   event doorOpened: DoorState @[100ms..1s]
 }
-service doors {
+service Doors {
   event doorLocked: DoorState @[100ms..1s]
 }
 ";
 
-/// `DOORS_TWICE` with `service doors` deleted and `interface doors` kept.
+/// Models a snapshot from before service declarations became package symbols.
+/// The old service and the interface both have the identity name `doors`.
+/// Drop context evidence, as a historical snapshot has no current fingerprint.
+fn give_published_service_the_historical_name(root: &Path) {
+    let path = snapshot(root);
+    let mut package: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(package["services"][0]["name"], "veh.cluster.Doors");
+    package["services"][0]["name"] = "doors".into();
+    std::fs::write(path, serde_json::to_string_pretty(&package).unwrap()).unwrap();
+    std::fs::remove_file(root.join(".ridl/baseline/context.json")).unwrap();
+}
+
+/// `DOORS_TWICE` with `service Doors` deleted and `interface doors` kept.
 const DOORS_INTERFACE_ONLY: &str = "package veh.cluster
 type DoorState: integer [0..1]
 interface doors {
@@ -1536,15 +1549,15 @@ const DOORS_NONE: &str = "package veh.cluster
 type DoorState: integer [0..1]
 ";
 
-/// `ridl-diff` reports the removed inline shape of `service doors` as an
-/// interface-level `DeclRemoved` at `veh.cluster/doors`, the same path as the
-/// declared `interface doors`. The gate must find the shape whose number is
-/// lost (2), not stop at the kept interface of the same name (1).
+/// The historical service and the interface share the diff path
+/// `veh.cluster/doors`. The gate must find the shape whose number is lost (2),
+/// not stop at the kept interface (1).
 #[test]
 fn baseline_refuses_a_service_removed_beside_a_kept_interface_of_the_same_name() {
     let dir = TempDir::new("gate-service-beside-interface");
     let root = package_workspace(&dir, DOORS_TWICE);
     publish(&root);
+    give_published_service_the_historical_name(&root);
     let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
 
     dir.write("cluster.ridl", DOORS_INTERFACE_ONLY);
@@ -1572,10 +1585,10 @@ fn baseline_refuses_a_service_removed_beside_a_kept_interface_of_the_same_name()
     assert_eq!(before, after, "a refused publication rewrites nothing");
 }
 
-/// `DOORS_TWICE` with `interface doors` deleted and `service doors` kept.
+/// `DOORS_TWICE` with `interface doors` deleted and `service Doors` kept.
 const DOORS_SERVICE_ONLY: &str = "package veh.cluster
 type DoorState: integer [0..1]
-service doors {
+service Doors {
   event doorLocked: DoorState @[100ms..1s]
 }
 ";
@@ -1590,12 +1603,13 @@ fn baseline_refuses_an_interface_removed_beside_a_kept_service_of_the_same_name(
     let dir = TempDir::new("gate-interface-beside-service");
     let root = package_workspace(&dir, DOORS_TWICE);
     publish(&root);
+    give_published_service_the_historical_name(&root);
     let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
 
     dir.write("cluster.ridl", DOORS_SERVICE_ONLY);
     dir.write(
         "interfaces.lock",
-        &format!("{LOCK_HEADER}next 3\nservice:doors 2\n"),
+        &format!("{LOCK_HEADER}next 3\nservice:veh.cluster.Doors 2\n"),
     );
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
 
@@ -1624,6 +1638,7 @@ fn both_shapes_of_one_name_removed_draw_one_refusal_per_number() {
     let dir = TempDir::new("gate-both-shapes-removed");
     let root = package_workspace(&dir, DOORS_TWICE);
     publish(&root);
+    give_published_service_the_historical_name(&root);
 
     dir.write("cluster.ridl", DOORS_NONE);
     dir.write("interfaces.lock", &format!("{LOCK_HEADER}next 3\n"));
@@ -1909,17 +1924,17 @@ fn a_removed_legacy_root_with_a_remaining_subpackage_refuses_even_under_reset() 
     }
 }
 
-/// A legacy root snapshot holds the inline `service zone` under number 7,
+/// A legacy root snapshot holds the inline `service Zone` under number 7,
 /// which the unit's new numbering (`Session` 1, `cluster.Speed` 2,
-/// `service:zone` 3) does not reach. The refusal (RIDL-412) names the shape
-/// by its lock key, `service:zone`.
+/// `service:veh.hmi.Zone` 3) does not reach. The refusal (RIDL-412) names the shape
+/// by its lock key, `service:veh.hmi.Zone`.
 #[test]
 fn a_lost_inline_service_number_of_a_legacy_snapshot_keeps_its_service_key() {
     let dir = TempDir::new("gate-migration-service-key");
     let root = legacy_per_package_baseline(
         &dir,
-        &format!("{SESSION}service zone {{ signal z : Level @[100ms..1s] }}\n"),
-        "next 3\nSession 1\nservice:zone 2\n",
+        &format!("{SESSION}service Zone {{ signal z : Level @[100ms..1s] }}\n"),
+        "next 3\nSession 1\nservice:veh.hmi.Zone 2\n",
         &[
             ("veh.hmi.ir.json", "\"number\": 3", "\"number\": 7"),
             ("veh.hmi.cluster.ir.json", "\"number\": 2", "\"number\": 1"),
@@ -1930,16 +1945,19 @@ fn a_lost_inline_service_number_of_a_legacy_snapshot_keeps_its_service_key() {
     assert!(
         lock.contains("Session 1\n")
             && lock.contains("cluster.Speed 2\n")
-            && lock.contains("service:zone 3\n"),
+            && lock.contains("service:veh.hmi.Zone 3\n"),
         "the unit's numbering:\n{lock}"
     );
-    assert_eq!(code, 1, "the number 7 of `service:zone` is lost:\n{stderr}");
+    assert_eq!(
+        code, 1,
+        "the number 7 of `service:veh.hmi.Zone` is lost:\n{stderr}"
+    );
     assert!(
-        stderr.contains("`service:zone` holds interface number"),
+        stderr.contains("`service:veh.hmi.Zone` holds interface number"),
         "stderr:\n{stderr}"
     );
     assert!(
-        stderr.contains("Restore the line `service:zone 7`"),
+        stderr.contains("Restore the line `service:veh.hmi.Zone 7`"),
         "stderr:\n{stderr}"
     );
 }
@@ -2058,30 +2076,30 @@ fn a_migration_of_a_mixed_baseline_reads_each_snapshot_in_its_own_unit() {
 
 // --- The published side the gate cannot resolve (driftsys/ridl#339) --------
 
-/// A declared `interface doors` beside an inline-form `service doors`: the
-/// service name is not dotted, so the two shapes carry the same identity
-/// name. The service retires `doorClosed` at ordinal 2; the interface holds
+/// A declared `interface doors` beside an inline-form `service Doors`: the
+/// two shapes carry different identity names, `doors` and `veh.cluster.Doors`.
+/// The service retires `doorClosed` at ordinal 2; the interface holds
 /// no tombstone at all.
-const INTERFACE_AND_SERVICE_SHARING_A_NAME: &str = "package veh.cluster
+const INTERFACE_AND_TOMBSTONED_SERVICE: &str = "package veh.cluster
 type DoorState: integer [0..1]
 interface doors {
   event locked: DoorState @[100ms..1s]
 }
-service doors {
+service Doors {
   event doorOpened: DoorState @[100ms..1s]
   reserved doorClosed
   event doorLocked: DoorState @[100ms..1s]
 }
 ";
 
-/// `INTERFACE_AND_SERVICE_SHARING_A_NAME` with `doorClosed` declared live
+/// `INTERFACE_AND_TOMBSTONED_SERVICE` with `doorClosed` declared live
 /// again in the service, at the end.
-const INTERFACE_AND_SERVICE_SHARING_A_NAME_REDECLARED: &str = "package veh.cluster
+const INTERFACE_AND_TOMBSTONED_SERVICE_REDECLARED: &str = "package veh.cluster
 type DoorState: integer [0..1]
 interface doors {
   event locked: DoorState @[100ms..1s]
 }
-service doors {
+service Doors {
   event doorOpened: DoorState @[100ms..1s]
   event doorLocked: DoorState @[100ms..1s]
   event doorClosed: DoorState @[100ms..1s]
@@ -2102,31 +2120,31 @@ interface Status {
 }
 ";
 
-/// The mirror of `INTERFACE_AND_SERVICE_SHARING_A_NAME`: the declared
+/// The mirror of `INTERFACE_AND_TOMBSTONED_SERVICE`: the declared
 /// `interface doors` holds the tombstone, at ordinal 2, and the inline-form
-/// `service doors` beside it holds no tombstone at all.
-const INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME: &str = "package veh.cluster
+/// `service Doors` beside it holds no tombstone at all.
+const TOMBSTONED_INTERFACE_BESIDE_SERVICE: &str = "package veh.cluster
 type DoorState: integer [0..1]
 interface doors {
   event doorOpened: DoorState @[100ms..1s]
   reserved doorClosed
   event doorLocked: DoorState @[100ms..1s]
 }
-service doors {
+service Doors {
   event locked: DoorState @[100ms..1s]
 }
 ";
 
-/// `INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME` with `doorClosed`
+/// `TOMBSTONED_INTERFACE_BESIDE_SERVICE` with `doorClosed`
 /// declared live again in the interface, at the end.
-const INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME_REDECLARED: &str = "package veh.cluster
+const TOMBSTONED_INTERFACE_BESIDE_SERVICE_REDECLARED: &str = "package veh.cluster
 type DoorState: integer [0..1]
 interface doors {
   event doorOpened: DoorState @[100ms..1s]
   event doorLocked: DoorState @[100ms..1s]
   event doorClosed: DoorState @[100ms..1s]
 }
-service doors {
+service Doors {
   event locked: DoorState @[100ms..1s]
 }
 ";
@@ -2140,7 +2158,7 @@ interface VehicleStatus {
   reserved doorClosed
   event doorLocked: DoorState @[100ms..1s]
 }
-service status : VehicleStatus
+service Status : VehicleStatus
 ";
 
 /// `TOMBSTONED_REMOVAL_BEHIND_A_NAMED_SERVICE` with the interface renamed to
@@ -2155,7 +2173,7 @@ interface status {
   event doorLocked: DoorState @[100ms..1s]
   event doorClosed: DoorState @[100ms..1s]
 }
-service status : status
+service Status : status
 ";
 
 /// Two published snapshots declaring one package are refused, exit 2, and
@@ -2215,28 +2233,22 @@ fn two_published_snapshots_for_one_package_are_refused_and_left_as_they_are() {
     );
 }
 
-/// An interface and an inline-form service sharing a name are two shapes
-/// under one identity name. Redeclaring a name the service retires is
+/// An interface `doors` beside an inline-form service `Doors` are two shapes
+/// of one package. Redeclaring a name the service retires is
 /// `ReservedNameRedeclared` on the service's path, refused unconditionally;
 /// the message's ordinal comes from a lookup of the published IR, which must
-/// read the shape that holds the tombstone — not the interface that happens
-/// to sort first under the same name (driftsys/ridl#339 case 2).
+/// read the shape that holds the tombstone — not the interface
+/// (driftsys/ridl#339 case 2).
 #[test]
-fn a_tombstone_in_a_service_sharing_its_interface_name_still_refuses_the_redeclaration() {
+fn a_tombstone_in_a_service_beside_an_interface_still_refuses_the_redeclaration() {
     let dir = TempDir::new("gate-shared-shape-name");
-    let root = package_workspace(&dir, INTERFACE_AND_SERVICE_SHARING_A_NAME);
+    let root = package_workspace(&dir, INTERFACE_AND_TOMBSTONED_SERVICE);
     let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
-    assert_eq!(
-        code, 0,
-        "an interface and a service may share a name: {stderr}"
-    );
+    assert_eq!(code, 0, "an interface and a service may coexist: {stderr}");
     publish(&root);
     let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
 
-    dir.write(
-        "cluster.ridl",
-        INTERFACE_AND_SERVICE_SHARING_A_NAME_REDECLARED,
-    );
+    dir.write("cluster.ridl", INTERFACE_AND_TOMBSTONED_SERVICE_REDECLARED);
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
 
     assert_eq!(
@@ -2249,7 +2261,7 @@ fn a_tombstone_in_a_service_sharing_its_interface_name_still_refuses_the_redecla
         "one refusal for the one redeclared name:\n{stderr}",
     );
     assert!(
-        stderr.contains("`doorClosed` is declared again in `doors`")
+        stderr.contains("`doorClosed` is declared again in `veh.cluster.Doors`")
             && stderr.contains("keep `reserved doorClosed` at ordinal 2"),
         "the ordinal comes from the service's shape, the one that holds the tombstone:\n\
          {stderr}",
@@ -2353,20 +2365,20 @@ fn a_redeclaration_in_a_renamed_interface_is_refused_although_the_lookup_finds_n
     assert_eq!(before, after, "a refused publication rewrites nothing");
 }
 
-/// The other direction of the shared-name case: the declared interface holds
-/// the tombstone and the same-named inline service does not. The lookup must
+/// The declared interface holds the tombstone and the adjacent inline service
+/// does not. The lookup must
 /// answer from the shape that declares the name whichever of the two it is,
 /// so the message carries the tombstone's ordinal here as well.
 #[test]
-fn a_tombstone_in_an_interface_sharing_its_service_name_still_names_its_ordinal() {
+fn a_tombstone_in_an_interface_beside_a_service_still_names_its_ordinal() {
     let dir = TempDir::new("gate-shared-shape-name-interface");
-    let root = package_workspace(&dir, INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME);
+    let root = package_workspace(&dir, TOMBSTONED_INTERFACE_BESIDE_SERVICE);
     publish(&root);
     let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
 
     dir.write(
         "cluster.ridl",
-        INTERFACE_TOMBSTONED_BESIDE_SERVICE_SHARING_ITS_NAME_REDECLARED,
+        TOMBSTONED_INTERFACE_BESIDE_SERVICE_REDECLARED,
     );
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
 
@@ -3354,7 +3366,7 @@ fn deleting_the_snapshots_of_a_legacy_gone_package_allows_publication() {
 #[test]
 fn deleting_only_the_service_beside_its_named_interface_refuses_the_inline_number() {
     let dir = TempDir::new("gate-service-marker");
-    let root = package_workspace(&dir, INTERFACE_AND_SERVICE_SHARING_A_NAME);
+    let root = package_workspace(&dir, INTERFACE_AND_TOMBSTONED_SERVICE);
     publish(&root);
     let before = baseline_files(&root);
     dir.write("cluster.ridl", "package veh.cluster\ntype DoorState: integer [0..1]\ninterface doors { event locked: DoorState @[100ms..1s] }\n");
@@ -3366,7 +3378,7 @@ fn deleting_only_the_service_beside_its_named_interface_refuses_the_inline_numbe
     assert_eq!(code, 1, "the inline number is lost: {stderr}");
     assert_eq!(stderr.matches("RIDL-412").count(), 1, "stderr: {stderr}");
     assert!(
-        stderr.contains("`service:doors` holds interface number 2"),
+        stderr.contains("`service:veh.cluster.Doors` holds interface number 2"),
         "stderr: {stderr}"
     );
     assert!(
@@ -3376,25 +3388,20 @@ fn deleting_only_the_service_beside_its_named_interface_refuses_the_inline_numbe
     assert_eq!(before, baseline_files(&root));
 }
 
-/// `ridl lock` numbers an interface before an inline shape of the same name
-/// (language reference, the lock section). This pins the observable order; the
-/// kind in the sort key (`provisional_order`) is only partly observable here:
-/// the shapes of a package are listed interfaces first, so removing the kind
-/// leaves this test passing and only inverting it fails. The ridl-sem unit test
-/// `provisional_order_places_an_interface_before_a_service_with_the_same_name`
-/// in `crates/ridl-sem/src/check.rs` pins the tie-break with the service first
-/// in its input.
+/// `ridl lock` numbers `doors` before `veh.cluster.Doors` in name byte order.
+/// Historical equal-name ordering is covered by the semantic numbering tests;
+/// current source declarations cannot produce equal shape identities.
 #[test]
-fn an_interface_is_numbered_before_an_inline_shape_of_the_same_name() {
+fn an_interface_is_numbered_before_an_inline_shape_with_a_later_global_name() {
     let dir = TempDir::new("gate-tie-break");
     dir.write("ridl.toml", MANIFEST);
-    dir.write("cluster.ridl", INTERFACE_AND_SERVICE_SHARING_A_NAME);
+    dir.write("cluster.ridl", INTERFACE_AND_TOMBSTONED_SERVICE);
     let root = dir.path().to_path_buf();
     let (code, stdout, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
 
     assert_eq!(code, 0, "the lock is allocated: {stderr}");
     assert_eq!(
-        stdout, "allocated doors 1\nallocated service:doors 2\n",
+        stdout, "allocated doors 1\nallocated service:veh.cluster.Doors 2\n",
         "the interface takes the lower number",
     );
 }

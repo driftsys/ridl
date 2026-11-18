@@ -117,15 +117,15 @@ message Spellings {
 
 // A package name or a service name.
 message DottedName {
-  // "veh.adas.cruise".
+  // "veh.adas.Cruise".
   string dotted = 1;
-  // ["veh", "adas", "cruise"].
+  // ["veh", "adas", "Cruise"].
   repeated string segments = 2;
   // "VehAdasCruise" — the wire backends' `type_name`, which ADR-0016 does not
-  // pin. `camel_case` splits on underscores and gives "Veh.adas.cruise" over
+  // pin. `camel_case` splits on underscores and gives "Veh.adas.Cruise" over
   // a dotted name, so this is its own rule.
   string joined_camel = 3;
-  // "veh_adas_cruise" — the TypeScript import alias.
+  // "veh_adas_Cruise" — the TypeScript import alias.
   string underscored = 4;
 }
 
