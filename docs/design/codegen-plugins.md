@@ -786,5 +786,6 @@ guide for a plugin author, and its "Reading order" section is the reading list.
 9. **The module documentation of the TypeScript backend's `generate` names an
    `interact` module that does not exist**
    (`crates/ridl-backend-ts/src/lib.rs`). The interaction layer the language
-   backends shipped was retracted by ADR-0018. A stale intra-doc link. **Open.**
-   No tracking issue.
+   backends shipped was retracted by ADR-0018. A stale intra-doc link.
+   **Resolved:** the documentation of `generate` now says that an interface and
+   its interactions emit nothing (driftsys/ridl#1385).

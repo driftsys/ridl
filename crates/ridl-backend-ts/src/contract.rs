@@ -19,7 +19,7 @@ pub const CODEC_OPTION: &str = "codec";
 /// The TypeScript backend as a [`codegen::Backend`]: the file
 /// `<artifact_base>.ts`, the module [`crate::generate`] emits with the doc
 /// comments read from the request's model, and, when the option
-/// [`CODEC_OPTION`] is `true` and the package has a payload root that gets a
+/// `CODEC_OPTION` is `true` and the package has a payload root that gets a
 /// codec, local or foreign, or a supported stream call, the file
 /// `<artifact_base>.codec.ts` that
 /// [`crate::generate_codec_with`] emits.
