@@ -5,8 +5,8 @@ e012019c, which is after release 0.20.0. The owner accepted the "I-Regexp only"
 proposal on 2026-11-18, and decided the same day to refuse `\p{..}` (§3.6).
 Nothing here is implemented. This note replaces
 [`2026-10-01-portable-match-patterns-design.md`](../archive/2026-10-01-portable-match-patterns-design.md)
-(approach A), which was never implemented. §12 lists the questions that the
-owner still has to answer.
+(approach A), which was never implemented. §12 records the decisions the owner
+took on the questions this note raised.
 
 ## 1. The problem
 
@@ -218,8 +218,8 @@ written and read, and the meaning of an existing value does not change in place.
   text, so the writer gives it a text that a search reads as a whole-value
   match: `^(?:P)$`, where `P` is the normalised pattern. The meaning of the
   field ("a pattern that a search applies") does not change. In `ridl.ir.v2` the
-  field keeps its delimiters, as today. §12 question 2 covers the one case this
-  does not preserve: a reader of 0.20 does not see a second clause.
+  field keeps its delimiters, as today. A reader of 0.20 does not see a second
+  clause; §12 decision 2 accepts that.
 - **Readers.** Every reader of `Constraint.pattern` in this workspace moves to
   `matches`: the two code backends, the proto3 and FlatBuffers spellings, the
   descriptor spelling, hover, the derived-init rule in `ridl-sem`,
@@ -364,24 +364,22 @@ a hand-written changelog entry.
    Rust violation name the clause. Not built: it changes a frozen runtime
    surface.
 
-## 12. Questions for the owner
+## 12. Decisions by the owner
 
-1. **The first five refusals of §3.3** (`^`, `$`, `&&`, `~~`, `--`, `\-`). Like
-   the refusal of `\p{..}`, they make typl a subset of RFC 9485. Recommended,
-   because without them each backend escapes characters again and `^…$` changes
-   meaning with no diagnostic.
+The owner answered these on 2026-11-18.
+
+1. **The refusals of §3.3 are accepted**, all six. typl accepts a subset of
+   RFC 9485.
 2. **A reader of 0.20 and a type with several clauses.** The old field holds the
    first clause only (§6), so a plugin built against 0.20 checks one clause and
    ignores the others. The IR specification §6 calls a new field that a reader
-   cannot ignore a breaking change. The choices are:
-   - accept this for the one new source feature, and release the Kotlin plugin
-     with the compiler (recommended; that plugin is the only known one outside
-     this repository);
-   - name the packages `ridl.codegen.v2` and `ridl.ir.v3`;
-   - leave several clauses out of this change.
+   cannot ignore a breaking change. The owner accepts this for the one new
+   source feature. The Kotlin plugin, the only known plugin outside this
+   repository, is released with the compiler. The alternatives were to name the
+   packages `ridl.codegen.v2` and `ridl.ir.v3`, or to leave several clauses out
+   of this change.
 3. **`TimeOfDay` and `Version`** keep accepting any suffix through `.*` (§9).
-   The alternative is to state the suffix each standard allows. Recommended:
-   `.*` in this change, and the exact suffix as a separate issue.
+   Stating the suffix that each standard allows is a separate issue.
 
 ## 13. Records to amend when this lands
 
@@ -392,8 +390,8 @@ a hand-written changelog entry.
   text is `^(?:P)$`, and several clauses are an `allOf`), the normative
   references (RFC 9485 replaces ECMA-262) and the glossary.
 - `family.ungram`.
-- IR specification: the `Constraint` fields, and §6 if question 2 is answered
-  with the first choice.
+- IR specification: the `Constraint` fields, and a statement in §6 of the
+  exception that §12 decision 2 accepts.
 - ADR-0007 decision 10 (pattern validation with `regress`) and ADR-0013 (the
   TypeScript pattern check "follows the checker's ECMA-262 semantics"): read
   each `## Status` first, then record the amendment.
