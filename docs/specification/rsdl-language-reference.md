@@ -14,10 +14,13 @@ Version: 0.2.0 — Draft
 > derivation, and the binding of a reaction to an interface's members that
 > application notation also wrote. v0.1.0 is kept for provenance at
 > [`../archive/rsdl-language-reference-v0.1.md`](../archive/rsdl-language-reference-v0.1.md).
-> The language stated here was settled in the rsdl rewrite decisions of
-> 2026-09-12 and 2026-09-13 (decisions D-1 to D-11), over the topology
-> vocabulary of 2026-09-08. Doc comments (`/** … */`, `///`) are CommonMark, as
-> everywhere in the family.
+> The language stated here was settled in the
+> [rsdl rewrite decisions](../archive/2026-09-12-rsdl-rewrite-decisions.md) of
+> 2026-09-12 and 2026-09-13 (decisions D-1 to D-11), over the
+> [topology vocabulary](../archive/2026-09-08-topology-vocabulary.md) of
+> 2026-09-08. The ids this reference cites, `D-n` and `V-nn`, name decisions and
+> invariants in those two archived notes. Doc comments (`/** … */`, `///`) are
+> CommonMark, as everywhere in the family.
 
 ---
 
@@ -655,9 +658,10 @@ machines its endpoints are placed on in the deployment:
   `deployment`, earned by a backend that reads them (§5).
 - Whether two components on one machine share an address space is the backend's
   or the host program's decision, not rsdl's (D-2): rsdl declares no process and
-  carries no pump kind, priority or other scheduling fact. Under vocabulary V-09
-  a same-machine crossing optimised into a direct channel keeps the semantics of
-  the store and the queue.
+  carries no pump kind, priority or other scheduling fact. Under vocabulary
+  [V-09](../archive/2026-09-08-topology-vocabulary.md) a same-machine crossing
+  optimised into a direct channel keeps the semantics of the store and the
+  queue.
 - A link with an `external` component at both endpoints is not lowered: it
   crosses nothing the workspace builds. A link with an external component at
   exactly one endpoint is lowered with its kind and enters the surface set

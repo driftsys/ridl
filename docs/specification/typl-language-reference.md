@@ -1811,7 +1811,7 @@ turns every such published contract into a breaking diff is not a point release.
 The corpus check runs before the change lands, not after: every unit type
 written with integer literals today is either a wanted integer or a missing
 `.0`. Recorded in
-[`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
+[`docs/archive/2026-09-12-release-scope-and-plugin-system-design.md`](../archive/2026-09-12-release-scope-and-plugin-system-design.md)
 §3.10.
 
 ### 17.15 A Reorder in the Same Edit as an Addition or a Removal — deferred to v0.2
