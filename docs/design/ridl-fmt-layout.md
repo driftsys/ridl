@@ -12,16 +12,17 @@ for every declaration — the tight colon, no column alignment, one blank line
 between top-level declarations, newline separators inside braces, source order
 never changed, comments never dropped, and the lint-directive rule. This record
 does not restate them. It owns the layout of the seven declarations, which no
-other record states. General form §5
+other design record states. General form §5
 ([`../specification/family-general-form.md`](../specification/family-general-form.md))
 fixes the tight colon and the ban on alignment that every rule below builds on.
 The design note that fixed these rules, with the alternatives it weighed for
 each of the thirteen decisions, is archived verbatim in
 [`../archive/fmt-ridl-rsdl-layout.md`](../archive/fmt-ridl-rsdl-layout.md); the
 decision log and the review of the work that built them are beside it. The
-decisions are numbered D-1 to D-13 here as in that note, and each is stated next
-to the rule it fixes with its reason in one line. The work is tracked in
-driftsys/ridl#387.
+decisions are numbered D-1 to D-13 here as in that note, and each, except D-10
+(the scope of the one-time reformatting of the examples and the book, which is
+not a layout rule), is stated next to the rule it fixes with its reason in one
+line. The work was tracked in driftsys/ridl#387.
 
 ## Model
 
@@ -33,7 +34,8 @@ header's indent; a one-line construct is rebuilt from its tokens; a construct
 that holds a comment among its own tokens is emitted from the source text (see
 Comments). There is one layout engine for the typl, ridl and rsdl profiles; the
 seven declarations add header and member-line renderers, not a second engine.
-Indentation is two spaces per level and the output never holds a tab.
+Indentation is two spaces per level and the layout never emits a tab (a
+construct emitted from the source text keeps the whitespace it had).
 
 ## The ridl declarations
 
@@ -47,12 +49,12 @@ keyword. The canonical member is
     signal name: Type = INIT @timing [ attrs ]
     command name(p: P, q: Q): Return @timing [ attrs ]
 
-with every slot after the name optional. The slots follow the parser, which is
-wider than the grammar file: it accepts a stream payload, an initialiser, a
-timing and an attribute block on every value interaction and leaves the
-narrowing to the checker, so the formatter renders every slot on every member
-kind (`signal`, `event`, `fixed`, `command`, `query`). `reserved name` and
-`reserved 3` render as written.
+with the initialiser, the timing, the attribute block and the return of a
+`command` optional. The slots follow the parser, which is wider than the grammar
+file: it accepts a stream payload, an initialiser, a timing and an attribute
+block on every value interaction and leaves the narrowing to the checker, so the
+formatter renders every slot on every member kind (`signal`, `event`, `fixed`,
+`command`, `query`). `reserved name` and `reserved 3` render as written.
 
 - **Payload and parameter types** render as in typl: `Speed`,
   `integer [0..100]`, `[Label: Speed; 1..8]`, `Speed?`, tuples
@@ -70,9 +72,11 @@ kind (`signal`, `event`, `fixed`, `command`, `query`). `reserved name` and
 - **Annotation order** (D-4): the timing comes first and the attribute block
   last, whatever the source order, because general form R5 writes
   `@timing → [ attrs ]` and the parser accepts both orders; with the block form
-  the member ends on `]`. This is the only place the formatter reorders tokens.
-  Two comment cases keep a member's meaning. An inline comment between the two
-  annotations stays with the annotation before it in the source, so
+  the member ends on `]`. Apart from comment placement, this is the only
+  reordering. A member that holds a comment among its own tokens, other than in
+  the inline case below, stays as written, source order included. Two comment
+  cases involve the pair. An inline comment between the two annotations stays
+  with the annotation before it in the source, so
   `query q(): T [persist] /* note */ @10ms` becomes
   `query q(): T @10ms [ persist ] /* note */`. When moving a line comment would
   collide with a trailing comment of the member, the whole member stays as
@@ -89,11 +93,12 @@ kind (`signal`, `event`, `fixed`, `command`, `query`). `reserved name` and
   its inline form would exceed the width; every other block is inline. The
   decision is by kind and by width, not by the source's line breaks, so one
   declaration has one rendering.
-- **Attributes**: a flag is its key, and a dotted key is tight
+- **Attributes**: a flag is its key, and, in rsdl only, a dotted key is tight
   (`linux.realtime`); an assignment is `key = value`; a list value is `(a, b)`,
   nested lists the same, `()` kept, a trailing comma removed.
-- **`require` and `ensure`** take one space before the expression (D-5: the
-  heading rule forbids the two-space alignment that some older examples show).
+- **`require` and `ensure`** take one space before the expression (D-5: general
+  form §5 forbids column alignment, which the two-space `ensure  result` of some
+  older examples would be).
 - **Expressions** (D-6): one space on each side of a binary operator, a prefix
   operator tight to its operand, a member access tight, and parentheses tight to
   their content and kept exactly where the author wrote them. The formatter
@@ -109,9 +114,9 @@ kind (`signal`, `event`, `fixed`, `command`, `query`). `reserved name` and
   line, and the optional trailing comma removed (D-7: a list laid out from the
   tree, not from the source's line breaks, so there is one rendering). The
   commas between shapes are required by the grammar (ADR-0015 decision 13), so
-  this is the one list whose separators the formatter keeps. When the line
-  exceeds the width, the list breaks after the colon, one shape per line at the
-  next indent, each followed by a comma except the last.
+  this is the one brace-less list whose commas are required, not optional. When
+  the line exceeds the width, the list breaks after the colon, one shape per
+  line at the next indent, each followed by a comma except the last.
 - **Inline form**: `service veh.hvac.cabin {` with an interface body, laid out
   as an interface. A service takes no modifier.
 
@@ -138,11 +143,13 @@ each side: `system Vehicle [ attrs ] {`.
   indent. A blank line between two machines is kept where the source had one,
   and a run of blank lines collapses to one (D-11: a machine is a member, not a
   top-level declaration).
-- **Attribute blocks**: flags and assignments only, so they take the inline form
-  when the line fits and the block form when it does not. An overlong header
-  keeps its opening brace on the closing bracket's line: `component Cruise [`,
-  one attribute per line, `] {`. A source block that spans several lines is
-  joined when it fits, and its separator commas are replaced.
+- **Attribute blocks**: the rsdl keys take no predicate, so these blocks take
+  the inline form when the line fits and the block form when it does not (a
+  predicate, were one written, would force the block form as in ridl). An
+  overlong header keeps its opening brace on the closing bracket's line:
+  `component Cruise [`, one attribute per line, `] {`. A source block that spans
+  several lines is joined when it fits, and its separator commas are removed in
+  the block form and written as a comma and a space in the inline form.
 
 ## Line width and breaking
 
@@ -201,12 +208,13 @@ for wasm32 without default features. The default feature `editorconfig` adds
 crate: the search from the file's directory upward, every matching `[glob]`
 section with later files and sections winning, and a `root = true` file stopping
 the search. It reads one key, `max_line_length`. An integer is the width, `off`
-removes the limit, and an absent, `unset` or invalid value gives 100.
-`indent_size` and `indent_style` are not read (D-12: a canonical style has one
-indent, as it has one colon; the output must not depend on a file setting that
-the book fences and the golden files cannot carry). The repository's
-`.editorconfig` states `indent_size = 2` and `max_line_length = 100` for the
-family's files so that editors agree with the formatter.
+removes the limit, and an absent, `unset` or invalid value, or a configuration
+that fails to parse, gives 100. `indent_size` and `indent_style` are not read
+(D-12: a canonical style has one indent, as it has one colon; the output must
+not depend on a file setting that the book fences and the golden files cannot
+carry). The repository's `.editorconfig` states `indent_size = 2` and
+`max_line_length = 100` for the family's files so that editors agree with the
+formatter.
 
 `ridl fmt` resolves the options per file, because two files of one run can sit
 under different `.editorconfig` files. The language server resolves them from
@@ -247,15 +255,20 @@ The tests in `crates/ridl-fmt/tests/` and the unit tests of
 `crates/ridl-fmt/src/lib.rs` pin each rule.
 
 - `corpus.rs` formats each input under `test_data/input/` to its golden under
-  `test_data/formatted/` (`interface.ridl`, `attributes.ridl`, `services.ridl`,
-  `component.rsdl`, `deployment.rsdl`, `rsdl_attribute_positions.rsdl`) and
-  checks that every golden is a fixed point.
+  `test_data/formatted/` (the ridl and rsdl cases are `interface.ridl`,
+  `attributes.ridl`, `services.ridl`, `component.rsdl`, `deployment.rsdl` and
+  `rsdl_attribute_positions.rsdl`; four typl cases sit beside them) and checks
+  that every golden is a fixed point.
 - `properties.rs` runs over the `ok` parser corpus of all three profiles at
   widths 100, 60 and 40: idempotence, no comment lost, and an unchanged node and
   token stream once the annotation pair is put in timing-first order. Every file
-  of the `err` corpus must come back unformatted. A mutation check shows that a
-  dropped comment fails the comparison.
-- `rsdl.rs` and `ridl.rs` format the reference examples idempotently without
-  losing a token; `editorconfig.rs` pins the width resolution; the unit tests
-  hold the width boundaries (one less than, equal to and one more than the
-  width) for each breakable construct.
+  of the `err` corpus must come back unformatted. A test shows that the
+  comparison fails on a dropped comment. The comparison treats a lint-directive
+  comment separately, because the formatter moves one to the line of its
+  declaration.
+- `rsdl.rs` and `ridl.rs` format the reference examples (`ridl.rs`: Appendix A
+  of the ridl reference) idempotently without losing a token; `editorconfig.rs`
+  pins the width resolution; the unit tests hold the width boundaries (one less
+  than, equal to and one more than the width) for the parameter list, the tuple
+  and the attribute value list, and the equal and one-over cases for the service
+  shape list.
