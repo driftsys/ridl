@@ -162,7 +162,7 @@ after this change merges.
 
 ## Service declaration names
 
-Release 0.20.0 changes how a service is named
+Release 0.21.0 changes how a service is named
 ([ADR-0034](../decisions/ADR-0034-service-declaration-names.md)). A service is
 declared with one `CamelCase` name, and its global name is its package followed
 by that name: `service Doors : DoorControl` in package `veh.body` is

@@ -261,7 +261,7 @@ identity name (the interface's own, or the service's global one) so no consumer
 reads the inline shape's empty `Interface.name`, and the owning `Service` so no
 consumer reads its unspecified `Interface.visibility` either (see the section
 above). `DeclIndex` now walks `SourceFile::shapes()` and the inline-shape
-warning spans the service's global name;
+warning spans the service's declared name;
 `inline_shape_removal_spans_the_service_name` pins that.
 
 ### A non-integer `reserved` literal destroyed the retired identity — fixed

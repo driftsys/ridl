@@ -26,7 +26,9 @@ What the entry exercises that `veh-cluster` does not:
   `Package.interfaces`.
 - **Contracts inside an inline shape**, including an `ensure` over `result`.
 - **A service composing two interfaces** (ADR-0015 decision 12).
-  `fleet.vehicle.Cockpit` lists `DoorControl` and `Telemetry` — the
+  `fleet.vehicle.Cockpit` lists `DoorControl` and `TelemetryContract` (the
+  imported `Telemetry` interface under an alias, because a service named
+  `Telemetry` in the same package would hide it) — the
   clean-compile case of the list, with each reference canonicalized on its
   own. `a_composed_service_compiles_and_round_trips_through_the_ir`
   in `corpus.rs` drives the same entry through both interchange encodings.
