@@ -183,7 +183,11 @@ To migrate a workspace:
    edit changes one unit's `interfaces.lock`. For each lone service listed in a
    system, run `ridl lock <workspace root> --rename <old name>=<package>.<Name>`
    at the workspace root, which holds `instances.lock`. Both keep their numbers.
-4. Run `ridl check` and `ridl build`. Regenerate and redeploy every peer
+4. Rewrite each `[limits.interaction]` key of an inline-shape service in
+   `ridl.toml`: the key starts with the service's declared name, so
+   `cabin.setTarget` becomes `Cabin.setTarget`. A key that still uses the old
+   name is reported as RIDL-152 and no longer sets a limit.
+5. Run `ridl check` and `ridl build`. Regenerate and redeploy every peer
    together. The descriptor strings and lock keys of every service change. Every
    renamed inline shape changes the catalog hash of its unit and the transport
    identities of its fallible returns, because both hold the service's name as
@@ -192,7 +196,7 @@ To migrate a workspace:
    while `veh.cluster.wheels` keeps `VehClusterWheels…`. A suffix added to avoid
    a declaration-name collision, or a change to underscore spelling, can also
    change generated names.
-5. `ridl diff` keys a service by its package and global name, so against a
+6. `ridl diff` keys a service by its package and global name, so against a
    baseline published before the migration it reports every renamed service as
    removed and added, which is breaking. Expect that verdict once, then publish
    a new baseline with `ridl baseline`.

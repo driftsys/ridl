@@ -322,12 +322,15 @@ TYPL-009.
     body, each `requires` line naming an inline-shape service, and each doc link
     that names a service, then run the two `ridl lock --rename` commands of
     decision 7 — each `service:` rename once per unit with the unit's directory,
-    each implicit component rename at the workspace root. It also states that
-    `ridl diff` keys a service by `<package>/<global name>`, so a comparison
-    against a baseline published before the migration reports every renamed
-    service as removed and added, which is breaking, and that the workspace
-    publishes a new baseline with `ridl baseline` after the migration. The
-    book's chapter on stability states the same steps.
+    each implicit component rename at the workspace root, and rewrite each
+    `[limits.interaction]` key of an inline-shape service, which starts with the
+    service's declared name (`cabin.setTarget` becomes `Cabin.setTarget`; a
+    stale key is RIDL-152). It also states that `ridl diff` keys a service by
+    `<package>/<global name>`, so a comparison against a baseline published
+    before the migration reports every renamed service as removed and added,
+    which is breaking, and that the workspace publishes a new baseline with
+    `ridl baseline` after the migration. The book's chapter on stability states
+    the same steps.
 
 ## Alternatives considered
 
