@@ -84,9 +84,7 @@ pub fn hover(
     if let Some(info) = contract_use_hover(scope, file, offset) {
         return Some(info);
     }
-    // Interaction and service anchors are not symbols either: an interaction
-    // name lives inside an interface body and a service name in the workspace
-    // catalog, so `symbol_at` would return `None` for both.
+    // Interactions and services have dedicated renderings of their contracts.
     if let Some(info) = interaction_hover(db, ws, std, pkg, file, offset) {
         return Some(info);
     }
@@ -212,13 +210,10 @@ fn doc_link_hover(scope: Scope<'_>, file: InputFile, offset: TextSize) -> Option
         scope.pkg,
         &link.target.canonical(),
     )?;
-    let owner = owner_package(
-        scope.db,
-        scope.ws,
-        scope.std,
-        scope.pkg,
-        &link.target.symbol.package,
-    )?;
+    let owner = std::iter::once(scope.pkg)
+        .chain(std::iter::once(scope.std))
+        .chain(scope.ws.packages(scope.db).iter().copied())
+        .find(|package| package.files(scope.db).contains(&target_file))?;
     let target = hover(
         scope.db,
         scope.ws,
@@ -552,6 +547,11 @@ pub(crate) fn symbol_markdown(
         if let Some(decl) = ir.decls.iter().find(|decl| decl.name == symbol.name) {
             let rules = rules::rules(&ir, &[], ItemRef::Decl(decl));
             return render_decl(&qualified, decl, &rules, &resolve);
+        }
+        if symbol.kind == SymbolKind::Service
+            && let Some(service) = ir.services.iter().find(|service| service.name == qualified)
+        {
+            return render_service(service, &resolve);
         }
         if symbol.kind == SymbolKind::Interface
             && let Some(interface) = named_interface(&ir, &symbol.name)

@@ -1,12 +1,12 @@
 package veh.topology
 
 component Cruise [ instances = (primary, backup) ] {
-  offers veh.adas.cruise
+  offers veh.adas.AdaptiveCruise
   requires LaneAssist
 }
 
 component Lane {
-  offers veh.adas.lane
+  offers veh.adas.LaneKeeping
 }
 
 component Panel {

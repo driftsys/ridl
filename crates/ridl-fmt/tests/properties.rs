@@ -106,7 +106,7 @@ const TRAILING_COMMENT_SHAPES: &[(&str, Profile)] = &[
         Profile::Ridl,
     ),
     (
-        "package p\nservice veh.body.composite: DoorControl, MotorControl // shapes\n",
+        "package p\nservice Composite: DoorControl, MotorControl // shapes\n",
         Profile::Ridl,
     ),
     (

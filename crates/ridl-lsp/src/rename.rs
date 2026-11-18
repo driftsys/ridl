@@ -184,7 +184,9 @@ pub fn rename_symbol(
         let segment = nav::final_segment_range(db, reference_file, range);
         let text = reference_file.text(db);
         let segment_text = &text[usize::from(segment.start())..usize::from(segment.end())];
-        if segment_text != target.name {
+        if segment_text != target.name
+            || (range == segment && explicit_alias(db, packages, reference_file, &target))
+        {
             continue;
         }
         edits.push(Edit {
@@ -199,7 +201,12 @@ pub fn rename_symbol(
     for (link_file, segment) in nav::doc_link_references(db, ws, std, packages, &target) {
         let text = link_file.text(db);
         let segment_text = &text[usize::from(segment.start())..usize::from(segment.end())];
-        if segment_text != target.name {
+        if segment_text != target.name
+            || (text
+                .get(..usize::from(segment.start()))
+                .is_some_and(|prefix| !prefix.ends_with('.'))
+                && explicit_alias(db, packages, link_file, &target))
+        {
             continue;
         }
         edits.push(Edit {
@@ -246,6 +253,33 @@ pub fn rename_symbol(
     }
 
     Ok(dedup(edits))
+}
+
+/// Whether a bare use keeps an explicit import alias equal to the old name.
+/// A local declaration takes precedence over an import of itself.
+fn explicit_alias(
+    db: &dyn salsa::Database,
+    packages: &[Package],
+    file: InputFile,
+    target: &Symbol,
+) -> bool {
+    let Some(package) = packages
+        .iter()
+        .find(|package| package.files(db).contains(&file))
+    else {
+        return false;
+    };
+    package.name(db) != &target.package
+        && package.files(db).iter().any(|file| {
+            nav::source_file(db, *file).imports().any(|import| {
+                import
+                    .alias()
+                    .is_some_and(|alias| alias.syntax().text().to_string() == target.name)
+                    && import
+                        .qualified_name()
+                        .is_some_and(|qualified| import_binds(qualified.syntax(), target))
+            })
+        })
 }
 
 /// Drops repeated `(file, range)` edits — a declaration that is also
@@ -342,10 +376,19 @@ pub(crate) fn declares(
     name: &str,
 ) -> bool {
     let package_name = package.name(db);
-    resolve_package(db, ws, package, std)
-        .symbols
-        .values()
-        .any(|symbol| symbol.name == name && symbol.package == *package_name)
+    let system = ridl_sem::rsdl::check_system(db, ws, std);
+    system
+        .systems
+        .iter()
+        .map(|d| (&d.package, &d.name))
+        .chain(system.components.iter().map(|d| (&d.package, &d.name)))
+        .chain(system.distributions.iter().map(|d| (&d.package, &d.name)))
+        .chain(system.deployments.iter().map(|d| (&d.package, &d.name)))
+        .any(|(owner, declared)| owner == package_name && declared.name == name)
+        || resolve_package(db, ws, package, std)
+            .symbols
+            .values()
+            .any(|symbol| symbol.name == name && symbol.package == *package_name)
 }
 
 /// Whether `symbol` is declared in the embedded `ridl.std` package — a built-in

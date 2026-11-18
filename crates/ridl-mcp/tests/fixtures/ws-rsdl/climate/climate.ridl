@@ -15,10 +15,10 @@ interface Seats {
   signal heated: Heated @[100ms..1s]
 }
 
-service veh.climate.control: Climate
+service Control: Climate
 
-service veh.climate.seats: Seats
+service SeatsService: Seats
 
-service veh.climate.diag {
+service Diag {
   query readTemperature(): Temperature @[..100ms]
 }

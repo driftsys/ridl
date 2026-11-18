@@ -41,7 +41,7 @@ tool error. Tools never write files or fetch remote imports.
 Workspace results carry `workspace: {root, errors, warnings, notes}`. Locations
 are `{path, start, end}` with 1-based `{line, column}` and an exclusive end. The
 range is the declared name. Fields and interactions use their enclosing
-declaration's location; services and standard declarations have null locations.
+declaration's location; standard declarations have null locations.
 
 ### `ridl_check`
 
@@ -108,7 +108,9 @@ including import aliases.
 
 Result: `{name, package, kind, visibility, location, workspace}`, plus `alias`
 when an import alias was used. Kinds are `type`, `const`, `struct`, `enum`,
-`enumset`, `union`, `interface`; visibility is `public` or `internal`.
+`enumset`, `union`, `interface`, `service`; visibility is `public` or
+`internal`. A service reports its declared name, its package and its declaration
+location; its visibility is always `public`.
 
 No match is a tool error with up to ten sorted canonical suggestions containing
 the input, ignoring case. Ambiguity lists every match and directs the caller to
@@ -120,8 +122,8 @@ error; the latter directs the caller to `ridl_check` on the same path.
 Input: `path`, optional `overlays`, `name`, optional `from`, resolved as above.
 Result: `{declaration, package, location, workspace}`. `declaration` is a
 complete non-interface IR `Decl` in canonical protobuf JSON, as in `.ir.json`
-snapshots. Lookup errors are the same as `ridl_resolve`; an interface is a tool
-error naming `ridl_list_interactions`.
+snapshots. Lookup errors are the same as `ridl_resolve`; an interface or service
+is a tool error naming `ridl_list_interactions`.
 
 ### `ridl_list_interactions`
 
@@ -131,7 +133,10 @@ Input: `path`, optional `overlays`, `interface`, optional `from`. Result:
 Interactions are canonical IR declarations in source order: `signal`, `event`,
 `command`, `query`, `fixed`, or a `reserved` tombstone. Payloads, returns,
 parameters, timing, ordinals and contracts retain the IR's fields. Lookup errors
-are the same as `ridl_resolve`; a non-interface is a tool error.
+are the same as `ridl_resolve`. An inline-shape service is accepted by declared
+name, global name or import alias; its header uses the global service name. A
+list-form service is a tool error naming its interfaces to query separately.
+Other declarations are tool errors.
 
 ### `ridl_references`
 
@@ -143,8 +148,9 @@ pattern constants, enumset backing enums, interface references and inline
 service interactions. Standard declarations are not walked. References are
 reported once per `(declaration, interaction)` pair. Repeated fields without an
 interaction yield one result; two interactions using the same target yield two
-results. Service references use the service name and a null location. Lookup
-errors are the same as `ridl_resolve`.
+results. A service target adds no component uses: offers and inline requires are
+not reported. Service references use the service name and a null location.
+Lookup errors are the same as `ridl_resolve`.
 
 Declared components in the lowered rsdl system count as references when they
 require a named interface. Inline requirements are covered by their service;

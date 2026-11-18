@@ -21,9 +21,8 @@
 //! the ridl navigation finds the references, the rsdl `requires` lines among
 //! them. Rename rewrites a system, a component or a declared instance, with
 //! every rsdl reference and import line that names it. An interface is
-//! renamed by the ridl rename, which already rewrites the rsdl references to
-//! it. A service, and an rsdl reference the checker binds to nothing, are not
-//! renamed.
+//! renamed by the ridl rename, as is a service. An rsdl reference the checker
+//! binds to nothing is not renamed.
 
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, package_of, service_catalog};
@@ -292,7 +291,7 @@ fn target_at(
 
 /// What find-references reports for a cursor in an `.rsdl` file.
 pub enum References {
-    /// A declared interface: the typl symbol, whose references the ridl
+    /// A declared interface or service: the symbol, whose references the ridl
     /// navigation finds, the rsdl `requires` lines among them.
     Interface(Symbol),
     /// Any other rsdl target: its declaration site, when it has one, and the
@@ -317,6 +316,11 @@ pub fn references(
     if let Target::Interface(InterfaceId::Declared { package, name }) = &target {
         let symbol = interface_symbol(db, ws, std, package, name)?;
         return Some(References::Interface(symbol));
+    }
+    if let Target::Service(name) | Target::Interface(InterfaceId::Inline { service: name }) =
+        &target
+    {
+        return Some(References::Interface(service_symbol(db, ws, std, name)?));
     }
     Some(References::Rsdl {
         declaration: declaration_site(db, ws, std, &system, &target),
@@ -343,13 +347,11 @@ pub enum RenameAt {
     /// A system, component or declared instance, which [`rename`] rewrites;
     /// `span` is the name under the cursor.
     Rsdl { target: Target, span: TextRange },
-    /// A declared interface, which the ridl rename rewrites with every
+    /// A declared interface or service, which the ridl rename rewrites with every
     /// reference to it, the rsdl `requires` lines among them; `span` is the
     /// name under the cursor.
     Interface { symbol: Symbol, span: TextRange },
-    /// Not renamed: a service or the inline shape of one, whose dotted name
-    /// is declared in ridl and is global to the workspace, or an rsdl
-    /// reference the checker binds to nothing.
+    /// Not renamed: an rsdl reference the checker binds to nothing.
     Refused,
     /// No rsdl reference: the typl rename handles the cursor, as it handles a
     /// doc link, an import line or a typl declaration.
@@ -382,7 +384,12 @@ pub fn rename_at(
                 None => RenameAt::Refused,
             }
         }
-        Target::Service(_) | Target::Interface(InterfaceId::Inline { .. }) => RenameAt::Refused,
+        Target::Service(name) | Target::Interface(InterfaceId::Inline { service: name }) => {
+            match service_symbol(db, ws, std, name) {
+                Some(symbol) => RenameAt::Interface { symbol, span },
+                None => RenameAt::Refused,
+            }
+        }
         Target::System(_) | Target::Component(_) | Target::Instance { .. } => {
             RenameAt::Rsdl { target, span }
         }
@@ -641,6 +648,23 @@ fn service_site(
                 .then(|| (*file, declared.text_range()))
         })
     })
+}
+
+fn service_symbol(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    name: &str,
+) -> Option<Symbol> {
+    let package = service_package(db, ws, std, name)?;
+    resolve_package(db, ws, package, std)
+        .symbols
+        .values()
+        .find(|symbol| {
+            symbol.kind == ridl_sem::SymbolKind::Service
+                && format!("{}.{}", symbol.package, symbol.name) == name
+        })
+        .cloned()
 }
 
 /// A ridl service as a hover on its own declaration renders it.

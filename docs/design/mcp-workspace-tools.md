@@ -17,8 +17,8 @@ not repeat. Built by driftsys/ridl#668 and #677.
 | `ridl_check`             | none; or, instead of `path`, `{source, profile}`                                         | `{diagnostics, workspace}`; in source mode `{diagnostics}`                   |
 | `ridl_explain`           | `code`: a diagnostic code or a diff category word; no path                               | a diagnostic entry or a diff category entry                                  |
 | `ridl_resolve`           | `name`; optional `from`                                                                  | package, kind, visibility, location, and `alias` when one was used           |
-| `ridl_describe_type`     | `name`; optional `from`                                                                  | the IR `Decl` of a declaration that is not an interface                      |
-| `ridl_list_interactions` | `interface`; optional `from`                                                             | the interface header and its interactions in source order                    |
+| `ridl_describe_type`     | `name`; optional `from`                                                                  | the IR `Decl` of a declaration that is not an interface or service           |
+| `ridl_list_interactions` | `interface`; optional `from`                                                             | the interface or inline service header and its interactions in source order  |
 | `ridl_references`        | `name`; optional `from`                                                                  | each declaration, interaction or component that uses the target              |
 | `ridl_dependencies`      | optional `package`                                                                       | each package's imports, dependencies and dependents                          |
 | `ridl_metrics`           | none; takes `path` only                                                                  | package fan-in, fan-out, instability and interface cohesion groups           |
@@ -47,8 +47,9 @@ not repeat. Built by driftsys/ridl#668 and #677.
   1-based `{line, column}`, end exclusive, the shape of `span` in
   `ridl check --format json`. Its range is the declared name (`Symbol.range`). A
   declaration that is not a symbol (an interaction, a field) reports its
-  enclosing package-level declaration. A service, a component and a standard
-  declaration have a null location.
+  enclosing package-level declaration. A service resolves to its declared-name
+  location. A component and a standard declaration have a null location; service
+  referrers in `ridl_references` also retain their null location.
 
 ## 3. The tools in detail
 
@@ -60,7 +61,10 @@ The behaviour that is not in the README:
   tool.
 - **`ridl_list_interactions`** returns each interaction as the IR `Decl`, whose
   kind is one of `signal`, `event`, `command`, `query`, `fixed`, or a `reserved`
-  tombstone.
+  tombstone. An inline service is looked up by joining its package and declared
+  name to the IR global name. A list-form service is refused with the list of
+  interfaces to query. `ridl_resolve` reports kind `service` and public
+  visibility; `ridl_describe_type` refuses either service form.
 - **`ridl_references`** resolves the target as `ridl_resolve` does, to a
   canonical `pkg.Name`. It walks the canonical JSON of every declaration, every
   interface and every service of every workspace package, and collects each
@@ -71,7 +75,8 @@ The behaviour that is not in the README:
   walked: a standard type cannot refer to a workspace type. `kind` is
   `declaration` (a package-level declaration other than an interface),
   `interface`, `service` or `component`. A reference inside a service reports
-  the service's name as its declaration.
+  the service's name as its declaration. A service target adds no new kind of
+  use; components offering it are not reported (ADR-0034 decision 3).
 - **rsdl component uses.** `ridl_references` and `ridl_dependencies` also read
   the lowered system, `WorkspaceOutput.system`, because components exist only
   there. For each component whose `package` is not empty, each `Require` whose
