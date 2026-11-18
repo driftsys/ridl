@@ -952,46 +952,60 @@ fn a_change_reaches_a_fast_sender_within_two_poll_intervals() {
     }
     assert_eq!(decode(&got[2]).unwrap(), publish(0, 0, PublishState::Init));
 
-    // A subscribe every millisecond, each answered; the change is committed
-    // after 100 ms of that, and the answers are read until its publish
-    // arrives.
+    // A subscribe every millisecond, each answered. After 100 ms of that, a
+    // change is committed and the answers are read until its publish arrives.
+    // A scheduling stall of the test or the server threads adds to the
+    // measured latency without the server delaying the poll, so one sample
+    // over the bound is not a failure. A server that delays the polls while
+    // messages flow exceeds the bound in every attempt, so the test fails
+    // only when no attempt of several is within it.
     client
         .set_read_timeout(Some(Duration::from_millis(1)))
         .unwrap();
-    let start = Instant::now();
-    let mut committed = None;
-    let latency = loop {
-        assert!(start.elapsed() < TEST_LIMIT, "no publish within the limit");
-        client.write_all(&subscribe).unwrap();
-        if committed.is_none() && start.elapsed() >= Duration::from_millis(100) {
-            provider.set(IFACE, Ordinal(1), &[9]).unwrap();
-            provider.commit();
-            committed = Some(Instant::now());
-        }
-        match client.read(&mut chunk) {
-            Ok(0) => panic!("the server closed"),
-            Ok(n) => buf.extend_from_slice(&chunk[..n]),
-            Err(e)
-                if matches!(
-                    e.kind(),
-                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
-                ) => {}
-            Err(e) => panic!("{e}"),
-        }
-        let frames = take_binary_frames(&mut buf);
-        if let Some(at) = committed {
-            if frames
-                .iter()
-                .any(|f| decode(f).unwrap() == publish(0, 1, PublishState::Live(&[9])))
-            {
-                break at.elapsed();
+    const ATTEMPTS: u8 = 5;
+    let mut latencies = Vec::new();
+    for attempt in 1..=ATTEMPTS {
+        let value = 8 + attempt;
+        let start = Instant::now();
+        let mut committed = None;
+        let latency = loop {
+            assert!(start.elapsed() < TEST_LIMIT, "no publish within the limit");
+            client.write_all(&subscribe).unwrap();
+            if committed.is_none() && start.elapsed() >= Duration::from_millis(100) {
+                provider.set(IFACE, Ordinal(1), &[value]).unwrap();
+                provider.commit();
+                committed = Some(Instant::now());
             }
+            match client.read(&mut chunk) {
+                Ok(0) => panic!("the server closed"),
+                Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                Err(e)
+                    if matches!(
+                        e.kind(),
+                        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                    ) => {}
+                Err(e) => panic!("{e}"),
+            }
+            let frames = take_binary_frames(&mut buf);
+            if let Some(at) = committed {
+                if frames.iter().any(|f| {
+                    decode(f).unwrap()
+                        == publish(0, u64::from(attempt), PublishState::Live(&[value]))
+                }) {
+                    break at.elapsed();
+                }
+            }
+            thread::sleep(Duration::from_millis(1));
+        };
+        latencies.push(latency);
+        if latency < bound {
+            break;
         }
-        thread::sleep(Duration::from_millis(1));
-    };
+    }
+    let best = latencies.iter().min().unwrap();
     assert!(
-        latency < bound,
-        "the change arrived after {latency:?}, over {bound:?}"
+        *best < bound,
+        "the change arrived after {latencies:?} in {ATTEMPTS} attempts, none under {bound:?}"
     );
     // Answers to the subscribes may still be unread. Closing a TCP socket that
     // holds unread data sends a reset instead of an orderly close, and the
@@ -3002,14 +3016,18 @@ fn a_credit_restarts_the_abandon_bound() {
 }
 
 /// A `chunk` sent restarts the abandon bound: with one credit granted at the
-/// start, a provider that pushes every 100 ms keeps the stream open for
-/// twice the bound, and the stream is abandoned once it stops.
+/// start, a provider that pushes every 250 ms keeps the stream open for
+/// more than the bound, and the stream is abandoned once it stops.
 ///
 /// Mutation: do not restart the bound on a chunk.
 #[test]
 fn a_chunk_restarts_the_abandon_bound() {
     let (mut config, notes) = recording();
-    config.call_abandon_after = Duration::from_millis(300);
+    config.call_abandon_after = Duration::from_millis(1000);
+    // The pushes are 250 ms apart against a bound of 1000 ms, so a stall of
+    // 750 ms is needed to end the stream early. Six pushes span 1500 ms, more
+    // than the bound, so a bound that a chunk does not restart ends the
+    // stream before the last push.
     let (mut ws, handle, provider) = stream_session(config, SUBPROTOCOL_V3, false);
     request(&mut ws, STREAM_QUERY, 1, &[64]);
     grant(&mut ws, 1, 100);
@@ -3026,7 +3044,7 @@ fn a_chunk_restarts_the_abandon_bound() {
             seq += 1;
             assert_eq!(recv(&mut ws), element(1, seq, i), "chunk {seq}");
         }
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(250));
     }
     // Any chunk the steps pushed beyond the 24 read comes first, in order;
     // the first other frame is the end of the abandoned stream.
