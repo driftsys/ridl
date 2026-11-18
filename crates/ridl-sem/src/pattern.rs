@@ -12,12 +12,13 @@ pub struct Refusal {
 /// Check delimiter-free pattern text, returning the first refusal from the left.
 ///
 /// Accept RFC 9485 syntax except the typl portability restrictions, reversed
-/// ranges and reversed quantifier bounds. Quantifier numbers saturate at `u64::MAX`;
+/// ranges and reversed quantifier bounds. Groups may nest at most 250 levels;
 /// engine size limits are left to the caller's regex compiler.
 pub fn check(pattern: &str) -> Result<(), Refusal> {
     Parser {
         source: pattern,
         pos: 0,
+        group_depth: 0,
     }
     .expression(None)
 }
@@ -25,6 +26,7 @@ pub fn check(pattern: &str) -> Result<(), Refusal> {
 struct Parser<'a> {
     source: &'a str,
     pos: usize,
+    group_depth: usize,
 }
 
 fn refusal(construct: &str, message: impl Into<String>) -> Refusal {
@@ -41,7 +43,7 @@ fn syntax(construct: &str, what: &str) -> Refusal {
     )
 }
 
-impl Parser<'_> {
+impl<'a> Parser<'a> {
     fn rest(&self) -> &str {
         &self.source[self.pos..]
     }
@@ -72,15 +74,24 @@ impl Parser<'_> {
                 _ => {
                     self.atom()?;
                     if matches!(self.peek(), Some('*' | '+' | '?' | '{')) {
+                        let quantifier_start = self.pos;
                         self.quantifier()?;
                         if let Some(next @ ('*' | '+' | '?' | '{')) = self.peek() {
-                            let previous = self.source[..self.pos].chars().next_back().unwrap();
-                            let construct = format!("{previous}{next}");
+                            let first = &self.source[quantifier_start..self.pos];
+                            if matches!((first, next), ("*", '?') | ("+", '+')) {
+                                let construct = format!("{first}{next}");
+                                return Err(refusal(
+                                    &construct,
+                                    format!(
+                                        "`{construct}` is not accepted: a pattern has no lazy or possessive quantifier"
+                                    ),
+                                ));
+                            }
+                            let second_start = self.pos;
+                            let _ = self.quantifier();
                             return Err(refusal(
-                                &construct,
-                                format!(
-                                    "`{construct}` is not accepted: a pattern has no lazy or possessive quantifier"
-                                ),
+                                &self.source[second_start..self.pos],
+                                "a quantifier cannot follow a quantifier",
                             ));
                         }
                     }
@@ -107,7 +118,13 @@ impl Parser<'_> {
                 if self.peek() == Some('?') {
                     return Err(self.special_group(start));
                 }
-                self.expression(Some(start))
+                if self.group_depth == 250 {
+                    return Err(refusal("(", "groups are nested deeper than 250"));
+                }
+                self.group_depth += 1;
+                let result = self.expression(Some(start));
+                self.group_depth -= 1;
+                result
             }
             '[' => self.class(start),
             '\\' => self.escape(start, false).map(|_| ()),
@@ -139,12 +156,35 @@ impl Parser<'_> {
                 );
             }
         }
+        for (prefix, message) in [
+            (
+                "(?P=",
+                "a backreference to a named group is not accepted: write the alternatives out",
+            ),
+            (
+                "(?#",
+                "a comment group is not accepted: remove the comment group",
+            ),
+        ] {
+            if text.starts_with(prefix) {
+                return refusal(prefix, message);
+            }
+        }
+        let named_group = if text.starts_with("(?P<") {
+            Some("(?P<")
+        } else if text.starts_with("(?<") {
+            Some(&text[..text.find('>').map_or(text.len(), |end| end + 1)])
+        } else {
+            None
+        };
+        if let Some(construct) = named_group {
+            return refusal(
+                construct,
+                "a named group is not accepted: write a plain group `(…)`",
+            );
+        }
         let construct = if text.starts_with("(?:") {
             "(?:"
-        } else if text.starts_with("(?P<") {
-            "(?P<"
-        } else if text.starts_with("(?<") {
-            &text[..text.find('>').map_or(text.len(), |end| end + 1)]
         } else {
             return refusal(
                 "(?",
@@ -258,7 +298,7 @@ impl Parser<'_> {
         if self.bump() != Some('}') {
             return Err(syntax("{", "unescaped {"));
         }
-        if maximum.is_some_and(|maximum| maximum < minimum) {
+        if maximum.is_some_and(|maximum| (maximum.len(), maximum) < (minimum.len(), minimum)) {
             let construct = &self.source[start..self.pos];
             return Err(refusal(
                 construct,
@@ -268,15 +308,12 @@ impl Parser<'_> {
         Ok(())
     }
 
-    fn number(&mut self) -> u64 {
-        let mut number = 0_u64;
-        while let Some(ch @ '0'..='9') = self.peek() {
+    fn number(&mut self) -> &'a str {
+        let start = self.pos;
+        while matches!(self.peek(), Some('0'..='9')) {
             self.bump();
-            number = number
-                .saturating_mul(10)
-                .saturating_add(u64::from(ch as u8 - b'0'));
         }
-        number
+        self.source[start..self.pos].trim_start_matches('0')
     }
 
     fn class(&mut self, start: usize) -> Result<(), Refusal> {
@@ -312,7 +349,10 @@ impl Parser<'_> {
                 if self.peek() == Some(']') {
                     continue;
                 }
-                return Err(syntax("-", "unclosed class"));
+                return Err(refusal(
+                    "-",
+                    r"a `-` inside a class is written first, last, or as `\-`",
+                ));
             }
             let range_start = self.pos;
             let first = self.class_character()?;
@@ -371,7 +411,10 @@ impl Parser<'_> {
                 }
             }
             '\\' => self.escape(start, true),
-            '-' => Err(syntax("-", "unclosed class")),
+            '-' => Err(refusal(
+                "-",
+                r"a `-` inside a class is written first, last, or as `\-`",
+            )),
             ch => Ok(ch),
         }
     }
@@ -528,8 +571,8 @@ mod tests {
         ("[a-[]", "["),
         ("[a-", "[a-"),
         (r"[\d]", r"\d"),
-        ("a{2}?", "}?"),
-        ("a?{2}", "?{"),
+        ("a{2}?", "?"),
+        ("a?{2}", "{2}"),
         ("+", "+"),
         ("?", "?"),
         ("{2}", "{2}"),
@@ -541,6 +584,132 @@ mod tests {
         ("[\\r-\\n]", "[\\r-\\n]"),
         ("a{18446744073709551616,2}", "{18446744073709551616,2}"),
     ];
+
+    #[test]
+    fn group_nesting_is_limited_to_250() {
+        let nested = |count| format!("{}a{}", "(".repeat(count), ")".repeat(count));
+        assert_eq!(check(&nested(250)), Ok(()));
+        let expected = refusal("(", "groups are nested deeper than 250");
+        assert_eq!(check(&nested(251)), Err(expected));
+        assert_eq!(
+            check(&"(".repeat(100_000)),
+            Err(refusal("(", "groups are nested deeper than 250"))
+        );
+        assert_eq!(check(&"(a)".repeat(251)), Ok(()));
+    }
+
+    #[test]
+    fn quantifier_bounds_are_compared_exactly() {
+        for (pattern, construct, message) in [
+            (
+                "a{18446744073709551617,18446744073709551616}",
+                "{18446744073709551617,18446744073709551616}",
+                "the quantifier `{18446744073709551617,18446744073709551616}` has a maximum below its minimum",
+            ),
+            (
+                "a{007,6}",
+                "{007,6}",
+                "the quantifier `{007,6}` has a maximum below its minimum",
+            ),
+        ] {
+            assert_eq!(
+                check(pattern),
+                Err(refusal(construct, message)),
+                "{pattern}"
+            );
+        }
+        for pattern in ["a{006,7}", "a{000,0}", "a{0007,7}", "a{9,10}"] {
+            assert_eq!(check(pattern), Ok(()), "{pattern}");
+        }
+    }
+
+    #[test]
+    fn stacked_quantifiers_name_the_second_quantifier() {
+        for (pattern, construct) in [
+            ("a{2}{3}", "{3}"),
+            ("a{2,3}{2}", "{2}"),
+            ("a**", "*"),
+            ("a+*", "*"),
+            ("a?{2}", "{2}"),
+            ("a{2}?", "?"),
+            ("a*{3,2}", "{3,2}"),
+            ("a*{,3}", "{,3}"),
+        ] {
+            assert_eq!(
+                check(pattern),
+                Err(refusal(
+                    construct,
+                    "a quantifier cannot follow a quantifier"
+                )),
+                "{pattern}"
+            );
+        }
+    }
+
+    #[test]
+    fn lazy_and_possessive_quantifiers_have_specific_messages() {
+        for (pattern, construct, message) in [
+            (
+                "a*?",
+                "*?",
+                "`*?` is not accepted: a pattern has no lazy or possessive quantifier",
+            ),
+            (
+                "a++",
+                "++",
+                "`++` is not accepted: a pattern has no lazy or possessive quantifier",
+            ),
+        ] {
+            assert_eq!(
+                check(pattern),
+                Err(refusal(construct, message)),
+                "{pattern}"
+            );
+        }
+    }
+
+    #[test]
+    fn misplaced_class_hyphens_have_a_specific_message() {
+        assert_eq!(
+            check("[a-b-c]"),
+            Err(refusal(
+                "-",
+                r"a `-` inside a class is written first, last, or as `\-`"
+            ))
+        );
+    }
+
+    #[test]
+    fn special_groups_name_the_real_construct() {
+        for (pattern, construct, message) in [
+            (
+                "(?P=n)",
+                "(?P=",
+                "a backreference to a named group is not accepted: write the alternatives out",
+            ),
+            (
+                "(?P<n>a)",
+                "(?P<",
+                "a named group is not accepted: write a plain group `(…)`",
+            ),
+            (
+                "(?<n>a)",
+                "(?<n>",
+                "a named group is not accepted: write a plain group `(…)`",
+            ),
+            (
+                "(?#c)",
+                "(?#",
+                "a comment group is not accepted: remove the comment group",
+            ),
+        ] {
+            assert_eq!(
+                check(pattern),
+                Err(refusal(construct, message)),
+                "{pattern}"
+            );
+        }
+    }
 
     #[test]
     fn accepted_patterns_follow_the_grammar() {
@@ -559,23 +728,90 @@ mod tests {
 
     #[test]
     fn refusal_messages_state_the_replacement() {
-        for (pattern, message) in [
+        for (pattern, construct, message) in [
             (
-                "^",
+                r"^",
+                r"^",
                 r"`^` is not accepted: a pattern matches the whole value, so remove the anchor; a literal `^` is `\^`",
             ),
             (
-                "$",
-                "`$` is not accepted: a pattern matches the whole value, so remove the anchor; a literal `$` is `[$]`",
+                r"$",
+                r"$",
+                r"`$` is not accepted: a pattern matches the whole value, so remove the anchor; a literal `$` is `[$]`",
             ),
-            (r"\d", "`\\d` is not accepted: write `[0-9]`"),
-            ("[a&&b]", "`&&` is not accepted in a class: write one `&`"),
+            (r"\d", r"\d", r"`\d` is not accepted: write `[0-9]`"),
+            (r"\D", r"\D", r"`\D` is not accepted: write `[^0-9]`"),
+            (r"\w", r"\w", r"`\w` is not accepted: write `[0-9A-Za-z_]`"),
+            (r"\W", r"\W", r"`\W` is not accepted: write `[^0-9A-Za-z_]`"),
+            (r"\s", r"\s", r"`\s` is not accepted: write `[ \t\n\r]`"),
+            (r"\S", r"\S", r"`\S` is not accepted: write `[^ \t\n\r]`"),
             (
-                "[^]",
+                r"\b",
+                r"\b",
+                r"`\b` is not accepted: a pattern has no word boundary",
+            ),
+            (
+                r"(?=a)",
+                r"(?=",
+                r"lookaround is not accepted: write each condition as its own `match` clause",
+            ),
+            (
+                r"(?!a)",
+                r"(?!",
+                r"lookaround is not accepted: write each condition as its own `match` clause",
+            ),
+            (
+                r"(?<=a)b",
+                r"(?<=",
+                r"lookaround is not accepted: write each condition as its own `match` clause",
+            ),
+            (
+                r"a{,3}",
+                r"{,3}",
+                r"`{,3}` is not accepted: a quantifier needs a minimum, such as `{0,3}`",
+            ),
+            (
+                r"a{3,2}",
+                r"{3,2}",
+                r"the quantifier `{3,2}` has a maximum below its minimum",
+            ),
+            (r"[z-a]", r"[z-a]", r"the range `z-a` ends before it starts"),
+            (
+                r"\p{L}",
+                r"\p{L}",
+                r"`\p{L}` is not accepted: write explicit ranges, such as `[a-zà-ÿ]`",
+            ),
+            (
+                r"[a&&b]",
+                r"&&",
+                r"`&&` is not accepted in a class: write one `&`",
+            ),
+            (
+                r"[a~~b]",
+                r"~~",
+                r"`~~` is not accepted in a class: write one `~`",
+            ),
+            (
+                r"[--]",
+                r"--",
+                r"`--` is not accepted in a class: write one `-`",
+            ),
+            (
+                r"a\-b",
+                r"\-",
+                r"`\-` is accepted inside a class only: write a bare `-`",
+            ),
+            (
+                r"[^]",
+                r"[^]",
                 r"`[^]` is not accepted: a literal `^` is `\^`, and any character is `(.|\n|\r)`",
             ),
         ] {
-            assert_eq!(check(pattern).unwrap_err().message, message, "{pattern:?}");
+            assert_eq!(
+                check(pattern),
+                Err(refusal(construct, message)),
+                "{pattern:?}"
+            );
         }
     }
 
