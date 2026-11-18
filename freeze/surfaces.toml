@@ -54,3 +54,19 @@ baseline = "4edf558aa886619b0338b9808d7fcae7514b3cf1"
 [[surface]]
 name = "cli"
 baseline = "4edf558aa886619b0338b9808d7fcae7514b3cf1"
+
+[[surface]]
+name = "wire"
+baseline = "ac64fc2a844371bc8c6099b94284a42641783044"
+
+[[surface]]
+name = "generated-crate"
+baseline = "ac64fc2a844371bc8c6099b94284a42641783044"
+
+[[surface]]
+name = "accepted-sources"
+baseline = "ac64fc2a844371bc8c6099b94284a42641783044"
+
+[[surface]]
+name = "diagnostics"
+baseline = "ac64fc2a844371bc8c6099b94284a42641783044"
