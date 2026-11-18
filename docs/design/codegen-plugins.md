@@ -395,8 +395,8 @@ the model carries every fact that output is a function of.
 **The snapshots and `ridl build` generate over different scopes.** The Rust
 snapshots of `crates/ridl-backend-rust/src/snapshots/` and the Rust snapshots of
 the corpus harness (`crates/ridlc/tests/corpus.rs`) are taken with an empty
-scope: `generate_pipeline` is called with `others` equal to `&[]`, so a type
-that reaches another package gets no codec, and the snapshot carries a
+scope: the backend lowers with `others` equal to `&[]`, so a type that reaches
+another package gets no codec, and a snapshot that includes the codec carries a
 `__RIDL_FB_NO_CODEC_*` note for it. `ridl build` lowers each package over
 `ridlc::catalog_scope` (every package of the workspace, plus `ridl.std` when a
 package references it), so the same type gets its codec there. The corpus
