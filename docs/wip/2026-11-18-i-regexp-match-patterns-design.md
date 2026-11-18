@@ -120,11 +120,19 @@ does not match `\n` or `\r`; a prefix followed by any character at all is
 
 ### 3.6 `\p{..}` and the Unicode version
 
-Each engine carries its own Unicode tables. The members of `\p{L}` are the same
-in every engine for a code point that the oldest of the engines knows. A code
-point that a later Unicode version assigned can be inside the category in one
-engine and outside it in another. The specification states this as the one
-remaining difference. A pattern that needs an exact set uses explicit ranges.
+Each engine carries its own Unicode tables, so a category does not hold the same
+code points in every engine. A code point that a later Unicode version assigned
+is inside `\p{L}` in one engine and outside it in another, and a Unicode version
+can also move an assigned code point to another category. The approach A note
+measured 4,644 code points of `\p{L}` on which `regress` 0.11.1 and `regex`
+1.13.1 differ. `regress` leaves the workspace (§5), but the Rust `regex` crate,
+the host's `RegExp` and the JVM still have one Unicode version each, and no test
+in this repository can pin the version of a host engine.
+
+So "the engines agree by construction" holds for every construct except `\p{..}`
+and `\P{..}`. The specification states this as the one remaining difference, and
+states that a pattern that needs an exact set uses explicit ranges. §12 question
+4 asks whether to accept the difference or to refuse the construct.
 
 ## 4. Several `match` clauses
 
@@ -295,9 +303,9 @@ a hand-written changelog entry.
 3. **Accept `^…$` as an optional spelling of a whole-value match.** It would
    make the migration smaller. Rejected: it is a second spelling of the same
    pattern, and the text would no longer be an I-Regexp.
-4. **Refuse `\p{..}`**, as approach A did, because of the Unicode version. The
-   accepted proposal includes it. RFC 9485 requires it, and a subset without it
-   cannot express a non-ASCII letter except by listing ranges.
+4. **Refuse `\p{..}`**, as approach A did, because of the Unicode version
+   (§3.6). Not taken for now, because the accepted proposal includes the
+   construct. §12 question 4 leaves the choice to the owner.
 5. **Each backend normalises `.` itself.** Rejected: it is one more step that
    each backend can get wrong, and the normalised text is still an I-Regexp.
 6. **An automatic migration in `ridl fmt` or a fix command.** Not built. The
@@ -321,6 +329,13 @@ a hand-written changelog entry.
 3. **`TimeOfDay` and `Version`** keep accepting any suffix through `.*` (§9).
    The alternative is to state the suffix each standard allows. Recommended:
    `.*` in this change, and the exact suffix as a separate issue.
+4. **`\p{..}` and `\P{..}`** (§3.6). Accepting them leaves one construct on
+   which the outputs can differ, by the Unicode version of each engine. Refusing
+   them makes every accepted pattern mean the same in every engine, makes typl a
+   smaller subset of RFC 9485, and leaves explicit ranges as the only way to
+   write a non-ASCII letter. Refusing is the choice that can be reversed later
+   without breaking a source file. The accepted proposal lists `\p{..}` as
+   included, so this note keeps it until the owner says otherwise.
 
 ## 13. Records to amend when this lands
 
