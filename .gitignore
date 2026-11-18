@@ -67,3 +67,7 @@ evals/results/*/transcripts/
 
 # Written by `cargo xtask bench pixel`.
 /bench/encodings/results/
+
+# cargo-fuzz output under fuzz/ (the checked-in seeds are fuzz/seeds/).
+/fuzz/corpus/
+/fuzz/artifacts/
