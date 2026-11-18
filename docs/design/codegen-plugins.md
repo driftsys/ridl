@@ -767,20 +767,25 @@ guide for a plugin author, and its "Reading order" section is the reading list.
    name; the proto3 and FlatBuffers backends nest by `Field<N>` and spell a
    service's global name with their own `type_name`. The model carries
    `DottedName.joined_camel` and both induced-name rules, so each backend reads
-   its own. Pinning one rule is an
+   its own. **Decided: not pinned.** The names are internal to each backend's
+   output and cross no wire boundary, and pinning one rule would be an
    [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
-   amendment and a breaking change to one side's generated names. **Open.** No
-   tracking issue.
-6. **The Rust and TypeScript printers resolve nothing across packages for inits,
-   derives and constants, while the model resolves over its scope.** Three
-   printer rules stay conservative. Lifting them changes what the generated
-   crate contains. **Open.** No tracking issue.
+   amendment and a breaking change to one side's generated names, for symmetry
+   only (driftsys/ridl#1381).
+6. **The Rust and TypeScript printers emit less across packages than the model
+   resolves.** Derives (a struct that uses a foreign type derives no `Copy`,
+   `Eq` or `Hash`) and defaults and inits (a foreign field default, or a union
+   with a foreign first arm, gives no `Default` and no `init`) are conservative:
+   correct, and lifting them changes what the generated crate contains.
+   Constants resolve across packages. **Open:** driftsys/ridl#1382. A contract
+   clause on a parameter of a foreign scalar type is a defect and not a
+   conservative rule: driftsys/ridl#1414.
 7. **The model's unbounded-member facts are computed over the package alone**
    (`others: &[]` in `crates/ridl-ir/src/codegen/unbounded.rs`), as
    `check_flatbuffers_bound` computes them, even when the pipeline hands the
-   codec a scope. With the scope, a cross-package member could be judged and
-   named. That would change the attribution messages. **Open.** No tracking
-   issue.
+   codec a scope. A cross-package aggregate that exceeds the FlatBuffers ceiling
+   gets no codec and a note that states a false cause, where the same shape in
+   one package is an error. **Open:** driftsys/ridl#1383.
 8. **The corpus harness and the CLI generate over different scopes.** Resolved:
    [section 6](#6-the-parity-test-and-what-it-proves) states the difference.
 9. **The module documentation of the TypeScript backend's `generate` names an
