@@ -60,7 +60,7 @@ type Free : string
 /// A string whose pattern matches the whole value.
 type Capitals : string [1..8 match /[A-Z]+/]
 
-/// A string that contains `ab`, with an explicit search pattern.
+/// A string that contains `ab` and holds no line break.
 type Contains : string [0..16 match /.*ab.*/]
 
 /// A string of exactly one Unicode character other than a newline or carriage return.

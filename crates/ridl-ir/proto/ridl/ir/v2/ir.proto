@@ -223,8 +223,9 @@ message Constraint {
   // typl §5.4). A fixed [N] constraint has len_min == len_max == N.
   optional uint64 len_min = 4;
   optional uint64 len_max = 5;
-  // Deprecated: /^(?:S)$/, where S is the first clause's source body with
-  // delimiter escapes unchanged. Still written and read (IR specification §6).
+  // Deprecated: /^(?:B)$/, where B is the first clause's source body with
+  // unescaped dots outside classes written [^\n\r] and delimiter escapes kept.
+  // Still written and read (IR specification §6).
   optional string pattern = 6 [deprecated = true];
   // Deprecated: the first clause of matches, still written and read
   // (IR specification §6).

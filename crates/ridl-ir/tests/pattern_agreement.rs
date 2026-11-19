@@ -19,30 +19,39 @@ fn engine_texts_and_lowering_agree_with_the_shared_table() {
     for row in rows {
         let n = pattern::normalised_pattern(&row.literal);
         assert_eq!(n, row.normalised, "{}", row.literal);
-        let pkg = v2::Package {
-            name: "test".into(),
-            decls: vec![v2::Decl {
-                name: "Text".into(),
-                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
-                    backing: Some(v2::Backing {
-                        kind: Some(v2::backing::Kind::Primitive(
-                            v2::PrimitiveType::String as i32,
-                        )),
-                    }),
-                    constraint: Some(v2::Constraint {
-                        pattern: Some(row.literal.clone()),
-                        matches: vec![v2::Match {
-                            pattern: Some(row.literal.clone()),
-                            pattern_const: None,
-                        }],
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                })),
-                ..Default::default()
-            }],
-            ..Default::default()
+        let mut db = ridl_core::RidlDatabase::default();
+        let std = ridl_core::std_package(&mut db);
+        let file = ridl_core::InputFile::new(
+            &db,
+            "test.typl".into(),
+            format!("package test\ntype Text : string [match {}]\n", row.literal),
+        );
+        let pkg = ridl_core::Package::new(
+            &db,
+            "test".into(),
+            "test".into(),
+            vec![file],
+            ridl_core::PackageOrigin::WorkspaceMember,
+            Default::default(),
+            Default::default(),
+            None,
+        );
+        let ws = ridl_core::Workspace::new(&db, vec![pkg], Default::default());
+        let checked = ridl_sem::check_package(&db, ws, pkg, std);
+        assert!(
+            !checked
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == ridl_core::Severity::Error),
+            "{}: {:?}",
+            row.literal,
+            checked.diagnostics
+        );
+        let pkg = checked.ir;
+        let Some(v2::decl::Kind::TypeDef(td)) = &pkg.decls[0].kind else {
+            panic!("string type")
         };
+        let deprecated_ir = td.constraint.as_ref().unwrap().pattern.as_deref().unwrap();
         let model = codegen::lower(&pkg, &[]);
         let Some(codegen::v1::declaration::Kind::Scalar(sc)) = &model.declarations[0].kind else {
             panic!("string scalar")
@@ -54,6 +63,7 @@ fn engine_texts_and_lowering_agree_with_the_shared_table() {
             pattern::rust_engine_text(&n),
             pattern::search_engine_text(&n),
             c.pattern.clone().unwrap(),
+            pattern::pattern_text(deprecated_ir),
         ] {
             assert_eq!(
                 Regex::new(&text).unwrap().is_match(&row.value),

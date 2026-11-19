@@ -5904,8 +5904,8 @@ fn match_clauses_lower_all_bodies_and_preserve_legacy_search_input() {
                 )),
             }),
             constraint: Some(v2::Constraint {
-                pattern: Some("/a.b/".into()),
-                pattern_const: Some("P".into()),
+                pattern: Some(if legacy { "/a.b/" } else { "/stale/" }.into()),
+                pattern_const: Some(if legacy { "P" } else { "STALE" }.into()),
                 matches: if legacy {
                     vec![]
                 } else {

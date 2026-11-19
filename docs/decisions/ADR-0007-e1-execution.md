@@ -107,9 +107,12 @@ at epic close) and cites these decisions by number.
     parse the constructs they reject and are deferred with it; TYPL-302
     (duration or timing in typl context) ships in E1, emitted by the parser,
     because the family lexer already produces the tokens. All the deferred codes
-    roll into the E1 debt issue. TYPL-106 regex validation is implemented with
-    the `regress` crate (an ECMA-262 engine, matching the reference's §2.7
-    syntax choice, where Rust's `regex` crate dialect would not).
+    roll into the E1 debt issue.
+
+    _Superseded by the 2026-11-18 amendment below._ TYPL-106 regex validation is
+    implemented with the `regress` crate (an ECMA-262 engine, matching the
+    reference's §2.7 syntax choice, where Rust's `regex` crate dialect would
+    not).
 
     **Extended (2026-07-26):** E2 paid the profile-boundary half of this cut.
     TYPL-301, TYPL-303, and TYPL-304 ship — the family grammar made the
@@ -118,17 +121,17 @@ at epic close) and cites these decisions by number.
     TYPL-403 are still unimplemented and still deferred; that remaining
     inventory is carried on the E2 debt issue #172 beside the E1 one (#135).
 
-    _Amended (2026-09-29)._ `regress` alone is not enough. The Rust backend
-    emits a `match` on a `String`-backed type as a `regex::Regex::new` call in
-    the generated code, under the generated crate's `validate-pattern` feature,
-    and that call panics on a pattern the `regex` crate refuses (issue #437).
-    The checker now compiles a pattern that `regress` accepts with `regex` as
-    well, and a pattern `regex` refuses is the new error TYPL-220. `regress`
-    still decides TYPL-106, and a typl pattern is the ECMA-262 syntax that
-    `regex` also accepts (typl reference §2.7). TYPL-220 guarantees only that
-    the Rust output can compile the pattern, not that the checker, the Rust
-    output and another backend's output match the same strings with it (issue
-    #597).
+    _Amended (2026-09-29; superseded by the 2026-11-18 amendment below)._
+    `regress` alone is not enough. The Rust backend emits a `match` on a
+    `String`-backed type as a `regex::Regex::new` call in the generated code,
+    under the generated crate's `validate-pattern` feature, and that call panics
+    on a pattern the `regex` crate refuses (issue #437). The checker now
+    compiles a pattern that `regress` accepts with `regex` as well, and a
+    pattern `regex` refuses is the new error TYPL-220. `regress` still decides
+    TYPL-106, and a typl pattern is the ECMA-262 syntax that `regex` also
+    accepts (typl reference §2.7). TYPL-220 guarantees only that the Rust output
+    can compile the pattern, not that the checker, the Rust output and another
+    backend's output match the same strings with it (issue #597).
 
     _Amended (2026-11-18)._ `regress` is removed. A pattern is an I-Regexp with
     the refusals of typl §2.7, decided by the recogniser in `ridl-sem`, and

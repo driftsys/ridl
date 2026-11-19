@@ -1716,7 +1716,7 @@ pub(crate) mod tests_support {
     }
 
     /// `Coord = integer [-1000..1000]` (i16); `Point { x: Coord, y: Coord }`;
-    /// `Vin = string [17..17] match /^[A-HJ-NPR-Z0-9]{17}$/`;
+    /// `Vin = string [17..17 match /[A-HJ-NPR-Z0-9]{17}/]`;
     /// `Bag { tag: Vin, flags: [u8; 0..4], index: {string [0..8]: u32; 0..2} }`;
     /// `Shape = Point | Coord`; `const LIMIT`.
     #[allow(deprecated)]

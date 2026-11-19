@@ -112,7 +112,7 @@ type Code: string [1..8 match /[A-Z]+/] = "A"
 /// A text of one character other than a newline or carriage return.
 type Glyph: string [0..4 match /./] = "a"
 
-/// A text that contains an ASCII digit.
+/// A text that contains an ASCII digit and holds no line break.
 type Digited: string [0..16 match /.*[0-9].*/] = "1"
 
 /// A block of two to four bytes.

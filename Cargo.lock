@@ -2157,6 +2157,8 @@ dependencies = [
  "prost-reflect",
  "protox",
  "regex",
+ "ridl-core",
+ "ridl-sem",
  "serde",
  "serde_json",
  "sha2",

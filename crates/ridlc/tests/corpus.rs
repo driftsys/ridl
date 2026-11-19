@@ -795,6 +795,21 @@ const SHOWCASE_INCIDENTAL_CODES: &[&str] = &[
     "TYPL-115",
 ];
 
+#[test]
+fn showcase_includes_group_depth_and_reversed_quantifier_refusals() {
+    let compiled = compile_entry(Path::new("tests/corpus/ridl-diag-showcase"));
+    for message in [
+        "groups are nested deeper than 250",
+        "has a maximum below its minimum",
+    ] {
+        assert!(
+            compiled.diagnostics.contains(message),
+            "missing {message}:\n{}",
+            compiled.diagnostics
+        );
+    }
+}
+
 /// The diagnostic showcase emits exactly the expected codes: every ridl-profile
 /// code marked [`Showcase`], plus the listed incidental ones, and nothing else.
 ///

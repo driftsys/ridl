@@ -3265,6 +3265,25 @@ fn match_clauses_emit_two_whole_value_regexes_and_checks_in_order() {
 }
 
 #[test]
+fn match_clause_dot_is_normalised_in_the_emitted_regexp() {
+    let mut d = text_decl("Dot", v2::PrimitiveType::String, (Some(0), Some(8)), None);
+    let Some(v2::decl::Kind::TypeDef(td)) = d.kind.as_mut() else {
+        panic!("scalar")
+    };
+    td.constraint.as_mut().unwrap().matches = vec![v2::Match {
+        pattern: Some("/a.b/".into()),
+        pattern_const: None,
+    }];
+    let source = ts_for(vec![d]);
+    assert!(
+        source.contains(
+            r"const __ridlPatternDot_0 = new globalThis.RegExp('^(?:a[^\\n\\r]b)$', 'u');"
+        ),
+        "{source}"
+    );
+}
+
+#[test]
 fn match_clauses_legacy_ir_emits_the_original_search() {
     let source = ts_for(vec![text_decl(
         "Code",

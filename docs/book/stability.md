@@ -206,9 +206,9 @@ are removed until the follow-up restores them.
 
 ## Match pattern migration
 
-A pattern with no anchor and no refused construct still compiles, and now
-matches the whole value. `/ABC/` accepts only `"ABC"`; write `/.*ABC.*/` for a
-value that contains `ABC` and holds no line break (see
+An unanchored pattern with no refused construct still compiles and now matches
+the whole value. `/ABC/` accepts only `"ABC"`; write `/.*ABC.*/` for a value
+that contains `ABC` and holds no line break (see
 [typl §2.7](../specification/typl-language-reference.md#27-regex-literals)).
 This change draws no diagnostic. `ridl diff` compares pattern text, so it does
 not report a pattern whose text did not change, although its accepted values
@@ -216,16 +216,14 @@ did.
 
 Refused constructs draw TYPL-106:
 
-- Start and end anchors; `\d`, `\D`, `\w`, `\W`, `\s`, `\S`, `\b` and `\B`.
-- `\uXXXX`, `\xXX`, identity and control escapes; `\p{…}` and `\P{…}`.
-- Lookahead, lookbehind, backreferences, non-capturing or named groups, and
+- Anchors, shorthand character classes and word boundaries.
+- Unicode, hexadecimal, identity, control and Unicode category escapes.
+- Lookahead, lookbehind, backreferences, non-capturing groups, named groups and
   inline flags.
-- Lazy or possessive quantifiers, a quantifier after a quantifier, `{,n}`, and a
-  quantifier with nothing to repeat.
-- POSIX or nested classes; `&&`, `~~` or consecutive unescaped `--` inside a
-  class; a hyphen after a class range; and `\-` outside a class.
-- Empty or incomplete classes, groups, escapes or quantifiers; reversed class
-  ranges or quantifier bounds; and more than 250 nested groups.
+- Lazy, possessive, repeated, incomplete, reversed or operand-free quantifiers.
+- POSIX, nested, empty or incomplete classes; class set operators; misplaced
+  hyphens; reversed ranges; and hyphen escapes outside a class.
+- Incomplete escapes, unmatched groups and excessive group nesting.
 
 See [typl §2.7](../specification/typl-language-reference.md#27-regex-literals)
 for replacements and the complete language. An accepted pattern that exceeds the

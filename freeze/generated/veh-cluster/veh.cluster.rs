@@ -12404,8 +12404,8 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            251, 119, 61, 79, 154, 132, 42, 200, 134, 189, 130, 82, 189, 170, 166, 242,
-            33, 251, 133, 100, 19, 59, 16, 145, 219, 206, 252, 233, 200, 13, 100, 220,
+            146, 67, 37, 15, 87, 13, 99, 238, 21, 131, 180, 160, 21, 152, 212, 212, 215,
+            181, 24, 252, 55, 134, 177, 170, 98, 9, 161, 155, 43, 113, 44, 56,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -13099,8 +13099,8 @@ impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            251, 119, 61, 79, 154, 132, 42, 200, 134, 189, 130, 82, 189, 170, 166, 242,
-            33, 251, 133, 100, 19, 59, 16, 145, 219, 206, 252, 233, 200, 13, 100, 220,
+            146, 67, 37, 15, 87, 13, 99, 238, 21, 131, 180, 160, 21, 152, 212, 212, 215,
+            181, 24, 252, 55, 134, 177, 170, 98, 9, 161, 155, 43, 113, 44, 56,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(5);
@@ -13446,8 +13446,8 @@ impl ::ridl_rt::contract::Interface for FaultLog {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            251, 119, 61, 79, 154, 132, 42, 200, 134, 189, 130, 82, 189, 170, 166, 242,
-            33, 251, 133, 100, 19, 59, 16, 145, 219, 206, 252, 233, 200, 13, 100, 220,
+            146, 67, 37, 15, 87, 13, 99, 238, 21, 131, 180, 160, 21, 152, 212, 212, 215,
+            181, 24, 252, 55, 134, 177, 170, 98, 9, 161, 155, 43, 113, 44, 56,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);

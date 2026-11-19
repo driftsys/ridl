@@ -411,13 +411,8 @@ package, like any other domain type.
 ## Constants
 
 `const` declares a compile-time constant, reusable in range bounds, `match`
-patterns, init values, and contract expressions. A regex constant is an I-Regexp
-matched against the whole value: `MODEL_PATTERN` below accepts a value of 3 to 6
-characters and `VIN_PATTERN` accepts exactly 17. No anchors are needed. Several
-`match` clauses require every pattern to match; use `/.*ABC.*/` for a value that
-contains `ABC` and holds no line break. The
-[pattern language](../specification/typl-language-reference.md#27-regex-literals)
-lists the accepted constructs and replacements for refused ones:
+patterns, init values, and contract expressions. The example declares numeric
+constants and two regex constants, `MODEL_PATTERN` and `VIN_PATTERN`:
 
 ```ridl
 package veh.common
@@ -440,6 +435,10 @@ struct GearState {
   gear: integer [0..MAX_GEAR]
 }
 ```
+
+See the
+[pattern language](../specification/typl-language-reference.md#27-regex-literals)
+for the meaning of regex constants and their use in `match` clauses.
 
 Constants are written `SCREAMING_SNAKE` by convention. The compiler does not
 enforce it — the lexer folds every case shape into one identifier kind, so a

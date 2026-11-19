@@ -408,6 +408,18 @@ error[TYPL-106]: `^` is not accepted: a pattern matches the whole value, so remo
 12 │ const REPEATED_PATTERN = /^(a)\1$/
    │                          ^^^^^^^^^
 
+error[TYPL-106]: groups are nested deeper than 250; reduce the nesting
+   ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:15:22
+   │
+15 │ const DEEP_PATTERN = /(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((a)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))/
+   │                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[TYPL-106]: the quantifier `{3,2}` has a maximum below its minimum; write the smaller number first
+   ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:18:26
+   │
+18 │ const REVERSED_PATTERN = /a{3,2}/
+   │                          ^^^^^^^^
+
 error[RIDL-142]: `diag.showcase.legacy` is not a service name: a service is declared with one CamelCase name, and its global name is its package followed by that name — write `service ShowcaseLegacy` (global name `diag.ridl.ShowcaseLegacy`) (ridl §14.5)
    ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:12:9
    │

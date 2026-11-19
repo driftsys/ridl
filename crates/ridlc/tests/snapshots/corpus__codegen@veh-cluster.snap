@@ -11112,7 +11112,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "catalog": {
     "package": "veh.cluster",
-    "hash": "+3c9T5qEKsiGvYJSvaqm8iH7hWQTOxCR28786cgNZNw=",
+    "hash": "kkMlD1cNY+4Vg7SgFZjU1Ne1GPw3hrGqYgmhmytxLDg=",
     "retired": [],
     "compatible": []
   },

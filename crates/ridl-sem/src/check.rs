@@ -10392,6 +10392,33 @@ mod tests {
         }
     }
 
+    #[test]
+    #[allow(deprecated)]
+    fn delimiter_escapes_are_decoded_before_recognition_and_kept_in_legacy_ir() {
+        for (prefix, clause) in [("", r"/a\/b/"), ("const P = /a\\/b/\n", "P")] {
+            let checked = check_source(
+                "app",
+                &format!("package app\n{prefix}type T : string [0..8 match {clause}]\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-115"],
+                "{:?}",
+                checked.diagnostics
+            );
+            let Some(v2::decl::Kind::TypeDef(td)) = &checked.ir.decls.last().unwrap().kind else {
+                panic!("string type")
+            };
+            let literal = td.constraint.as_ref().unwrap().pattern.as_deref().unwrap();
+            assert_eq!(literal, r"/^(?:a\/b)$/");
+            let parsed = ridl_syntax::parse(
+                &format!("package app\nconst LEGACY = {literal}\n"),
+                Profile::Typl,
+            );
+            assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+        }
+    }
+
     /// Patterns both engines accept: an ordinary one, and every `match` pattern
     /// in `ridl.std`, which must keep drawing nothing.
     fn accepted_by_both_engines() -> Vec<String> {
@@ -11639,7 +11666,10 @@ mod tests {
                 .collect::<Vec<_>>(),
             [Some("/.*[0-9].*/"), Some("/.*[A-Z].*/")]
         );
-        assert_eq!(constraint.pattern.as_deref(), Some("/^(?:.*[0-9].*)$/"));
+        assert_eq!(
+            constraint.pattern.as_deref(),
+            Some(r"/^(?:[^\n\r]*[0-9][^\n\r]*)$/")
+        );
         assert_eq!(constraint.pattern_const, None);
     }
 

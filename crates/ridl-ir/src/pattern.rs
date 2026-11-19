@@ -44,7 +44,10 @@ pub fn pattern_text(literal: &str) -> String {
 /// not change that state. Incomplete delimiters, unclosed class text and trailing
 /// escapes are preserved without validation.
 pub fn normalised_pattern(literal: &str) -> String {
-    let text = pattern_text(literal);
+    normalise_dots(&pattern_text(literal))
+}
+
+fn normalise_dots(text: &str) -> String {
     let mut normalised = String::with_capacity(text.len());
     let mut chars = text.chars();
     let mut in_class = false;
@@ -87,13 +90,14 @@ pub fn search_engine_text(normalised: &str) -> String {
 
 /// Wrap the source body in `/^(?:…)$/` for the compatibility IR field.
 /// Remove delimiters only as a complete `/…/` pair, keeping delimiter escapes
-/// `\/`, dots and class text unchanged. Incomplete input is embedded unchanged.
+/// `\/` and normalising unescaped dots outside classes to `[^\n\r]`.
+/// Incomplete syntax is preserved without validation.
 pub fn deprecated_ir_literal(literal: &str) -> String {
     let body = literal
         .strip_prefix('/')
         .and_then(|body| body.strip_suffix('/'))
         .unwrap_or(literal);
-    format!("/^(?:{body})$/")
+    format!("/^(?:{})$/", normalise_dots(body))
 }
 
 /// One borrowed match clause, retaining its pattern text and constant reference.
@@ -234,9 +238,13 @@ mod tests {
     }
 
     #[test]
-    fn deprecated_ir_literal_preserves_source_escapes_and_dots() {
+    fn deprecated_ir_literal_preserves_delimiter_escapes_and_normalises_dots() {
         assert_eq!(deprecated_ir_literal(r"/a\/b|c/"), r"/^(?:a\/b|c)$/");
-        assert_eq!(deprecated_ir_literal(r"/a.b/"), r"/^(?:a.b)$/");
+        assert_eq!(deprecated_ir_literal(r"/a.b/"), r"/^(?:a[^\n\r]b)$/");
+        assert_eq!(
+            deprecated_ir_literal(r"/a\/.[.]\./"),
+            r"/^(?:a\/[^\n\r][.]\.)$/"
+        );
     }
 
     #[test]

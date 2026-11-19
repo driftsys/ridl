@@ -379,10 +379,11 @@ language layer at `int64`/`float64`.
   gRPC needs work this ADR places outside the backend.
 - **Negative — decision 3 is work on shipped code.** Both existing backends gain
   an emit and the snapshot tests that cover them.
-- **Negative — decision 8 is work on a shipped backend.** The TypeScript
-  `make<Name>` pattern check follows the checker's ECMA-262 semantics, not the
-  Rust `regex` crate's, so the two can disagree for a pattern construct that the
-  two engines read differently (driftsys/ridl#597).
+- **Negative — decision 8 is work on a shipped backend.** _Superseded by the
+  2026-11-18 amendment below._ The TypeScript `make<Name>` pattern check follows
+  the checker's ECMA-262 semantics, not the Rust `regex` crate's, so the two can
+  disagree for a pattern construct that the two engines read differently
+  (driftsys/ridl#597).
 - **Decision 8 amendment (2026-11-18).** The TypeScript `make<Name>` pattern
   check uses a normalised I-Regexp with whole-value matching and the `u` flag.
   It agrees with the checker and the Rust output (typl §2.7).

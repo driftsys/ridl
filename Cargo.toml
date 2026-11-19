@@ -144,8 +144,8 @@ pulldown-cmark = { version = "0.13.4", default-features = false }
 quote = "1.0.46"
 # ridl-sem compiles every accepted pattern with `regex` in the engine text
 # of the Rust output, so a pattern that crate refuses is TYPL-220.
-# The generated crate depends on `regex = "1.13"`. Keep the major and minor version
-# Cargo.lock resolves for this requirement equal to the generated crate's
+# The generated crate depends on `regex = "1.13"`. Keep the major and minor
+# version Cargo.lock resolves for this requirement equal to the generated crate's
 # requirement (`crates/ridlc/src/lib.rs`); the test
 # `regex_version_requirement_matches_the_checker` in
 # `crates/ridlc/tests/rust_crate_emit.rs` reads Cargo.lock and fails when they

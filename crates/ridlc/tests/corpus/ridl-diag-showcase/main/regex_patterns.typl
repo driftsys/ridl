@@ -8,5 +8,11 @@ package diag.ridl
 /// Nested counted repetitions over the compiled-size limit.
 type NestedCode : string [1..8 match /(([a-z]{1,64}){1,64}){1,64}/]
 
-/// A backreference in a regex constant.
+/// A leading anchor is refused before the later backreference.
 const REPEATED_PATTERN = /^(a)\1$/
+
+/// Groups nested beyond the recogniser limit.
+const DEEP_PATTERN = /(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((a)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))/
+
+/// A quantifier with its maximum below its minimum.
+const REVERSED_PATTERN = /a{3,2}/

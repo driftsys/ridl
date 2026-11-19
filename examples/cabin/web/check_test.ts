@@ -647,7 +647,7 @@ Deno.test("an absent field at an illegal default is malformed", () => {
   assert.deepEqual(codec.verify(tenth, encodeTenth(0 as Tenth)), { ok: true });
 });
 
-Deno.test("the RegExp engine text agrees with the table", () => {
+Deno.test("reference wrappers and the generated Glyph constructor agree with the table", () => {
   const rows: {
     literal: string;
     normalised: string;
@@ -665,6 +665,13 @@ Deno.test("the RegExp engine text agrees with the table", () => {
       accepted,
       `${literal} with ${JSON.stringify(value)}`,
     );
+    if (literal === "/./") {
+      if (accepted) {
+        assert.doesNotThrow(() => makeGlyph(value));
+      } else {
+        assert.throws(() => makeGlyph(value), ConstraintError);
+      }
+    }
   }
 });
 
