@@ -857,7 +857,7 @@ fn pre_match_baseline_with_a_clause_is_readable_and_reset_restarts_history() {
     use ridl_core::catalog_history::{self, CatalogHistory};
     use ridlc::baseline_context::{BaselineContext, write_context};
     use sha2::{Digest, Sha256};
-    for reaches_std in [false, true] {
+    for (local_clause, reaches_std) in [(true, false), (true, true), (false, true)] {
         for mode in ["plain", "--repair-context", "--reset-history"] {
             let dir = TempDir::new("match-history");
             let home = TempDir::new("match-history-home");
@@ -870,7 +870,8 @@ fn pre_match_baseline_with_a_clause_is_readable_and_reset_restarts_history() {
             } else {
                 ""
             };
-            dir.write("app.ridl", &format!("package app\ntype Code: string [1..8 match /a/] = \"a\"\ninterface Probe {{ signal code: Code @10ms\n{extra}\n}}\n"));
+            let clause = if local_clause { " match /a/" } else { "" };
+            dir.write("app.ridl", &format!("package app\ntype Code: string [1..8{clause}] = \"a\"\ninterface Probe {{ signal code: Code @10ms\n{extra}\n}}\n"));
             command(dir.path(), home.path(), &["lock"], 0);
             command(dir.path(), home.path(), &["baseline"], 0);
             let baseline = dir.path().join(".ridl/baseline");
@@ -938,14 +939,33 @@ fn pre_match_baseline_with_a_clause_is_readable_and_reset_restarts_history() {
                     }
                 }
                 "--repair-context" => {
-                    let stderr = command(dir.path(), home.path(), &["baseline", mode], 2);
-                    assert!(
-                        stderr.contains(
-                            "complete historical local snapshot set does not match SOURCE"
-                        ),
-                        "{stderr}"
+                    let stderr = command(
+                        dir.path(),
+                        home.path(),
+                        &["baseline", mode],
+                        if local_clause { 2 } else { 0 },
                     );
-                    assert_eq!(inventory(&baseline), prior);
+                    if local_clause {
+                        assert!(
+                            stderr.contains(
+                                "complete historical local snapshot set does not match SOURCE"
+                            ),
+                            "{stderr}"
+                        );
+                        assert_eq!(inventory(&baseline), prior);
+                    } else {
+                        let repaired = inventory(&baseline);
+                        assert_eq!(
+                            repaired[Path::new("app.ir.json")],
+                            prior[Path::new("app.ir.json")]
+                        );
+                        let history = catalog_history::parse(
+                            &std::fs::read_to_string(baseline.join("app.catalogs")).unwrap(),
+                        )
+                        .unwrap();
+                        assert_eq!(history.hashes.len(), 1);
+                        assert_ne!(history.hashes[0], old_hash);
+                    }
                 }
                 "--reset-history" => {
                     command(dir.path(), home.path(), &["baseline", mode], 0);

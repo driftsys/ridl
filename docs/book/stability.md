@@ -232,7 +232,11 @@ ridl baseline CURRENT_SOURCE --reset-history --out BASELINE
 ```
 
 This preserves the prior baseline and starts each current unit's history at its
-current hash. `--repair-context` cannot repair a pre-addition match snapshot
-from source rebuilt by this compiler: the new non-empty `matches` list changes
-its canonical JSON, so the historical snapshot equality check refuses it. Units
-with no match clause need neither repair nor reset for this addition.
+current hash. For a unit whose only match clause comes from `ridl.std`,
+`ridl baseline --repair-context` exits 0; for a unit with its own match clause,
+it exits 2 with "complete historical local snapshot set does not match SOURCE",
+so use `--reset-history`. A pre-addition snapshot with a local match clause
+cannot be repaired from source rebuilt by this compiler: the new non-empty
+`matches` list changes its canonical JSON, so the historical snapshot equality
+check refuses it. Units with no match clause need neither repair nor reset for
+this addition.
