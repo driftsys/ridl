@@ -2418,4 +2418,99 @@ mod tests {
         assert_eq!(c.matches[1].pattern_const.as_deref(), Some("p.SECOND"));
         assert_eq!(c.pattern_const.as_deref(), Some("p.FIRST"));
     }
+    fn match_hash_fixture() -> Package {
+        let scalar = |name: &str, backing: crate::v2::PrimitiveType, constraint| Decl {
+            name: name.into(),
+            kind: Some(decl::Kind::TypeDef(TypeDef {
+                backing: Some(crate::v2::Backing {
+                    kind: Some(crate::v2::backing::Kind::Primitive(backing as i32)),
+                }),
+                constraint: Some(constraint),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let mut text = signal("text", "Text");
+        text.ordinal = 2;
+        Package {
+            name: "p".into(),
+            decls: vec![
+                scalar(
+                    "Count",
+                    crate::v2::PrimitiveType::Integer,
+                    Constraint {
+                        min: Some("0".into()),
+                        max: Some("10".into()),
+                        ..Default::default()
+                    },
+                ),
+                scalar(
+                    "Text",
+                    crate::v2::PrimitiveType::String,
+                    Constraint {
+                        len_min: Some(1),
+                        len_max: Some(8),
+                        ..Default::default()
+                    },
+                ),
+            ],
+            interfaces: vec![Interface {
+                name: "I".into(),
+                number: 1,
+                interactions: vec![signal("count", "Count"), text],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn match_hash_adoption_affects_only_reached_match_clauses() {
+        let mut package = match_hash_fixture();
+        // Measured from origin/main at 0190f063b0cb236b85215b6bce911eabc702c496.
+        // The fixture reaches a numeric range and a string length bound.
+        assert_eq!(
+            hex(catalog_hash("p", &[&package])),
+            "06b463de93e8820d654e6d539482ea6354c62d569ee747bdea7ab2f4b7c4b9d0"
+        );
+        let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
+            unreachable!()
+        };
+        let constraint = text.constraint.as_mut().unwrap();
+        constraint.pattern = Some("/a/".into());
+        let legacy_hash = catalog_hash("p", &[&package]);
+        assert_eq!(
+            hex(legacy_hash),
+            "f42d48c998a72fca92e47d8d83b2121d05513a4a21e1613b9fb42c856284302a"
+        );
+        let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
+            unreachable!()
+        };
+        let constraint = text.constraint.as_mut().unwrap();
+        constraint.matches.push(crate::v2::Match {
+            pattern: constraint.pattern.clone(),
+            pattern_const: None,
+        });
+        assert_ne!(catalog_hash("p", &[&package]), legacy_hash);
+        let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
+            unreachable!()
+        };
+        text.constraint
+            .as_mut()
+            .unwrap()
+            .matches
+            .push(crate::v2::Match {
+                pattern: Some("/b/".into()),
+                pattern_const: None,
+            });
+        let before_swap = catalog_hash("p", &[&package]);
+        let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
+            unreachable!()
+        };
+        let constraint = text.constraint.as_mut().unwrap();
+        constraint.matches.swap(0, 1);
+        constraint.pattern = constraint.matches[0].pattern.clone();
+        assert_ne!(catalog_hash("p", &[&package]), before_swap);
+    }
 }

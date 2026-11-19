@@ -876,9 +876,14 @@ fn a_removed_pattern_is_compatible() {
     assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
 }
 
-/// Build clauses without compatibility fields so the classifier must read the list.
+/// Build clauses with the first clause mirrored as the checker writes it.
+#[allow(deprecated)]
 fn match_constraint(clauses: &[(&str, Option<&str>)]) -> v2::Constraint {
     v2::Constraint {
+        pattern: clauses.first().map(|(pattern, _)| (*pattern).into()),
+        pattern_const: clauses
+            .first()
+            .and_then(|(_, constant)| constant.map(str::to_owned)),
         matches: clauses
             .iter()
             .map(|(pattern, constant)| v2::Match {
@@ -926,6 +931,79 @@ fn assert_match_constraints_unchanged(old: v2::Constraint, new: v2::Constraint, 
 }
 
 #[test]
+fn match_clause_narrowing_ignores_order() {
+    for remaining in ["/b/", "/a/"] {
+        let (old, new) = constraint_case(
+            match_constraint(&[("/a/", None), ("/b/", None)]),
+            match_constraint(&[(remaining, None)]),
+        );
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+    }
+    for clauses in [
+        [("/b/", None), ("/a/", None)],
+        [("/a/", None), ("/b/", None)],
+    ] {
+        let (old, new) = constraint_case(
+            match_constraint(&[("/b/", None)]),
+            match_constraint(&clauses),
+        );
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn inline_scalar_match_constraints_compare_semantically() {
+    let package = |constraint| {
+        let mut member = field("text", 1, "unused");
+        let Some(v2::struct_member::Member::Field(field)) = &mut member.member else {
+            unreachable!()
+        };
+        field.r#type = Some(v2::FieldType {
+            kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+                backing: Some(v2::Backing {
+                    kind: Some(v2::backing::Kind::Primitive(
+                        v2::PrimitiveType::String as i32,
+                    )),
+                }),
+                constraint: Some(constraint),
+                ..Default::default()
+            }))),
+            ..Default::default()
+        });
+        decl_pkg(vec![struct_decl("S", vec![member])])
+    };
+    let legacy = v2::Constraint {
+        pattern: Some("/a/".into()),
+        ..Default::default()
+    };
+    for (old, new) in [
+        (legacy, match_constraint(&[("/a/", None)])),
+        (
+            match_constraint(&[("/a/", None), ("/b/", None)]),
+            match_constraint(&[("/b/", None), ("/a/", None)]),
+        ),
+    ] {
+        for (old, new) in [
+            (package(old.clone()), package(new.clone())),
+            (package(new), package(old)),
+        ] {
+            assert!(
+                diff_packages(&old, &new).changes.is_empty(),
+                "{:?}",
+                diff_packages(&old, &new)
+            );
+        }
+    }
+    assert_row(
+        &package(match_constraint(&[("/a/", None)])),
+        &package(match_constraint(&[("/b/", None)])),
+        Category::ConstraintChanged,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
 fn adding_a_second_match_clause_is_breaking() {
     let (old, new) = constraint_case(
         match_constraint(&[("/a/", None)]),
@@ -946,8 +1024,8 @@ fn removing_a_match_clause_is_compatible() {
 #[test]
 fn swapping_match_clauses_is_compatible() {
     assert_match_constraints_unchanged(
-        match_constraint(&[("/a/", None), ("/b/", None)]),
-        match_constraint(&[("/b/", None), ("/a/", None)]),
+        match_constraint(&[("/a/", Some("A")), ("/b/", Some("B"))]),
+        match_constraint(&[("/b/", Some("B")), ("/a/", Some("A"))]),
         false,
     );
 }

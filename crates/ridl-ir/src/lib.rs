@@ -2459,6 +2459,30 @@ mod v2_round_trip {
                 .collect()
         );
     }
+    #[test]
+    #[allow(deprecated)]
+    fn a_legacy_pattern_constant_is_a_referenced_package() {
+        let package = v2::Package {
+            name: "app".into(),
+            decls: vec![v2::Decl {
+                name: "Text".into(),
+                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                    constraint: Some(v2::Constraint {
+                        pattern_const: Some("legacy.pattern.P".into()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            v2::referenced_packages(&package),
+            ["legacy.pattern".into()].into_iter().collect()
+        );
+    }
+
     /// An empty package references nothing — the negative case the emit rule in
     /// `ridlc` depends on.
     #[test]

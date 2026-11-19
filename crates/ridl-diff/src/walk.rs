@@ -122,13 +122,13 @@ fn diff_decl(pkg: &str, name: &str, old: &v2::Decl, new: &v2::Decl, changes: &mu
             }
         }
         (Some(Kind::StructDef(a)), Some(Kind::StructDef(b))) => {
-            if a != b {
+            if !structs_equal(a, b) {
                 diff_composite(
                     &path,
                     struct_slots(a),
                     struct_slots(b),
                     "ordinal",
-                    || struct_ignoring_order(a) != struct_ignoring_order(b),
+                    || !structs_equal(&struct_ignoring_order(a), &struct_ignoring_order(b)),
                     changes,
                 );
             }
@@ -1327,6 +1327,27 @@ fn without_numbers(mut values: Vec<v2::EnumValue>) -> Vec<v2::EnumValue> {
         value.value = 0;
     }
     values
+}
+
+/// Compare inline scalar constraints with the same semantics as named types.
+fn structs_equal(old: &v2::StructDef, new: &v2::StructDef) -> bool {
+    let mut new = new.clone();
+    for (old, new) in old.members.iter().zip(&mut new.members) {
+        if let (
+            Some(v2::struct_member::Member::Field(old)),
+            Some(v2::struct_member::Member::Field(new)),
+        ) = (&old.member, &mut new.member)
+            && let (Some(old), Some(new)) = (&old.r#type, &mut new.r#type)
+            && let (
+                Some(v2::field_type::Kind::InlineScalar(old)),
+                Some(v2::field_type::Kind::InlineScalar(new)),
+            ) = (&old.kind, &mut new.kind)
+            && crate::classify::constraints_equal(old.constraint.as_ref(), new.constraint.as_ref())
+        {
+            new.constraint = old.constraint.clone();
+        }
+    }
+    old == &new
 }
 
 // The four `*_ignoring_order` helpers return a body with its member order

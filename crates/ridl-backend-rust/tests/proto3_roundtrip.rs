@@ -962,6 +962,57 @@ fn main() {
     rustc::run_program_with_pattern("pb_pattern_on", &source, true);
 }
 
+#[test]
+#[allow(deprecated)]
+fn model_only_match_clauses_check_absent_proto3_strings() {
+    use ridl_ir::codegen::{Backend, v1};
+    let package = ir::compile_fixture("proto3_roundtrip.ridl");
+    let mut model = ridl_ir::codegen::lower(&package, &[]);
+    let tag = model
+        .declarations
+        .iter_mut()
+        .find(|decl| decl.name.as_ref().is_some_and(|name| name.pascal == "Tag"))
+        .unwrap();
+    let Some(v1::declaration::Kind::Scalar(tag)) = &mut tag.kind else {
+        unreachable!()
+    };
+    let constraint = tag.constraint.as_mut().unwrap();
+    assert!(!constraint.matches.is_empty());
+    constraint.pattern = None;
+    constraint.pattern_const = None;
+    let response = ridl_backend_rust::Backend.generate(&v1::CodegenRequest {
+        model: Some(model),
+        artifact_base: "fixture".into(),
+        options: vec![v1::BackendOption {
+            key: "encodings".into(),
+            value: "proto3".into(),
+        }],
+        ..Default::default()
+    });
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    let Some(v1::generated_file::Content::Text(generated)) = &response.files[0].content else {
+        panic!("one generated Rust source");
+    };
+    let main = r#"
+fn main() {
+    assert!(<Tag as Payload<Proto3>>::verify(&[0x0a, 2, b'a', b'b']).is_ok());
+    for bytes in [&[][..], &[0x0a, 0][..]] {
+        assert!(matches!(<Tag as Payload<Proto3>>::verify(bytes),
+            Err(VerifyError::Contract(v)) if v.rule == ridl_rt::payload::Rule::Pattern));
+    }
+}
+"#;
+    rustc::run_program_with_pattern(
+        "pb_model_matches_only",
+        &format!("#![allow(dead_code)]\n{generated}\n{PRELUDE}\n{main}"),
+        true,
+    );
+}
+
 /// The prelude items the collection cases share: a `Lists` value with every
 /// array kind populated, a union value per arm, and the maps.
 const COLLECTIONS: &str = r#"

@@ -203,3 +203,18 @@ To migrate a workspace:
 
 The `diagnostics`, `accepted-sources`, `wire` and `generated-crate` freeze rows
 are removed until the follow-up restores them.
+
+## Match clause catalog hashes
+
+The addition of `Constraint.matches` changes the catalog hash of each unit whose
+interfaces reach a type with a `match` clause, including a type declared in
+another unit. The ordered clauses now enter the protobuf binary of the reduced
+unit. A unit that reaches no `match` clause keeps its hash: an empty `matches`
+list adds no byte, including on numeric constraints and string length bounds.
+Reordering clauses also changes the hash, although `ridl diff` ignores clause
+order.
+
+Regenerate and redeploy communicating peers together for each affected unit.
+Each compatibility chain of such a unit restarts once; publish a new baseline
+with `ridl baseline` after migration. Units that reach no `match` clause need no
+chain restart for this addition.
