@@ -13,7 +13,8 @@ Two kinds of users need more help than the toolchain gives today.
   or Sonnet, or GPT). Today `ridl mcp` exposes one tool, `ridl_check`. It checks
   one pasted source string against `ridl.std` only, so an import of any other
   package does not resolve and spans name a synthetic file. No skill or rules
-  file exists; only
+  file exists (2026-11-19: no longer true; the skill shipped in #893, see
+  [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md)); only
   [`skill-ridl-authoring-outline.md`](skill-ridl-authoring-outline.md) does.
 - **Developers who write and consume RIDL**. typl §14 specifies doc comments
   (`///`, `/** */`, CommonMark, `[Type]` links, `@see`, `@labels`,
