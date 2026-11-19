@@ -3788,3 +3788,31 @@ fn the_model_projection_matches_the_codec_layout() {
         println!("{name}: {count} compared messages");
     }
 }
+
+#[test]
+fn the_reported_refusal_is_the_root_cause_and_not_the_dependency() {
+    let compiled = ridlc::compile(
+        "refusal.typl",
+        "package p.refusal\n\
+         struct First {\n next : [User; 0..2]\n}\n\
+         struct User {\n bad : [integer : Bad; 0..2]\n}\n\
+         struct Bad {\n values : [[integer; 0..2]; 0..2]\n}\n",
+    );
+    assert!(
+        !compiled
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error)
+    );
+    let error = ridl_backend_rust::generate_pipeline(
+        &compiled.package,
+        &[ridl_backend_rust::WireEncoding::Proto3],
+        false,
+        &[],
+    )
+    .expect_err("the nested collection has no proto3 representation");
+    assert_eq!(
+        error.message,
+        "an array of arrays or of maps is one proto3 does not admit, as the proto backend refuses it"
+    );
+}
