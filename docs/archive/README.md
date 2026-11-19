@@ -1037,3 +1037,14 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md),
   [the stability chapter](../book/stability.md) and
   [the generated code chapter](../book/generated-code.md).
+- **2026-11-18-proto3-model-projection-design.md** and
+  **2026-11-18-proto3-model-projection-plan.md** — the proto3 projection in the
+  codegen model (`Model.proto3`) and the Rust proto3 codec reading it
+  (driftsys/ridl#1413). Archived on 2026-11-19, once both pull requests had
+  landed. The durable records are
+  [the codegen plugins design record](../design/codegen-plugins.md) (section
+  "The proto3 projection"),
+  [the proto3 codec design record](../design/proto3-codec.md) (the single-source
+  decision and its rejected alternatives), the 2026-11-19 amendments of
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decision 9 and [the codegen plugins chapter](../book/codegen-plugins.md).

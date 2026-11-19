@@ -369,6 +369,15 @@ on 2026-11-04, once the work landed (driftsys/ridl#1222);
 durable records. The archived streams design records the subsequent
 implementation.
 
+The proto3 model projection design and plan
+(`2026-11-18-proto3-model-projection-{design,plan}.md`) were archived on
+2026-11-19, once both pull requests of driftsys/ridl#1413 had landed;
+[`../design/codegen-plugins.md`](../design/codegen-plugins.md),
+[`../design/proto3-codec.md`](../design/proto3-codec.md) and the 2026-11-19
+amendments of
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+are their durable records.
+
 ## Files that stay after the 0.10.0 gardening pass (2026-10-13)
 
 Each file below was read against the code and the issue tracker on 2026-10-13

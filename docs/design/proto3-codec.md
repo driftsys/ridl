@@ -36,7 +36,7 @@ third party writes.
 
 | What                                                                                 | Where                                                                                                     |
 | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------- |
-| The scalar a width projects to, and its wire type, which both emitters read          | `crates/ridl-ir/src/projection/proto3.rs` (`int_width_scalar`, `float_width_scalar`, `Scalar::wire_type`) |
+| The scalar table read by the schema emitter, sizer and model projection              | `crates/ridl-ir/src/projection/proto3.rs` (`int_width_scalar`, `float_width_scalar`, `Scalar::wire_type`) |
 | The proto3 size bound of a root message                                              | `crates/ridl-ir/src/projection/size/proto3.rs`                                                            |
 | `Declaration.proto3` in the codegen model                                            | `crates/ridl-ir/proto/ridl/codegen/v1/model.proto`, filled by `crates/ridl-ir/src/codegen/lower.rs`       |
 | `Model.proto3`, the message layout and refusals                                      | `crates/ridl-ir/src/codegen/proto3.rs`, set by `crates/ridl-ir/src/codegen/lower.rs`                      |
@@ -107,27 +107,26 @@ Every state but `Bounded` is refused: an absent state (`NoBound`, `Overflow`,
 `RefusedMember` and `Unresolved` are the causes the sizer gives a type),
 `Unbounded`, and a state the model does not carry. The refusal is a
 `GenerateError` that names the declaration and the cause, by its name in
-parentheses for an absent state (`bound_state` in `codec_proto3.rs`). The codec
-emitter stops at the first refused declaration, so one refusal fails the
-package's proto3 generation, and `ridl build` fails with it; the same package
-still generates with no encoding. `an_unbounded_type_is_refused_under_proto3`
-pins `NoBound` for a string with no length bound and for a struct that holds
-one. An induced interaction payload — a call's argument message, a query's tuple
-reply — whose state is not `Bounded` is handled as the FlatBuffers codec handles
-one with no finite FlatBuffers bound: the tuple gets no `Payload<Proto3>`, and
-the pipeline skips its interface, with the interface's descriptors and face,
-under the rule and the marker [the interaction-face record](interaction-face.md)
-states (design rule 2 and "The consumer face"), so the package's other
-interfaces and its types still generate. The descriptor emitter judges the tuple
-in each encoding the list names (`descriptors::induced_name`), and the note
-names the tuple and the sizer's cause.
-`an_unbounded_induced_call_is_skipped_under_proto3` pins the skip for
-`Overflow`, and `tests/induced_call_refusals.rs` pins it for a request and for a
-query's tuple reply whose proto3 state is `RefusedMember` and whose FlatBuffers
-bound is finite — faced under `flatbuffers` alone, skipped under `proto3` alone
-and under both, the output compiling — and for a bare `string` request, with the
-other interface faced in each case; `generate_face_with`, which refuses rather
-than skips, refuses with the same message
+parentheses for an absent state (`bound_state` in `codec_proto3.rs`). A refused
+declaration fails the package's proto3 generation, and `ridl build` fails with
+it; the same package still generates with no encoding.
+`an_unbounded_type_is_refused_under_proto3` pins `NoBound` for a string with no
+length bound and for a struct that holds one. An induced interaction payload — a
+call's argument message, a query's tuple reply — whose state is not `Bounded` is
+handled as the FlatBuffers codec handles one with no finite FlatBuffers bound:
+the tuple gets no `Payload<Proto3>`, and the pipeline skips its interface, with
+the interface's descriptors and face, under the rule and the marker
+[the interaction-face record](interaction-face.md) states (design rule 2 and
+"The consumer face"), so the package's other interfaces and its types still
+generate. The descriptor emitter judges the tuple in each encoding the list
+names (`descriptors::induced_name`), and the note names the tuple and the
+sizer's cause. `an_unbounded_induced_call_is_skipped_under_proto3` pins the skip
+for `Overflow`, and `tests/induced_call_refusals.rs` pins it for a request and
+for a query's tuple reply whose proto3 state is `RefusedMember` and whose
+FlatBuffers bound is finite — faced under `flatbuffers` alone, skipped under
+`proto3` alone and under both, the output compiling — and for a bare `string`
+request, with the other interface faced in each case; `generate_face_with`,
+which refuses rather than skips, refuses with the same message
 (`an_interface_with_an_unbounded_payload_is_refused`). One difference from the
 FlatBuffers codec remains: that codec withholds the codec of a type whose bound
 it cannot judge, while the proto3 sizer resolves cross-package references
@@ -146,21 +145,22 @@ map, a map key outside the integral and string scalars, an enum value or a
 retired enum value outside int32 (a live value can reach this refusal only
 through hand-built IR, because TYPL-225 rejects it in source; a retired value
 outside int32 remains legal in source), a field number proto3 reserves (19000
-to 19999) or does not admit (0, or above 2^29 − 1), a stream, and a name that
-does not resolve. The sizer checks a field number before the bound of the
-field's type, so a field with a refused number is `RefusedMember` whatever its
-type. The codec's own walk runs before the size state is read, and refuses an
+to 19999) or a field number above 2^29 − 1, a stream, and a name that does not
+resolve. The sizer checks a field number before the bound of the field's type,
+so a field with a refused number is `RefusedMember` whatever its type. The
+projection refusals are checked before the size state is read, and reject an
 optional array or map field, a refused field number and an enum value outside
 int32 with a message that names the field or the value (the live enum value case
-requires hand-built IR; `an_enum_at_the_int32_maximum_has_a_proto3_codec` in
+requires hand-built IR; `enums_at_int32_boundaries_have_proto3_codecs` in
 `crates/ridl-backend-rust/tests/proto3_roundtrip.rs` pins the legal source
-boundary) — in a declaration, and in a tuple a declaration holds. A tuple only
-an interaction reaches is not walked when its root is not bounded, so such a
-member in it skips the interface with the sizer's `RefusedMember` and no field
-name. The codec alone refuses an optional array element and an optional map
-value, which the schema emits without presence (ADR-0019 review ruling 6), as
-the FlatBuffers codec does. An integer with no width, an enum with no value and
-a union with no arm are refused as malformed IR; the compiler produces none of
+boundary) — in a declaration, and in a tuple a declaration holds. The projection
+considers every named tuple; the codec does not emit a tuple reached only by an
+interaction whose root is not bounded, so such a member in it skips the
+interface with the sizer's `RefusedMember` and no field name. The model
+projection also refuses an optional array element and an optional map value,
+which the schema emits without presence (ADR-0019 review ruling 6), as the
+FlatBuffers codec does. An integer with no width, an enum with no value and a
+union with no arm are refused as malformed IR; the compiler produces none of
 them.
 
 **The ros2 corpus does not generate with proto3.** Every ros2 package that
@@ -205,35 +205,60 @@ Every row is what `crates/ridl-backend-proto/src/lib.rs` emits for the same IR.
 | retired field, arm or enum value         | `reserved`                                            | never written; read as an unknown field                                     |
 | cross-package struct, enum, union        | `pkg.Name` and an import                              | as the local kind                                                           |
 
-**What the two emitters share, and how agreement is kept.** A field number is
-the ordinal both emitters read, a tuple field's number is its position from 1, a
-map entry's key and value are 1 and 2, and a box's value is 1. The scalar a
-width projects to is one table in `ridl_ir::projection::proto3`, which the
-`.proto` emitter, the proto3 sizer, this codec and the model's proto3 walk all
-read. The codec's own walk of a message is not shared with the `.proto` emitter:
-the emitter reads the IR and the codec reads the codegen model, and porting the
-emitter onto the model is driftsys/ridl#690's territory. What holds the two
-walks together is the drift test `proto3_layout_matches_the_emitted_schema`: it
-compiles the emitted `.proto` of every corpus package (`examples/cabin`,
-`crates/ridlc/tests/corpus/veh-cluster`, `evals/corpus/mavlink`, `ros2` and
-`vss`) and of the conformance fixture with `protox`, and compares each message
-field by field — number, scalar or message name, label — with the layout the
-codec emitted from (`ridl_backend_rust::proto3_layout`), keyed by the `.proto`
-message name. A field-number or scalar drift fails it without running any
-generated code. Each corpus entry lists the messages the codec does not lay out,
-with the reason; the only one is the `fixed` tuple above.
+**What the two emitters share, and how agreement is kept.** The Rust codec reads
+`Model.proto3`: message references, field numbers, proto3 scalar types and their
+wire types, array packing, default legality and layout refusals. The
+projection's contract is defined in
+[the codegen plugin record](codegen-plugins.md#the-proto3-projection).
 
-The model also carries `Model.proto3`, whose contract is defined in
-[the codegen plugin record](codegen-plugins.md#the-proto3-projection). The Rust
-codec still computes its own layout rather than reading that projection.
-`the_model_projection_matches_the_codec_layout` in
-`crates/ridl-backend-rust/tests/proto3_conformance.rs` keeps the projection and
-the codec equal for field numbers, types and labels over the conformance
-fixture, every ridlc corpus workspace that compiles without an error diagnostic,
-and the encoding corpus. It compares every codec message and requires every
-projection message outside the codec layout and every `refused` entry to have a
-tuple source. It does not compare packing or `default_is_legal`: the codec
-layout carries only a number, a type and a label per field.
+The codec still derives the Rust representation of each value: its Rust type,
+named-scalar constructor, typl constraints and collection count bounds. It joins
+projected fields to model members by `Proto3Field.source`, because the
+projection describes the wire rather than the Rust representation. For an enum,
+the projection supplies `enumeration` with no scalar, and the codec holds it as
+a varint in an `Int64`, which gives the same bytes for every int32 value. It
+also checks size states with `bound_state`, because a representable message can
+lack a finite bound. `reachable_tuples` chooses which tuples to emit and their
+discovery order, so an unused tuple adds no generated functions. It skips a
+tuple without a Rust name, because the codec functions of a tuple need that
+name; `tuple_message` also refuses such a tuple, as a check that discovery makes
+unreachable. The codec selects the first projection refusal whose cause is not
+`REFUSED_DEPENDENCY` and whose source is a declaration or an emitted tuple, and
+reports its message unchanged; an unused tuple's refusal does not stop emission.
+
+The scalar table in `ridl_ir::projection::proto3` is read by the model
+projection, the `.proto` emitter and the proto3 sizer. The `.proto` emitter
+still walks the raw IR independently. The drift test
+`proto3_layout_matches_the_emitted_schema` compiles the emitted `.proto` of
+`examples/cabin`, `crates/ridlc/tests/corpus/veh-cluster`,
+`evals/corpus/mavlink`, `ros2`, `vss` and the conformance fixture with `protox`,
+and compares each message field by field — number, scalar or message name, label
+— with `ridl_backend_rust::proto3_layout`, keyed by the `.proto` message name. A
+field-number or scalar drift fails it without running generated code. Each
+corpus entry lists the messages the codec does not lay out, with the reason; the
+only one is the `fixed` tuple above.
+
+The codec reads packing and `default_is_legal` from the projection, so the
+byte-equality tests against `prost` fail when those projected facts are wrong
+for a tested value. `the_codec_selects_no_proto3_scalar_itself` catches the
+named helper calls and constants listed in that test. The
+`the_codec_follows_projected_*` tests tamper with one fact in `Model.proto3`
+after lowering and check that the generated code follows the changed packing,
+scalar, array, map and map-key default legality, field number or scalar type.
+The packing test checks that disabling `packed` removes the packed-run encode
+path. Separately, `every_clean_ridlc_corpus_package_has_a_proto3_layout`
+requires every clean ridlc corpus package to lay out, classifies every corpus
+directory, and requires skipped directories to retain their deliberate errors.
+
+The reasons for using the projection as the single source are recorded in
+[Alternatives considered](#alternatives-considered).
+
+The projection refuses field number 0, as the Rust codec always did. The
+`.proto` emitter does not refuse it; this is the one known difference between
+the two, left to driftsys/ridl#690. When a package holds several independent
+refusals, the Rust backend reports the first one in projection order among those
+it emits, which can differ from the one it reported before; the text of each is
+unchanged.
 
 ## The writer
 
@@ -599,12 +624,33 @@ regenerate byte for byte.
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | Neither codec generates a type with no finite bound, so the ros2 corpus packages do not generate with proto3; the cap of such bounds that ADR-0030 decision 3 proposed was withdrawn, and the question stays open | driftsys/ridl#996 |
 | The codec does not reproduce the proto backend's name-collision refusals: a package the `.proto` emitter refuses for a name reason still gets a Rust codec                                                        | driftsys/ridl#997 |
-| The `.proto` emitter, the Rust codec and `codegen/proto3.rs` walk messages separately; comparison tests check their agreement                                                                                     | driftsys/ridl#690 |
+| The `.proto` emitter and proto3 sizer still walk the raw IR independently of the model projection, and the emitter does not refuse field number 0; see [the wire mapping](#the-wire-mapping)                      | driftsys/ridl#690 |
 
 ## Alternatives considered
 
-The design note weighed each of these and rejected it; the reason is the one it
-gave, checked against what was built.
+**Why the projection is the single source.** The Rust codec reads the projection
+instead of keeping its own copy of the rules, so the codec and every plugin read
+the same facts and cannot differ on them. Two other forms were rejected: a
+projection kept equal to the codec only by a comparison test, which would be a
+fourth copy of the rules that agrees only on the inputs of the test corpus; and
+moving the codec, the `.proto` emitter and the sizer onto the projection in one
+change, which would combine three independent consumer migrations. The emitter
+and the sizer remain (driftsys/ridl#690).
+
+The walk reads the lowered model and not the raw IR, because the Rust codec read
+the model and its refusal texts name model-level things. The cost is that the
+sizer runs on the raw IR while the model is being built, so it cannot call the
+walk. Moving it onto the projection needs a correction step after lowering,
+which sets the size states of a refused declaration, as the FlatBuffers
+projection does for its own. That step is not designed.
+
+`Proto3Wire.default_is_legal` is carried on the wire and not on the field,
+because the rule also applies to a map key and a map value. It was added because
+the model did not carry the fact: a plugin would have had to re-derive it for
+every kind, and `FbSlot.needs_null_default` is a different predicate, about the
+`.fbs` schema.
+
+The codec design note also considered and rejected the following alternatives.
 
 - **Delegating the codec to `prost` in the generated crate.** ADR-0018 decision
   4 generates the codec, `prost` needs `alloc` and its own message types beside

@@ -3408,206 +3408,270 @@ fn main() {
     );
 }
 
-/// Spells a projected wire using only its wire and model names.
-fn projection_wire(model: &v1::Model, wire: &v1::Proto3Wire) -> String {
-    use v1::proto3_wire::Kind;
-
-    match wire.kind.as_ref().expect("a projected wire kind") {
-        Kind::Scalar(scalar) => {
-            match v1::Proto3ScalarType::try_from(scalar.r#type).expect("a scalar type") {
-                v1::Proto3ScalarType::Bool => "bool",
-                v1::Proto3ScalarType::Int64 => "int64",
-                v1::Proto3ScalarType::Uint32 => "uint32",
-                v1::Proto3ScalarType::Uint64 => "uint64",
-                v1::Proto3ScalarType::Sint32 => "sint32",
-                v1::Proto3ScalarType::Sint64 => "sint64",
-                v1::Proto3ScalarType::Float => "float",
-                v1::Proto3ScalarType::Double => "double",
-                v1::Proto3ScalarType::Unspecified => panic!("an unspecified scalar type"),
-            }
-            .to_string()
-        }
-        Kind::Text(_) => "string".to_string(),
-        Kind::Bytes(_) => "bytes".to_string(),
-        Kind::Enumeration(enumeration) => {
-            let reference = enumeration.r#type.as_ref().expect("an enum reference");
-            let declaration = if reference.foreign {
-                model.foreign[reference.index as usize]
-                    .declaration
-                    .as_ref()
-                    .expect("a foreign declaration")
-            } else {
-                &model.declarations[reference.index as usize]
-            };
-            let name = &declaration
-                .name
-                .as_ref()
-                .expect("a declaration name")
-                .declared;
-            local_or_qualified(
-                &model.scope.as_ref().expect("a scope").package,
-                &format!("{}.{name}", reference.package),
-            )
-        }
-        Kind::Message(reference) => match reference.target.expect("a message target") {
-            v1::proto3_message_ref::Target::Message(index) => {
-                model.proto3.as_ref().expect("a projection").messages[index as usize]
-                    .name
-                    .clone()
-            }
-            v1::proto3_message_ref::Target::Foreign(index) => {
-                let foreign = &model.foreign[index as usize];
-                let name = &foreign
-                    .declaration
-                    .as_ref()
-                    .expect("a foreign declaration")
-                    .name
-                    .as_ref()
-                    .expect("a name")
-                    .declared;
-                local_or_qualified(
-                    &model.scope.as_ref().expect("a scope").package,
-                    &format!("{}.{name}", foreign.package),
-                )
-            }
-        },
-        Kind::Array(array) => {
-            projection_wire(model, array.element.as_deref().expect("an array element"))
-        }
-        Kind::Map(map) => format!(
-            "map<{}, {}>",
-            projection_wire(model, map.key.as_deref().expect("a map key")),
-            projection_wire(model, map.value.as_deref().expect("a map value")),
-        ),
-    }
-}
-
-/// Reads optionality from the model member identified by the projected source.
-fn projection_optional(
-    model: &v1::Model,
-    message: &v1::Proto3Message,
-    field: &v1::Proto3Field,
-) -> bool {
-    match (
-        message.source.expect("a message source"),
-        field.source.as_ref().expect("a field source"),
-    ) {
-        (
-            v1::proto3_message::Source::StructDeclaration(index),
-            v1::proto3_field::Source::Field(name),
-        ) => {
-            let Some(v1::declaration::Kind::Struct(def)) =
-                model.declarations[index as usize].kind.as_ref()
-            else {
-                panic!("a struct declaration");
-            };
-            def.slots
-                .iter()
-                .find_map(|slot| match slot.occupant.as_ref() {
-                    Some(v1::slot::Occupant::Field(member))
-                        if member.name.as_ref().expect("a member name").declared == *name =>
-                    {
-                        Some(member.r#type.as_ref().expect("a member type").optional)
-                    }
-                    _ => None,
-                })
-                .expect("the projected struct field exists")
-        }
-        (
-            v1::proto3_message::Source::Tuple(index),
-            v1::proto3_field::Source::TuplePosition(position),
-        ) => {
-            model.tuples[index as usize].fields[*position as usize]
-                .r#type
-                .as_ref()
-                .expect("a tuple field type")
-                .optional
-        }
-        (v1::proto3_message::Source::UnionDeclaration(_), v1::proto3_field::Source::Arm(_))
-        | (v1::proto3_message::Source::RootBox(_), v1::proto3_field::Source::BoxValue(true)) => {
-            false
-        }
-        other => panic!("inconsistent projection sources: {other:?}"),
-    }
-}
-
-/// The projected fields in the spelling and number order of the codec layout.
-fn projection_fields(model: &v1::Model, message: &v1::Proto3Message) -> Fields {
-    use v1::proto3_wire::Kind;
-
-    let mut fields: Fields = message
-        .fields
-        .iter()
-        .map(|field| {
-            let wire = field.wire.as_ref().expect("a field wire");
-            let label = if matches!(wire.kind, Some(Kind::Array(_) | Kind::Map(_))) {
-                Proto3Label::Repeated
-            } else if projection_optional(model, message, field) {
-                Proto3Label::Optional
-            } else {
-                Proto3Label::Implicit
-            };
-            (field.number, projection_wire(model, wire), label)
-        })
-        .collect();
-    fields.sort_by_key(|field| field.0);
-    fields
-}
-
-/// Returns flags for packed arrays, maps, unions, boxes and foreign references.
-fn projection_shapes(message: &v1::Proto3Message) -> [bool; 5] {
-    fn visit(wire: &v1::Proto3Wire, shapes: &mut [bool; 5]) {
-        match wire.kind.as_ref().expect("a wire kind") {
-            v1::proto3_wire::Kind::Array(array) => {
-                shapes[0] |= array.packed;
-                visit(array.element.as_deref().expect("an element"), shapes);
-            }
-            v1::proto3_wire::Kind::Map(map) => {
-                shapes[1] = true;
-                visit(map.key.as_deref().expect("a key"), shapes);
-                visit(map.value.as_deref().expect("a value"), shapes);
-            }
-            v1::proto3_wire::Kind::Message(reference) => {
-                shapes[4] |= matches!(
-                    reference.target,
-                    Some(v1::proto3_message_ref::Target::Foreign(_))
-                );
-            }
-            v1::proto3_wire::Kind::Enumeration(enumeration) => {
-                shapes[4] |= enumeration
-                    .r#type
-                    .as_ref()
-                    .expect("an enum reference")
-                    .foreign;
-            }
-            _ => {}
-        }
-    }
-    let mut shapes = [false; 5];
-    shapes[2] = matches!(
-        message.source,
-        Some(v1::proto3_message::Source::UnionDeclaration(_))
-    );
-    shapes[3] = matches!(message.source, Some(v1::proto3_message::Source::RootBox(_)));
-    for field in &message.fields {
-        visit(field.wire.as_ref().expect("a wire"), &mut shapes);
-    }
-    shapes
-}
-
-/// Compares every codec message and permits only tuple sources outside its layout.
-/// Packing is not compared: the codec layout carries a number, a type and a
-/// label per field, and no packing.
+/// The codec source does not call these projection helpers by these names.
 #[test]
-fn the_model_projection_matches_the_codec_layout() {
-    use ridl_ir::codegen::{self, v1};
+fn the_codec_selects_no_proto3_scalar_itself() {
+    let source = include_str!("../src/codec_proto3.rs");
+    for forbidden in [
+        "pb::primitive(",
+        "pb::scalar(",
+        "pb::int_width_scalar(",
+        "pb::float_width_scalar(",
+        "pb::enum_set_scalar(",
+        "PROTO_RESERVED",
+        "PROTO_MAX_FIELD_NUMBER",
+        "zero_is_legal",
+        "admitted_as_map_key",
+    ] {
+        assert!(
+            !source.contains(forbidden),
+            "codec_proto3.rs must read the projection instead of using {forbidden}"
+        );
+    }
+}
+
+fn projection_model(body: &str) -> v1::Model {
+    let compiled = ridlc::compile(
+        "projection.typl",
+        &format!("package p.projection\n{body}\n"),
+    );
+    assert!(
+        !compiled
+            .diagnostics
+            .iter()
+            .any(|diagnostic| { diagnostic.severity == ridl_core::diag::Severity::Error }),
+        "{:?}",
+        compiled.diagnostics
+    );
+    ridl_ir::codegen::lower(&compiled.package, &[])
+}
+
+fn projected_response(model: &v1::Model) -> v1::CodegenResponse {
+    use ridl_ir::codegen::Backend as _;
+
+    ridl_backend_rust::Backend.generate(&v1::CodegenRequest {
+        model: Some(model.clone()),
+        options: vec![v1::BackendOption {
+            key: ridl_backend_rust::ENCODINGS_OPTION.to_string(),
+            value: "proto3".to_string(),
+        }],
+        ..Default::default()
+    })
+}
+
+fn projected_code(model: &v1::Model) -> String {
+    let response = projected_response(model);
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    assert_eq!(response.files.len(), 1);
+    let Some(v1::generated_file::Content::Text(text)) = &response.files[0].content else {
+        panic!("the backend emits Rust text");
+    };
+    text.clone()
+}
+
+fn sample_wire(model: &mut v1::Model) -> &mut v1::Proto3Wire {
+    model.proto3.as_mut().unwrap().messages[0].fields[0]
+        .wire
+        .as_mut()
+        .unwrap()
+}
+
+#[test]
+fn the_codec_follows_projected_array_packing() {
+    let mut model = projection_model("struct Sample { values : [integer [0..255]; 0..2] }");
+    let original = projected_code(&model);
+    let Some(v1::proto3_wire::Kind::Array(array)) = sample_wire(&mut model).kind.as_mut() else {
+        panic!("an array wire");
+    };
+    assert!(array.packed);
+    array.packed = false;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("writer.varint(__l as ::core::primitive::u64)"));
+    assert!(!changed.contains("writer.varint(__l as ::core::primitive::u64)"));
+    assert!(changed.contains("writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint)"));
+}
+
+#[test]
+fn the_codec_follows_projected_scalar_default_legality() {
+    let mut model = projection_model("struct Sample { value : integer [0..255] }");
+    let original = projected_code(&model);
+    assert!(sample_wire(&mut model).default_is_legal);
+    sample_wire(&mut model).default_is_legal = false;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("if __r != 0"));
+    assert!(!changed.contains("if __r != 0"));
+    assert!(!original.contains("Malformed::MissingRequired"));
+    assert!(changed.contains("Malformed::MissingRequired"));
+}
+
+#[test]
+fn the_codec_follows_projected_array_default_legality() {
+    let mut model = projection_model("struct Sample { values : [integer [0..255]; 0..2] }");
+    let original = projected_code(&model);
+    assert!(sample_wire(&mut model).default_is_legal);
+    sample_wire(&mut model).default_is_legal = false;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(!original.contains("Malformed::MissingRequired"));
+    assert!(changed.contains("Malformed::MissingRequired"));
+}
+
+#[test]
+fn the_codec_follows_projected_map_default_legality() {
+    let mut model = projection_model("struct Sample { values : [integer : boolean; 1..2] }");
+    let original = projected_code(&model);
+    assert!(!sample_wire(&mut model).default_is_legal);
+    sample_wire(&mut model).default_is_legal = true;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("Malformed::MissingRequired"));
+    assert!(!changed.contains("Malformed::MissingRequired"));
+}
+
+#[test]
+fn the_codec_follows_projected_map_key_default_legality() {
+    let mut model = projection_model("struct Sample { values : [integer : boolean; 0..2] }");
+    let original = projected_code(&model);
+    let Some(v1::proto3_wire::Kind::Map(map)) = sample_wire(&mut model).kind.as_mut() else {
+        panic!("a map wire");
+    };
+    let key = map.key.as_deref_mut().unwrap();
+    assert!(key.default_is_legal);
+    key.default_is_legal = false;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(!original.contains("Malformed::MissingRequired"));
+    assert!(changed.contains("Malformed::MissingRequired"));
+}
+
+#[test]
+fn the_codec_follows_projected_field_numbers() {
+    let mut model = projection_model("struct Sample { value : integer [0..255] }");
+    let original = projected_code(&model);
+    model.proto3.as_mut().unwrap().messages[0].fields[0].number = 17;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("writer.tag(1u32,"));
+    assert!(changed.contains("writer.tag(17u32,"));
+    assert!(changed.contains("__field.number == 17u32"));
+    assert!(!changed.contains("writer.tag(1u32,"));
+}
+
+#[test]
+fn the_codec_follows_projected_scalar_types() {
+    let mut model = projection_model("struct Sample { value : integer [0..255] }");
+    let original = projected_code(&model);
+    let Some(v1::proto3_wire::Kind::Scalar(scalar)) = sample_wire(&mut model).kind.as_mut() else {
+        panic!("a scalar wire");
+    };
+    assert_eq!(scalar.r#type, v1::Proto3ScalarType::Uint32 as i32);
+    scalar.r#type = v1::Proto3ScalarType::Sint32 as i32;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(!original.contains("::ridl_rt::proto3::zigzag32("));
+    assert!(changed.contains("::ridl_rt::proto3::zigzag32("));
+    assert!(changed.contains("::ridl_rt::proto3::unzigzag32_checked("));
+}
+
+#[test]
+fn a_map_count_floor_requires_a_present_field() {
+    let model = projection_model("struct Sample { values : [integer : boolean; 1..2] }");
+    let code = projected_code(&model);
+    rustc::run_program(
+        "pb_map_count_floor",
+        &format!(
+            r#"
+#![allow(dead_code)]
+{code}
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{{Malformed, Ref, VerifyError}};
+fn main() {{
+    assert!(matches!(Ref::<Sample, Proto3>::verify(&[]),
+        Err(VerifyError::Structure(Malformed::MissingRequired))));
+    let value = Ref::<Sample, Proto3>::verify(&[0x0a, 0x00]).expect("one entry").decode();
+    assert_eq!(value.values, vec![(0, false)]);
+}}
+"#
+        ),
+    );
+}
+
+#[test]
+fn a_projected_struct_with_too_few_fields_is_refused() {
+    let mut model = projection_model("struct Sample { value : boolean }");
+    model.proto3.as_mut().unwrap().messages[0]
+        .fields
+        .pop()
+        .unwrap();
+    assert_invalid_struct_projection(&model);
+}
+
+#[test]
+fn a_projected_struct_with_too_many_fields_is_refused() {
+    let mut model = projection_model("struct Sample { value : boolean }");
+    let fields = &mut model.proto3.as_mut().unwrap().messages[0].fields;
+    let mut extra = fields[0].clone();
+    extra.number = 2;
+    fields.push(extra);
+    assert_invalid_struct_projection(&model);
+}
+
+fn assert_invalid_struct_projection(model: &v1::Model) {
+    let response = projected_response(model);
+    assert!(response.files.is_empty(), "a refused model emits no files");
+    assert_eq!(response.diagnostics.len(), 1);
+    assert!(
+        response.diagnostics[0]
+            .message
+            .starts_with("invalid proto3 projection:")
+    );
+    assert_eq!(
+        response.diagnostics[0].severity,
+        v1::DiagnosticSeverity::Error as i32
+    );
+}
+
+#[test]
+fn a_model_without_the_proto3_projection_is_refused() {
+    use ridl_ir::codegen::Backend as _;
 
     let (main, others) = proto3::fixture();
-    let mut fixture = vec![main];
-    fixture.extend(others);
+    let refs: Vec<_> = others.iter().collect();
+    let mut model = ridl_ir::codegen::lower(&main, &refs);
+    model.proto3 = None;
+    let response = ridl_backend_rust::Backend.generate(&v1::CodegenRequest {
+        model: Some(model),
+        options: vec![v1::BackendOption {
+            key: ridl_backend_rust::ENCODINGS_OPTION.to_string(),
+            value: "proto3".to_string(),
+        }],
+        ..Default::default()
+    });
+    assert!(response.files.is_empty(), "a refused model emits no files");
+    assert_eq!(response.diagnostics.len(), 1);
+    assert_eq!(
+        response.diagnostics[0].message,
+        "invalid proto3 projection: the model carries no proto3 projection"
+    );
+    assert_eq!(
+        response.diagnostics[0].severity,
+        v1::DiagnosticSeverity::Error as i32
+    );
+}
+
+/// Every clean ridlc corpus package has a proto3 layout. Every corpus directory
+/// is classified, and skipped directories still contain deliberate errors.
+#[test]
+fn every_clean_ridlc_corpus_package_has_a_proto3_layout() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    // Every directory must be compared or have a deliberate-error reason.
-    const COMPARED: &[&str] = &[
+    // Every directory must be clean or have a deliberate-error reason.
+    const CLEAN: &[&str] = &[
         "instance-numbers",
         "rsdl-appendix-a",
         "rust-shapes",
@@ -3637,13 +3701,7 @@ fn the_model_projection_matches_the_codec_layout() {
         .filter(|path| path.is_dir())
         .collect();
     directories.sort();
-    let mut entries = vec![("fixture".to_string(), fixture)];
-    entries.extend(CORPUS.iter().map(|(entry, _)| {
-        (
-            (*entry).to_string(),
-            proto3::compile_workspace(&root.join(entry)),
-        )
-    }));
+    let mut entries = Vec::new();
     for directory in &directories {
         let name = directory.file_name().unwrap().to_str().unwrap();
         if let Some((_, reason)) = SKIPPED.iter().find(|(skipped, _)| *skipped == name) {
@@ -3660,16 +3718,14 @@ fn the_model_projection_matches_the_codec_layout() {
             println!("{name}: skipped: {reason}");
         } else {
             assert!(
-                COMPARED.contains(&name),
-                "{name}: neither compared nor explicitly skipped"
+                CLEAN.contains(&name),
+                "{name}: neither clean nor explicitly skipped"
             );
             let entry = format!("crates/ridlc/tests/corpus/{name}");
-            if !entries.iter().any(|(existing, _)| *existing == entry) {
-                entries.push((entry, proto3::compile_workspace(directory)));
-            }
+            entries.push((entry, proto3::compile_workspace(directory)));
         }
     }
-    for name in COMPARED
+    for name in CLEAN
         .iter()
         .copied()
         .chain(SKIPPED.iter().map(|(name, _)| *name))
@@ -3682,11 +3738,8 @@ fn the_model_projection_matches_the_codec_layout() {
         );
     }
     let std_ir = ridlc::std_ir();
-    let mut shapes = [0usize; 5];
-    let mut packages_with_every_shape = 0usize;
     for (entry, packages) in entries {
         assert!(!packages.is_empty(), "{entry}: at least one package");
-        let mut counts = [0usize; 3];
         for (at, package) in packages.iter().enumerate() {
             let mut others: Vec<&v2::Package> = packages
                 .iter()
@@ -3695,96 +3748,50 @@ fn the_model_projection_matches_the_codec_layout() {
                 .map(|(_, other)| other)
                 .collect();
             others.push(&std_ir);
-            let model = codegen::lower(package, &others);
-            let projection = model
-                .proto3
-                .as_ref()
-                .expect("every package has a proto3 projection");
             let layout =
                 ridl_backend_rust::proto3_layout(package, &others).unwrap_or_else(|error| {
                     panic!("{entry}: {} layout failed: {}", package.name, error.message)
                 });
-            println!(
-                "{entry}: {}: {} codec messages, {} projected messages, {} refusals",
-                package.name,
-                layout.len(),
-                projection.messages.len(),
-                projection.refused.len()
-            );
-            let projected: BTreeMap<_, _> = projection
-                .messages
-                .iter()
-                .map(|message| (message.name.as_str(), message))
-                .collect();
-            assert_eq!(
-                projected.len(),
-                projection.messages.len(),
-                "{entry}: {} has unique message names",
-                package.name
-            );
-            let mut package_shapes = [0usize; 5];
-            let names: BTreeSet<_> = layout.iter().map(|message| message.name.as_str()).collect();
-            for message in &layout {
-                let projected = projected.get(message.name.as_str()).unwrap_or_else(|| {
-                    panic!(
-                        "{entry}: {}.{} is missing from the projection",
-                        package.name, message.name
-                    )
-                });
-                let mut fields = message.fields.clone();
-                fields.sort_by_key(|field| field.0);
-                assert_eq!(
-                    projection_fields(&model, projected),
-                    fields,
-                    "{entry}: {}.{}",
+            let model = ridl_ir::codegen::lower(package, &others);
+            for message in &model.proto3.as_ref().unwrap().messages {
+                if matches!(message.source, Some(v1::proto3_message::Source::Tuple(_))) {
+                    continue;
+                }
+                assert!(
+                    layout.iter().any(|actual| actual.name == message.name),
+                    "{entry}: {} has no layout for declaration message {}",
                     package.name,
                     message.name
                 );
-                for (count, present) in package_shapes.iter_mut().zip(projection_shapes(projected))
-                {
-                    *count += usize::from(present);
-                }
-                counts[0] += 1;
-            }
-            packages_with_every_shape += usize::from(package_shapes.iter().all(|count| *count > 0));
-            for (total, count) in shapes.iter_mut().zip(package_shapes) {
-                *total += count;
-            }
-            for message in &projection.messages {
-                if !names.contains(message.name.as_str()) {
-                    assert!(
-                        matches!(message.source, Some(v1::proto3_message::Source::Tuple(_))),
-                        "{entry}: {}.{} is missing from the codec layout",
-                        package.name,
-                        message.name
-                    );
-                    counts[1] += 1;
-                }
-            }
-            for refused in &projection.refused {
-                assert!(
-                    matches!(refused.source, Some(v1::proto3_refused::Source::Tuple(_))),
-                    "{entry}: {} has a refused declaration with an accepted codec layout: {refused:?}",
-                    package.name
-                );
-                counts[2] += 1;
             }
         }
-        assert!(counts[0] > 0, "{entry}: at least one message compared");
-        println!(
-            "{entry}: {} messages compared, {} tuple-only messages allowed, {} tuple-only refusals allowed",
-            counts[0], counts[1], counts[2]
-        );
     }
-    assert!(
-        packages_with_every_shape > 0,
-        "at least one package compares every required shape"
+}
+
+#[test]
+fn the_reported_refusal_is_the_root_cause_and_not_the_dependency() {
+    let compiled = ridlc::compile(
+        "refusal.typl",
+        "package p.refusal\n\
+         struct First {\n next : [User; 0..2]\n}\n\
+         struct User {\n bad : [integer : Bad; 0..2]\n}\n\
+         struct Bad {\n values : [[integer; 0..2]; 0..2]\n}\n",
     );
-    for (name, count) in ["packed array", "map", "union", "box", "foreign reference"]
-        .into_iter()
-        .zip(shapes)
-    {
-        assert!(count > 0, "at least one compared message with a {name}");
-        println!("{name}: {count} compared messages");
-    }
+    assert!(
+        !compiled
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error)
+    );
+    let error = ridl_backend_rust::generate_pipeline(
+        &compiled.package,
+        &[ridl_backend_rust::WireEncoding::Proto3],
+        false,
+        &[],
+    )
+    .expect_err("the nested collection has no proto3 representation");
+    assert_eq!(
+        error.message,
+        "an array of arrays or of maps is one proto3 does not admit, as the proto backend refuses it"
+    );
 }

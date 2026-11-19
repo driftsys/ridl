@@ -38,25 +38,20 @@
 //! finite FlatBuffers bound (`crate::descriptors::induced_name`). The size
 //! limit lives in the type: a source that needs a proto3 codec declares a
 //! finite bound on every string and bytes its payloads reach, and a
-//! collection count that fits. The codec's own walk refuses the
-//! same members the proto backend refuses, naming the field: an optional
-//! array or map field of a struct or of a tuple a declaration holds
-//! (ADR-0013 decision 7), an optional array element and an optional map
-//! value, a nested collection, a map key outside the integral and string
-//! scalars, a live enum value outside int32 in hand-built IR (TYPL-225 rejects
-//! it in source), a retired value outside int32 (legal in source), and a field
-//! number proto3 reserves or exceeds. A tuple only an interaction reaches is
-//! never walked when its root is not bounded, so such a member in it is the
-//! sizer's `RefusedMember`, named by the interface's note without the field.
+//! collection count that fits. The codec reads layout refusals from
+//! `Model.proto3`, reporting the first direct refusal for a declaration or
+//! a tuple it emits. A tuple only an interaction reaches is not emitted when
+//! its root is not bounded; its interface note names the size-state cause.
 //!
 //! # The wire mapping
 //!
-//! A field's number is its ordinal, a union arm's number is its ordinal, a
-//! tuple's fields are numbered from 1 in position order, a map entry's key
-//! and value are 1 and 2, and the scalar a width projects to is
-//! `ridl_ir::projection::proto3`'s table, the one the proto backend and the
-//! proto3 sizer read, so the codec cannot disagree with the emitted `.proto`
-//! on any of them. The writer writes the canonical form: fields in number
+//! `Model.proto3` supplies message references, field numbers, scalar types,
+//! scalar wire types, array packing and whether defaults are legal. An enum
+//! uses the projection's `enumeration` arm, with no scalar; the codec holds
+//! it as a varint in an `Int64`, which gives the same bytes for every int32
+//! value. The codec joins projected fields to model members by source to
+//! obtain their Rust representation, constraints and collection count bounds.
+//! The writer writes the canonical form: fields in number
 //! order, an implicit-presence field omitted at its proto3 default — 0,
 //! `false`, the empty string or bytes, enum value 0, the empty set, the
 //! empty array or map — a `?` field written whenever present, a
@@ -76,10 +71,8 @@
 //! length is not a multiple of the width (`Malformed::OutOfBounds`).
 //!
 //! An absent implicit-presence field reads as its default when that default
-//! is a legal value of its type, decided at generation time by the predicate
-//! the FlatBuffers codec reads (`crate::zero_is_legal`, a string's or bytes'
-//! length lower bound, a collection's count lower bound, an enum's zero
-//! member), and is `Malformed::MissingRequired` otherwise. An absent
+//! is a legal value of its type, as `Proto3Wire.default_is_legal` states,
+//! and is `Malformed::MissingRequired` otherwise. An absent
 //! non-optional nested struct or tuple is the message decoded from zero
 //! bytes, so `verify` verifies the empty message in its place, which refuses
 //! it exactly when one of its own fields is refused when absent; an absent
@@ -117,7 +110,7 @@ use crate::codec::{
 use crate::descriptors::interactions;
 use crate::{
     Ctx, GenerateError, ScalarBacking, allow_dead_code_if_internal, class_backing, declared, ident,
-    pascal_of, snake_of, type_path, zero_is_legal,
+    pascal_of, snake_of, type_path,
 };
 
 /// Emits the proto3 codec for the package `ctx` was built over.
@@ -178,7 +171,13 @@ struct Codec<'a> {
 
 /// What a value of one typl type position becomes in a proto3 message.
 #[derive(Debug, Clone)]
-enum Wire {
+struct Wire {
+    kind: WireKind,
+    default_is_legal: bool,
+}
+
+#[derive(Debug, Clone)]
+enum WireKind {
     /// A varint or a fixed-width value.
     Scalar(Scalar),
     /// A length-delimited UTF-8 string; `Some` when a named scalar wraps it.
@@ -190,10 +189,10 @@ enum Wire {
     /// it (the dotted reference for one of another package), `proto` the
     /// `.proto` message, which differs from the Rust name only for a tuple.
     Message { owner: String, proto: String },
-    /// A `repeated` field: packed when the element is a scalar, one record
-    /// per element otherwise.
+    /// A `repeated` field, written with the projection's packing choice.
     Array {
         element: Box<Wire>,
+        packed: bool,
         min: u64,
         max: u64,
     },
@@ -212,41 +211,19 @@ impl Wire {
     /// of a scalar array carries the element's own wire type, which the
     /// reader accepts beside the packed form.
     fn wire_type(&self) -> pb::WireType {
-        match self {
-            Wire::Scalar(scalar) => scalar.scalar.wire_type(),
-            Wire::Text(..)
-            | Wire::Bytes(..)
-            | Wire::Message { .. }
-            | Wire::Array { .. }
-            | Wire::Map { .. } => pb::WireType::Len,
-        }
-    }
-
-    /// Whether the proto3 default of the field's type is a legal value of
-    /// it, decided at generation time: an absent non-optional field reads as
-    /// that default when it is, and is refused when it is not. A nested
-    /// message decides for itself, field by field, when its empty message is
-    /// verified; a collection's default is the empty one, legal when the
-    /// count lower bound is 0.
-    fn default_is_legal(&self) -> bool {
-        match self {
-            Wire::Scalar(scalar) => scalar.zero_legal,
-            Wire::Text(_, constraint) | Wire::Bytes(_, constraint) => {
-                constraint
-                    .as_ref()
-                    .and_then(|sc| sc.constraint.as_ref())
-                    .and_then(|constraint| constraint.len_min)
-                    .unwrap_or(0)
-                    == 0
-            }
-            Wire::Message { .. } => true,
-            Wire::Array { min, .. } | Wire::Map { min, .. } => *min == 0,
+        match &self.kind {
+            WireKind::Scalar(scalar) => scalar.wire_type,
+            WireKind::Text(..)
+            | WireKind::Bytes(..)
+            | WireKind::Message { .. }
+            | WireKind::Array { .. }
+            | WireKind::Map { .. } => pb::WireType::Len,
         }
     }
 
     /// Whether the field is `repeated` in the schema: an array or a map.
     fn repeated(&self) -> bool {
-        matches!(self, Wire::Array { .. } | Wire::Map { .. })
+        matches!(self.kind, WireKind::Array { .. } | WireKind::Map { .. })
     }
 
     /// The scalar's spelling or the message's name, for [`MessageLayout`]:
@@ -254,17 +231,17 @@ impl Wire {
     /// `pkg.Name` when foreign), inlines an enum set as its scalar, names a
     /// repeated field by its element, and spells a map as `map<K, V>`.
     fn layout_name(&self) -> String {
-        match self {
-            Wire::Scalar(Scalar {
+        match &self.kind {
+            WireKind::Scalar(Scalar {
                 repr: Repr::Enum { name, .. },
                 ..
             }) => name.clone(),
-            Wire::Scalar(scalar) => scalar.scalar.as_str().to_string(),
-            Wire::Text(..) => pb::Scalar::String.as_str().to_string(),
-            Wire::Bytes(..) => pb::Scalar::Bytes.as_str().to_string(),
-            Wire::Message { proto, .. } => proto.clone(),
-            Wire::Array { element, .. } => element.layout_name(),
-            Wire::Map { key, value, .. } => {
+            WireKind::Scalar(scalar) => scalar.scalar.as_str().to_string(),
+            WireKind::Text(..) => pb::Scalar::String.as_str().to_string(),
+            WireKind::Bytes(..) => pb::Scalar::Bytes.as_str().to_string(),
+            WireKind::Message { proto, .. } => proto.clone(),
+            WireKind::Array { element, .. } => element.layout_name(),
+            WireKind::Map { key, value, .. } => {
                 format!("map<{}, {}>", key.layout_name(), value.layout_name())
             }
         }
@@ -311,10 +288,9 @@ struct Scalar {
     repr: Repr,
     /// The inline constraint `verify` checks, for an anonymous scalar.
     constraint: Option<v1::Scalar>,
-    /// Whether 0, the proto3 default, is a legal value of the type
-    /// (`crate::zero_is_legal`; an enum declares a zero member; an enum set
-    /// always is).
-    zero_legal: bool,
+    /// The projection's scalar wire type, or `Varint` for an enum carried
+    /// by the projection's `enumeration` arm without a scalar.
+    wire_type: pb::WireType,
 }
 
 impl Scalar {
@@ -392,7 +368,7 @@ impl Scalar {
 
     /// The bytes the value `__r` ([`Scalar::raw`]) takes after the tag.
     fn value_len(&self) -> TokenStream {
-        match self.scalar.wire_type() {
+        match self.wire_type {
             pb::WireType::Varint => quote! { ::ridl_rt::proto3::varint_len(__r) },
             pb::WireType::I32 => quote! { 4usize },
             pb::WireType::I64 => quote! { 8usize },
@@ -402,7 +378,7 @@ impl Scalar {
 
     /// The width of a fixed-width value, or `None` for a varint.
     fn fixed_width(&self) -> Option<usize> {
-        match self.scalar.wire_type() {
+        match self.wire_type {
             pb::WireType::I32 => Some(4),
             pb::WireType::I64 => Some(8),
             pb::WireType::Varint | pb::WireType::Len => None,
@@ -412,7 +388,7 @@ impl Scalar {
     /// The statements that read one fixed-width element `__chunk` of a
     /// packed run into `__raw`: four bytes for an `I32`, eight for an `I64`.
     fn fixed_read(&self) -> TokenStream {
-        match self.scalar.wire_type() {
+        match self.wire_type {
             pb::WireType::I32 => quote! {
                 let mut __bytes = [0u8; 4];
                 __bytes.copy_from_slice(__chunk);
@@ -428,7 +404,7 @@ impl Scalar {
 
     /// The writer call for the value `__r`.
     fn write(&self) -> TokenStream {
-        match self.scalar.wire_type() {
+        match self.wire_type {
             pb::WireType::Varint => quote! { writer.varint(__r); },
             pb::WireType::I32 => quote! { writer.fixed32(__r); },
             pb::WireType::I64 => quote! { writer.fixed64(__r); },
@@ -438,7 +414,7 @@ impl Scalar {
 
     /// The `Value` variant the field's wire type is read as.
     fn value_variant(&self) -> Ident {
-        wire_variant(self.scalar.wire_type())
+        wire_variant(self.wire_type)
     }
 
     /// The language-layer value read from the raw wire value `__raw`, and
@@ -685,7 +661,7 @@ impl Field {
     /// field: every field but a fixed-length array of zero elements, which
     /// has nothing to count and nothing to write (`array_statement`).
     fn has_statement(&self) -> bool {
-        !matches!(self.wire, Wire::Array { min, max, .. } if min == max && max == 0)
+        !matches!(self.wire.kind, WireKind::Array { min, max, .. } if min == max && max == 0)
     }
 
     fn operand(&self, base: &TokenStream) -> Operand {
@@ -1010,10 +986,9 @@ impl<'a> Codec<'a> {
         Ok(Codec { ctx, scope })
     }
 
-    /// Resolves a type reference against this package first and then the
-    /// others of the build, returning the declaration and the owner string a
-    /// reference site writes: the bare declared name for a type of this
-    /// package, the dotted reference for one of another package.
+    /// Resolves a type reference through the model's declarations or embedded
+    /// foreign declarations. The owner is the local declared name or the
+    /// dotted reference used to name another package's Rust codec functions.
     fn resolve(&self, reference: &v1::TypeRef) -> Option<(&'a v1::Declaration, String)> {
         if reference.package.is_empty() {
             return None;
@@ -1030,6 +1005,20 @@ impl<'a> Codec<'a> {
     /// type, in declaration order, then every induced tuple those
     /// declarations and the interaction roots reach, in discovery order.
     fn messages(&self) -> Result<Vec<Message>, GenerateError> {
+        let roots = self.interaction_roots();
+        let tuples = self.reachable_tuples(&roots);
+        if let Some(refused) = self.projection()?.refused.iter().find(|refused| {
+            refused.cause != v1::Proto3RefusalCause::RefusedDependency as i32
+                && match refused.source {
+                    Some(v1::proto3_refused::Source::Declaration(_)) => true,
+                    Some(v1::proto3_refused::Source::Tuple(index)) => tuples.contains(&index),
+                    None => false,
+                }
+        }) {
+            return Err(GenerateError {
+                message: refused.message.clone(),
+            });
+        }
         let mut messages: Vec<Message> = Vec::new();
         for (index, decl) in self.ctx.model.declarations.iter().enumerate() {
             let index = u32::try_from(index).map_err(|_| GenerateError {
@@ -1040,12 +1029,11 @@ impl<'a> Codec<'a> {
                 messages.push(message);
             }
         }
-        let roots = self.interaction_roots();
-        for index in self.reachable_tuples(&roots) {
+        for index in tuples {
             let induced = self.ctx.tuple(index).ok_or_else(|| GenerateError {
                 message: "the lowered model names a tuple it does not carry".to_string(),
             })?;
-            messages.push(self.tuple_message(induced, roots.get(&index).copied())?);
+            messages.push(self.tuple_message(induced, index, roots.get(&index).copied())?);
         }
         Ok(messages)
     }
@@ -1199,125 +1187,168 @@ impl<'a> Codec<'a> {
     }
 
     // -----------------------------------------------------------------
-    // Classification
+    // Projection and Rust representation
     // -----------------------------------------------------------------
 
-    /// The message of one declaration: a struct over its fields, a union
-    /// over its arms, a named scalar, an enum or an enum set over its box.
-    /// `None` for a constant, which projects no type.
+    /// The projection message for a declaration or induced tuple.
+    fn projected_message(
+        &self,
+        source: v1::proto3_message::Source,
+    ) -> Result<&v1::Proto3Message, GenerateError> {
+        self.projection()?
+            .messages
+            .iter()
+            .find(|message| message.source == Some(source))
+            .ok_or_else(|| invalid_projection("a message source has no layout"))
+    }
+
+    fn projection(&self) -> Result<&v1::Proto3Projection, GenerateError> {
+        self.ctx
+            .model
+            .proto3
+            .as_ref()
+            .ok_or_else(|| invalid_projection("the model carries no proto3 projection"))
+    }
+
+    /// Joins projected fields to the declaration's Rust members by source.
     fn message_of(
         &self,
         decl: &v1::Declaration,
         index: u32,
     ) -> Result<Option<Message>, GenerateError> {
-        let owner = declared(decl.name.as_ref());
-        match decl.kind.as_ref() {
-            Some(v1::declaration::Kind::Struct(def)) => {
-                let mut fields: Vec<Field> = Vec::new();
-                for slot in &def.slots {
-                    let Some(v1::slot::Occupant::Field(field)) = slot.occupant.as_ref() else {
-                        // A reserved tombstone holds its number and emits no
-                        // field (typl §7.4).
-                        continue;
-                    };
-                    let name = declared(field.name.as_ref());
-                    let Some(ty) = field.r#type.as_ref() else {
-                        return Err(GenerateError {
-                            message: format!("`{owner}.{name}` carries no type"),
-                        });
-                    };
-                    refuse_optional_repeated(owner, name, false, ty)?;
-                    fields.push(Field {
-                        number: field_number(owner, name, slot.ordinal)?,
-                        name: snake_of(field.name.as_ref()).to_string(),
-                        wire: self.wire(ty)?,
-                        optional: ty.optional,
-                        access: Access::Field(snake_of(field.name.as_ref()).to_string()),
-                    });
-                }
-                // Field-number order, whatever the declaration order.
-                fields.sort_by_key(|field| field.number);
-                Ok(Some(Message {
-                    owner: owner.to_string(),
-                    proto: owner.to_string(),
-                    source: Source::Declaration(index),
-                    visibility: decl.visibility,
-                    fields,
-                    build: Build::Struct,
-                }))
+        use v1::proto3_message::Source as ProjectedSource;
+        let (source, build) = match decl.kind.as_ref() {
+            Some(v1::declaration::Kind::Struct(_)) => {
+                (ProjectedSource::StructDeclaration(index), Build::Struct)
             }
-            Some(v1::declaration::Kind::Union(def)) => {
-                if def.arms.is_empty() {
-                    return Err(GenerateError {
-                        message: format!("`{owner}` declares no arm, so it encodes no value"),
-                    });
-                }
-                let mut fields: Vec<Field> = Vec::new();
-                for arm in &def.arms {
-                    let name = declared(arm.name.as_ref());
-                    let reference = arm.r#type.as_ref().ok_or_else(|| GenerateError {
-                        message: format!("`{owner}.{name}` names no type"),
-                    })?;
-                    let Some((decl, arm_owner)) = self.resolve(reference) else {
-                        let text = &reference.reference;
-                        return Err(GenerateError {
-                            message: format!(
-                                "`{text}` resolves in no package of this build, so no proto3 \
-                                 codec can be emitted for it"
-                            ),
-                        });
-                    };
-                    fields.push(Field {
-                        number: field_number(owner, name, arm.ordinal)?,
-                        name: crate::camel_of(arm.name.as_ref()).to_string(),
-                        wire: self.declaration_wire(decl, arm_owner, &reference.reference)?,
-                        optional: false,
-                        access: Access::Whole,
-                    });
-                }
-                fields.sort_by_key(|field| field.number);
-                Ok(Some(Message {
-                    owner: owner.to_string(),
-                    proto: owner.to_string(),
-                    source: Source::Declaration(index),
-                    visibility: decl.visibility,
-                    fields,
-                    build: Build::Union,
-                }))
+            Some(v1::declaration::Kind::Union(_)) => {
+                (ProjectedSource::UnionDeclaration(index), Build::Union)
             }
             Some(
                 v1::declaration::Kind::Scalar(_)
                 | v1::declaration::Kind::Enum(_)
                 | v1::declaration::Kind::EnumSet(_),
-            ) => {
-                let wire = self.declaration_wire(decl, owner.to_string(), owner)?;
-                Ok(Some(Message {
-                    owner: owner.to_string(),
-                    proto: format!("{owner}Box"),
-                    source: Source::Declaration(index),
-                    visibility: decl.visibility,
-                    fields: vec![Field {
-                        number: 1,
-                        name: "value".to_string(),
-                        wire,
-                        optional: false,
-                        access: Access::Whole,
-                    }],
-                    build: Build::Box,
-                }))
+            ) => (ProjectedSource::RootBox(index), Build::Box),
+            _ => return Ok(None),
+        };
+        let projected = self.projected_message(source)?;
+        if let Some(v1::declaration::Kind::Struct(def)) = decl.kind.as_ref() {
+            let members = def
+                .slots
+                .iter()
+                .filter(|slot| matches!(slot.occupant, Some(v1::slot::Occupant::Field(_))))
+                .count();
+            if projected.fields.len() != members {
+                return Err(invalid_projection(
+                    "a struct's projected field count differs from its model field count",
+                ));
             }
-            // A constant projects no type.
-            _ => Ok(None),
         }
+        let mut fields = Vec::new();
+        for field in &projected.fields {
+            use v1::proto3_field::Source as FieldSource;
+            let (ty, name, access) = match (field.source.as_ref(), decl.kind.as_ref()) {
+                (Some(FieldSource::Field(name)), Some(v1::declaration::Kind::Struct(def))) => {
+                    let member = def
+                        .slots
+                        .iter()
+                        .find_map(|slot| match slot.occupant.as_ref() {
+                            Some(v1::slot::Occupant::Field(member))
+                                if declared(member.name.as_ref()) == name =>
+                            {
+                                Some(member)
+                            }
+                            _ => None,
+                        })
+                        .ok_or_else(|| {
+                            invalid_projection("a projected field has no model member")
+                        })?;
+                    let name = snake_of(member.name.as_ref()).to_string();
+                    (
+                        member.r#type.clone().ok_or_else(|| GenerateError {
+                            message: format!(
+                                "`{}.{}` carries no type",
+                                declared(decl.name.as_ref()),
+                                declared(member.name.as_ref())
+                            ),
+                        })?,
+                        name.clone(),
+                        Access::Field(name),
+                    )
+                }
+                (Some(FieldSource::Arm(name)), Some(v1::declaration::Kind::Union(def))) => {
+                    let arm = def
+                        .arms
+                        .iter()
+                        .find(|arm| declared(arm.name.as_ref()) == name)
+                        .ok_or_else(|| invalid_projection("a projected arm has no model member"))?;
+                    let reference = arm.r#type.clone().ok_or_else(|| GenerateError {
+                        message: format!(
+                            "`{}.{}` names no type",
+                            declared(decl.name.as_ref()),
+                            declared(arm.name.as_ref())
+                        ),
+                    })?;
+                    (
+                        v1::Type {
+                            optional: false,
+                            kind: Some(v1::r#type::Kind::Named(reference)),
+                        },
+                        crate::camel_of(arm.name.as_ref()).to_string(),
+                        Access::Whole,
+                    )
+                }
+                (Some(FieldSource::BoxValue(_)), _) => {
+                    let reference = v1::TypeRef {
+                        package: self.scope.to_string(),
+                        index,
+                        ..Default::default()
+                    };
+                    (
+                        v1::Type {
+                            optional: false,
+                            kind: Some(v1::r#type::Kind::Named(reference)),
+                        },
+                        "value".to_string(),
+                        Access::Whole,
+                    )
+                }
+                _ => {
+                    return Err(invalid_projection(
+                        "a projected field source does not match its declaration",
+                    ));
+                }
+            };
+            fields.push(Field {
+                number: field.number,
+                name,
+                wire: self.wire(
+                    field
+                        .wire
+                        .as_ref()
+                        .ok_or_else(|| invalid_projection("a field carries no wire"))?,
+                    &ty,
+                )?,
+                optional: ty.optional,
+                access,
+            });
+        }
+        Ok(Some(Message {
+            owner: declared(decl.name.as_ref()).to_string(),
+            proto: projected.name.clone(),
+            source: Source::Declaration(index),
+            visibility: decl.visibility,
+            fields,
+            build,
+        }))
     }
 
-    /// The message of one induced tuple: positional fields numbered from 1,
-    /// as `emit_induced_tuple` of the proto backend numbers them, named in
-    /// Rust by the tuple field's own name. A tuple the lowering left without
-    /// a Rust name is an error: nothing could name its functions.
+    /// Joins a tuple's projected positions to its Rust fields. A tuple without
+    /// a Rust name cannot name the functions that encode it.
     fn tuple_message(
         &self,
         induced: &v1::InducedTuple,
+        index: u32,
         root: Option<u32>,
     ) -> Result<Message, GenerateError> {
         let owner = induced
@@ -1327,42 +1358,46 @@ impl<'a> Codec<'a> {
             .filter(|rust| !rust.is_empty())
             .ok_or_else(|| GenerateError {
                 message: format!(
-                    "an induced tuple of `{}` carries no Rust name, so the proto3 codec cannot \
-                     name its functions",
-                    self.ctx.package_name()
+                    "an induced tuple of `{}` carries no Rust name, so the proto3 codec \
+                     cannot name its functions",
+                    self.ctx.package_name(),
                 ),
             })?;
-        let proto = induced
-            .name
-            .as_ref()
-            .map(|name| name.wire.as_str())
-            .filter(|wire| !wire.is_empty())
-            .unwrap_or(owner);
-        let mut fields: Vec<Field> = Vec::new();
-        for (index, field) in induced.fields.iter().enumerate() {
-            let name = declared(field.name.as_ref());
-            let Some(ty) = field.r#type.as_ref() else {
-                return Err(GenerateError {
-                    message: format!("`{owner}.{name}` carries no type"),
-                });
+        let projected = self.projected_message(v1::proto3_message::Source::Tuple(index))?;
+        let mut fields = Vec::new();
+        for field in &projected.fields {
+            let Some(v1::proto3_field::Source::TuplePosition(position)) = field.source else {
+                return Err(invalid_projection(
+                    "a projected tuple field carries no position",
+                ));
             };
-            let number = u32::try_from(index + 1).map_err(|_| GenerateError {
+            let member = induced.fields.get(position as usize).ok_or_else(|| {
+                invalid_projection("a projected tuple position has no model member")
+            })?;
+            let ty = member.r#type.as_ref().ok_or_else(|| GenerateError {
                 message: format!(
-                    "`{owner}` has more tuple fields than a proto3 field number holds"
+                    "`{owner}.{}` carries no type",
+                    declared(member.name.as_ref())
                 ),
             })?;
-            refuse_optional_repeated(owner, name, true, ty)?;
+            let name = snake_of(member.name.as_ref()).to_string();
             fields.push(Field {
-                number: field_number(owner, name, number)?,
-                name: snake_of(field.name.as_ref()).to_string(),
-                wire: self.wire(ty)?,
+                number: field.number,
+                name: name.clone(),
+                wire: self.wire(
+                    field
+                        .wire
+                        .as_ref()
+                        .ok_or_else(|| invalid_projection("a field carries no wire"))?,
+                    ty,
+                )?,
                 optional: ty.optional,
-                access: Access::Field(snake_of(field.name.as_ref()).to_string()),
+                access: Access::Field(name),
             });
         }
         Ok(Message {
             owner: owner.to_string(),
-            proto: proto.to_string(),
+            proto: projected.name.clone(),
             source: Source::Tuple { root },
             visibility: induced.visibility,
             fields,
@@ -1370,300 +1405,228 @@ impl<'a> Codec<'a> {
         })
     }
 
-    /// The wire shape of one type position.
-    fn wire(&self, ty: &v1::Type) -> Result<Wire, GenerateError> {
-        match ty.kind.as_ref() {
-            Some(v1::r#type::Kind::Primitive(primitive)) => {
-                match v1::PrimitiveType::try_from(*primitive).ok() {
-                    Some(v1::PrimitiveType::Boolean) => Ok(Wire::Scalar(Scalar {
-                        scalar: pb::Scalar::Bool,
-                        repr: Repr::Bool,
-                        constraint: None,
-                        zero_legal: true,
-                    })),
-                    Some(v1::PrimitiveType::Integer) => Ok(Wire::Scalar(Scalar {
-                        scalar: pb::primitive(*primitive),
-                        repr: Repr::Int,
-                        constraint: None,
-                        zero_legal: true,
-                    })),
-                    Some(v1::PrimitiveType::Float) => Ok(Wire::Scalar(Scalar {
-                        scalar: pb::primitive(*primitive),
-                        repr: Repr::Float,
-                        constraint: None,
-                        zero_legal: true,
-                    })),
-                    // A bare `string` or `bytes` carries no length bound, so
-                    // it has no finite bound (typl §15.3 keeps it out of a
-                    // field position anyway).
-                    _ => Err(GenerateError {
-                        message: "a proto3 codec cannot carry an unbounded primitive".to_string(),
-                    }),
-                }
-            }
-            Some(v1::r#type::Kind::Inline(sc)) => self.scalar_wire(sc, None),
-            Some(v1::r#type::Kind::Named(reference)) => {
-                let Some((decl, owner)) = self.resolve(reference) else {
-                    let text = &reference.reference;
-                    return Err(GenerateError {
-                        message: format!(
-                            "`{text}` resolves in no package of this build, so no proto3 codec \
-                             can be emitted for it"
-                        ),
-                    });
-                };
-                self.declaration_wire(decl, owner, &reference.reference)
-            }
-            // A tuple generates a named struct, encoded as a nested message
-            // (typl §11). The lowering named it twice: for Rust and for the
-            // wire.
-            Some(v1::r#type::Kind::Tuple(reference)) => {
-                let induced = self
-                    .ctx
-                    .tuple(reference.index)
-                    .ok_or_else(|| GenerateError {
-                        message: "the lowered model names a tuple it does not carry".to_string(),
-                    })?;
-                let owner = self.ctx.tuple_name(reference.index);
-                let proto = induced
-                    .name
-                    .as_ref()
-                    .map(|name| name.wire.as_str())
-                    .filter(|wire| !wire.is_empty())
-                    .unwrap_or(owner);
-                Ok(Wire::Message {
-                    owner: owner.to_string(),
-                    proto: proto.to_string(),
-                })
-            }
-            Some(v1::r#type::Kind::Array(array)) => {
-                let element = array.element.as_deref().ok_or_else(|| GenerateError {
-                    message: "an array carries no element type".to_string(),
-                })?;
-                refuse_optional(element, "an array element")?;
-                let element = self.wire(element)?;
-                if element.repeated() {
-                    return Err(GenerateError {
-                        message: "an array of arrays or of maps is one proto3 does not admit, \
-                                  as the proto backend refuses it"
-                            .to_string(),
-                    });
-                }
-                Ok(Wire::Array {
-                    element: Box::new(element),
-                    min: array.min,
-                    max: array.max,
-                })
-            }
-            Some(v1::r#type::Kind::Map(map)) => {
-                let key = map.key.as_deref().ok_or_else(|| GenerateError {
-                    message: "a map carries no key type".to_string(),
-                })?;
-                let value = map.value.as_deref().ok_or_else(|| GenerateError {
-                    message: "a map carries no value type".to_string(),
-                })?;
-                // Defence in depth: `ridl check` already refuses an optional
-                // map key (TYPL-209), so no checked source reaches this.
-                refuse_optional(key, "a map key")?;
-                refuse_optional(value, "a map value")?;
-                let key = self.wire(key)?;
-                let admitted = match &key {
-                    Wire::Scalar(scalar) => scalar.scalar.admitted_as_map_key(),
-                    Wire::Text(..) => true,
-                    _ => false,
-                };
-                if !admitted {
-                    return Err(GenerateError {
-                        message: "a map key must be an integral or string type, as the proto \
-                                  backend requires"
-                            .to_string(),
-                    });
-                }
-                let value = self.wire(value)?;
-                if value.repeated() {
-                    return Err(GenerateError {
-                        message: "a map whose value is an array or a map is one proto3 does \
-                                  not admit, as the proto backend refuses it"
-                            .to_string(),
-                    });
-                }
-                Ok(Wire::Map {
-                    key: Box::new(key),
-                    value: Box::new(value),
-                    min: map.min,
-                    max: map.max,
-                })
-            }
-            _ => Err(GenerateError {
-                message: "a proto3 codec cannot carry this type position".to_string(),
-            }),
-        }
-    }
-
-    /// The wire shape of one resolved reference, or of the declaration being
-    /// boxed: the declaration decides.
-    fn declaration_wire(
-        &self,
-        decl: &v1::Declaration,
-        owner: String,
-        reference: &str,
-    ) -> Result<Wire, GenerateError> {
-        let name = declared(decl.name.as_ref());
-        match decl.kind.as_ref() {
-            Some(v1::declaration::Kind::Scalar(sc)) => self.scalar_wire(
-                sc,
-                Some(NamedScalar {
-                    name: owner,
-                    ctor: if sc.vacuous { "new" } else { "new_unchecked" },
-                }),
-            ),
-            Some(v1::declaration::Kind::Enum(def)) => {
-                // A strict enum decodes a discharged read as its first
-                // variant, so it needs one. An open enum decodes every value
-                // through `From<i64>` and may declare none (TYPL-413 warns).
-                let first = match def.values.first() {
-                    Some(first) => pascal_of(first.name.as_ref()),
-                    None if def.open => String::new(),
-                    None => {
-                        return Err(GenerateError {
-                            message: format!(
-                                "`{name}` declares no value, so no proto3 codec can decode one"
-                            ),
-                        });
-                    }
-                };
-                // proto3 enum and reserved values are int32; the proto
-                // backend refuses a value outside it, so the codec cannot
-                // carry one either.
-                let outside = def
-                    .values
-                    .iter()
-                    .map(|value| (declared(value.name.as_ref()), value.value))
-                    .chain(def.retired.iter().filter_map(|retired| {
-                        retired
-                            .value
-                            .map(|value| (declared(retired.name.as_ref()), value))
-                    }))
-                    .find(|(_, value)| i32::try_from(*value).is_err());
-                if let Some((member, value)) = outside {
-                    let full = if owner.contains('.') {
-                        owner.clone()
-                    } else {
-                        format!("{}.{owner}", self.ctx.package_name())
-                    };
-                    return Err(GenerateError {
-                        message: format!(
-                            "`{full}` has no proto3 codec: its value `{member}` is {value}, \
-                             outside int32, which the proto backend refuses"
-                        ),
-                    });
-                }
-                let zero = def
-                    .zero_member
-                    .and_then(|index| def.values.get(index as usize))
-                    .map(|zero| pascal_of(zero.name.as_ref()));
-                Ok(Wire::Scalar(Scalar {
-                    scalar: pb::Scalar::Int64,
-                    // An open enum admits every integer, 0 included.
-                    zero_legal: zero.is_some() || def.open,
-                    repr: Repr::Enum {
-                        name: owner,
-                        first,
-                        zero,
-                        open: def.open,
-                    },
-                    constraint: None,
-                }))
-            }
-            Some(v1::declaration::Kind::EnumSet(def)) => {
-                let scalar = v1::IntWidth::try_from(def.width)
-                    .ok()
-                    .and_then(pb::int_width_scalar)
-                    .ok_or_else(|| GenerateError {
-                        message: format!("`{name}` carries no integer width"),
-                    })?;
-                Ok(Wire::Scalar(Scalar {
-                    scalar,
-                    repr: Repr::EnumSet {
-                        name: owner,
-                        open: def.open,
-                    },
-                    constraint: None,
-                    zero_legal: true,
-                }))
-            }
-            Some(v1::declaration::Kind::Struct(_) | v1::declaration::Kind::Union(_)) => {
-                Ok(Wire::Message {
-                    proto: owner.clone(),
-                    owner,
-                })
-            }
-            _ => Err(GenerateError {
-                message: format!("`{reference}` names a declaration a proto3 codec cannot carry"),
-            }),
-        }
-    }
-
-    fn scalar_wire(
-        &self,
-        sc: &v1::Scalar,
-        named: Option<NamedScalar>,
-    ) -> Result<Wire, GenerateError> {
-        let backing = class_backing(sc.class);
-        let repr = |named: Option<NamedScalar>| match named {
-            Some(named) => Repr::Named(named),
-            None => match backing {
-                ScalarBacking::Boolean => Repr::Bool,
-                ScalarBacking::Integer => Repr::Int,
-                _ => Repr::Float,
-            },
+    /// The Rust representation and constraint of a scalar type position.
+    fn scalar_repr(&self, ty: &v1::Type) -> Result<(Repr, Option<v1::Scalar>), GenerateError> {
+        let anonymous = |backing| match backing {
+            ScalarBacking::Boolean => Repr::Bool,
+            ScalarBacking::Integer => Repr::Int,
+            _ => Repr::Float,
         };
-        match &sc.width {
-            Some(v1::scalar::Width::IntWidth(width)) => {
-                let scalar = v1::IntWidth::try_from(*width)
-                    .ok()
-                    .and_then(pb::int_width_scalar)
-                    .ok_or_else(|| GenerateError {
-                        message: "a scalar carries no integer width".to_string(),
-                    })?;
-                Ok(Wire::Scalar(Scalar {
-                    scalar,
-                    repr: repr(named),
-                    constraint: Some(sc.clone()),
-                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
-                }))
+        Ok(match ty.kind.as_ref() {
+            Some(v1::r#type::Kind::Primitive(primitive)) => (
+                match v1::PrimitiveType::try_from(*primitive).ok() {
+                    Some(v1::PrimitiveType::Boolean) => Repr::Bool,
+                    Some(v1::PrimitiveType::Integer) => Repr::Int,
+                    _ => Repr::Float,
+                },
+                None,
+            ),
+            Some(v1::r#type::Kind::Inline(scalar)) => {
+                (anonymous(class_backing(scalar.class)), Some(scalar.clone()))
             }
-            Some(v1::scalar::Width::FloatWidth(width)) => {
-                let scalar = v1::FloatWidth::try_from(*width)
-                    .ok()
-                    .and_then(pb::float_width_scalar)
-                    .ok_or_else(|| GenerateError {
-                        message: "a scalar carries no float width".to_string(),
-                    })?;
-                Ok(Wire::Scalar(Scalar {
-                    scalar,
-                    repr: repr(named),
-                    constraint: Some(sc.clone()),
-                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
-                }))
+            Some(v1::r#type::Kind::Named(reference)) => {
+                let (decl, owner) = self.resolve(reference).ok_or_else(|| {
+                    invalid_projection("a scalar reference has no model declaration")
+                })?;
+                match decl.kind.as_ref() {
+                    Some(v1::declaration::Kind::Scalar(scalar)) => (
+                        Repr::Named(NamedScalar {
+                            name: owner,
+                            ctor: if scalar.vacuous {
+                                "new"
+                            } else {
+                                "new_unchecked"
+                            },
+                        }),
+                        Some(scalar.clone()),
+                    ),
+                    Some(v1::declaration::Kind::Enum(def)) => (
+                        Repr::Enum {
+                            name: owner,
+                            first: def
+                                .values
+                                .first()
+                                .map(|first| pascal_of(first.name.as_ref()))
+                                .unwrap_or_default(),
+                            zero: def
+                                .zero_member
+                                .and_then(|index| def.values.get(index as usize))
+                                .map(|zero| pascal_of(zero.name.as_ref())),
+                            open: def.open,
+                        },
+                        None,
+                    ),
+                    Some(v1::declaration::Kind::EnumSet(def)) => (
+                        Repr::EnumSet {
+                            name: owner,
+                            open: def.open,
+                        },
+                        None,
+                    ),
+                    _ => {
+                        return Err(invalid_projection(
+                            "a scalar wire has no Rust scalar representation",
+                        ));
+                    }
+                }
             }
-            None => match backing {
-                ScalarBacking::Boolean => Ok(Wire::Scalar(Scalar {
-                    scalar: pb::Scalar::Bool,
-                    repr: repr(named),
-                    constraint: Some(sc.clone()),
-                    zero_legal: zero_is_legal(sc.constraint.as_ref()),
-                })),
-                ScalarBacking::String => Ok(Wire::Text(named, Some(sc.clone()))),
-                ScalarBacking::Bytes => Ok(Wire::Bytes(named, Some(sc.clone()))),
-                // The compiler derives a width for every numeric scalar, so
-                // this is IR handed in directly; the `.proto` emitter's
-                // `string` fallback is not followed.
-                ScalarBacking::Float | ScalarBacking::Integer => Err(GenerateError {
-                    message: "a numeric scalar carries no width".to_string(),
-                }),
-            },
-        }
+            _ => return Err(invalid_projection("a scalar wire has no Rust scalar type")),
+        })
+    }
+
+    /// Reads a projected wire beside the type that supplies its Rust representation.
+    fn wire(&self, projected: &v1::Proto3Wire, ty: &v1::Type) -> Result<Wire, GenerateError> {
+        use v1::proto3_wire::Kind;
+        let kind =
+            match projected.kind.as_ref() {
+                Some(Kind::Scalar(scalar)) => {
+                    let (repr, constraint) = self.scalar_repr(ty)?;
+                    WireKind::Scalar(Scalar {
+                        scalar: projected_scalar(scalar.r#type)?,
+                        wire_type: projected_wire_type(scalar.wire_type)?,
+                        repr,
+                        constraint,
+                    })
+                }
+                Some(Kind::Enumeration(enumeration)) => {
+                    // The projection carries an enum reference without a scalar.
+                    // An int64 varint has the same bytes for every int32 value.
+                    let ty = v1::Type {
+                        optional: false,
+                        kind: Some(v1::r#type::Kind::Named(
+                            enumeration.r#type.clone().ok_or_else(|| {
+                                invalid_projection("an enum wire carries no type")
+                            })?,
+                        )),
+                    };
+                    let (repr, constraint) = self.scalar_repr(&ty)?;
+                    WireKind::Scalar(Scalar {
+                        scalar: pb::Scalar::Int64,
+                        wire_type: pb::WireType::Varint,
+                        repr,
+                        constraint,
+                    })
+                }
+                Some(Kind::Text(_) | Kind::Bytes(_)) => {
+                    let (repr, constraint) = self.scalar_repr(ty)?;
+                    let named = match repr {
+                        Repr::Named(named) => Some(named),
+                        _ => None,
+                    };
+                    if matches!(projected.kind, Some(Kind::Text(_))) {
+                        WireKind::Text(named, constraint)
+                    } else {
+                        WireKind::Bytes(named, constraint)
+                    }
+                }
+                Some(Kind::Message(reference)) => {
+                    let (owner, proto) = match reference.target {
+                        Some(v1::proto3_message_ref::Target::Message(index)) => {
+                            let message =
+                                self.projection()?.messages.get(index as usize).ok_or_else(
+                                    || invalid_projection("a message reference has no layout"),
+                                )?;
+                            let owner = match message.source {
+                                Some(v1::proto3_message::Source::Tuple(index)) => {
+                                    self.ctx.tuple_name(index)
+                                }
+                                Some(
+                                    v1::proto3_message::Source::StructDeclaration(index)
+                                    | v1::proto3_message::Source::UnionDeclaration(index)
+                                    | v1::proto3_message::Source::RootBox(index),
+                                ) => declared(
+                                    self.ctx
+                                        .declaration(index)
+                                        .and_then(|decl| decl.name.as_ref()),
+                                ),
+                                None => {
+                                    return Err(invalid_projection(
+                                        "a referenced message carries no source",
+                                    ));
+                                }
+                            };
+                            (owner.to_string(), message.name.clone())
+                        }
+                        Some(v1::proto3_message_ref::Target::Foreign(index)) => {
+                            let foreign =
+                                self.ctx.model.foreign.get(index as usize).ok_or_else(|| {
+                                    invalid_projection(
+                                        "a foreign message reference has no model declaration",
+                                    )
+                                })?;
+                            let owner = format!(
+                                "{}.{}",
+                                foreign.package,
+                                declared(
+                                    foreign
+                                        .declaration
+                                        .as_ref()
+                                        .and_then(|decl| decl.name.as_ref())
+                                )
+                            );
+                            (owner.clone(), owner)
+                        }
+                        None => {
+                            return Err(invalid_projection(
+                                "a message reference carries no target",
+                            ));
+                        }
+                    };
+                    WireKind::Message { owner, proto }
+                }
+                Some(Kind::Array(array)) => {
+                    let Some(v1::r#type::Kind::Array(model)) = ty.kind.as_ref() else {
+                        return Err(invalid_projection("an array wire has no model array"));
+                    };
+                    WireKind::Array {
+                        element: Box::new(self.wire(
+                            array.element.as_deref().ok_or_else(|| {
+                                invalid_projection("an array wire carries no element")
+                            })?,
+                            model.element.as_deref().ok_or_else(|| {
+                                invalid_projection("a model array carries no element")
+                            })?,
+                        )?),
+                        packed: array.packed,
+                        min: model.min,
+                        max: model.max,
+                    }
+                }
+                Some(Kind::Map(map)) => {
+                    let Some(v1::r#type::Kind::Map(model)) = ty.kind.as_ref() else {
+                        return Err(invalid_projection("a map wire has no model map"));
+                    };
+                    WireKind::Map {
+                        key: Box::new(
+                            self.wire(
+                                map.key.as_deref().ok_or_else(|| {
+                                    invalid_projection("a map wire carries no key")
+                                })?,
+                                model.key.as_deref().ok_or_else(|| {
+                                    invalid_projection("a model map carries no key")
+                                })?,
+                            )?,
+                        ),
+                        value: Box::new(
+                            self.wire(
+                                map.value.as_deref().ok_or_else(|| {
+                                    invalid_projection("a map wire carries no value")
+                                })?,
+                                model.value.as_deref().ok_or_else(|| {
+                                    invalid_projection("a model map carries no value")
+                                })?,
+                            )?,
+                        ),
+                        min: model.min,
+                        max: model.max,
+                    }
+                }
+                None => return Err(invalid_projection("a wire carries no kind")),
+            };
+        Ok(Wire {
+            kind,
+            default_is_legal: projected.default_is_legal,
+        })
     }
 
     // -----------------------------------------------------------------
@@ -1813,12 +1776,12 @@ impl<'a> Codec<'a> {
         // tested, as every proto3 writer does; an element or an arm is
         // written whatever its value.
         let test = match site {
-            Site::Field => field.wire.default_is_legal(),
+            Site::Field => field.wire.default_is_legal,
             Site::Entry => true,
             Site::Element => false,
         };
-        Ok(match &field.wire {
-            Wire::Scalar(scalar) => {
+        Ok(match &field.wire.kind {
+            WireKind::Scalar(scalar) => {
                 let raw = scalar.raw(scalar.language(quote! { __s }));
                 let value_len = scalar.value_len();
                 let action = match pass {
@@ -1848,8 +1811,8 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Wire::Text(named, constraint) | Wire::Bytes(named, constraint) => {
-                let text = matches!(field.wire, Wire::Text(..));
+            WireKind::Text(named, constraint) | WireKind::Bytes(named, constraint) => {
+                let text = matches!(field.wire.kind, WireKind::Text(..));
                 let value = match (named, text) {
                     (Some(_), _) => quote! { #receiver.get() },
                     (None, true) => quote! { #receiver.as_str() },
@@ -1892,7 +1855,7 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Wire::Message { owner: name, .. } => {
+            WireKind::Message { owner: name, .. } => {
                 let len = owner_path(name, len_ident);
                 let action = match pass {
                     Pass::Len => quote! {
@@ -1927,10 +1890,15 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Wire::Array { element, min, max } => {
-                self.array_statement(owner, field, element, *min, *max, reference, pass)?
+            WireKind::Array {
+                element,
+                packed,
+                min,
+                max,
+            } => {
+                self.array_statement(owner, field, element, *packed, *min, *max, reference, pass)?
             }
-            Wire::Map {
+            WireKind::Map {
                 key,
                 value,
                 min,
@@ -1939,9 +1907,9 @@ impl<'a> Codec<'a> {
         })
     }
 
-    /// The statement that counts or writes one array, bound to `__c`: a
-    /// scalar element makes one packed record, any other element one record
-    /// per element, and an empty array is not written. A fixed-length array
+    /// The statement that counts or writes one array, bound to `__c`:
+    /// the projection selects a packed record or one record per element,
+    /// and an empty array is not written. A fixed-length array
     /// has nothing to count and no emptiness to test, because its Rust type
     /// is `[T; N]`.
     #[allow(clippy::too_many_arguments)]
@@ -1950,6 +1918,7 @@ impl<'a> Codec<'a> {
         owner: &str,
         field: &Field,
         element: &Wire,
+        packed: bool,
         min: u64,
         max: u64,
         reference: &TokenStream,
@@ -1965,8 +1934,8 @@ impl<'a> Codec<'a> {
             Pass::Encode if !fixed => encode_count_check(owner, min, max, &quote! { __c }),
             _ => quote! {},
         };
-        let body = match element {
-            Wire::Scalar(scalar) => {
+        let body = match &element.kind {
+            WireKind::Scalar(scalar) if packed => {
                 let raw = scalar.raw(scalar.language(quote! { __s }));
                 let check = scalar.encode_check();
                 let write = scalar.write();
@@ -2014,8 +1983,8 @@ impl<'a> Codec<'a> {
                     quote! { if !__c.is_empty() { #packed } }
                 }
             }
-            other => {
-                let element = Field::element(field.number, other.clone());
+            _ => {
+                let element = Field::element(field.number, element.clone());
                 let statement = self.field_value(
                     owner,
                     &element,
@@ -2215,8 +2184,10 @@ impl<'a> Codec<'a> {
                     }
                 });
             }
-            match &field.wire {
-                Wire::Array { min, max, .. } | Wire::Map { min, max, .. } if !field.optional => {
+            match &field.wire.kind {
+                WireKind::Array { min, max, .. } | WireKind::Map { min, max, .. }
+                    if !field.optional =>
+                {
                     after.push(counter_check(owner, *min, *max, &counter));
                 }
                 _ => {}
@@ -2248,12 +2219,12 @@ impl<'a> Codec<'a> {
         let counter = count_ident(index);
         let wrong_type = structure_error("WireType");
         let duplicate = structure_error("Duplicate");
-        Ok(match &field.wire {
-            Wire::Array { element, .. } => {
-                let run = match element.as_ref() {
-                    Wire::Scalar(scalar) => self.packed_run_verify(owner, scalar, &counter),
-                    other => {
-                        let (pattern, checks) = self.present_checks(owner, other)?;
+        Ok(match &field.wire.kind {
+            WireKind::Array { element, .. } => {
+                let run = match &element.kind {
+                    WireKind::Scalar(scalar) => self.packed_run_verify(owner, scalar, &counter),
+                    _ => {
+                        let (pattern, checks) = self.present_checks(owner, element)?;
                         quote! {
                             #pattern => {
                                 #checks
@@ -2270,7 +2241,7 @@ impl<'a> Codec<'a> {
                     }
                 }
             }
-            Wire::Map {
+            WireKind::Map {
                 key, value, max, ..
             } => {
                 let entry =
@@ -2452,8 +2423,8 @@ impl<'a> Codec<'a> {
     /// value of a scalar key, the bytes of a string key, the key's default
     /// when the entry omits it.
     fn key_of(&self, key: &Wire, bytes: &TokenStream) -> TokenStream {
-        let (init, pattern, value) = match key {
-            Wire::Scalar(scalar) => {
+        let (init, pattern, value) = match &key.kind {
+            WireKind::Scalar(scalar) => {
                 let variant = scalar.value_variant();
                 (
                     scalar.language_zero(),
@@ -2531,8 +2502,8 @@ impl<'a> Codec<'a> {
         owner: &str,
         wire: &Wire,
     ) -> Result<(TokenStream, TokenStream), GenerateError> {
-        Ok(match wire {
-            Wire::Scalar(scalar) => {
+        Ok(match &wire.kind {
+            WireKind::Scalar(scalar) => {
                 let variant = scalar.value_variant();
                 let body = scalar.raw_checks(owner);
                 if body.is_empty() {
@@ -2541,7 +2512,7 @@ impl<'a> Codec<'a> {
                     (quote! { ::ridl_rt::proto3::Value::#variant(__raw) }, body)
                 }
             }
-            Wire::Text(named, constraint) => {
+            WireKind::Text(named, constraint) => {
                 let check = named
                     .as_ref()
                     .and_then(|named| named_scalar_check(named, quote! { __s }))
@@ -2565,7 +2536,7 @@ impl<'a> Codec<'a> {
                 };
                 (quote! { ::ridl_rt::proto3::Value::Len(__b) }, body)
             }
-            Wire::Bytes(named, constraint) => {
+            WireKind::Bytes(named, constraint) => {
                 let check = named
                     .as_ref()
                     .and_then(|named| named_scalar_check(named, quote! { __b }))
@@ -2580,14 +2551,14 @@ impl<'a> Codec<'a> {
                     None => (quote! { ::ridl_rt::proto3::Value::Len(_) }, quote! {}),
                 }
             }
-            Wire::Message { owner: name, .. } => {
+            WireKind::Message { owner: name, .. } => {
                 let verify = owner_path(name, verify_ident);
                 (
                     quote! { ::ridl_rt::proto3::Value::Len(__b) },
                     quote! { #verify(__b)?; },
                 )
             }
-            Wire::Array { .. } | Wire::Map { .. } => {
+            WireKind::Array { .. } | WireKind::Map { .. } => {
                 return Err(GenerateError {
                     message: "a collection is not a singular value".to_string(),
                 });
@@ -2608,12 +2579,12 @@ impl<'a> Codec<'a> {
         if field.optional {
             return quote! {};
         }
-        match &field.wire {
-            Wire::Message { owner: name, .. } => {
+        match &field.wire.kind {
+            WireKind::Message { owner: name, .. } => {
                 let verify = owner_path(name, verify_ident);
                 quote! { #verify(&[])?; }
             }
-            Wire::Text(named, constraint) if field.wire.default_is_legal() => {
+            WireKind::Text(named, constraint) if field.wire.default_is_legal => {
                 let has_pattern = constraint
                     .as_ref()
                     .and_then(|sc| sc.constraint.as_ref())
@@ -2632,7 +2603,7 @@ impl<'a> Codec<'a> {
                     })
                     .unwrap_or_default()
             }
-            wire if wire.default_is_legal() => quote! {},
+            _ if field.wire.default_is_legal => quote! {},
             _ => missing_required(),
         }
     }
@@ -2662,11 +2633,13 @@ impl<'a> Codec<'a> {
             inits.push(quote! { let mut #binding = #default; });
             let body = self.decode_arm(field, &binding)?;
             arms.push((number, body));
-            builds.push(match &field.wire {
+            builds.push(match &field.wire.kind {
                 // A fixed-length array is decoded into a `Vec` and moved into
                 // its `[T; N]`; `verify` has checked the count, so the
                 // fallback element is never reached.
-                Wire::Array { element, min, max } if min == max && !field.optional => {
+                WireKind::Array {
+                    element, min, max, ..
+                } if min == max && !field.optional => {
                     let fill = self.decode_default(element);
                     quote! {
                         {
@@ -2756,9 +2729,9 @@ impl<'a> Codec<'a> {
     /// The body of the `match` arm that reads one known field into
     /// `binding`.
     fn decode_arm(&self, field: &Field, binding: &Ident) -> Result<TokenStream, GenerateError> {
-        Ok(match &field.wire {
-            Wire::Array { element, .. } => match element.as_ref() {
-                Wire::Scalar(scalar) => {
+        Ok(match &field.wire.kind {
+            WireKind::Array { element, .. } => match &element.kind {
+                WireKind::Scalar(scalar) => {
                     let variant = scalar.value_variant();
                     let domain = scalar.domain(scalar.widen_total());
                     let packed = match scalar.fixed_width() {
@@ -2796,8 +2769,8 @@ impl<'a> Codec<'a> {
                         }
                     }
                 }
-                other => {
-                    let (pattern, value) = self.decode_present(other);
+                _ => {
+                    let (pattern, value) = self.decode_present(element);
                     quote! {
                         if let #pattern = __field.value {
                             #binding.push(#value);
@@ -2805,7 +2778,7 @@ impl<'a> Codec<'a> {
                     }
                 }
             },
-            Wire::Map { key, value, .. } => {
+            WireKind::Map { key, value, .. } => {
                 let key_default = self.decode_default(key);
                 let value_default = self.decode_default(value);
                 let (key_pattern, key_value) = self.decode_present(key);
@@ -2854,15 +2827,15 @@ impl<'a> Codec<'a> {
 
     /// The domain value an absent non-optional value of `wire` decodes as.
     fn decode_default(&self, wire: &Wire) -> TokenStream {
-        match wire {
-            Wire::Scalar(scalar) => scalar.decode_default(),
-            Wire::Text(named, _) => named_value(named, quote! { ::std::string::String::new() }),
-            Wire::Bytes(named, _) => named_value(named, quote! { ::std::vec::Vec::new() }),
-            Wire::Message { owner, .. } => {
+        match &wire.kind {
+            WireKind::Scalar(scalar) => scalar.decode_default(),
+            WireKind::Text(named, _) => named_value(named, quote! { ::std::string::String::new() }),
+            WireKind::Bytes(named, _) => named_value(named, quote! { ::std::vec::Vec::new() }),
+            WireKind::Message { owner, .. } => {
                 let decode = owner_path(owner, decode_ident);
                 quote! { #decode(&[]) }
             }
-            Wire::Array { .. } | Wire::Map { .. } => quote! { ::std::vec::Vec::new() },
+            WireKind::Array { .. } | WireKind::Map { .. } => quote! { ::std::vec::Vec::new() },
         }
     }
 
@@ -2870,15 +2843,15 @@ impl<'a> Codec<'a> {
     /// for one singular value of `wire`. A collection is read element by
     /// element by [`Codec::decode_arm`] and never reaches this.
     fn decode_present(&self, wire: &Wire) -> (TokenStream, TokenStream) {
-        match wire {
-            Wire::Scalar(scalar) => {
+        match &wire.kind {
+            WireKind::Scalar(scalar) => {
                 let variant = scalar.value_variant();
                 (
                     quote! { ::ridl_rt::proto3::Value::#variant(__raw) },
                     scalar.domain(scalar.widen_total()),
                 )
             }
-            Wire::Text(named, _) => (
+            WireKind::Text(named, _) => (
                 quote! { ::ridl_rt::proto3::Value::Len(__b) },
                 named_value(
                     named,
@@ -2889,18 +2862,18 @@ impl<'a> Codec<'a> {
                     },
                 ),
             ),
-            Wire::Bytes(named, _) => (
+            WireKind::Bytes(named, _) => (
                 quote! { ::ridl_rt::proto3::Value::Len(__b) },
                 named_value(named, quote! { __b.to_vec() }),
             ),
-            Wire::Message { owner, .. } => {
+            WireKind::Message { owner, .. } => {
                 let decode = owner_path(owner, decode_ident);
                 (
                     quote! { ::ridl_rt::proto3::Value::Len(__b) },
                     quote! { #decode(__b) },
                 )
             }
-            Wire::Array { .. } | Wire::Map { .. } => (
+            WireKind::Array { .. } | WireKind::Map { .. } => (
                 quote! { ::ridl_rt::proto3::Value::Len(_) },
                 quote! { ::std::vec::Vec::new() },
             ),
@@ -3064,74 +3037,6 @@ pub(crate) fn bound_state(state: Option<&v1::SizeState>) -> Result<u32, &'static
     }
 }
 
-/// The field number `number` of `owner.name`, or the refusal for one proto3
-/// reserves (19000 to 19999) or does not admit (0, or above 2^29 - 1), as
-/// the proto backend refuses it.
-fn field_number(owner: &str, name: &str, number: u32) -> Result<u32, GenerateError> {
-    if number == 0 || pb::PROTO_RESERVED.contains(&number) || number > pb::PROTO_MAX_FIELD_NUMBER {
-        return Err(GenerateError {
-            message: format!(
-                "`{owner}.{name}` has field number {number}, which proto3 reserves or does not \
-                 admit, as the proto backend refuses it"
-            ),
-        });
-    }
-    Ok(number)
-}
-
-/// Refuses an optional array or map field of a struct or a tuple, as the
-/// proto backend's `refuse_optional_repeated` does: proto3 cannot mark a
-/// `repeated` or `map` field absent, and no value is spare to carry the fact
-/// in-band, so ADR-0013 decision 7's last clause applies. Any other type
-/// passes, optional or not. The sizer gives such a payload `RefusedMember`;
-/// this check runs first, so the refusal names the field, for a struct and
-/// for a tuple a declaration holds. A tuple only an interaction reaches is
-/// not walked when its root is not bounded, so the field is never reached
-/// here and the interface's note carries the sizer's cause alone.
-fn refuse_optional_repeated(
-    owner: &str,
-    name: &str,
-    tuple: bool,
-    ty: &v1::Type,
-) -> Result<(), GenerateError> {
-    let (kind, proto_field) = match ty.kind.as_ref() {
-        Some(v1::r#type::Kind::Array(_)) if ty.optional => ("array", "repeated"),
-        Some(v1::r#type::Kind::Map(_)) if ty.optional => ("map", "map"),
-        _ => return Ok(()),
-    };
-    let advice = if tuple {
-        format!(
-            "Remove the `?` from the tuple field, or declare a struct that holds the {kind} \
-             and give the tuple field that struct's type, whose absence proto3 can track."
-        )
-    } else {
-        format!("Remove the `?`, or wrap the {kind} in a struct, whose absence proto3 can track.")
-    };
-    Err(GenerateError {
-        message: format!(
-            "`{owner}.{name}` is an optional {kind}, and proto3 cannot mark a {proto_field} \
-             field absent: an absent {kind} is indistinguishable from an empty one, and no \
-             value is spare to carry the fact in-band, so this backend refuses rather than \
-             choosing silently (ADR-0013 decision 7). {advice}"
-        ),
-    })
-}
-
-/// An `optional` marker is a field's property. A proto3 `repeated` field
-/// has no absent element and a map entry no absent value, so a `?` in one
-/// of those positions is refused rather than silently written as present,
-/// as the FlatBuffers codec refuses it.
-fn refuse_optional(ty: &v1::Type, what: &str) -> Result<(), GenerateError> {
-    if ty.optional {
-        return Err(GenerateError {
-            message: format!(
-                "{what} is optional, which proto3 cannot represent — only a field may be absent"
-            ),
-        });
-    }
-    Ok(())
-}
-
 /// Which of the two passes over a message's fields a statement serves.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Pass {
@@ -3139,8 +3044,7 @@ enum Pass {
     Encode,
 }
 
-/// `value` wrapped in the named scalar's constructor, when the position is a
-/// named scalar.
+/// Wraps a value in its named scalar constructor when needed.
 fn named_value(named: &Option<NamedScalar>, value: TokenStream) -> TokenStream {
     match named {
         Some(named) => {
@@ -3150,4 +3054,37 @@ fn named_value(named: &Option<NamedScalar>, value: TokenStream) -> TokenStream {
         }
         None => value,
     }
+}
+
+/// An inconsistent or incomplete model cannot supply a codec layout.
+fn invalid_projection(message: &str) -> GenerateError {
+    GenerateError {
+        message: format!("invalid proto3 projection: {message}"),
+    }
+}
+
+/// Converts the projection's scalar enum to the emitter's scalar spelling.
+fn projected_scalar(scalar: i32) -> Result<pb::Scalar, GenerateError> {
+    Ok(match v1::Proto3ScalarType::try_from(scalar).ok() {
+        Some(v1::Proto3ScalarType::Bool) => pb::Scalar::Bool,
+        Some(v1::Proto3ScalarType::Int64) => pb::Scalar::Int64,
+        Some(v1::Proto3ScalarType::Uint32) => pb::Scalar::Uint32,
+        Some(v1::Proto3ScalarType::Uint64) => pb::Scalar::Uint64,
+        Some(v1::Proto3ScalarType::Sint32) => pb::Scalar::Sint32,
+        Some(v1::Proto3ScalarType::Sint64) => pb::Scalar::Sint64,
+        Some(v1::Proto3ScalarType::Float) => pb::Scalar::Float,
+        Some(v1::Proto3ScalarType::Double) => pb::Scalar::Double,
+        _ => return Err(invalid_projection("a scalar carries no proto3 type")),
+    })
+}
+
+/// Converts the projection's wire-type enum to the emitter's wire type.
+fn projected_wire_type(wire: i32) -> Result<pb::WireType, GenerateError> {
+    Ok(match v1::Proto3WireType::try_from(wire).ok() {
+        Some(v1::Proto3WireType::Varint) => pb::WireType::Varint,
+        Some(v1::Proto3WireType::I64) => pb::WireType::I64,
+        Some(v1::Proto3WireType::Len) => pb::WireType::Len,
+        Some(v1::Proto3WireType::I32) => pb::WireType::I32,
+        _ => return Err(invalid_projection("a scalar carries no wire type")),
+    })
 }

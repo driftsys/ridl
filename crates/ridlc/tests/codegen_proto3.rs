@@ -409,7 +409,7 @@ fn a_map_carries_its_key_and_value_wires() {
 }
 
 #[test]
-fn an_enum_map_key_in_ir_keeps_the_codecs_integer_key_rule() {
+fn an_enum_map_key_in_ir_keeps_the_projections_integer_key_rule() {
     let compiled = ridlc::compile(
         "enum_key.typl",
         "package p.keys\n\nenum Mode {\n  OFF = 0\n}\n\nstruct Table {\n  entries : [integer : boolean; 0..2]\n}\n",
@@ -978,7 +978,7 @@ fn a_refused_struct_that_holds_itself_terminates() {
 }
 
 #[test]
-fn several_refused_members_keep_the_codecs_walk_order() {
+fn several_refused_members_keep_the_projections_walk_order() {
     let mut p = package(
         "package p.refusal\n\
          struct Bad {\n first : [integer; 0..2]?\n \
@@ -1334,16 +1334,16 @@ fn two_packages(a: &str, b: &str) -> Vec<v2::Package> {
 #[test]
 fn foreign_tuples_are_listed_only_in_the_declaring_package() {
     let packages = two_packages(
-        "package p.a\nstruct A {\n pair : (value: boolean, nested: (flag: boolean, count: integer))\n}\n",
-        "package p.b\nimport p.a.A\nstruct B {\n value : A\n}\n",
+        "package p.a\nstruct A {\n pair : (value: boolean, nested: (flag: boolean, count: integer))\n}\nstruct Refused {\n pair : (values: [integer; 0..2]?)\n}\n",
+        "package p.b\nimport p.a.A\nimport p.a.Refused\nstruct B {\n value : A\n refused : Refused\n}\n",
     );
     let others: Vec<_> = packages.iter().collect();
     for package in &packages {
         let model = codegen::lower(package, &others);
         let p = model.proto3.as_ref().unwrap();
-        assert_eq!(model.tuples.len(), 2);
-        assert!(p.refused.is_empty());
+        assert_eq!(model.tuples.len(), 3);
         if package.name == "p.b" {
+            assert!(p.refused.is_empty());
             assert_eq!(
                 p.messages
                     .iter()
@@ -1361,9 +1361,30 @@ fn foreign_tuples_are_listed_only_in_the_declaring_package() {
         } else {
             assert_eq!(package.name, "p.a");
             message(p, "A");
+            let refused_tuple = p
+                .refused
+                .iter()
+                .find(|entry| matches!(entry.source, Some(v1::proto3_refused::Source::Tuple(_))))
+                .expect("the declaring package lists the refused tuple");
+            assert_eq!(
+                refused_tuple.cause,
+                v1::Proto3RefusalCause::OptionalCollection as i32
+            );
+            assert_eq!(p.refused.len(), 2);
+            assert_eq!(
+                refusal(p, &model, "Refused").cause,
+                v1::Proto3RefusalCause::RefusedDependency as i32
+            );
             for (index, tuple) in model.tuples.iter().enumerate() {
                 let name = tuple.name.as_ref().unwrap();
                 assert!(!name.rust.is_empty() && !name.wire.is_empty());
+                if refused_tuple.source == Some(v1::proto3_refused::Source::Tuple(index as u32)) {
+                    assert_eq!(
+                        refused_tuple.member.as_deref(),
+                        Some(format!("{}.values", name.rust).as_str())
+                    );
+                    continue;
+                }
                 assert_eq!(
                     message(p, &name.wire).source,
                     Some(v1::proto3_message::Source::Tuple(index as u32))
@@ -1472,7 +1493,7 @@ fn an_empty_open_enum_and_its_user_keep_their_messages() {
 }
 
 #[test]
-fn malformed_field_types_report_the_codecs_refusal() {
+fn malformed_field_types_report_the_projections_refusal() {
     for case in [
         "field",
         "array",

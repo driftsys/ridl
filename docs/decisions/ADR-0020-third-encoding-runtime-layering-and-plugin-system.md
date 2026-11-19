@@ -583,6 +583,10 @@ as its public contract.
    is recorded in
    [the proto3 codec record](../design/proto3-codec.md#the-wire-mapping).
 
+   **Amendment (2026-11-19) — the Rust codec reads the projection.** The Rust
+   codec now reads `Model.proto3`; the same codec record describes the facts it
+   reads and the derivations specific to Rust it retains.
+
 10. **Two hosts for that contract; the process host is this release's.** The
     in-tree Rust and TypeScript backends implement the contract in-process. The
     process host implements it by running an executable named
