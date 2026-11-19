@@ -1562,15 +1562,19 @@ message PodbufArm {
 // ---------------------------------------------------------------------
 
 // The proto3 layout of the package: every message the proto3 codec writes,
-// and every declaration and tuple proto3 cannot represent. Set whenever the
+// and every declaration and named tuple proto3 cannot represent. Set whenever the
 // toolchain lowers a package, whatever `encodings` the manifest selects.
 message Proto3Projection {
-  // In `Model.declarations` order, then every induced tuple in
+  // In `Model.declarations` order, then every named induced tuple in
   // `Model.tuples` order, whether or not a declaration or an interaction
-  // reaches it. Map entries are not listed: an entry's key is field 1 and
-  // its value is field 2, and `Proto3Map` carries both wires.
+  // reaches it. A tuple lifted from another package's declaration has no
+  // name here and has neither a message nor a refusal here; the declaring
+  // package's projection lists it. Map entries are not listed: an entry's
+  // key is field 1 and its value is field 2; `Proto3Map` carries both wires.
   repeated Proto3Message messages = 1;
-  // The declarations and tuples that have no message, in the same order.
+  // The refused declarations and named tuples, in the same order.
+  // A tuple with no name in this package has no refusal here; it comes from
+  // another package's declaration and is listed in that package's projection.
   // A message that needs a refused one is refused too, transitively, with
   // the cause REFUSED_DEPENDENCY, and is not in `messages`.
   repeated Proto3Refused refused = 2;
@@ -1661,7 +1665,7 @@ message Proto3Refused {
     uint32 tuple = 11;
   }
   Proto3RefusalCause cause = 2;
-  // The member the cause is about, when there is one: `Owner.field`.
+  // The member the cause is about, when there is one: `Owner.field` or `Enum.value`.
   optional string member = 3;
   // The diagnostic text. For every cause but REFUSED_DEPENDENCY, the Rust
   // backend reports this text unchanged. For REFUSED_DEPENDENCY the text is
@@ -1682,6 +1686,8 @@ enum Proto3ScalarType {
   PROTO3_SCALAR_TYPE_DOUBLE = 8;
 }
 
+// These enum values are not protobuf wire-type numbers. The mapping is
+// VARINT -> 0, I64 -> 1, LEN -> 2, I32 -> 5.
 enum Proto3WireType {
   PROTO3_WIRE_TYPE_UNSPECIFIED = 0;
   PROTO3_WIRE_TYPE_VARINT = 1;
@@ -1695,7 +1701,7 @@ enum Proto3RefusalCause {
   PROTO3_REFUSAL_CAUSE_OPTIONAL_COLLECTION = 1;   // `T[]?` or a map field `?`
   PROTO3_REFUSAL_CAUSE_OPTIONAL_ELEMENT = 2;      // optional element, key or value
   PROTO3_REFUSAL_CAUSE_NESTED_COLLECTION = 3;
-  PROTO3_REFUSAL_CAUSE_MAP_KEY = 4;               // not integral and not string
+  PROTO3_REFUSAL_CAUSE_MAP_KEY = 4;               // key refused by the codec's rule
   PROTO3_REFUSAL_CAUSE_ENUM_VALUE = 5;            // outside int32, live or retired
   PROTO3_REFUSAL_CAUSE_FIELD_NUMBER = 6;          // 0, 19000..=19999, > 536870911
   PROTO3_REFUSAL_CAUSE_REFUSED_DEPENDENCY = 7;    // needs a refused message

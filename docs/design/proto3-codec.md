@@ -228,11 +228,12 @@ The model also carries `Model.proto3`, whose contract is defined in
 codec still computes its own layout rather than reading that projection.
 `the_model_projection_matches_the_codec_layout` in
 `crates/ridl-backend-rust/tests/proto3_conformance.rs` keeps the projection and
-the codec equal for field numbers, types and labels over the conformance fixture
-and the corpus. It compares every codec message and requires every projection
-message outside the codec layout to have a tuple source. It does not compare
-packing or `default_is_legal`: the codec layout carries only a number, a type
-and a label per field.
+the codec equal for field numbers, types and labels over the conformance
+fixture, every ridlc corpus workspace that compiles without an error diagnostic,
+and the encoding corpus. It compares every codec message and requires every
+projection message outside the codec layout and every `refused` entry to have a
+tuple source. It does not compare packing or `default_is_legal`: the codec
+layout carries only a number, a type and a label per field.
 
 ## The writer
 
@@ -598,7 +599,7 @@ regenerate byte for byte.
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | Neither codec generates a type with no finite bound, so the ros2 corpus packages do not generate with proto3; the cap of such bounds that ADR-0030 decision 3 proposed was withdrawn, and the question stays open | driftsys/ridl#996 |
 | The codec does not reproduce the proto backend's name-collision refusals: a package the `.proto` emitter refuses for a name reason still gets a Rust codec                                                        | driftsys/ridl#997 |
-| The `.proto` emitter and the codec walk a message separately, held together by the drift test rather than by one shared walk                                                                                      | driftsys/ridl#690 |
+| The `.proto` emitter, the Rust codec and `codegen/proto3.rs` walk messages separately; comparison tests check their agreement                                                                                     | driftsys/ridl#690 |
 
 ## Alternatives considered
 

@@ -746,9 +746,12 @@ projection".
 
 - **Order.** `messages` lists one message per representable struct, union, named
   scalar, enum and enum set in `Model.declarations` order, then one per
-  representable tuple in `Model.tuples` order. A constant has neither a message
-  nor a refusal. Every tuple is considered, including one that no payload
-  carries; the Rust codec lays out only the tuples it reaches.
+  representable named tuple in `Model.tuples` order. A constant has neither a
+  message nor a refusal. Every tuple with a name in this package is considered,
+  including one that no payload carries; the Rust codec lays out only the tuples
+  it reaches. A tuple lifted from a declaration of another package has no name
+  in this package and has neither a message nor a refusal here; the declaring
+  package's own projection lists it.
 - **Name and source.** `Proto3Message.name` is the message name without its
   package: the declared name of a struct or union, `<Name>Box` for a named
   scalar, enum or enum set, and the tuple's wire name (its Rust name if the wire
@@ -763,14 +766,16 @@ projection".
   value with `box_value`.
 - **Wires.** `Proto3Wire.kind` selects `scalar`, `text`, `bytes`, `enumeration`,
   `message`, `array` or `map`. A scalar carries its proto3 type and wire type;
-  numeric and boolean values and an enum set's integer use that arm. Text and
-  bytes use the length-delimited wire type. An enum carries a `TypeRef` and is
-  an int32 varint. A message reference indexes `Proto3Projection.messages` for a
-  local struct, union or tuple, or `Model.foreign` for a struct or union of
-  another package. An array carries its element wire, with `packed` true exactly
-  when that wire is `scalar` or `enumeration`; text, bytes and messages are not
-  packed. A map carries its key and value wires. Its entry message is not listed
-  in `messages`: key is field 1 and value is field 2.
+  numeric and boolean values and an enum set's integer use that arm.
+  `Proto3WireType` enum values are not protobuf wire-type numbers: VARINT maps
+  to 0, I64 to 1, LEN to 2 and I32 to 5. Text and bytes use the length-delimited
+  wire type. An enum carries a `TypeRef` and is an int32 varint. A message
+  reference indexes `Proto3Projection.messages` for a local struct, union or
+  tuple, or `Model.foreign` for a struct or union of another package. An array
+  carries its element wire, with `packed` true exactly when that wire is
+  `scalar` or `enumeration`; text, bytes and messages are not packed. A map
+  carries its key and value wires. Its entry message is not listed in
+  `messages`: key is field 1 and value is field 2.
 - **Defaults.** `Proto3Wire.default_is_legal` (field 1) states whether the
   proto3 default is a legal value of the type. Every wire carries it, including
   a root box's value, an array's element, and a map's key and value. For a
@@ -789,16 +794,19 @@ projection".
   at its default only when the flag is true. This field has existed since
   `Model.proto3`, so every writer that writes a `Proto3Wire` sets it, and
   `false` always means the default is not legal.
-- **Refusals.** A refused declaration or tuple has no message. `refused` lists
-  its source index and a `Proto3RefusalCause`, in declaration order and then
-  tuple order. The causes are `OPTIONAL_COLLECTION` (an optional array or map
-  field), `OPTIONAL_ELEMENT` (an optional array element, map key or map value),
-  `NESTED_COLLECTION` (an array of arrays or maps, or a map value that is an
-  array or map), `MAP_KEY` (a key wire proto3 does not admit), `ENUM_VALUE` (a
-  live or retired enum value outside int32), `FIELD_NUMBER` (0, 19000..=19999 or
-  above 536870911), `REFUSED_DEPENDENCY`, and `OTHER` (an input the walk cannot
-  represent, such as a missing type, an unresolved reference, an empty union or
-  an empty strict enum). `member`, when present, names the member as
+- **Refusals.** A refused declaration or named tuple has no message; a tuple
+  with no name in this package has neither a message nor a refusal here, because
+  it comes from another package's declaration, whose projection lists it.
+  `refused` lists its source index and a `Proto3RefusalCause`, in declaration
+  order and then tuple order. The causes are `OPTIONAL_COLLECTION` (an optional
+  array or map field), `OPTIONAL_ELEMENT` (an optional array element, map key or
+  map value), `NESTED_COLLECTION` (an array of arrays or maps, or a map value
+  that is an array or map), `MAP_KEY` (a key refused by the Rust codec's rule,
+  which admits integral, boolean, string, enum and enum-set keys), `ENUM_VALUE`
+  (a live or retired enum value outside int32), `FIELD_NUMBER` (0, 19000..=19999
+  or above 536870911), `REFUSED_DEPENDENCY`, and `OTHER` (an input the walk
+  cannot represent, such as a missing type, an unresolved reference, an empty
+  union or an empty strict enum). `member`, when present, names the member as
   `Owner.field`; an enum's own refusal names its value when that value has a
   name. For a member using an enum with values outside int32, it names the using
   member, including when the enum is foreign. The walk records each refused
