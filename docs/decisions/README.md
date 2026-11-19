@@ -732,7 +732,7 @@ other entry below is Accepted.
   and 16, and adds dated notes to ADR-0008, ADR-0016, ADR-0022 and ADR-0002.
 
 - **ADR-0035 — The authoring skill, its gates, its distribution and its evals.**
-  _Accepted._ The `ridl-authoring` skill is `SKILL.md` and `rules.md`, written
+  _Proposed._ The `ridl-authoring` skill is `SKILL.md` and `rules.md`, written
   by hand; three tests keep it consistent with the compiler; the editor release
   and the VS Code extension (which needs VS Code 1.109) distribute it; and
   `cargo xtask eval` compares an agent with and without it, scored mechanically

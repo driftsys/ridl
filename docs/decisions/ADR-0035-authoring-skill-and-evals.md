@@ -2,12 +2,13 @@
 
 ## Status
 
-Accepted — 2026-11-19, recorded when the design and plan of 2026-10-11 were
+Proposed — 2026-11-19, recorded when the design and plan of 2026-10-11 were
 gardened. The maintainer made four rulings before the design was written
 (because [ADR-0005](ADR-0005-agent-enablement.md) conflicted with the work) and
 agreed decisions 1 to 9 of the design in the brainstorming session of
-2026-10-11. The skill, its gates, its distribution and the eval runner were
-built in driftsys/ridl#893 and simplified in #963.
+2026-10-11. The record as gardened is not yet accepted by the maintainer. The
+skill, its gates, its distribution and the eval runner were built in
+driftsys/ridl#893 and simplified in #963.
 
 Two parts of decisions 8 and 9 are decided but not done: the judge check and the
 release record have not been run. They need the maintainer to confirm the model
