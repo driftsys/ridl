@@ -118,7 +118,9 @@ other entry below is Accepted.
   explicit, and decision 10 holds unqualified. Amended 2026-10-12: decision 8
   has a language backend emit a constructor that checks a type's range, step and
   length bounds, which a wire backend does not, and settles open item 1 with
-  ADR-0018 decision 15.
+  ADR-0018 decision 15. Amended 2026-11-18: decision 8 uses normalised I-Regexp
+  patterns with whole-value matching in the checker, Rust output and TypeScript
+  output, with the `u` flag in TypeScript.
 
 - **ADR-0014 — IR encodings.** Decision 16 (amended 2026-11-11) requires
   declared live enum values to fit int32, reports TYPL-225 otherwise, and leaves

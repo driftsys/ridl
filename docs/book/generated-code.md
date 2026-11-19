@@ -936,6 +936,15 @@ This table records, for each kind of rule, the generated item that checks it:
 | `require`        | checked by the call methods of `Client` and by `serve`    | not checked                                |
 | `ensure`         | checked by `serve`                                        | not checked                                |
 
+<a id="pattern-engine-texts"></a>
+
+Each output wraps the normalised pattern `P` for whole-value matching:
+
+| Consumer                            | Engine text and operation              |
+| ----------------------------------- | -------------------------------------- |
+| Checker, Rust output and wasm codec | `Regex::new(r"\A(?:P)\z")`, `is_match` |
+| TypeScript output                   | `new RegExp("^(?:P)$", "u")`, `test`   |
+
 In the Rust column:
 
 - `new` and `TryFrom` are the constructors of a named scalar. `verify` is the
@@ -957,9 +966,9 @@ In the Rust column:
   integer, so every value is written back unchanged.
 - Each pattern clause is checked only when the crate is built with the
   `validate-pattern` feature (see [Cargo features](#cargo-features)). One static
-  `regex::Regex` per clause compiles `\A(?:P)\z`, where `P` is the normalised
-  pattern; `is_match` checks the whole value. The checker uses the same text.
-  The first clause that refuses the value returns `Rule::Pattern`.
+  `regex::Regex` per clause uses the
+  [pattern engine text](#pattern-engine-texts) above. The checker uses the same
+  text. The first clause that refuses the value returns `Rule::Pattern`.
 - A call's future, in the async and in the blocking `Client`, resolves to a
   failure when the response bound's `max` passes (see [Failures](#failures)).
   Its `min` is not checked.
@@ -990,12 +999,12 @@ scalar value and which `TextEncoder` replaces with U+FFFD without an error, so a
 string with one breaks the `utf8` rule before any other. A string length counts
 Unicode code points, as the Rust `chars().count()` does, so `"😀"` has length 1,
 and a bytes length counts bytes. Each clause has one `RegExp`, named
-`__ridlPattern<Name>_<index>`, built once for the module as
-`new RegExp("^(?:P)$", "u")`, where `P` is the normalised pattern. Its `test`
-checks the whole value, and every clause must match. Normalisation writes a dot
-outside a class as `[^\n\r]`, so the checker, Rust output and TypeScript output
-give the same verdict; a dot accepts U+2028 and U+2029, and an astral character
-counts as one character. See the
+`__ridlPattern<Name>_<index>`, built once for the module with the
+[pattern engine text](#pattern-engine-texts) above. Its `test` checks the whole
+value, and every clause must match. Normalisation writes a dot outside a class
+as `[^\n\r]`, so the checker, Rust output and TypeScript output give the same
+verdict; a dot accepts U+2028 and U+2029, and an astral character counts as one
+character. See the
 [pattern language](../specification/typl-language-reference.md#27-regex-literals).
 The TypeScript pattern check is always on.
 

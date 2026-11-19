@@ -555,10 +555,11 @@ take any of those names. `make<Name>Unchecked` exists only for a scalar whose
 `make<Name>` checks something, which is every string scalar, and the decoder
 keeps a type assertion for the others. An `internal` scalar has neither
 constructor, because nothing in the module calls it and the codec module cannot
-import it. Each pattern clause has one `new RegExp("^(?:P)$", "u")` over the
-normalised I-Regexp pattern `P`, tested against the whole value. Every clause
-must match. These checks agree with the checker and the Rust `regex` crate used
-by the wasm codec ([Generated code](../book/generated-code.md)). The test
+import it. Each pattern clause has one `RegExp` using the
+[generated pattern engine text](../book/generated-code.md#pattern-engine-texts),
+tested against the whole value. Every clause must match. These checks agree with
+the checker and the Rust `regex` crate used by the wasm codec
+([Generated code](../book/generated-code.md)). The test
 `examples/cabin/web/check_test.ts` compares `make<Name>` with the wasm codec's
 `verify` over the constrained values of `examples/cabin/cabin.ridl` and checks
 TypeScript verdicts against a table shared with the Rust tests.

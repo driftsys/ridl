@@ -338,7 +338,7 @@ Deno.test("bytes length counts bytes and is inclusive", () => {
   refuses("Raw", () => makeRaw(new Uint8Array(9)), "length");
 });
 
-Deno.test("a pattern with anchors matches the whole value", () => {
+Deno.test("a pattern without anchors matches the whole value", () => {
   assert.equal(makeCapitals("ABC"), "ABC");
   refuses("Capitals", () => makeCapitals("ABc"), "pattern");
   refuses("Capitals", () => makeCapitals("1ABC"), "pattern");
@@ -346,7 +346,7 @@ Deno.test("a pattern with anchors matches the whole value", () => {
 });
 
 Deno.test("a pattern that matches the whole value refuses a trailing newline", () => {
-  // `$` without the multiline flag matches only at the end of the input.
+  // Whole-value matching refuses a newline outside the declared character class.
   refuses("Capitals", () => makeCapitals("ABC\n"), "pattern");
   refuses("Capitals", () => makeCapitals("AB\nC"), "pattern");
 });

@@ -415,7 +415,7 @@ patterns, init values, and contract expressions. A regex constant is an I-Regexp
 matched against the whole value: `MODEL_PATTERN` below accepts a value of 3 to 6
 characters and `VIN_PATTERN` accepts exactly 17. No anchors are needed. Several
 `match` clauses require every pattern to match; use `/.*ABC.*/` for a value that
-contains `ABC`. The
+contains `ABC` and holds no line break. The
 [pattern language](../specification/typl-language-reference.md#27-regex-literals)
 lists the accepted constructs and replacements for refused ones:
 

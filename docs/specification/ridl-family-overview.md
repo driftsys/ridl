@@ -296,9 +296,9 @@ By home; see each reference for full statements.
 
 ## 7. Shared Diagnostic Namespaces — `FORM-` and `MANI-`
 
-Pattern diagnostics remain in typl §16.2: TYPL-106 for an I-Regexp recogniser
-refusal, TYPL-220 for an accepted pattern the Rust `regex` compiler refuses. No
-shared surface or manifest diagnostic is added.
+Pattern diagnostics remain in typl §16.2 and §16.3: TYPL-106 for an I-Regexp
+recogniser refusal, TYPL-220 for an accepted pattern the Rust `regex` compiler
+refuses. No shared surface or manifest diagnostic is added.
 
 Diagnostic codes are namespaced and grouped by hundreds, never renumbered and
 never reused (typl §16). **One namespace per profile**, tabulated in that

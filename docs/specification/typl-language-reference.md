@@ -255,9 +255,11 @@ UTF-8 in double quotes. Escapes follow
 A regex literal is enclosed in forward slashes. Its pattern is an I-Regexp
 ([RFC 9485 §3](https://www.rfc-editor.org/rfc/rfc9485#section-3)), with the
 refusals below, and matches the whole value, from its first character to its
-last. Forward slashes inside the literal are escaped `\/`, including inside a
-class. The delimiter escape is removed before checking the pattern; other escape
-pairs are kept unchanged.
+last. `.*ABC.*` accepts a value that contains `ABC` and holds no line break;
+`(.|\n|\r)*ABC(.|\n|\r)*` accepts any value that contains `ABC`. Forward slashes
+inside the literal are escaped `\/`, including inside a class. The delimiter
+escape is removed before checking the pattern; other escape pairs are kept
+unchanged.
 
 ```ridl
 /[A-HJ-NPR-Z0-9]{17}/
@@ -282,24 +284,26 @@ nesting, write the smaller bound first, and complete the pattern's syntax.
 The following constructs are outside the accepted language. Replacements use
 explicit sets: they do not preserve the Unicode sets of every former engine.
 
-| Refused construct                                                             | Replacement                                                                            |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `^…$`, `\A…\z`, `\A…\Z`                                                       | Remove the anchors: the match covers the whole value.                                  |
-| `^…` with no end anchor                                                       | `….*` for a prefix.                                                                    |
-| `…$` with no start anchor                                                     | `.*…` for a suffix.                                                                    |
-| `\d`, `\D`                                                                    | `[0-9]`, `[^0-9]`.                                                                     |
-| `\w`, `\W`                                                                    | `[0-9A-Za-z_]`, `[^0-9A-Za-z_]`.                                                       |
-| `\s`, `\S`                                                                    | `[ \t\n\r]`, `[^ \t\n\r]`.                                                             |
-| `\b`, `\B`                                                                    | No word-boundary operator; write the boundary characters explicitly.                   |
-| `\uXXXX`, `\xXX`, identity or control escapes such as `\a`, `\cX`, `\0`, `\<` | Write the character itself; `[\x20-\x7E]` becomes `[ -~]`.                             |
-| Lookahead or lookbehind                                                       | Write each condition as its own `match` clause, such as `match /.*X.*/ match /.*Y.*/`. |
-| Backreferences (`\1` to `\9`, `\k`)                                           | Write the alternatives out.                                                            |
-| Non-capturing or named groups (`(?:…)`, `(?<name>…)`, `(?P<…)`)               | Write a plain group `(…)`.                                                             |
-| Lazy or possessive quantifiers (`*?`, `++`)                                   | Use a plain quantifier.                                                                |
-| Inline flags (`(?i)ab`)                                                       | Write each case in a class: `[Aa][Bb]`.                                                |
-| POSIX classes (`[:alpha:]`)                                                   | Write an explicit range, such as `[a-z]`.                                              |
-| Nested classes                                                                | Flatten the class; a literal `[` is `\[`.                                              |
-| `{,n}`                                                                        | Supply a minimum: `{0,n}`.                                                             |
+| Refused construct                                                             | Replacement                                                                                                                 |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `^…$`, `\A…\z`, `\A…\Z`                                                       | Remove the anchors: the match covers the whole value.                                                                       |
+| `^…` with no end anchor                                                       | `….*` for a prefix followed by text that holds no line break.                                                               |
+| `…$` with no start anchor                                                     | `.*…` for a suffix preceded by text that holds no line break.                                                               |
+| `\d`, `\D`                                                                    | `[0-9]`, `[^0-9]`.                                                                                                          |
+| `\w`, `\W`                                                                    | `[0-9A-Za-z_]`, `[^0-9A-Za-z_]`.                                                                                            |
+| `\s`, `\S`                                                                    | `[ \t\n\r]`, `[^ \t\n\r]`.                                                                                                  |
+| `\b`, `\B`                                                                    | No word-boundary operator; write the boundary characters explicitly.                                                        |
+| `\uXXXX`, `\xXX`, identity or control escapes such as `\a`, `\cX`, `\0`, `\<` | Write the character itself; `[\x20-\x7E]` becomes `[ -~]`.                                                                  |
+| Lookahead or lookbehind                                                       | Write each condition as its own `match` clause, such as `match /.*X.*/ match /.*Y.*/` for a value that holds no line break. |
+| Backreferences (`\1` to `\9`, `\k`)                                           | Write the alternatives out.                                                                                                 |
+| Non-capturing or named groups (`(?:…)`, `(?<name>…)`, `(?P<…)`)               | Write a plain group `(…)`.                                                                                                  |
+| Lazy or possessive quantifiers (`*?`, `++`)                                   | Use a plain quantifier.                                                                                                     |
+| A quantifier after a quantifier (`a**`, `a{2}{3}`)                            | Use one quantifier, or group the repeated expression: `(a{2}){3}`.                                                          |
+| A hyphen after a class range (`[a-b-c]`)                                      | Write a hyphen first, last, or as `\-`: `[-a-bc]`, `[a-bc-]`, `[a-b\-c]`.                                                   |
+| Inline flags (`(?i)ab`)                                                       | Write each case in a class: `[Aa][Bb]`.                                                                                     |
+| POSIX classes (`[:alpha:]`)                                                   | Write an explicit range, such as `[a-z]`.                                                                                   |
+| Nested classes                                                                | Flatten the class; a literal `[` is `\[`.                                                                                   |
+| `{,n}`                                                                        | Supply a minimum: `{0,n}`.                                                                                                  |
 
 Six spellings allowed by RFC 9485 are also refused because engine meanings would
 differ:
@@ -321,19 +325,16 @@ limit. A regex constant is checked at its declaration (§6.2), even though its
 generated constant is text.
 
 An unanchored pattern still compiles, but matches the whole value: `/ABC/`
-accepts only `"ABC"`. Write `/.*ABC.*/` for a value that contains `ABC`. For a
-prefix followed by any character including `\n` or `\r`, write
-`prefix(.|\n|\r)*` instead of `prefix.*`.
+accepts only `"ABC"`. Write `/.*ABC.*/` for a value that contains `ABC` and
+holds no line break. For a prefix followed by any character including `\n` or
+`\r`, write `prefix(.|\n|\r)*` instead of `prefix.*`.
 
 The normalised pattern `P` removes the literal's delimiters and delimiter
 escapes, and rewrites each unescaped `.` outside a class as `[^\n\r]`. The
 checker tests an init value against every clause (TYPL-109, RIDL-110) using the
-same text and engine as the Rust output:
-
-| Consumer                            | Engine text and operation              |
-| ----------------------------------- | -------------------------------------- |
-| Checker, Rust output and wasm codec | `Regex::new(r"\A(?:P)\z")`, `is_match` |
-| TypeScript output                   | `new RegExp("^(?:P)$", "u")`, `test`   |
+same text and engine as the Rust output. The
+[generated pattern engine texts](../book/generated-code.md#pattern-engine-texts)
+define how each output wraps `P` for whole-value matching.
 
 These consumers give the same verdict for an accepted pattern and a Unicode
 scalar value string. A dot accepts U+2028 and U+2029, and a character outside
@@ -676,7 +677,8 @@ more times without a length bound. A value must match every clause. Clause order
 does not change which values match, and `ridl diff` ignores it. The IR keeps
 source order, and changing the order changes the catalog hash when the unit
 reaches the type. Each clause references a named regex constant or an inline
-regex literal.
+regex literal. The example below requires a value that holds no line break (see
+[§2.7](#27-regex-literals)).
 
 ```ridl
 type Token : string [8..64 match /.*[0-9].*/ match /.*[A-Z].*/]

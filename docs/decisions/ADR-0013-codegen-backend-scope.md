@@ -11,6 +11,10 @@ Decision 2's ceiling is settled for wire backends. **Whether the same ceiling
 binds the language backends was open** — see Open item 1, settled by the
 amendment of 2026-10-12 below.
 
+**Amendment (2026-11-18).** Decision 8 uses normalised I-Regexp patterns with
+whole-value matching in the checker, Rust output and TypeScript output;
+TypeScript uses the `u` flag. See the amendment inside decision 8.
+
 **Amendment (2026-10-12).** Open item 1 is settled in two halves. The
 interaction-face half was answered by
 [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 15. The
@@ -375,6 +379,10 @@ language layer at `int64`/`float64`.
   gRPC needs work this ADR places outside the backend.
 - **Negative — decision 3 is work on shipped code.** Both existing backends gain
   an emit and the snapshot tests that cover them.
+- **Negative — decision 8 is work on a shipped backend.** The TypeScript
+  `make<Name>` pattern check follows the checker's ECMA-262 semantics, not the
+  Rust `regex` crate's, so the two can disagree for a pattern construct that the
+  two engines read differently (driftsys/ridl#597).
 - **Decision 8 amendment (2026-11-18).** The TypeScript `make<Name>` pattern
   check uses a normalised I-Regexp with whole-value matching and the `u` flag.
   It agrees with the checker and the Rust output (typl §2.7).

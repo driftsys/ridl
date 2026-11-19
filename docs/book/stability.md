@@ -208,36 +208,28 @@ are removed until the follow-up restores them.
 
 A pattern with no anchor and no refused construct still compiles, and now
 matches the whole value. `/ABC/` accepts only `"ABC"`; write `/.*ABC.*/` for a
-value that contains `ABC`. This change draws no diagnostic.
+value that contains `ABC` and holds no line break (see
+[typl §2.7](../specification/typl-language-reference.md#27-regex-literals)).
+This change draws no diagnostic. `ridl diff` compares pattern text, so it does
+not report a pattern whose text did not change, although its accepted values
+did.
 
-Refused constructs draw TYPL-106. Use these replacements; the explicit classes
-do not reproduce every former engine's Unicode sets:
+Refused constructs draw TYPL-106:
 
-| Refused construct                                           | Replacement                                                                                          |
-| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Start and end anchors (`^…$`, `\A…\z`, `\A…\Z`)             | Remove them. For a prefix use `….*`; for a suffix use `.*…`. Literal `^` and `$` are `\^` and `[$]`. |
-| `\d`, `\D`, `\w`, `\W`                                      | `[0-9]`, `[^0-9]`, `[0-9A-Za-z_]`, `[^0-9A-Za-z_]`.                                                  |
-| `\s`, `\S`                                                  | `[ \t\n\r]`, `[^ \t\n\r]`.                                                                           |
-| `\b`, `\B`                                                  | Write boundary characters explicitly; there is no word-boundary operator.                            |
-| `\uXXXX`, `\xXX`, identity and control escapes              | Write the character itself; `[\x20-\x7E]` becomes `[ -~]`.                                           |
-| `\p{…}`, `\P{…}`                                            | Write explicit ranges, such as `[a-zà-ÿ]`.                                                           |
-| Lookahead or lookbehind                                     | Write each condition as its own `match` clause, for example `match /.*X.*/ match /.*Y.*/`.           |
-| Backreferences                                              | Write the alternatives out.                                                                          |
-| Non-capturing or named groups                               | Write plain groups `(…)`.                                                                            |
-| Lazy or possessive quantifiers                              | Use plain quantifiers.                                                                               |
-| Inline flags                                                | Write each case explicitly: `(?i)ab` becomes `[Aa][Bb]`.                                             |
-| POSIX or nested classes                                     | Write explicit ranges or flatten the class; a literal `[` is `\[`.                                   |
-| `&&`, `~~`, consecutive unescaped `--` inside a class       | Write one `&`, `~` or `-`.                                                                           |
-| `\-` outside a class                                        | Write a bare `-`.                                                                                    |
-| Empty or incomplete classes, groups, escapes or quantifiers | Complete the syntax and give a class at least one character.                                         |
-| `{,n}` or a quantifier with nothing to repeat               | Write `{0,n}` or supply the atom to repeat.                                                          |
-| A reversed class range or quantifier bound                  | Write the smaller value first. Quantifier bounds are compared exactly.                               |
-| More than 250 nested groups                                 | Reduce the nesting.                                                                                  |
+- Start and end anchors; `\d`, `\D`, `\w`, `\W`, `\s`, `\S`, `\b` and `\B`.
+- `\uXXXX`, `\xXX`, identity and control escapes; `\p{…}` and `\P{…}`.
+- Lookahead, lookbehind, backreferences, non-capturing or named groups, and
+  inline flags.
+- Lazy or possessive quantifiers, a quantifier after a quantifier, `{,n}`, and a
+  quantifier with nothing to repeat.
+- POSIX or nested classes; `&&`, `~~` or consecutive unescaped `--` inside a
+  class; a hyphen after a class range; and `\-` outside a class.
+- Empty or incomplete classes, groups, escapes or quantifiers; reversed class
+  ranges or quantifier bounds; and more than 250 nested groups.
 
-The complete language is in
-[typl §2.7](../specification/typl-language-reference.md#27-regex-literals). An
-accepted pattern that exceeds the Rust `regex` compiler's limits still draws
-TYPL-220.
+See [typl §2.7](../specification/typl-language-reference.md#27-regex-literals)
+for replacements and the complete language. An accepted pattern that exceeds the
+Rust `regex` compiler's limits still draws TYPL-220.
 
 In `ridl.std`, `Date`, `IpV4` and the ASCII types (`Label`, `Name`, `Message`)
 use explicit classes: `[0-9]` for digits and `[ -~]` for printable ASCII.
