@@ -2418,10 +2418,11 @@ impl Checker<'_> {
                 && let Ok(regex) = regress::Regex::new(regex_body(pattern))
                 && regex.find(text).is_none()
             {
+                let clause_text = clause.pattern_const.unwrap_or(pattern);
                 self.error(
                     violation,
                     range,
-                    format!("init string `{text}` does not match the type's `match` pattern"),
+                    format!("init string `{text}` does not match the type's `match` pattern {clause_text}"),
                 );
             }
         }
@@ -11380,7 +11381,42 @@ mod tests {
             "package app\ntype Code : string [1..8 match /^[A-Z]+$/] = \"abc\"\n",
         );
         assert_eq!(codes(&checked), vec!["TYPL-109"]);
-        assert!(checked.diagnostics[0].message.contains("pattern"));
+        assert_eq!(
+            messages(&checked),
+            ["init string `abc` does not match the type's `match` pattern /^[A-Z]+$/"]
+        );
+    }
+
+    #[test]
+    fn several_match_clauses_name_each_failed_init_clause() {
+        for clauses in ["match /[0-9]/ match /[A-Z]/", "match /[0-9]/ match CAPITAL"] {
+            let text = format!(
+                "package app\nconst CAPITAL = /[A-Z]/\ntype T : string [0..8 {clauses}] = \"abc\"\n",
+            );
+            let checked = check_source("app", &text);
+            assert_eq!(codes(&checked), ["TYPL-109", "TYPL-109"]);
+            assert_eq!(
+                messages(&checked),
+                if clauses.ends_with("CAPITAL") {
+                    [
+                        "init string `abc` does not match the type's `match` pattern /[0-9]/",
+                        "init string `abc` does not match the type's `match` pattern CAPITAL",
+                    ]
+                } else {
+                    [
+                        "init string `abc` does not match the type's `match` pattern /[0-9]/",
+                        "init string `abc` does not match the type's `match` pattern /[A-Z]/",
+                    ]
+                }
+            );
+            for diagnostic in checked
+                .diagnostics
+                .iter()
+                .filter(|d| d.code == DiagCode::TYPL_109)
+            {
+                assert_eq!(primary_text(&text, diagnostic), "\"abc\"");
+            }
+        }
     }
 
     #[test]
@@ -11428,12 +11464,14 @@ mod tests {
 
     #[test]
     fn several_match_clauses_have_no_derivable_init() {
-        let checked = check_source(
-            "app",
-            "package app\ntype T : string [0..8 match /[0-9]/ match /[A-Z]/]\n",
-        );
-        assert_eq!(codes(&checked), ["TYPL-115"]);
-        assert_eq!(type_def(&checked, "T").init, Some(iv(false, None)));
+        for clauses in ["match /[0-9]/", "match /[0-9]/ match /[A-Z]/"] {
+            let checked = check_source(
+                "app",
+                &format!("package app\ntype T : string [0..8 {clauses}]\n"),
+            );
+            assert_eq!(codes(&checked), ["TYPL-115"], "{clauses}");
+            assert_eq!(type_def(&checked, "T").init, Some(iv(false, None)));
+        }
     }
 
     #[test]
@@ -13025,6 +13063,37 @@ mod tests {
             "got: {:?}",
             good.diagnostics
         );
+    }
+
+    #[test]
+    fn ridl_110_signal_init_names_each_failed_match_clause() {
+        for (clauses, expected) in [
+            (
+                "match CAPITAL",
+                vec!["init string `abc` does not match the type's `match` pattern CAPITAL"],
+            ),
+            (
+                "match /[0-9]/ match CAPITAL",
+                vec![
+                    "init string `abc` does not match the type's `match` pattern /[0-9]/",
+                    "init string `abc` does not match the type's `match` pattern CAPITAL",
+                ],
+            ),
+        ] {
+            let text = format!(
+                "package app\nconst CAPITAL = /[A-Z]/\ntype T : string [0..8 {clauses}] = \"1A\"\ninterface I {{\n  signal s : T = \"abc\" @10ms\n}}\n",
+            );
+            let checked = check_ridl("app", &text);
+            assert_eq!(codes(&checked), vec!["RIDL-110"; expected.len()]);
+            assert_eq!(messages(&checked), expected);
+            for diagnostic in checked
+                .diagnostics
+                .iter()
+                .filter(|d| d.code == DiagCode::RIDL_110)
+            {
+                assert_eq!(primary_text(&text, diagnostic), "\"abc\"");
+            }
+        }
     }
 
     #[test]
