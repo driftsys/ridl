@@ -210,7 +210,7 @@ const DEEPEST_ADMITTED: usize = 127;
 /// The tuple shape is a constant, because a tuple position is a `TupleRef`
 /// and each tuple is its own five-level entry in `Model.tuples`.
 const SHAPE_BOUNDS: &[(&str, usize, usize)] =
-    &[("arrays", 259, 262), ("maps", 261, 265), ("tuples", 6, 9)];
+    &[("arrays", 259, 262), ("maps", 262, 266), ("tuples", 6, 9)];
 
 /// One package whose single struct field nests `depth` levels of the given
 /// shape — the three shapes `ir_canonical.rs` measures, so the IR's figures
@@ -226,8 +226,13 @@ fn shaped_source(shape: &str, depth: usize) -> String {
         }
         "maps" => {
             let mut payload = "integer".to_string();
-            for _ in 0..depth {
-                payload = format!("[string : {payload}; 0..1]");
+            for level in 0..depth {
+                let key = if level == 0 {
+                    "string [0..8 match /a/]"
+                } else {
+                    "string"
+                };
+                payload = format!("[{key} : {payload}; 0..1]");
             }
             payload
         }
@@ -283,6 +288,17 @@ fn the_deepest_package_the_front_end_admits_pins_the_model_nesting_bound() {
                 ..Default::default()
             };
             let text = codegen::request_to_json(&request).expect("the request serializes");
+            let (request_objects, request_brackets) = depths(&text);
+            assert_eq!(
+                request_objects,
+                objects + 1,
+                "{shape}: the request adds one object"
+            );
+            assert_eq!(
+                request_brackets,
+                json_levels + 1,
+                "{shape}: the request adds one JSON level"
+            );
             assert_eq!(
                 codegen::request_from_json(&text).expect("the deepest request reads"),
                 request,

@@ -17530,6 +17530,7 @@ service Cabin { signal s : State @[100ms..1s] }
     }
 
     #[test]
+    #[allow(deprecated)]
     fn match_clauses_lower_literal_and_constant_without_changing_search_text() {
         for (prefix, clause, constant) in [
             ("", "/[A-Z]{17}/", None),
@@ -17548,8 +17549,11 @@ service Cabin { signal s : State @[100ms..1s] }
                     _ => None,
                 })
                 .unwrap();
+            let constraint = def.constraint.as_ref().unwrap();
+            assert_eq!(constraint.pattern.as_deref(), Some("/[A-Z]{17}/"));
+            assert_eq!(constraint.pattern_const.as_deref(), constant);
             assert_eq!(
-                def.constraint.as_ref().unwrap().matches,
+                constraint.matches,
                 vec![v2::Match {
                     pattern: Some("/[A-Z]{17}/".into()),
                     pattern_const: constant.map(str::to_owned)

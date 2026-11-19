@@ -167,8 +167,13 @@ fn shaped_source(shape: &str, depth: usize) -> String {
         }
         "maps" => {
             let mut payload = "integer".to_string();
-            for _ in 0..depth {
-                payload = format!("[string : {payload}; 0..1]");
+            for level in 0..depth {
+                let key = if level == 0 {
+                    "string [0..8 match /a/]"
+                } else {
+                    "string"
+                };
+                payload = format!("[{key} : {payload}; 0..1]");
             }
             payload
         }
@@ -197,7 +202,7 @@ fn shaped_source(shape: &str, depth: usize) -> String {
 /// moving the specification fails here.
 const SHAPE_BOUNDS: &[(&str, usize, usize)] = &[
     ("arrays", 259, 262),
-    ("maps", 261, 265),
+    ("maps", 262, 266),
     ("tuples", 386, 516),
 ];
 
