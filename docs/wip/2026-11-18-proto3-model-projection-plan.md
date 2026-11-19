@@ -443,6 +443,24 @@ this plan stay in `docs/wip/` until pull request 2.
 - [ ] **Step 5: Commit** —
       `refactor(ridl-backend-rust): read the proto3 layout from the codegen model`
 
+**Also in this task**, carried from the review of pull request 1 (its four Minor
+findings):
+
+- A test pins the refusal text and the member of a tuple field with no type
+  (`crates/ridl-ir/src/codegen/proto3.rs`, the tuple branch of the missing-type
+  refusal).
+- `foreign_tuples_are_listed_only_in_the_declaring_package` also lifts a tuple
+  that proto3 refuses, and asserts a refusal in the declaring package and none
+  in the importing one.
+- A unit test with two declarations of another package pins the index of
+  `Proto3MessageRef.foreign`.
+- `docs/design/proto3-codec.md` names the list it calls "the encoding corpus".
+
+**Mutations the reviewer tries**, beyond the one below: flip `packed` for one
+array, and flip `default_is_legal` for one scalar, each in `ridl-ir`'s
+`codegen/proto3.rs`. Each must now fail a test of the Rust codec, because the
+codec reads both.
+
 **Mutation the reviewer tries:** in `ridl-ir`'s `codegen/proto3.rs`, change one
 scalar mapping. The byte-equality tests of the Rust codec against prost
 (`bytes_this_codec_writes_equal_prost_bytes`) must now fail, which shows the
