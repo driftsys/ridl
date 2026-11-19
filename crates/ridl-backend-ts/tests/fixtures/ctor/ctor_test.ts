@@ -351,19 +351,20 @@ Deno.test("an anchored pattern refuses a trailing newline", () => {
   refuses("Capitals", () => makeCapitals("AB\nC"), "pattern");
 });
 
-Deno.test("an unanchored pattern accepts a match anywhere", () => {
+Deno.test("an explicit search pattern accepts a match anywhere", () => {
   assert.equal(makeContains("xxabxx"), "xxabxx");
   assert.equal(makeContains("ab"), "ab");
   refuses("Contains", () => makeContains("ba"), "pattern");
   refuses("Contains", () => makeContains(""), "pattern");
 });
 
-Deno.test("a pattern runs without the unicode flag", () => {
-  // The dot matches one UTF-16 unit, the semantics of the checker. With the
-  // `u` flag it would match the whole astral character.
+Deno.test("a pattern matches Unicode characters and normalised line terminators", () => {
   assert.equal(makeDot("a"), "a");
   assert.equal(makeDot("é"), "é");
-  refuses("Dot", () => makeDot("😀"), "pattern");
+  assert.equal(makeDot("😀"), "😀");
+  assert.equal(makeDot("\u2028"), "\u2028");
+  assert.equal(makeDot("\u2029"), "\u2029");
+  refuses("Dot", () => makeDot("\r"), "pattern");
   // The dot does not match a line break.
   refuses("Dot", () => makeDot("\n"), "pattern");
 });
@@ -436,7 +437,7 @@ Deno.test("a string constructor checks every match clause", () => {
   assert.throws(() => makeTwice("1a"), (error: unknown) => {
     assert(error instanceof ConstraintError);
     assert.equal(error.rule, "pattern");
-    assert(error.message.includes("/[A-Z]/"));
+    assert(error.message.includes("/.*[A-Z].*/"));
     return true;
   });
   refuses("Twice", () => makeTwice("aA"), "pattern");

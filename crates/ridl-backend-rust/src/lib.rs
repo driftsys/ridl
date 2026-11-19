@@ -1656,7 +1656,8 @@ fn constraint_checks_with_precision(
         }
     }
     if class_backing(sc.class) == ScalarBacking::String {
-        for pattern in ridl_ir::pattern::model_match_clauses(c)
+        let clauses = ridl_ir::pattern::model_match_clauses(c);
+        for pattern in clauses
             .clauses
             .into_iter()
             .filter_map(|clause| clause.pattern)
@@ -1684,9 +1685,13 @@ fn constraint_checks_with_precision(
             // names are: the face module of an interface named `Std` or `Regex`
             // is a module of that name in this same module, and it would shadow
             // the extern crate.
-            // The lowering already stripped the typl `/…/` delimiters, which are
-            // syntax rather than pattern content.
-            let source = pattern;
+            // New model clauses carry normalised patterns and match the whole
+            // value. A legacy model keeps its original search text.
+            let source = if clauses.legacy_search {
+                pattern.to_owned()
+            } else {
+                ridl_ir::pattern::rust_engine_text(pattern)
+            };
             checks.push(quote! {
                 #[cfg(feature = "validate-pattern")]
                 {

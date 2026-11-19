@@ -5911,7 +5911,10 @@ fn match_clauses_lower_all_bodies_and_preserve_legacy_search_input() {
             panic!("scalar")
         };
         let c = sc.constraint.as_ref().unwrap();
-        assert_eq!(c.pattern.as_deref(), Some("a.b"));
+        assert_eq!(
+            c.pattern.as_deref(),
+            Some(if legacy { "a.b" } else { r"^(?:a[^\n\r]b)$" })
+        );
         assert_eq!(c.pattern_const.as_deref(), Some("P"));
         if legacy {
             assert!(c.matches.is_empty());
@@ -5920,11 +5923,11 @@ fn match_clauses_lower_all_bodies_and_preserve_legacy_search_input() {
                 c.matches,
                 vec![
                     v1::Match {
-                        pattern: Some("a.b".into()),
+                        pattern: Some(r"a[^\n\r]b".into()),
                         pattern_const: Some("P".into())
                     },
                     v1::Match {
-                        pattern: Some(r"c\/d".into()),
+                        pattern: Some("c/d".into()),
                         pattern_const: None
                     }
                 ]

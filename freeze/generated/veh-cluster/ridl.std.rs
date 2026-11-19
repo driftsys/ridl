@@ -54,7 +54,7 @@ impl Uuid {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
                 ::regex::Regex::new(
-                        "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "\\A(?:^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$)\\z",
                     )
                     .expect("ridlc emitted an invalid pattern")
             });
@@ -132,7 +132,7 @@ impl Ulid {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[0-7][0-9A-HJKMNP-TV-Z]{25}$")
+                ::regex::Regex::new("\\A(?:^[0-7][0-9A-HJKMNP-TV-Z]{25}$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -209,7 +209,7 @@ impl Uri {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[a-zA-Z][a-zA-Z0-9+\\-.]*:\\/\\/.+$")
+                ::regex::Regex::new("\\A(?:^[a-zA-Z][a-zA-Z0-9+\\-.]*://[^\\n\\r]+$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -286,7 +286,7 @@ impl Url {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^https?:\\/\\/.+$")
+                ::regex::Regex::new("\\A(?:^https?://[^\\n\\r]+$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -363,7 +363,7 @@ impl Email {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[^@]+@[^@]+\\.[^@]+$")
+                ::regex::Regex::new("\\A(?:^[^@]+@[^@]+\\.[^@]+$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -440,7 +440,7 @@ impl IpV4 {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^(\\d{1,3}\\.){3}\\d{1,3}$")
+                ::regex::Regex::new("\\A(?:^(\\d{1,3}\\.){3}\\d{1,3}$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -517,7 +517,7 @@ impl IpV6 {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[0-9a-f:]+$")
+                ::regex::Regex::new("\\A(?:^[0-9a-f:]+$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -594,7 +594,7 @@ impl Label {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[\\x20-\\x7E]+$")
+                ::regex::Regex::new("\\A(?:^[\\x20-\\x7E]+$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -671,7 +671,7 @@ impl Name {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[\\x20-\\x7E]+$")
+                ::regex::Regex::new("\\A(?:^[\\x20-\\x7E]+$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -748,7 +748,7 @@ impl Message {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[\\x20-\\x7E]+$")
+                ::regex::Regex::new("\\A(?:^[\\x20-\\x7E]+$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -961,7 +961,7 @@ impl Date {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^\\d{4}-\\d{2}-\\d{2}$")
+                ::regex::Regex::new("\\A(?:^\\d{4}-\\d{2}-\\d{2}$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -1038,7 +1038,7 @@ impl TimeOfDay {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^\\d{2}:\\d{2}:\\d{2}")
+                ::regex::Regex::new("\\A(?:^\\d{2}:\\d{2}:\\d{2})\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -1115,7 +1115,7 @@ impl Version {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^\\d+\\.\\d+\\.\\d+")
+                ::regex::Regex::new("\\A(?:^\\d+\\.\\d+\\.\\d+)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -1192,7 +1192,7 @@ impl CountryCode {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[A-Z]{2}$")
+                ::regex::Regex::new("\\A(?:^[A-Z]{2}$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -1269,7 +1269,7 @@ impl LanguageCode {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[a-z]{2}(-[A-Z]{2})?$")
+                ::regex::Regex::new("\\A(?:^[a-z]{2}(-[A-Z]{2})?$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {

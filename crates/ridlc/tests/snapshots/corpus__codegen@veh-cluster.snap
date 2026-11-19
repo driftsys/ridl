@@ -2631,7 +2631,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "128",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:^[\\x20-\\x7E]+$)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
@@ -2699,7 +2699,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "64",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:^[\\x20-\\x7E]+$)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
@@ -2826,7 +2826,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "256",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:^[\\x20-\\x7E]+$)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
@@ -10687,7 +10687,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "catalog": {
     "package": "veh.cluster",
-    "hash": "3nY8ApZtNFSVHxxkSuVcHThKxs+tCYafTsw6sKiifyM=",
+    "hash": "hoJ9zt4Gm3b5x7oaPzdrnX12B1Y732jnBKGSNj9EiWE=",
     "retired": [],
     "compatible": []
   },
@@ -11395,7 +11395,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "64",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:^[\\x20-\\x7E]+$)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
@@ -11463,7 +11463,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "256",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:^[\\x20-\\x7E]+$)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
@@ -12123,7 +12123,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "5",
             "lenMax": "32",
-            "pattern": "^\\d+\\.\\d+\\.\\d+",
+            "pattern": "^(?:^\\d+\\.\\d+\\.\\d+)$",
             "matches": [
               {
                 "pattern": "^\\d+\\.\\d+\\.\\d+"

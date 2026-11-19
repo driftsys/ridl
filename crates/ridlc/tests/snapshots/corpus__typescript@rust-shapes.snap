@@ -169,7 +169,7 @@ export function initFloor(): Floor {
  */
 export type Tag = string & { readonly __ridl: 'lint.shapes.Tag' };
 
-const __ridlPatternTag_0 = new globalThis.RegExp('^[a-z][a-z0-9-]*$');
+const __ridlPatternTag_0 = new globalThis.RegExp('^(?:^[a-z][a-z0-9-]*$)$', 'u');
 
 /** Builds a `Tag`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeTag(value: string): Tag {

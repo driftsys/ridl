@@ -567,13 +567,24 @@ const subjects = [
     name: "Digited",
     make: makeDigited,
     encode: (v) => encodeDigited(v as Digited),
-    values: ["1", "a1", "1a", "abc", "", "9", "a b 7"],
+    values: ["1", "a1", "1a", "abc", "", "9", "a b 7", "١", "a\n1", "٣", "１"],
   }),
   subject<string>({
     name: "Glyph",
     make: makeGlyph,
     encode: (v) => encodeGlyph(v as Glyph),
-    values: ["a", "", "ab", "\u00e9", "\n"],
+    values: [
+      "a",
+      "",
+      "ab",
+      "\u00e9",
+      "\n",
+      "\r",
+      "\u2028",
+      "\u2029",
+      "\u{1F600}",
+      "\u{10FFFF}",
+    ],
   }),
 ] as const;
 
@@ -636,66 +647,23 @@ Deno.test("an absent field at an illegal default is malformed", () => {
   assert.deepEqual(codec.verify(tenth, encodeTenth(0 as Tenth)), { ok: true });
 });
 
-// Known divergences of the pattern rule (driftsys/ridl#597). `make<Name>` runs
-// a JavaScript `RegExp` without the `u` flag, and the wasm codec runs the Rust
-// `regex` crate, whose `.` and `\d` follow Unicode. Each case below pins the
-// current outcome of both sides. A case that starts to agree fails this test,
-// which is the cue to move it into the agreeing values above.
-const glyph = subjects[10] as Subject<string>;
-const digited = subjects[9] as Subject<string>;
-
-const divergences: readonly {
-  readonly subject: Subject<string>;
-  readonly value: string;
-  readonly why: string;
-}[] = [
-  {
-    // `.` matches one UTF-16 unit in JavaScript, so an astral character is
-    // two matches; `regex` matches one scalar value.
-    subject: glyph,
-    value: "\u{1F600}",
-    why: "an astral character is two UTF-16 units to `.`",
-  },
-  {
-    subject: glyph,
-    value: "\u{10FFFF}",
-    why: "the last scalar value is two UTF-16 units to `.`",
-  },
-  {
-    // JavaScript `.` excludes every line terminator; `regex` excludes `\n`.
-    subject: glyph,
-    value: "\r",
-    why: "`.` excludes a carriage return in JavaScript only",
-  },
-  {
-    subject: glyph,
-    value: " ",
-    why: "`.` excludes the line separator in JavaScript only",
-  },
-  {
-    subject: glyph,
-    value: "\u2029",
-    why: "`.` excludes the paragraph separator in JavaScript only",
-  },
-  {
-    // `\d` is `[0-9]` in JavaScript; `regex` matches any Unicode decimal digit.
-    subject: digited,
-    value: "٣",
-    why: "`\\d` matches an Arabic-Indic digit in `regex` only",
-  },
-  {
-    subject: digited,
-    value: "１",
-    why: "`\\d` matches a fullwidth digit in `regex` only",
-  },
-];
-
-Deno.test("the pattern engines disagree on the pinned cases (driftsys/ridl#597)", () => {
-  assert.equal(glyph.name, "Glyph");
-  assert.equal(digited.name, "Digited");
-  for (const { subject, value, why } of divergences) {
-    const label = `${subject.name}(${JSON.stringify(value)}): ${why}`;
-    assert.equal(constructed(subject, value), "pattern", label);
-    assert.equal(verified(subject, value), "ok", label);
+Deno.test("the RegExp engine text agrees with the table", () => {
+  const rows: {
+    literal: string;
+    normalised: string;
+    value: string;
+    accepted: boolean;
+  }[] = JSON.parse(Deno.readTextFileSync(
+    new URL(
+      "../../../crates/ridl-ir/tests/pattern_agreement.json",
+      import.meta.url,
+    ),
+  ));
+  for (const { literal, normalised, value, accepted } of rows) {
+    assert.equal(
+      new RegExp("^(?:" + normalised + ")$", "u").test(value),
+      accepted,
+      `${literal} with ${JSON.stringify(value)}`,
+    );
   }
 });

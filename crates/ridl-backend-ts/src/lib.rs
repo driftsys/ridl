@@ -534,14 +534,14 @@ fn text_checks(td: &v2::TypeDef, name: &str, string: bool) -> Vec<Check> {
             checks.push(Check {
                 rule: "pattern",
                 condition: format!("!{constant}.test(value)"),
-                constraint: format!("/{pattern}/"),
+                constraint: format!("/{}/", strip_regex_delimiters(pattern)),
             });
         }
     }
     checks
 }
 
-/// The constant name and regex body of every string clause, in clause order.
+/// The constant name and source literal of every string clause, in clause order.
 /// Legacy constraints retain their original constant name. Bytes carry no patterns.
 fn pattern_sources<'a>(td: &'a v2::TypeDef, name: &str) -> Vec<(String, &'a str)> {
     if backing_scalar(td) != ScalarBacking::String {
@@ -556,7 +556,7 @@ fn pattern_sources<'a>(td: &'a v2::TypeDef, name: &str) -> Vec<(String, &'a str)
         .into_iter()
         .enumerate()
         .filter_map(|(index, clause)| {
-            let pattern = strip_regex_delimiters(clause.pattern?);
+            let pattern = clause.pattern?;
             let constant = if clauses.legacy_search {
                 format!("__ridlPattern{name}")
             } else {
@@ -698,10 +698,24 @@ fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<St
         " Throws a `ConstraintError` when a checked constraint is broken."
     };
     let mut source = String::new();
+    let legacy_search = td
+        .constraint
+        .as_ref()
+        .is_some_and(|c| ridl_ir::pattern::ir_match_clauses(c).legacy_search);
     for (constant, pattern) in pattern_sources(td, name) {
+        let (text, flags) = if legacy_search {
+            (strip_regex_delimiters(pattern).to_owned(), "")
+        } else {
+            (
+                ridl_ir::pattern::search_engine_text(&ridl_ir::pattern::normalised_pattern(
+                    pattern,
+                )),
+                ", 'u'",
+            )
+        };
         source.push_str(&format!(
-            "const {constant} = new globalThis.RegExp({});\n\n",
-            ts_string(pattern)
+            "const {constant} = new globalThis.RegExp({}{flags});\n\n",
+            ts_string(&text)
         ));
     }
     source.push_str(&format!(

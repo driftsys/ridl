@@ -2209,7 +2209,15 @@ impl Checker<'_> {
         }
         let (pattern, pattern_const) = matches
             .first()
-            .map(|clause| (clause.pattern.clone(), clause.pattern_const.clone()))
+            .map(|clause| {
+                (
+                    clause
+                        .pattern
+                        .as_deref()
+                        .map(ridl_ir::pattern::deprecated_ir_literal),
+                    clause.pattern_const.clone(),
+                )
+            })
             .unwrap_or_default();
         ScalarParts {
             constraint: Some(v2::Constraint {
@@ -2906,7 +2914,15 @@ impl Checker<'_> {
             .collect();
         let (pattern, pattern_const) = matches
             .first()
-            .map(|clause| (clause.pattern.clone(), clause.pattern_const.clone()))
+            .map(|clause| {
+                (
+                    clause
+                        .pattern
+                        .as_deref()
+                        .map(ridl_ir::pattern::deprecated_ir_literal),
+                    clause.pattern_const.clone(),
+                )
+            })
             .unwrap_or_default();
         Some(v2::Constraint {
             min: None,
@@ -11420,6 +11436,25 @@ mod tests {
     }
 
     #[test]
+    fn several_match_clauses_name_only_the_second_failed_init_clause() {
+        for (second, expected) in [("/[A-Z]/", "/[A-Z]/"), ("CAPITAL", "CAPITAL")] {
+            let text = format!(
+                "package app\n/// A capital character.\nconst CAPITAL = /[A-Z]/\n/// A constrained string.\ntype T : string [0..8 match /[0-9]/ match {second}] = \"1a\"\n",
+            );
+            let checked = check_source("app", &text);
+            assert_eq!(codes(&checked), ["TYPL-109"]);
+            assert_eq!(
+                messages(&checked),
+                [format!(
+                    "init string `1a` does not match the type's `match` pattern {expected}"
+                )]
+            );
+            assert_eq!(checked.diagnostics.len(), 1);
+            assert_eq!(primary_text(&text, &checked.diagnostics[0]), "\"1a\"");
+        }
+    }
+
+    #[test]
     fn several_match_clauses_check_every_init_clause() {
         for (value, expected) in [
             ("1a", vec!["TYPL-109"]),
@@ -11458,7 +11493,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [Some("/[0-9]/"), Some("/[A-Z]/")]
         );
-        assert_eq!(constraint.pattern.as_deref(), Some("/[0-9]/"));
+        assert_eq!(constraint.pattern.as_deref(), Some("/^(?:[0-9])$/"));
         assert_eq!(constraint.pattern_const, None);
     }
 
@@ -17693,7 +17728,7 @@ service Cabin { signal s : State @[100ms..1s] }
 
     #[test]
     #[allow(deprecated)]
-    fn match_clauses_lower_literal_and_constant_without_changing_search_text() {
+    fn match_clauses_lower_literal_and_constant_with_compatible_search_text() {
         for (prefix, clause, constant) in [
             ("", "/[A-Z]{17}/", None),
             ("const VIN = /[A-Z]{17}/\n", "VIN", Some("VIN")),
@@ -17712,7 +17747,7 @@ service Cabin { signal s : State @[100ms..1s] }
                 })
                 .unwrap();
             let constraint = def.constraint.as_ref().unwrap();
-            assert_eq!(constraint.pattern.as_deref(), Some("/[A-Z]{17}/"));
+            assert_eq!(constraint.pattern.as_deref(), Some("/^(?:[A-Z]{17})$/"));
             assert_eq!(constraint.pattern_const.as_deref(), constant);
             assert_eq!(
                 constraint.matches,

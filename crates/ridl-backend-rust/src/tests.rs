@@ -8205,14 +8205,14 @@ fn the_proto3_codec_refuses_enum_values_outside_int32() {
 }
 
 #[test]
-fn match_clauses_emit_two_regex_searches_in_order() {
+fn match_clauses_emit_two_whole_value_regexes_in_order() {
     use ridl_ir::codegen::v1;
     let sc = v1::Scalar {
         class: v1::ScalarClass::String as i32,
         constraint: Some(v1::Constraint {
             matches: vec![
                 v1::Match {
-                    pattern: Some("first".into()),
+                    pattern: Some("[0-9]+".into()),
                     pattern_const: None,
                 },
                 v1::Match {
@@ -8226,8 +8226,15 @@ fn match_clauses_emit_two_regex_searches_in_order() {
     };
     let tokens = super::constraint_checks(&sc, "Code", quote::quote! { value }).to_string();
     assert_eq!(tokens.matches("Regex :: new").count(), 2, "{tokens}");
-    assert!(tokens.find("\"first\"").unwrap() < tokens.find("\"second\"").unwrap());
-    assert!(!tokens.contains(r"\A"), "search semantics: {tokens}");
+    assert!(
+        tokens.contains(r#"Regex :: new ("\\A(?:[0-9]+)\\z")"#),
+        "{tokens}"
+    );
+    assert!(tokens.find("[0-9]+").unwrap() < tokens.find("second").unwrap());
+    assert!(
+        tokens.contains(r#"Regex :: new ("\\A(?:second)\\z")"#),
+        "{tokens}"
+    );
 }
 
 #[test]

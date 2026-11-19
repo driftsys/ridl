@@ -593,7 +593,7 @@ impl Tag {
         {
             static PATTERN: ::std::sync::LazyLock<::regex::Regex> = ::std::sync::LazyLock::new(||
             {
-                ::regex::Regex::new("^[a-z][a-z0-9-]*$")
+                ::regex::Regex::new("\\A(?:^[a-z][a-z0-9-]*$)\\z")
                     .expect("ridlc emitted an invalid pattern")
             });
             if !PATTERN.is_match(value) {
@@ -7687,8 +7687,8 @@ impl ::ridl_rt::contract::Interface for Station {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "lint.shapes",
         hash: ::ridl_rt::contract::CatalogHash([
-            216, 45, 253, 107, 197, 118, 127, 159, 147, 57, 93, 187, 107, 150, 54, 1,
-            113, 242, 61, 79, 236, 134, 115, 130, 166, 174, 70, 207, 231, 115, 254, 50,
+            181, 219, 175, 163, 229, 80, 226, 143, 152, 149, 16, 119, 192, 155, 115, 237,
+            116, 183, 98, 20, 78, 77, 109, 226, 14, 98, 139, 24, 178, 54, 34, 149,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -17158,8 +17158,8 @@ impl ::ridl_rt::contract::Interface for Probe {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "lint.shapes",
         hash: ::ridl_rt::contract::CatalogHash([
-            216, 45, 253, 107, 197, 118, 127, 159, 147, 57, 93, 187, 107, 150, 54, 1,
-            113, 242, 61, 79, 236, 134, 115, 130, 166, 174, 70, 207, 231, 115, 254, 50,
+            181, 219, 175, 163, 229, 80, 226, 143, 152, 149, 16, 119, 192, 155, 115, 237,
+            116, 183, 98, 20, 78, 77, 109, 226, 14, 98, 139, 24, 178, 54, 34, 149,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);

@@ -129,7 +129,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "constraint": {
           "lenMin": "1",
           "lenMax": "16",
-          "pattern": "/^[a-z][a-z0-9-]*$/",
+          "pattern": "/^(?:^[a-z][a-z0-9-]*$)$/",
           "matches": [
             {
               "pattern": "/^[a-z][a-z0-9-]*$/"

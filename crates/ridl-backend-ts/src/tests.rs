@@ -3230,7 +3230,7 @@ fn the_model_and_the_ir_agree_on_which_string_scalars_have_an_unchecked_construc
 }
 
 #[test]
-fn match_clauses_emit_two_regexp_searches_and_checks_in_order() {
+fn match_clauses_emit_two_whole_value_regexes_and_checks_in_order() {
     let mut d = text_decl("Code", v2::PrimitiveType::String, (Some(0), Some(8)), None);
     let Some(v2::decl::Kind::TypeDef(td)) = d.kind.as_mut() else {
         panic!("scalar")
@@ -3247,11 +3247,11 @@ fn match_clauses_emit_two_regexp_searches_and_checks_in_order() {
     ];
     let source = ts_for(vec![d]);
     assert!(
-        source.contains("const __ridlPatternCode_0 = new globalThis.RegExp('first');"),
+        source.contains("const __ridlPatternCode_0 = new globalThis.RegExp('^(?:first)$', 'u');"),
         "{source}"
     );
     assert!(
-        source.contains("const __ridlPatternCode_1 = new globalThis.RegExp('second');"),
+        source.contains("const __ridlPatternCode_1 = new globalThis.RegExp('^(?:second)$', 'u');"),
         "{source}"
     );
     assert!(
@@ -3278,4 +3278,22 @@ fn match_clauses_legacy_ir_emits_the_original_search() {
         "{source}"
     );
     assert!(!source.contains("(?:a.b)"), "{source}");
+}
+
+#[test]
+fn match_clause_vin_uses_a_whole_value_unicode_regexp() {
+    let mut decl = string_type("Vin", "/[A-Z]{17}/");
+    let Some(v2::decl::Kind::TypeDef(td)) = decl.kind.as_mut() else {
+        panic!("string scalar")
+    };
+    td.constraint.as_mut().unwrap().matches = vec![v2::Match {
+        pattern: Some("/[A-Z]{17}/".into()),
+        pattern_const: None,
+    }];
+    let source = ts_for(vec![decl]);
+    assert!(
+        source.contains("new globalThis.RegExp('^(?:[A-Z]{17})$', 'u')"),
+        "{source}"
+    );
+    assert!(source.contains("value, '/[A-Z]{17}/'"), "{source}");
 }
