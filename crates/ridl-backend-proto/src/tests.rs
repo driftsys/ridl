@@ -3097,6 +3097,7 @@ fn typedef_package(package_name: &str, decl_name: &str, td: v2::TypeDef) -> v2::
 /// other fixture in this file, rather than the real embedded asset: this
 /// crate does not depend on `ridl-core`, and does not need to for a
 /// structural fixture.
+#[allow(deprecated)]
 fn ridl_std_package() -> v2::Package {
     v2::Package {
         name: "ridl.std".to_string(),
@@ -3502,4 +3503,24 @@ fn a_package_prefixed_rename_keeps_the_generated_identifiers() {
             .contains("enum VehClusterWheelsOrdinal {")
     );
     assert_eq!(before.proto_source, after.proto_source);
+}
+
+#[test]
+fn match_clauses_render_every_clause_in_order() {
+    let c = v2::Constraint {
+        len_min: Some(0),
+        len_max: Some(8),
+        matches: vec![
+            v2::Match {
+                pattern: Some("/a/".into()),
+                pattern_const: None,
+            },
+            v2::Match {
+                pattern: Some("/b/".into()),
+                pattern_const: Some("P".into()),
+            },
+        ],
+        ..Default::default()
+    };
+    assert_eq!(super::render_constraint(&c), "[0..8] match /a/ match P");
 }

@@ -1,4 +1,4 @@
-//! Text transformations for source pattern literals and regex engines.
+//! Match-clause compatibility readers and text transformations for regex engines.
 //!
 //! A delimiter pair is removed only when the input starts and ends with `/`.
 //! A delimiter escape is a backslash followed by `/` within an escape pair;
@@ -96,6 +96,86 @@ pub fn deprecated_ir_literal(literal: &str) -> String {
     format!("/^(?:{body})$/")
 }
 
+/// One borrowed match clause, retaining its pattern text and constant reference.
+#[derive(Debug, PartialEq, Eq)]
+pub struct MatchClause<'a> {
+    /// The pattern text in the representation of the input constraint.
+    pub pattern: Option<&'a str>,
+    /// The canonical reference to a regex constant, when present.
+    pub pattern_const: Option<&'a str>,
+}
+
+/// Ordered match clauses and whether their input used the legacy search fields.
+#[derive(Debug, PartialEq, Eq)]
+pub struct MatchClauses<'a> {
+    /// Every clause in order, or the single legacy clause when the list is empty.
+    pub clauses: Vec<MatchClause<'a>>,
+    /// True only when the clauses came from the deprecated search fields.
+    pub legacy_search: bool,
+}
+
+/// Read all IR clauses, falling back to the deprecated fields only for an empty list.
+#[allow(deprecated)]
+pub fn ir_match_clauses(c: &crate::v2::Constraint) -> MatchClauses<'_> {
+    if !c.matches.is_empty() {
+        MatchClauses {
+            clauses: c
+                .matches
+                .iter()
+                .map(|clause| MatchClause {
+                    pattern: clause.pattern.as_deref(),
+                    pattern_const: clause.pattern_const.as_deref(),
+                })
+                .collect(),
+            legacy_search: false,
+        }
+    } else if c.pattern.is_some() || c.pattern_const.is_some() {
+        MatchClauses {
+            clauses: vec![MatchClause {
+                pattern: c.pattern.as_deref(),
+                pattern_const: c.pattern_const.as_deref(),
+            }],
+            legacy_search: true,
+        }
+    } else {
+        MatchClauses {
+            clauses: Vec::new(),
+            legacy_search: false,
+        }
+    }
+}
+
+/// Read all model clauses, falling back to the deprecated fields only for an empty list.
+#[allow(deprecated)]
+pub fn model_match_clauses(c: &crate::codegen::v1::Constraint) -> MatchClauses<'_> {
+    if !c.matches.is_empty() {
+        MatchClauses {
+            clauses: c
+                .matches
+                .iter()
+                .map(|clause| MatchClause {
+                    pattern: clause.pattern.as_deref(),
+                    pattern_const: clause.pattern_const.as_deref(),
+                })
+                .collect(),
+            legacy_search: false,
+        }
+    } else if c.pattern.is_some() || c.pattern_const.is_some() {
+        MatchClauses {
+            clauses: vec![MatchClause {
+                pattern: c.pattern.as_deref(),
+                pattern_const: c.pattern_const.as_deref(),
+            }],
+            legacy_search: true,
+        }
+    } else {
+        MatchClauses {
+            clauses: Vec::new(),
+            legacy_search: false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -188,5 +268,149 @@ mod tests {
                 assert_eq!(rust.is_match(value), expected, "{literal}: {value:?}");
             }
         }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn ir_match_clauses_prefer_the_ordered_list() {
+        let c = crate::v2::Constraint {
+            matches: vec![
+                crate::v2::Match {
+                    pattern: Some("/a/".into()),
+                    pattern_const: None,
+                },
+                crate::v2::Match {
+                    pattern: None,
+                    pattern_const: Some("P".into()),
+                },
+            ],
+            pattern: Some("/ignored/".into()),
+            pattern_const: Some("IGNORED".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            ir_match_clauses(&c),
+            MatchClauses {
+                clauses: vec![
+                    MatchClause {
+                        pattern: Some("/a/"),
+                        pattern_const: None
+                    },
+                    MatchClause {
+                        pattern: None,
+                        pattern_const: Some("P")
+                    }
+                ],
+                legacy_search: false,
+            }
+        );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn ir_match_clauses_read_legacy_search_fields() {
+        for (pattern, pattern_const) in [
+            (Some("/a/"), None),
+            (None, Some("P")),
+            (Some("/a/"), Some("P")),
+        ] {
+            let c = crate::v2::Constraint {
+                pattern: pattern.map(str::to_owned),
+                pattern_const: pattern_const.map(str::to_owned),
+                ..Default::default()
+            };
+            assert_eq!(
+                ir_match_clauses(&c),
+                MatchClauses {
+                    clauses: vec![MatchClause {
+                        pattern,
+                        pattern_const
+                    }],
+                    legacy_search: true
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn ir_match_clauses_are_empty_without_a_pattern() {
+        assert_eq!(
+            ir_match_clauses(&crate::v2::Constraint::default()),
+            MatchClauses {
+                clauses: vec![],
+                legacy_search: false
+            }
+        );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn model_match_clauses_prefer_the_ordered_list() {
+        let c = crate::codegen::v1::Constraint {
+            matches: vec![
+                crate::codegen::v1::Match {
+                    pattern: Some("a".into()),
+                    pattern_const: None,
+                },
+                crate::codegen::v1::Match {
+                    pattern: None,
+                    pattern_const: Some("P".into()),
+                },
+            ],
+            pattern: Some("ignored".into()),
+            pattern_const: Some("IGNORED".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            model_match_clauses(&c),
+            MatchClauses {
+                clauses: vec![
+                    MatchClause {
+                        pattern: Some("a"),
+                        pattern_const: None
+                    },
+                    MatchClause {
+                        pattern: None,
+                        pattern_const: Some("P")
+                    }
+                ],
+                legacy_search: false,
+            }
+        );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn model_match_clauses_read_legacy_search_fields() {
+        for (pattern, pattern_const) in
+            [(Some("a"), None), (None, Some("P")), (Some("a"), Some("P"))]
+        {
+            let c = crate::codegen::v1::Constraint {
+                pattern: pattern.map(str::to_owned),
+                pattern_const: pattern_const.map(str::to_owned),
+                ..Default::default()
+            };
+            assert_eq!(
+                model_match_clauses(&c),
+                MatchClauses {
+                    clauses: vec![MatchClause {
+                        pattern,
+                        pattern_const
+                    }],
+                    legacy_search: true
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn model_match_clauses_are_empty_without_a_pattern() {
+        assert_eq!(
+            model_match_clauses(&crate::codegen::v1::Constraint::default()),
+            MatchClauses {
+                clauses: vec![],
+                legacy_search: false
+            }
+        );
     }
 }

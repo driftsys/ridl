@@ -2527,3 +2527,23 @@ fn a_package_prefixed_rename_keeps_the_generated_identifiers() {
     );
     assert_eq!(before.fbs_source, after.fbs_source);
 }
+
+#[test]
+fn match_clauses_render_every_clause_in_order() {
+    let c = v2::Constraint {
+        len_min: Some(0),
+        len_max: Some(8),
+        matches: vec![
+            v2::Match {
+                pattern: Some("/a/".into()),
+                pattern_const: None,
+            },
+            v2::Match {
+                pattern: Some("/b/".into()),
+                pattern_const: Some("P".into()),
+            },
+        ],
+        ..Default::default()
+    };
+    assert_eq!(super::render_constraint(&c), "[0..8] match /a/ match P");
+}

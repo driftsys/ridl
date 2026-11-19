@@ -529,31 +529,42 @@ fn text_checks(td: &v2::TypeDef, name: &str, string: bool) -> Vec<Check> {
     if let Some(max) = c.len_max.filter(|max| *max <= MAX_SAFE_INTEGER) {
         length_check(format!("{length} > {max}"));
     }
-    if let Some(pattern) = pattern_source(td).filter(|_| string) {
-        checks.push(Check {
-            rule: "pattern",
-            condition: format!("!{}.test(value)", pattern_constant(name)),
-            constraint: format!("/{pattern}/"),
-        });
+    if string {
+        for (constant, pattern) in pattern_sources(td, name) {
+            checks.push(Check {
+                rule: "pattern",
+                condition: format!("!{constant}.test(value)"),
+                constraint: format!("/{pattern}/"),
+            });
+        }
     }
     checks
 }
 
-/// The pattern source of a string scalar. Bytes carry no pattern.
-fn pattern_source(td: &v2::TypeDef) -> Option<&str> {
+/// The constant name and regex body of every string clause, in clause order.
+/// Legacy constraints retain their original constant name. Bytes carry no patterns.
+fn pattern_sources<'a>(td: &'a v2::TypeDef, name: &str) -> Vec<(String, &'a str)> {
     if backing_scalar(td) != ScalarBacking::String {
-        return None;
+        return Vec::new();
     }
-    td.constraint
-        .as_ref()?
-        .pattern
-        .as_deref()
-        .map(strip_regex_delimiters)
-}
-
-/// The module-level constant that holds the `RegExp` of a pattern-checked type.
-fn pattern_constant(name: &str) -> String {
-    format!("__ridlPattern{name}")
+    let Some(c) = &td.constraint else {
+        return Vec::new();
+    };
+    let clauses = ridl_ir::pattern::ir_match_clauses(c);
+    clauses
+        .clauses
+        .into_iter()
+        .enumerate()
+        .filter_map(|(index, clause)| {
+            let pattern = strip_regex_delimiters(clause.pattern?);
+            let constant = if clauses.legacy_search {
+                format!("__ridlPattern{name}")
+            } else {
+                format!("__ridlPattern{name}_{index}")
+            };
+            Some((constant, pattern))
+        })
+        .collect()
 }
 
 /// The step check of a numeric type. The origin of the lattice is the declared
@@ -687,10 +698,9 @@ fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<St
         " Throws a `ConstraintError` when a checked constraint is broken."
     };
     let mut source = String::new();
-    if let Some(pattern) = pattern_source(td) {
+    for (constant, pattern) in pattern_sources(td, name) {
         source.push_str(&format!(
-            "const {} = new globalThis.RegExp({});\n\n",
-            pattern_constant(name),
+            "const {constant} = new globalThis.RegExp({});\n\n",
             ts_string(pattern)
         ));
     }

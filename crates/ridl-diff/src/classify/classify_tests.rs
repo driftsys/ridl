@@ -276,8 +276,7 @@ fn bounds(min: Option<&str>, max: Option<&str>) -> v2::Constraint {
         step: None,
         len_min: None,
         len_max: None,
-        pattern: None,
-        pattern_const: None,
+        ..Default::default()
     }
 }
 
@@ -857,6 +856,7 @@ fn a_loosened_length_is_compatible() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn a_changed_pattern_is_breaking() {
     let pattern = |text: &str| {
         let mut constraint = bounds(None, None);
@@ -868,6 +868,7 @@ fn a_changed_pattern_is_breaking() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn a_removed_pattern_is_compatible() {
     let mut patterned = bounds(None, None);
     patterned.pattern = Some("^[A-Z]+$".to_string());
@@ -4028,6 +4029,7 @@ mod constraint_direction {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn every_widened_facet_uses_consumer_direction() {
         let empty = bounds(None, None);
         let cases = vec![

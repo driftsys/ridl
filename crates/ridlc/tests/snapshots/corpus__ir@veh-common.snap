@@ -24,7 +24,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "0",
           "max": "250",
-          "step": "0.5"
+          "step": "0.5",
+          "matches": []
         },
         "init": {
           "derivable": true,
@@ -50,7 +51,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.1"
+          "step": "0.1",
+          "matches": []
         },
         "init": {
           "derivable": true,
@@ -76,7 +78,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "0",
           "max": "8000",
-          "step": "10"
+          "step": "10",
+          "matches": []
         },
         "init": {
           "derivable": true,
@@ -102,7 +105,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "0",
           "max": "100",
-          "step": "0.1"
+          "step": "0.1",
+          "matches": []
         },
         "init": {
           "derivable": true,
@@ -127,7 +131,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         },
         "constraint": {
           "min": "0",
-          "max": "65535"
+          "max": "65535",
+          "matches": []
         },
         "init": {
           "derivable": true,
@@ -153,7 +158,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "0",
           "max": "1",
-          "step": "0.01"
+          "step": "0.01",
+          "matches": []
         },
         "init": {
           "derivable": true,
@@ -503,7 +509,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "6"
+                    "max": "6",
+                    "matches": []
                   },
                   "intWidth": "INT_WIDTH_U8"
                 }
@@ -839,7 +846,8 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                   },
                   "constraint": {
                     "lenMin": "8",
-                    "lenMax": "8"
+                    "lenMax": "8",
+                    "matches": []
                   }
                 }
               },

@@ -2617,7 +2617,7 @@ impl<'a> Codec<'a> {
                 let has_pattern = constraint
                     .as_ref()
                     .and_then(|sc| sc.constraint.as_ref())
-                    .is_some_and(|c| c.pattern.is_some() || c.pattern_const.is_some());
+                    .is_some_and(|c| !ridl_ir::pattern::model_match_clauses(c).clauses.is_empty());
                 if !has_pattern {
                     return quote! {};
                 }

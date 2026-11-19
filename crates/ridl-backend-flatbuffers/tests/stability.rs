@@ -313,8 +313,7 @@ fn base_package(shape: &BaseShape) -> v2::Package {
             step: None,
             len_min: None,
             len_max: None,
-            pattern: None,
-            pattern_const: None,
+            ..Default::default()
         }),
         declared_init: None,
         init: None,

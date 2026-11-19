@@ -1655,50 +1655,54 @@ fn constraint_checks_with_precision(
             });
         }
     }
-    if class_backing(sc.class) == ScalarBacking::String
-        && let Some(pattern) = c.pattern.as_deref()
-    {
-        // A `match` pattern is checked against text, and `regex::Regex`
-        // matches `&str`. Only a `String` backing has a value that coerces
-        // to `&str` (`newtype_inner`); a bytes backing carries `Vec<u8>`,
-        // against which `Regex::is_match` does not type-check.
-        //
-        // No typl source reaches this: the reference gives bytes no `match`
-        // (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for
-        // that backing, so the pattern never enters the IR. The guard is
-        // totality over the IR rather than over the surface, on the same
-        // footing as the `is_float` guard above — `lower_len_scalar` always
-        // leaves `min` and `max` absent, so that one is unreachable from a
-        // typl source too, and is pinned by its own test. A backend reads
-        // the IR, which need not have come from this checker.
-        //
-        // The pattern needs a regex engine, which `core` has none of. The
-        // range and length checks above are not gated; only this one is, so
-        // a `--no-default-features` build still validates the bounds it
-        // emits.
-        //
-        // `::std` and `::regex` are absolute for the reason the prelude
-        // names are: the face module of an interface named `Std` or `Regex`
-        // is a module of that name in this same module, and it would shadow
-        // the extern crate.
-        // The lowering already stripped the typl `/…/` delimiters, which are
-        // syntax rather than pattern content (`Constraint.pattern`).
-        let source = pattern;
-        checks.push(quote! {
-            #[cfg(feature = "validate-pattern")]
-            {
-                static PATTERN: ::std::sync::LazyLock<::regex::Regex> =
-                    ::std::sync::LazyLock::new(|| {
-                        ::regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
-                    });
-                if !PATTERN.is_match(#value) {
-                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
-                        type_name: ::core::option::Option::Some(#type_name),
-                        rule: ::ridl_rt::payload::Rule::Pattern,
-                    });
+    if class_backing(sc.class) == ScalarBacking::String {
+        for pattern in ridl_ir::pattern::model_match_clauses(c)
+            .clauses
+            .into_iter()
+            .filter_map(|clause| clause.pattern)
+        {
+            // A `match` pattern is checked against text, and `regex::Regex`
+            // matches `&str`. Only a `String` backing has a value that coerces
+            // to `&str` (`newtype_inner`); a bytes backing carries `Vec<u8>`,
+            // against which `Regex::is_match` does not type-check.
+            //
+            // No typl source reaches this: the reference gives bytes no `match`
+            // (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for
+            // that backing, so the pattern never enters the IR. The guard is
+            // totality over the IR rather than over the surface, on the same
+            // footing as the `is_float` guard above — `lower_len_scalar` always
+            // leaves `min` and `max` absent, so that one is unreachable from a
+            // typl source too, and is pinned by its own test. A backend reads
+            // the IR, which need not have come from this checker.
+            //
+            // The pattern needs a regex engine, which `core` has none of. The
+            // range and length checks above are not gated; only this one is, so
+            // a `--no-default-features` build still validates the bounds it
+            // emits.
+            //
+            // `::std` and `::regex` are absolute for the reason the prelude
+            // names are: the face module of an interface named `Std` or `Regex`
+            // is a module of that name in this same module, and it would shadow
+            // the extern crate.
+            // The lowering already stripped the typl `/…/` delimiters, which are
+            // syntax rather than pattern content.
+            let source = pattern;
+            checks.push(quote! {
+                #[cfg(feature = "validate-pattern")]
+                {
+                    static PATTERN: ::std::sync::LazyLock<::regex::Regex> =
+                        ::std::sync::LazyLock::new(|| {
+                            ::regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
+                        });
+                    if !PATTERN.is_match(#value) {
+                        return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                            type_name: ::core::option::Option::Some(#type_name),
+                            rule: ::ridl_rt::payload::Rule::Pattern,
+                        });
+                    }
                 }
-            }
-        });
+            });
+        }
     }
     quote! { #(#checks)* }
 }

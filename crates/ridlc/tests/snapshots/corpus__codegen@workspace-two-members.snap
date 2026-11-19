@@ -1,6 +1,5 @@
 ---
 source: crates/ridlc/tests/corpus.rs
-assertion_line: 377
 expression: compiled.codegen
 input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 ---
@@ -82,7 +81,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "constraint": {
           "min": "0",
           "max": "250",
-          "step": "0.5"
+          "step": "0.5",
+          "matches": []
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -147,7 +147,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.1"
+          "step": "0.1",
+          "matches": []
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -492,7 +493,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
           "constraint": {
             "min": "0",
             "max": "250",
-            "step": "0.5"
+            "step": "0.5",
+            "matches": []
           },
           "vacuous": false,
           "floatWidth": "FLOAT_WIDTH_F32"

@@ -196,8 +196,10 @@ fn type_def_rules(type_def: &v2::TypeDef, out: &mut Vec<Rule>) {
                 max: c.len_max,
             });
         }
-        if let Some(pattern) = &c.pattern {
-            out.push(Rule::Pattern(pattern.clone()));
+        for clause in crate::pattern::ir_match_clauses(c).clauses {
+            if let Some(pattern) = clause.pattern {
+                out.push(Rule::Pattern(pattern.to_owned()));
+            }
         }
     }
 }
@@ -403,6 +405,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn bounded_string_type_gives_length_and_pattern() {
         let vin = decl(
             "Vin",
@@ -794,5 +797,33 @@ mod tests {
         for (rule, expected) in cases {
             assert_eq!(render(&rule), expected, "{rule:?}");
         }
+    }
+
+    #[test]
+    fn match_clauses_produce_every_pattern_rule_in_order() {
+        let text = decl(
+            "Text",
+            Kind::TypeDef(v2::TypeDef {
+                constraint: Some(v2::Constraint {
+                    matches: vec![
+                        v2::Match {
+                            pattern: some("/a/"),
+                            pattern_const: None,
+                        },
+                        v2::Match {
+                            pattern: some("/b/"),
+                            pattern_const: some("P"),
+                        },
+                    ],
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        );
+        let pkg = package("app", vec![text.clone()]);
+        assert_eq!(
+            rules(&pkg, &[], ItemRef::Decl(&text)),
+            vec![Rule::Pattern("/a/".into()), Rule::Pattern("/b/".into())]
+        );
     }
 }

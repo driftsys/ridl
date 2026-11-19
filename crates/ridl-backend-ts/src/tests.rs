@@ -53,8 +53,7 @@ fn constraint(min: Option<&str>, max: Option<&str>, step: Option<&str>) -> v2::C
         step: step.map(str::to_string),
         len_min: None,
         len_max: None,
-        pattern: None,
-        pattern_const: None,
+        ..Default::default()
     }
 }
 
@@ -1590,6 +1589,7 @@ fn see_link(text: &str, target: &str) -> v2::DocLink {
 }
 
 /// `type Vin : string [len 17] match <pattern>`.
+#[allow(deprecated)]
 fn string_type(name: &str, pattern: &str) -> v2::Decl {
     public_decl(
         name,
@@ -2868,6 +2868,7 @@ fn a_declaration_may_take_a_runtime_name() {
 }
 
 /// A string or bytes declaration with a length bound and an optional pattern.
+#[allow(deprecated)]
 fn text_decl(
     name: &str,
     prim: v2::PrimitiveType,
@@ -3226,4 +3227,55 @@ fn the_model_and_the_ir_agree_on_which_string_scalars_have_an_unchecked_construc
         primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
     );
     assert!(ts_for(vec![decl]).contains("function makeFreeUnchecked("));
+}
+
+#[test]
+fn match_clauses_emit_two_regexp_searches_and_checks_in_order() {
+    let mut d = text_decl("Code", v2::PrimitiveType::String, (Some(0), Some(8)), None);
+    let Some(v2::decl::Kind::TypeDef(td)) = d.kind.as_mut() else {
+        panic!("scalar")
+    };
+    td.constraint.as_mut().unwrap().matches = vec![
+        v2::Match {
+            pattern: Some("/first/".into()),
+            pattern_const: None,
+        },
+        v2::Match {
+            pattern: Some("/second/".into()),
+            pattern_const: Some("P".into()),
+        },
+    ];
+    let source = ts_for(vec![d]);
+    assert!(
+        source.contains("const __ridlPatternCode_0 = new globalThis.RegExp('first');"),
+        "{source}"
+    );
+    assert!(
+        source.contains("const __ridlPatternCode_1 = new globalThis.RegExp('second');"),
+        "{source}"
+    );
+    assert!(
+        source.find("!__ridlPatternCode_0.test(value)").unwrap()
+            < source.find("!__ridlPatternCode_1.test(value)").unwrap()
+    );
+    assert!(
+        source.contains("value, '/first/'") && source.contains("value, '/second/'"),
+        "{source}"
+    );
+}
+
+#[test]
+fn match_clauses_legacy_ir_emits_the_original_search() {
+    let source = ts_for(vec![text_decl(
+        "Code",
+        v2::PrimitiveType::String,
+        (Some(0), Some(8)),
+        Some("/a.b/"),
+    )]);
+    assert_eq!(
+        source.matches("new globalThis.RegExp('a.b')").count(),
+        1,
+        "{source}"
+    );
+    assert!(!source.contains("(?:a.b)"), "{source}");
 }

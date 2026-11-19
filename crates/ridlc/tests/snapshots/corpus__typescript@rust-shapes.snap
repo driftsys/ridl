@@ -169,7 +169,7 @@ export function initFloor(): Floor {
  */
 export type Tag = string & { readonly __ridl: 'lint.shapes.Tag' };
 
-const __ridlPatternTag = new globalThis.RegExp('^[a-z][a-z0-9-]*$');
+const __ridlPatternTag_0 = new globalThis.RegExp('^[a-z][a-z0-9-]*$');
 
 /** Builds a `Tag`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeTag(value: string): Tag {
@@ -182,7 +182,7 @@ export function makeTag(value: string): Tag {
   if ($rt.codePointLength(value) > 16) {
     throw new $rt.ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
   }
-  if (!__ridlPatternTag.test(value)) {
+  if (!__ridlPatternTag_0.test(value)) {
     throw new $rt.ConstraintError('pattern', 'lint.shapes.Tag', value, '/^[a-z][a-z0-9-]*$/');
   }
   return value as Tag;

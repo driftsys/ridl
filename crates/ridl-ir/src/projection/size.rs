@@ -474,6 +474,7 @@ mod tests {
         stream_type, struct_member, type_def,
     };
 
+    #[allow(deprecated)]
     fn constraint(len_max: Option<u64>, pattern: Option<&str>) -> Constraint {
         Constraint {
             len_max,
@@ -1718,6 +1719,7 @@ pub(crate) mod tests_support {
     /// `Vin = string [17..17] match /^[A-HJ-NPR-Z0-9]{17}$/`;
     /// `Bag { tag: Vin, flags: [u8; 0..4], index: {string [0..8]: u32; 0..2} }`;
     /// `Shape = Point | Coord`; `const LIMIT`.
+    #[allow(deprecated)]
     pub(crate) fn fixture() -> Package {
         let field = |name: &str, ordinal: u32, ty: FieldType| StructMember {
             member: Some(struct_member::Member::Field(Box::new(Field {

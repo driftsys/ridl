@@ -70,7 +70,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "0",
-          "max": "200"
+          "max": "200",
+          "matches": []
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_U8"
@@ -125,7 +126,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "-5",
-          "max": "10"
+          "max": "10",
+          "matches": []
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_I8"
@@ -190,7 +192,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.5"
+          "step": "0.5",
+          "matches": []
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -248,7 +251,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_FLOAT",
         "constraint": {
           "min": "0",
-          "step": "0.25"
+          "step": "0.25",
+          "matches": []
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F64"
@@ -308,7 +312,12 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "constraint": {
           "lenMin": "1",
           "lenMax": "16",
-          "pattern": "^[a-z][a-z0-9-]*$"
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "matches": [
+            {
+              "pattern": "^[a-z][a-z0-9-]*$"
+            }
+          ]
         },
         "vacuous": false,
         "declaredInit": "unit"
@@ -363,7 +372,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_STRING",
         "constraint": {
           "lenMin": "0",
-          "lenMax": "32"
+          "lenMax": "32",
+          "matches": []
         },
         "vacuous": false
       }
@@ -416,7 +426,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_BYTES",
         "constraint": {
           "lenMin": "8",
-          "lenMax": "8"
+          "lenMax": "8",
+          "matches": []
         },
         "vacuous": false
       }
@@ -470,7 +481,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_BYTES",
         "constraint": {
           "lenMin": "0",
-          "lenMax": "64"
+          "lenMax": "64",
+          "matches": []
         },
         "vacuous": false
       }
@@ -1973,7 +1985,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                       "class": "SCALAR_CLASS_STRING",
                       "constraint": {
                         "lenMin": "0",
-                        "lenMax": "8"
+                        "lenMax": "8",
+                        "matches": []
                       },
                       "vacuous": false
                     }
@@ -6281,7 +6294,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
   "services": [],
   "catalog": {
     "package": "lint.shapes",
-    "hash": "4pNulIezMScQ77wSQmfzfpIXNu3rUAebKpqnTzRUW8Q=",
+    "hash": "2C39a8V2f5+TOV27a5Y2AXHyPU/shnOCpq5Gz+dz/jI=",
     "retired": [],
     "compatible": []
   },

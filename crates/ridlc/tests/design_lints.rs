@@ -1092,6 +1092,7 @@ fn duplicate_shape_ignores_field_ordinals_docs_and_initial_values() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn duplicate_shape_qualifies_inline_scalar_pattern_constants_in_checked_ir() {
     use ridl_ir::v2::{decl, field_type, struct_member};
     // Inline string scalars are forbidden in source fields. Copy valid named
@@ -1337,4 +1338,70 @@ fn package_edges_through_the_real_compiler_count_only_system_requires_and_member
     for package in ["a", "b", "c", "d"] {
         assert!(edges[package].is_empty(), "{edges:?}");
     }
+}
+
+#[test]
+fn match_clauses_duplicate_shape_qualifies_the_second_constant() {
+    use ridl_ir::v2::{decl, field_type, struct_member};
+    // Inline string scalars are forbidden in source fields. Copy valid named
+    // string type data into the existing IR variant to exercise its reference.
+    let a = "package a\nconst PATTERN = /^x+$/\ntype Text: string [1..8 match PATTERN]\nstruct First { data: Text, index: integer }\n";
+    let b = "package b\nimport a.PATTERN as TEXT_PATTERN\ntype Text: string [1..8 match TEXT_PATTERN]\nstruct Second { index: integer, data: Text }\n";
+    let (diagnostics, _) = design_source_set_with(&[("a", a), ("b", b)], |checked| {
+        for package in checked {
+            let mut scalar = package
+                .ir
+                .decls
+                .iter()
+                .find_map(|d| match &d.kind {
+                    Some(decl::Kind::TypeDef(def)) if d.name == "Text" => Some(def.clone()),
+                    _ => None,
+                })
+                .unwrap();
+
+            // Exercise local and qualified forms of the same referenced
+            // constant without depending on the checker's retained spelling.
+            scalar.constraint = Some(ridl_ir::v2::Constraint {
+                len_min: Some(1),
+                len_max: Some(8),
+                matches: vec![
+                    ridl_ir::v2::Match {
+                        pattern: Some("/x/".into()),
+                        pattern_const: None,
+                    },
+                    ridl_ir::v2::Match {
+                        pattern: Some("/^x+$/".into()),
+                        pattern_const: Some(
+                            if package.ir.name == "a" {
+                                "PATTERN"
+                            } else {
+                                "a.PATTERN"
+                            }
+                            .into(),
+                        ),
+                    },
+                ],
+                ..Default::default()
+            });
+            for declaration in &mut package.ir.decls {
+                if let Some(decl::Kind::StructDef(def)) = &mut declaration.kind {
+                    for member in &mut def.members {
+                        if let Some(struct_member::Member::Field(field)) = &mut member.member
+                            && field.name == "data"
+                        {
+                            field.r#type.as_mut().unwrap().kind =
+                                Some(field_type::Kind::InlineScalar(Box::new(scalar.clone())));
+                        }
+                    }
+                }
+            }
+        }
+    });
+    assert_eq!(
+        shapes(&diagnostics)
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>(),
+        ["`b.Second` has the same 2 fields as `a.First`"]
+    );
 }

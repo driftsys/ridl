@@ -197,7 +197,7 @@ fn shaped_source(shape: &str, depth: usize) -> String {
 /// moving the specification fails here.
 const SHAPE_BOUNDS: &[(&str, usize, usize)] = &[
     ("arrays", 259, 262),
-    ("maps", 261, 264),
+    ("maps", 261, 265),
     ("tuples", 386, 516),
 ];
 

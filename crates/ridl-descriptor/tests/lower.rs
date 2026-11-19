@@ -960,6 +960,7 @@ fn inline(backing: backing::Kind, constraint: Constraint) -> FieldType {
 }
 
 #[test]
+#[allow(deprecated)]
 fn a_structural_type_name_is_spelled_in_the_typl_syntax_over_the_canonical_values() {
     let integer = || ty(field_type::Kind::Primitive(PrimitiveType::Integer as i32));
     let cases: Vec<(FieldType, &str)> = vec![
@@ -1051,6 +1052,27 @@ fn a_structural_type_name_is_spelled_in_the_typl_syntax_over_the_canonical_value
                 },
             ),
             "string [17 match VIN_PATTERN]",
+        ),
+        (
+            inline(
+                backing::Kind::Primitive(PrimitiveType::String as i32),
+                Constraint {
+                    len_min: Some(0),
+                    len_max: Some(8),
+                    matches: vec![
+                        ridl_ir::v2::Match {
+                            pattern: Some("/a/".into()),
+                            pattern_const: None,
+                        },
+                        ridl_ir::v2::Match {
+                            pattern: Some("/b/".into()),
+                            pattern_const: Some("P".into()),
+                        },
+                    ],
+                    ..Default::default()
+                },
+            ),
+            "string [0..8 match /a/ match P]",
         ),
         (
             inline(

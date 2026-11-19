@@ -30,8 +30,7 @@ fn program(main: &str) -> String {
                 step: Some(step.into()),
                 len_min: None,
                 len_max: None,
-                pattern: None,
-                pattern_const: None,
+                ..Default::default()
             });
         }
     }

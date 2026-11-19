@@ -1111,11 +1111,20 @@ pub mod v2 {
     }
 
     /// A `TypeDef`'s only reference is the constant a `match` bound names.
+    #[allow(deprecated)]
     fn walk_type_def(type_def: &TypeDef, found: &mut std::collections::BTreeSet<String>) {
-        if let Some(constraint) = &type_def.constraint
-            && let Some(reference) = &constraint.pattern_const
-        {
-            qualifier(reference, found);
+        if let Some(constraint) = &type_def.constraint {
+            for clause in crate::pattern::ir_match_clauses(constraint).clauses {
+                if let Some(reference) = clause.pattern_const {
+                    qualifier(reference, found);
+                }
+            }
+            // Compatibility fields can retain a reference absent from the clause list.
+            if !constraint.matches.is_empty()
+                && let Some(reference) = &constraint.pattern_const
+            {
+                qualifier(reference, found);
+            }
         }
     }
 
@@ -1135,11 +1144,9 @@ pub mod v2 {
     /// True when no bound, step or pattern is present. A step is an enforced
     /// quantization constraint, including when its origin defaults to zero.
     ///
-    /// A pattern given by name counts as a pattern: `pattern_const` is read as
-    /// well as `pattern`, because a pattern constant that did not resolve leaves
-    /// `pattern` absent while the type still carries a match constraint.
-    /// `ridl-sem` treats the two fields the same way in its derived-init rule
-    /// (`init.rs`).
+    /// Every match clause counts, including an unresolved pattern constant.
+    /// An empty clause list falls back to the deprecated search fields.
+    /// `ridl-sem` uses the same clause reader for its derived-init rule.
     ///
     /// Because the checker materializes the typl §4.4 default `[0..256]` into
     /// `len_min`/`len_max`, every string and bytes type is non-vacuous. In
@@ -1152,8 +1159,7 @@ pub mod v2 {
             && c.step.is_none()
             && c.len_min.is_none()
             && c.len_max.is_none()
-            && c.pattern.is_none()
-            && c.pattern_const.is_none()
+            && crate::pattern::ir_match_clauses(c).clauses.is_empty()
     }
 }
 
@@ -1556,8 +1562,7 @@ mod v2_round_trip {
                 step: None,
                 len_min: Some(1),
                 len_max: Some(86),
-                pattern: None,
-                pattern_const: None,
+                ..Default::default()
             }),
             declared_init: None,
             init: None,
@@ -1618,8 +1623,7 @@ mod v2_round_trip {
                             step: None,
                             len_min: None,
                             len_max: None,
-                            pattern: None,
-                            pattern_const: None,
+                            ..Default::default()
                         }),
                         declared_init: None,
                         init: None,
@@ -2420,6 +2424,41 @@ mod v2_round_trip {
         );
     }
 
+    #[test]
+    #[allow(deprecated)]
+    fn match_clauses_reference_walk_includes_second_clause_and_legacy_reference() {
+        let package = v2::Package {
+            name: "app".into(),
+            decls: vec![v2::Decl {
+                name: "Text".into(),
+                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                    constraint: Some(v2::Constraint {
+                        matches: vec![
+                            v2::Match {
+                                pattern: Some("/a/".into()),
+                                pattern_const: None,
+                            },
+                            v2::Match {
+                                pattern: None,
+                                pattern_const: Some("patterns.second.P".into()),
+                            },
+                        ],
+                        pattern_const: Some("legacy.pattern.P".into()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            v2::referenced_packages(&package),
+            ["legacy.pattern".into(), "patterns.second".into()]
+                .into_iter()
+                .collect()
+        );
+    }
     /// An empty package references nothing — the negative case the emit rule in
     /// `ridlc` depends on.
     #[test]
@@ -2905,6 +2944,18 @@ mod v2_round_trip {
 mod vacuous_constraint {
     use crate::v2;
 
+    #[test]
+    fn match_clauses_alone_are_non_vacuous() {
+        let c = v2::Constraint {
+            matches: vec![v2::Match {
+                pattern: Some("/a/".into()),
+                pattern_const: None,
+            }],
+            ..Default::default()
+        };
+        assert!(!v2::constraint_is_vacuous(Some(&c)));
+    }
+
     /// A constraint with every field absent. Each test sets only the field it
     /// is about, so no assertion can pass through a neighbouring field.
     fn constraint() -> v2::Constraint {
@@ -2914,8 +2965,7 @@ mod vacuous_constraint {
             step: None,
             len_min: None,
             len_max: None,
-            pattern: None,
-            pattern_const: None,
+            ..Default::default()
         }
     }
 
@@ -2941,6 +2991,7 @@ mod vacuous_constraint {
     /// [`a_bound_pair_set_together_is_non_vacuous`], which a one-sided fixture
     /// cannot do.
     #[test]
+    #[allow(deprecated)]
     fn any_single_constrained_field_is_non_vacuous() {
         let cases = [
             (

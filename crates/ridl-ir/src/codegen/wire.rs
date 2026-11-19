@@ -146,6 +146,7 @@ fn type_position(
     })
 }
 
+#[allow(deprecated)]
 fn scalar_type(scalar: &v1::Scalar) -> v2::TypeDef {
     let primitive = match v1::ScalarClass::try_from(scalar.class).ok() {
         Some(v1::ScalarClass::Integer) => v2::PrimitiveType::Integer,
@@ -170,7 +171,56 @@ fn scalar_type(scalar: &v1::Scalar) -> v2::TypeDef {
             len_max: constraint.len_max,
             pattern: constraint.pattern.clone(),
             pattern_const: constraint.pattern_const.clone(),
+            matches: constraint
+                .matches
+                .iter()
+                .map(|clause| v2::Match {
+                    pattern: clause.pattern.clone(),
+                    pattern_const: clause.pattern_const.clone(),
+                })
+                .collect(),
         }),
         ..Default::default()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    //! Checks that wire tuple adaptation retains every scalar clause.
+    use super::*;
+
+    #[test]
+    fn match_clauses_survive_model_to_ir_adaptation() {
+        let sc = v1::Scalar {
+            class: v1::ScalarClass::String as i32,
+            constraint: Some(v1::Constraint {
+                matches: vec![
+                    v1::Match {
+                        pattern: Some("first".into()),
+                        pattern_const: None,
+                    },
+                    v1::Match {
+                        pattern: Some("second".into()),
+                        pattern_const: Some("P".into()),
+                    },
+                ],
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let c = scalar_type(&sc).constraint.unwrap();
+        assert_eq!(
+            c.matches,
+            vec![
+                v2::Match {
+                    pattern: Some("first".into()),
+                    pattern_const: None
+                },
+                v2::Match {
+                    pattern: Some("second".into()),
+                    pattern_const: Some("P".into())
+                },
+            ]
+        );
     }
 }

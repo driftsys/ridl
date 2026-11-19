@@ -245,6 +245,12 @@ the limit its row states.
 | a comment, a doc string, a `deprecated` option        | additive                                                                                                                                                                                                                                                                                                                                      |
 | retiring a field's meaning                            | additive only as `[deprecated = true]` with the field kept, still written and still read; the field itself leaves in the next major package (§7)                                                                                                                                                                                              |
 
+One exception is recorded. `Constraint.matches` holds every `match` clause of a
+string type, and the deprecated `Constraint.pattern` and `pattern_const` hold
+the first. A reader that reads only the deprecated fields checks the first
+clause of a type with several clauses and ignores the others. The owner accepted
+this for this one source feature (driftsys/ridl#597).
+
 Everything else is **breaking**, and is never made in place:
 
 - removing a field, an enum value or a `oneof` member;

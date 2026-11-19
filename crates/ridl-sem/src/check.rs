@@ -1980,8 +1980,7 @@ impl Checker<'_> {
                 step: None,
                 len_min: None,
                 len_max: None,
-                pattern: None,
-                pattern_const: None,
+                ..Default::default()
             }),
             width,
             min,
@@ -2121,8 +2120,7 @@ impl Checker<'_> {
                 step: step.as_ref().map(ExactValue::to_decimal_string),
                 len_min: None,
                 len_max: None,
-                pattern: None,
-                pattern_const: None,
+                ..Default::default()
             }),
             width,
             min,
@@ -2130,6 +2128,7 @@ impl Checker<'_> {
         }
     }
 
+    #[allow(deprecated)]
     fn lower_len_scalar(
         &mut self,
         noun: &str,
@@ -2212,6 +2211,14 @@ impl Checker<'_> {
             }
         }
 
+        let matches = if pattern.is_some() || pattern_const.is_some() {
+            vec![v2::Match {
+                pattern: pattern.clone(),
+                pattern_const: pattern_const.clone(),
+            }]
+        } else {
+            Vec::new()
+        };
         ScalarParts {
             constraint: Some(v2::Constraint {
                 min: None,
@@ -2221,6 +2228,7 @@ impl Checker<'_> {
                 len_max: Some(len_max),
                 pattern,
                 pattern_const,
+                matches,
             }),
             width: None,
             min: None,
@@ -2413,15 +2421,17 @@ impl Checker<'_> {
                 format!("init string length {length} exceeds the declared maximum {max}"),
             );
         }
-        if let Some(pattern) = &constraint.pattern
-            && let Ok(regex) = regress::Regex::new(regex_body(pattern))
-            && regex.find(text).is_none()
-        {
-            self.error(
-                violation,
-                range,
-                format!("init string `{text}` does not match the type's `match` pattern"),
-            );
+        for clause in ridl_ir::pattern::ir_match_clauses(constraint).clauses {
+            if let Some(pattern) = clause.pattern
+                && let Ok(regex) = regress::Regex::new(regex_body(pattern))
+                && regex.find(text).is_none()
+            {
+                self.error(
+                    violation,
+                    range,
+                    format!("init string `{text}` does not match the type's `match` pattern"),
+                );
+            }
         }
     }
 
@@ -2882,6 +2892,7 @@ impl Checker<'_> {
     /// The length bounds and `match` pattern of a named string/bytes `type`, as
     /// an IR constraint (read-only, no diagnostics), for init validation and
     /// derivation. `None` when the symbol is not a string/bytes type.
+    #[allow(deprecated)]
     fn named_string_constraint(&self, symbol: &Symbol) -> Option<v2::Constraint> {
         let Definition::Type(decl) = self.find_definition(symbol)? else {
             return None;
@@ -2893,7 +2904,18 @@ impl Checker<'_> {
         let package = self.package_handle(&symbol.package)?;
         let constraint = decl.constraint();
         let (len_min, len_max) = self.string_len_bounds(package, constraint.as_ref());
-        let (pattern, pattern_const) = self.string_pattern(package, constraint.as_ref());
+        let matches: Vec<_> = self
+            .string_pattern(package, constraint.as_ref())
+            .into_iter()
+            .map(|(pattern, pattern_const)| v2::Match {
+                pattern,
+                pattern_const,
+            })
+            .collect();
+        let (pattern, pattern_const) = matches
+            .first()
+            .map(|clause| (clause.pattern.clone(), clause.pattern_const.clone()))
+            .unwrap_or_default();
         Some(v2::Constraint {
             min: None,
             max: None,
@@ -2902,6 +2924,7 @@ impl Checker<'_> {
             len_max: Some(len_max),
             pattern,
             pattern_const,
+            matches,
         })
     }
 
@@ -2938,18 +2961,18 @@ impl Checker<'_> {
         &self,
         package: Package,
         constraint: Option<&ast::Constraint>,
-    ) -> (Option<String>, Option<String>) {
+    ) -> Vec<(Option<String>, Option<String>)> {
         let Some(match_literal) = constraint.and_then(ast::Constraint::match_pattern) else {
-            return (None, None);
+            return Vec::new();
         };
-        match literal_kind(&match_literal) {
+        vec![match literal_kind(&match_literal) {
             LitKind::Regex(text) => (Some(text), None),
             LitKind::ConstRef(name) => match self.const_regex_value_in(package, &name) {
                 Some((text, canonical)) => (Some(text), Some(canonical)),
                 None => (None, Some(name)),
             },
-            _ => (None, None),
-        }
+            _ => return Vec::new(),
+        }]
     }
 
     /// Resolves a canonical IR reference (`Speed` same-package,
@@ -10256,11 +10279,11 @@ mod tests {
             .declarations
             .iter()
             .filter_map(|declaration| match declaration.kind.as_ref() {
-                Some(v1::declaration::Kind::Scalar(scalar)) => {
-                    scalar.constraint.as_ref()?.pattern.clone()
-                }
+                Some(v1::declaration::Kind::Scalar(scalar)) => scalar.constraint.as_ref(),
                 _ => None,
             })
+            .flat_map(|c| ridl_ir::pattern::model_match_clauses(c).clauses)
+            .filter_map(|clause| clause.pattern.map(str::to_owned))
             .collect()
     }
 
@@ -17504,5 +17527,34 @@ service Cabin { signal s : State @[100ms..1s] }
             &[("u.a", "package u.a\ninterface Foo {}\n")],
         );
         assert_eq!(unit.numbers("u.a"), [("a.Foo".to_string(), 1, false)]);
+    }
+
+    #[test]
+    fn match_clauses_lower_literal_and_constant_without_changing_search_text() {
+        for (prefix, clause, constant) in [
+            ("", "/[A-Z]{17}/", None),
+            ("const VIN = /[A-Z]{17}/\n", "VIN", Some("VIN")),
+        ] {
+            let checked = check_source(
+                "test",
+                &format!("package test\n{prefix}type Vin : string [17 match {clause}]\n"),
+            );
+            let def = checked
+                .ir
+                .decls
+                .iter()
+                .find_map(|d| match &d.kind {
+                    Some(v2::decl::Kind::TypeDef(def)) => Some(def),
+                    _ => None,
+                })
+                .unwrap();
+            assert_eq!(
+                def.constraint.as_ref().unwrap().matches,
+                vec![v2::Match {
+                    pattern: Some("/[A-Z]{17}/".into()),
+                    pattern_const: constant.map(str::to_owned)
+                }]
+            );
+        }
     }
 }

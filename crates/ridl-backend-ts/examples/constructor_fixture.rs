@@ -63,6 +63,7 @@ fn grid(min: Option<&str>, max: Option<&str>, step: &str) -> Option<v2::Constrai
     })
 }
 
+#[allow(deprecated)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args().nth(1).ok_or("expected an output path")?;
     let package = v2::Package {

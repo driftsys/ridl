@@ -598,6 +598,7 @@ fn constraint(
 /// change, so a mixed edit — a lowered `min` with a lowered `max` — is breaking
 /// on the half that narrows. A stepped minimum also defines the grid origin,
 /// so a shifted grid is breaking even when the interval widens.
+#[allow(deprecated)]
 pub(crate) fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
     let (Some(old), Some(new)) = (old, new) else {
         // A constraint appearing where there was none bounds a previously

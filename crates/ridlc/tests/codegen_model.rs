@@ -210,7 +210,7 @@ const DEEPEST_ADMITTED: usize = 127;
 /// The tuple shape is a constant, because a tuple position is a `TupleRef`
 /// and each tuple is its own five-level entry in `Model.tuples`.
 const SHAPE_BOUNDS: &[(&str, usize, usize)] =
-    &[("arrays", 259, 262), ("maps", 261, 264), ("tuples", 6, 9)];
+    &[("arrays", 259, 262), ("maps", 261, 265), ("tuples", 6, 9)];
 
 /// One package whose single struct field nests `depth` levels of the given
 /// shape — the three shapes `ir_canonical.rs` measures, so the IR's figures

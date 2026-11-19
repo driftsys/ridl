@@ -29,7 +29,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "15"
+                    "max": "15",
+                    "matches": []
                   },
                   "intWidth": "INT_WIDTH_U8"
                 }
@@ -92,7 +93,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "5"
+                    "max": "5",
+                    "matches": []
                   },
                   "intWidth": "INT_WIDTH_U8"
                 }
@@ -154,7 +156,8 @@ expression: "v2::to_json_pretty(&checked.ir).expect(\"the appendix package seria
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "65535"
+                    "max": "65535",
+                    "matches": []
                   },
                   "intWidth": "INT_WIDTH_U16"
                 }

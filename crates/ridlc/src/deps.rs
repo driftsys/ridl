@@ -349,4 +349,25 @@ mod tests {
             edges(&[("consumer", &["team.types"]), ("team.types", &[])])
         );
     }
+
+    #[test]
+    fn match_clauses_dependency_scan_finds_the_second_constant() {
+        let c = ridl_ir::v2::Constraint {
+            matches: vec![
+                ridl_ir::v2::Match {
+                    pattern: Some("/a/".into()),
+                    pattern_const: None,
+                },
+                ridl_ir::v2::Match {
+                    pattern: None,
+                    pattern_const: Some("patterns.P".into()),
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(
+            super::references_of("app", &c),
+            vec![(None, "patterns.P".into())]
+        );
+    }
 }

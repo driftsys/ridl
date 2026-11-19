@@ -222,12 +222,22 @@ message Constraint {
   // typl §5.4). A fixed [N] constraint has len_min == len_max == N.
   optional uint64 len_min = 4;
   optional uint64 len_max = 5;
-  // Regex source text of the match pattern (typl §5.3), resolved through
-  // the named constant when one is referenced.
-  optional string pattern = 6;
-  // Name of the referenced regex constant when the match pattern was given
-  // by name (typl §5.3, §6.2); absent for inline regex literals.
-  optional string pattern_const = 7;
+  // Deprecated: the first clause of matches, still written and read
+  // (IR specification §6).
+  optional string pattern = 6 [deprecated = true];
+  // Deprecated: the first clause of matches, still written and read
+  // (IR specification §6).
+  optional string pattern_const = 7 [deprecated = true];
+  // Every match clause, in source order.
+  repeated Match matches = 8;
+}
+
+// One `match` clause (typl §5.3).
+message Match {
+  // The source literal with its delimiters.
+  optional string pattern = 1;
+  // The canonical reference to the regex constant, when the clause names one.
+  optional string pattern_const = 2;
 }
 
 // The resolved init value of a type or field (typl §5.8).

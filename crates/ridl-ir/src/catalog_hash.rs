@@ -337,7 +337,8 @@ fn collect_refs(decl: &Decl, context: usize, out: &mut Vec<Pending>) {
 /// and `InitValue.value` on `TypeDef`, `Field` and `SignalDef`), and range
 /// bounds, steps and timing bounds are canonical decimals. A change to the
 /// constant changes those strings, so they need no following.
-/// `Constraint.pattern_const` is a reference, visited by [`visit_refs`].
+/// Every `Match.pattern_const` and the compatibility `Constraint.pattern_const`
+/// are references, visited by [`visit_refs`].
 ///
 /// The `match` is exhaustive for the same reason as in [`visit_refs`].
 fn visit_exprs(decl: &Decl, f: &mut dyn FnMut(&str)) {
@@ -423,7 +424,8 @@ fn expr_names(source: &str, f: &mut dyn FnMut(&str)) {
 /// Calls `f` on every type reference inside `decl`. The IR references a type
 /// by name string in: `SignalDef.payload`, `EventDef.payload`,
 /// `FieldType::Named`, `UnionArm.type_ref`, `ConstDef.type_ref`,
-/// `EnumSetDef.backing_enum`, `Constraint.pattern_const`,
+/// `EnumSetDef.backing_enum`, every `Match.pattern_const`, the compatibility
+/// `Constraint.pattern_const`,
 /// `StreamType::Named` and `FallibleType.ok`/`err`. `Contract.signal_refs`
 /// and `Contract.param_refs` name interactions and parameters of the same
 /// interface, not types, so they are not visited. Names inside expression
@@ -493,14 +495,18 @@ fn visit_refs(decl: &mut Decl, f: &mut dyn FnMut(&mut String)) {
     }
 }
 
+#[allow(deprecated)]
 fn visit_type_def(def: &mut TypeDef, f: &mut dyn FnMut(&mut String)) {
     // `backing.unit` is a UCUM unit expression, not a type reference.
-    if let Some(constant) = def
-        .constraint
-        .as_mut()
-        .and_then(|c| c.pattern_const.as_mut())
-    {
-        f(constant);
+    if let Some(c) = &mut def.constraint {
+        for clause in &mut c.matches {
+            if let Some(constant) = &mut clause.pattern_const {
+                f(constant);
+            }
+        }
+        if let Some(constant) = &mut c.pattern_const {
+            f(constant);
+        }
     }
 }
 
@@ -1537,6 +1543,7 @@ mod tests {
         }
     }
 
+    #[allow(deprecated)]
     fn pattern_const_def(name: &str) -> TypeDef {
         TypeDef {
             constraint: Some(Constraint {
@@ -2384,5 +2391,31 @@ mod tests {
             hex(catalog_hash("u", &[&limit_fixture(None)])),
             "ad0663a0210793e7a415b391b15eb2a8e03b394e542deeefcee8ea64bedaaa8d"
         );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn match_clauses_qualify_second_constant_and_legacy_reference() {
+        let mut def = TypeDef {
+            constraint: Some(Constraint {
+                matches: vec![
+                    crate::v2::Match {
+                        pattern: Some("/a/".into()),
+                        pattern_const: None,
+                    },
+                    crate::v2::Match {
+                        pattern: None,
+                        pattern_const: Some("SECOND".into()),
+                    },
+                ],
+                pattern_const: Some("FIRST".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        visit_type_def(&mut def, &mut |name| *name = format!("p.{name}"));
+        let c = def.constraint.unwrap();
+        assert_eq!(c.matches[1].pattern_const.as_deref(), Some("p.SECOND"));
+        assert_eq!(c.pattern_const.as_deref(), Some("p.FIRST"));
     }
 }
