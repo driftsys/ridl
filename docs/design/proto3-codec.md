@@ -230,10 +230,11 @@ codec still computes its own layout rather than reading that projection.
 `crates/ridl-backend-rust/tests/proto3_conformance.rs` keeps the projection and
 the codec equal for field numbers, types and labels over the conformance
 fixture, every ridlc corpus workspace that compiles without an error diagnostic,
-and the encoding corpus. It compares every codec message and requires every
-projection message outside the codec layout and every `refused` entry to have a
-tuple source. It does not compare packing or `default_is_legal`: the codec
-layout carries only a number, a type and a label per field.
+and the encoding corpus listed by `CORPUS` in that test. It compares every codec
+message and requires every projection message outside the codec layout and every
+`refused` entry to have a tuple source. It does not compare packing or
+`default_is_legal`: the codec layout carries only a number, a type and a label
+per field.
 
 ## The writer
 

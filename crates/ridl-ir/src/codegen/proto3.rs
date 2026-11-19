@@ -924,4 +924,104 @@ mod tests {
         assert_eq!(p.refused[0].member.as_deref(), Some("Bad.value"));
         assert_eq!(p.refused[0].message, "`Bad.value` names no type");
     }
+
+    fn name(value: &str) -> Option<v1::Spellings> {
+        Some(v1::Spellings {
+            declared: value.into(),
+            ..Default::default()
+        })
+    }
+
+    #[test]
+    fn a_tuple_field_without_a_type_names_the_member() {
+        let model = v1::Model {
+            tuples: vec![v1::InducedTuple {
+                name: Some(v1::InducedName {
+                    rust: "Pair".into(),
+                    wire: "Pair".into(),
+                }),
+                fields: vec![v1::Field {
+                    name: name("value"),
+                    r#type: None,
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let p = project(&model);
+        assert!(p.messages.is_empty());
+        assert_eq!(p.refused.len(), 1);
+        assert_eq!(
+            p.refused[0].source,
+            Some(v1::proto3_refused::Source::Tuple(0))
+        );
+        assert_eq!(p.refused[0].cause, Cause::Other as i32);
+        assert_eq!(p.refused[0].member.as_deref(), Some("Pair.value"));
+        assert_eq!(p.refused[0].message, "`Pair.value` carries no type");
+    }
+
+    #[test]
+    fn foreign_message_references_index_the_foreign_declarations() {
+        let foreign = ["First", "Second"].map(|value| v1::ForeignDeclaration {
+            package: "p.other".into(),
+            declaration: Some(v1::Declaration {
+                name: name(value),
+                kind: Some(v1::declaration::Kind::Struct(v1::Struct::default())),
+                ..Default::default()
+            }),
+        });
+        let slots = [("second", "Second", 1), ("first", "First", 0)]
+            .into_iter()
+            .enumerate()
+            .map(|(ordinal, (member, target, index))| v1::Slot {
+                ordinal: ordinal as u32 + 1,
+                occupant: Some(v1::slot::Occupant::Field(Box::new(v1::Field {
+                    name: name(member),
+                    r#type: Some(v1::Type {
+                        optional: false,
+                        kind: Some(v1::r#type::Kind::Named(v1::TypeRef {
+                            reference: format!("p.other.{target}"),
+                            package: "p.other".into(),
+                            resolved: true,
+                            foreign: true,
+                            index,
+                            kind: v1::DeclKind::Struct as i32,
+                        })),
+                    }),
+                    ..Default::default()
+                }))),
+            })
+            .collect();
+        let model = v1::Model {
+            scope: Some(v1::Scope {
+                package: "p.local".into(),
+                ..Default::default()
+            }),
+            declarations: vec![v1::Declaration {
+                name: name("Holder"),
+                kind: Some(v1::declaration::Kind::Struct(v1::Struct {
+                    slots,
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            foreign: foreign.into(),
+            ..Default::default()
+        };
+        let p = project(&model);
+        assert!(p.refused.is_empty());
+        assert_eq!(p.messages.len(), 1);
+        for (field, expected) in p.messages[0].fields.iter().zip([1, 0]) {
+            let Some(v1::proto3_wire::Kind::Message(reference)) =
+                field.wire.as_ref().and_then(|wire| wire.kind.as_ref())
+            else {
+                panic!("a foreign message reference");
+            };
+            assert_eq!(
+                reference.target,
+                Some(v1::proto3_message_ref::Target::Foreign(expected))
+            );
+        }
+    }
 }

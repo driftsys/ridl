@@ -1334,16 +1334,16 @@ fn two_packages(a: &str, b: &str) -> Vec<v2::Package> {
 #[test]
 fn foreign_tuples_are_listed_only_in_the_declaring_package() {
     let packages = two_packages(
-        "package p.a\nstruct A {\n pair : (value: boolean, nested: (flag: boolean, count: integer))\n}\n",
-        "package p.b\nimport p.a.A\nstruct B {\n value : A\n}\n",
+        "package p.a\nstruct A {\n pair : (value: boolean, nested: (flag: boolean, count: integer))\n}\nstruct Refused {\n pair : (values: [integer; 0..2]?)\n}\n",
+        "package p.b\nimport p.a.A\nimport p.a.Refused\nstruct B {\n value : A\n refused : Refused\n}\n",
     );
     let others: Vec<_> = packages.iter().collect();
     for package in &packages {
         let model = codegen::lower(package, &others);
         let p = model.proto3.as_ref().unwrap();
-        assert_eq!(model.tuples.len(), 2);
-        assert!(p.refused.is_empty());
+        assert_eq!(model.tuples.len(), 3);
         if package.name == "p.b" {
+            assert!(p.refused.is_empty());
             assert_eq!(
                 p.messages
                     .iter()
@@ -1361,9 +1361,30 @@ fn foreign_tuples_are_listed_only_in_the_declaring_package() {
         } else {
             assert_eq!(package.name, "p.a");
             message(p, "A");
+            let refused_tuple = p
+                .refused
+                .iter()
+                .find(|entry| matches!(entry.source, Some(v1::proto3_refused::Source::Tuple(_))))
+                .expect("the declaring package lists the refused tuple");
+            assert_eq!(
+                refused_tuple.cause,
+                v1::Proto3RefusalCause::OptionalCollection as i32
+            );
+            assert_eq!(p.refused.len(), 2);
+            assert_eq!(
+                refusal(p, &model, "Refused").cause,
+                v1::Proto3RefusalCause::RefusedDependency as i32
+            );
             for (index, tuple) in model.tuples.iter().enumerate() {
                 let name = tuple.name.as_ref().unwrap();
                 assert!(!name.rust.is_empty() && !name.wire.is_empty());
+                if refused_tuple.source == Some(v1::proto3_refused::Source::Tuple(index as u32)) {
+                    assert_eq!(
+                        refused_tuple.member.as_deref(),
+                        Some(format!("{}.values", name.rust).as_str())
+                    );
+                    continue;
+                }
                 assert_eq!(
                     message(p, &name.wire).source,
                     Some(v1::proto3_message::Source::Tuple(index as u32))
