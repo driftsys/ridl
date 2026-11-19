@@ -52,6 +52,10 @@ pub mod v1 {
         use super::*;
 
         include!(concat!(env!("OUT_DIR"), "/ridl.codegen.v1.serde.rs"));
+        include!(concat!(
+            env!("OUT_DIR"),
+            "/constraints/ridl.codegen.v1.serde.rs"
+        ));
     }
 }
 

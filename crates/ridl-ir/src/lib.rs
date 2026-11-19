@@ -33,6 +33,7 @@ pub mod v2 {
         use super::*;
 
         include!(concat!(env!("OUT_DIR"), "/ridl.ir.v2.serde.rs"));
+        include!(concat!(env!("OUT_DIR"), "/constraints/ridl.ir.v2.serde.rs"));
     }
 
     /// The descriptor pool over the compiled IR schema — the reflection data
@@ -174,7 +175,8 @@ pub mod v2 {
     /// what the retired reflection path rendered.
     ///
     /// A field holding its default is emitted rather than skipped (decision
-    /// 2, `emit_fields()` in `build.rs`); an unset proto3 `optional` field
+    /// 2, `emit_fields()` in `build.rs`), except for an empty
+    /// `Constraint.matches` list (IR specification section 3). An unset proto3 `optional` field
     /// is omitted entirely, never rendered as `null` (the answer to that
     /// decision's open item). 64-bit fields render as strings, the canonical
     /// mapping JavaScript consumers need (decision 8).

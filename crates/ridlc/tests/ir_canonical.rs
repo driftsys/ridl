@@ -285,3 +285,31 @@ fn with_sized_stack(test: impl FnOnce() + Send + 'static) {
         std::panic::resume_unwind(payload);
     }
 }
+
+#[test]
+fn constraints_without_matches_keep_the_pre_match_json_golden() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus/veh-cluster");
+    let output = ridlc::compile_workspace(&mut RidlDatabase::default(), &root).unwrap();
+    let packages: Vec<_> = output.checked.iter().map(|checked| &checked.ir).collect();
+    let actual = packages
+        .iter()
+        .map(|package| {
+            format!(
+                "// ===== package {} =====\n{}",
+                package.name,
+                ridl_ir::v2::to_json_pretty(package).unwrap()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    // This golden is unchanged from origin/main before match lists existed.
+    let expected = include_str!("snapshots/corpus__ir@veh-cluster.snap")
+        .split_once("\n---\n")
+        .unwrap()
+        .1
+        .trim_end();
+    assert!(expected.contains("\"lenMin\""));
+    assert!(expected.contains("\"min\""));
+    assert!(!expected.contains("\"pattern\""));
+    assert_eq!(actual, expected);
+}

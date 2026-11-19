@@ -836,3 +836,132 @@ fn interrupted_publication_refuses_the_catalog_build() {
         assert!(stderr.contains(expected), "missing {expected}: {stderr}");
     }
 }
+
+/// Render the pre-match schema's JSON without changing the remaining bytes.
+fn pre_match_json(package: &ridl_ir::v2::Package) -> String {
+    let json = ridl_ir::v2::to_json_pretty(package).unwrap();
+    let mut lines: Vec<String> = Vec::new();
+    for line in json.lines() {
+        if line.trim() == "\"matches\": []" {
+            let previous = lines.last_mut().unwrap();
+            *previous = previous.trim_end_matches(',').to_owned();
+        } else {
+            lines.push(line.to_owned());
+        }
+    }
+    lines.join("\n")
+}
+
+#[test]
+fn pre_match_baseline_with_a_clause_is_readable_and_reset_restarts_history() {
+    use ridl_core::catalog_history::{self, CatalogHistory};
+    use ridlc::baseline_context::{BaselineContext, write_context};
+    use sha2::{Digest, Sha256};
+    for reaches_std in [false, true] {
+        for mode in ["plain", "--repair-context", "--reset-history"] {
+            let dir = TempDir::new("match-history");
+            let home = TempDir::new("match-history-home");
+            dir.write(
+                "ridl.toml",
+                "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+            );
+            let extra = if reaches_std {
+                "event date: Date @[10ms..100ms]"
+            } else {
+                ""
+            };
+            dir.write("app.ridl", &format!("package app\ntype Code: string [1..8 match /a/] = \"a\"\ninterface Probe {{ signal code: Code @10ms\n{extra}\n}}\n"));
+            command(dir.path(), home.path(), &["lock"], 0);
+            command(dir.path(), home.path(), &["baseline"], 0);
+            let baseline = dir.path().join(".ridl/baseline");
+            let mut historical = ridl_ir::v2::from_json(
+                &std::fs::read_to_string(baseline.join("app.ir.json")).unwrap(),
+            )
+            .unwrap();
+            let Some(ridl_ir::v2::decl::Kind::TypeDef(code)) = &mut historical.decls[0].kind else {
+                unreachable!()
+            };
+            code.constraint.as_mut().unwrap().matches.clear();
+            let json = pre_match_json(&historical);
+            assert!(!json.contains("\"matches\""));
+            std::fs::write(baseline.join("app.ir.json"), &json).unwrap();
+            write_context(
+                &baseline,
+                &BaselineContext {
+                    version: 1,
+                    local_packages: BTreeMap::from([(
+                        "app".into(),
+                        format!("{:x}", Sha256::digest(json.as_bytes())),
+                    )]),
+                    remote_units: vec![],
+                },
+            )
+            .unwrap();
+            let mut historical_std = ridlc::std_ir();
+            for decl in &mut historical_std.decls {
+                if let Some(ridl_ir::v2::decl::Kind::TypeDef(def)) = &mut decl.kind
+                    && let Some(constraint) = &mut def.constraint
+                {
+                    constraint.matches.clear();
+                }
+            }
+            let old_hash =
+                ridl_ir::catalog_hash::catalog_hash("app", &[&historical, &historical_std]);
+            std::fs::write(
+                baseline.join("app.catalogs"),
+                CatalogHistory {
+                    hashes: vec![old_hash],
+                }
+                .render(),
+            )
+            .unwrap();
+            let prior = inventory(&baseline);
+            command(
+                dir.path(),
+                home.path(),
+                &["diff", baseline.to_str().unwrap(), "."],
+                0,
+            );
+            match mode {
+                "plain" => {
+                    command(dir.path(), home.path(), &["baseline"], 0);
+                    let history = catalog_history::parse(
+                        &std::fs::read_to_string(baseline.join("app.catalogs")).unwrap(),
+                    )
+                    .unwrap();
+                    if reaches_std {
+                        assert_eq!(history.hashes.len(), 1);
+                        assert_ne!(history.hashes[0], old_hash);
+                    } else {
+                        assert_eq!(history.hashes.len(), 2);
+                        assert_eq!(history.hashes[1], old_hash);
+                    }
+                }
+                "--repair-context" => {
+                    let stderr = command(dir.path(), home.path(), &["baseline", mode], 2);
+                    assert!(
+                        stderr.contains(
+                            "complete historical local snapshot set does not match SOURCE"
+                        ),
+                        "{stderr}"
+                    );
+                    assert_eq!(inventory(&baseline), prior);
+                }
+                "--reset-history" => {
+                    command(dir.path(), home.path(), &["baseline", mode], 0);
+                    let history = catalog_history::parse(
+                        &std::fs::read_to_string(baseline.join("app.catalogs")).unwrap(),
+                    )
+                    .unwrap();
+                    assert_eq!(history.hashes.len(), 1);
+                    assert_ne!(history.hashes[0], old_hash);
+                    assert_eq!(
+                        inventory(&dir.path().join(".ridl/baseline.previous.1")),
+                        prior
+                    );
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+}

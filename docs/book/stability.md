@@ -214,7 +214,25 @@ list adds no byte, including on numeric constraints and string length bounds.
 Reordering clauses also changes the hash, although `ridl diff` ignores clause
 order.
 
-Regenerate and redeploy communicating peers together for each affected unit.
-Each compatibility chain of such a unit restarts once; publish a new baseline
-with `ridl baseline` after migration. Units that reach no `match` clause need no
-chain restart for this addition.
+Pre-addition baseline snapshots remain readable, including snapshots with only
+numeric ranges, string length bounds, or the deprecated `pattern` field. Empty
+`matches` lists are omitted from canonical JSON, so each package with no match
+clause keeps its snapshot bytes and baseline-context fingerprints. No recovery
+flag is required for this schema addition. For an unchanged local match clause
+without a reached built-in match, plain `ridl baseline` adds the new hash to the
+existing compatibility history and retains the old hash. A unit that reaches a
+built-in match, such as `ridl.std.Date`, instead starts a new history during
+plain publication: the built-in vocabulary is recompiled by the current
+compiler, so the old hash cannot be reproduced from the stored snapshots.
+
+To restart that history explicitly, run:
+
+```sh
+ridl baseline CURRENT_SOURCE --reset-history --out BASELINE
+```
+
+This preserves the prior baseline and starts each current unit's history at its
+current hash. `--repair-context` cannot repair a pre-addition match snapshot
+from source rebuilt by this compiler: the new non-empty `matches` list changes
+its canonical JSON, so the historical snapshot equality check refuses it. Units
+with no match clause need neither repair nor reset for this addition.

@@ -70,8 +70,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "0",
-          "max": "200",
-          "matches": []
+          "max": "200"
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_U8"
@@ -126,8 +125,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "-5",
-          "max": "10",
-          "matches": []
+          "max": "10"
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_I8"
@@ -192,8 +190,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -251,8 +248,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_FLOAT",
         "constraint": {
           "min": "0",
-          "step": "0.25",
-          "matches": []
+          "step": "0.25"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F64"
@@ -372,8 +368,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_STRING",
         "constraint": {
           "lenMin": "0",
-          "lenMax": "32",
-          "matches": []
+          "lenMax": "32"
         },
         "vacuous": false
       }
@@ -426,8 +421,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_BYTES",
         "constraint": {
           "lenMin": "8",
-          "lenMax": "8",
-          "matches": []
+          "lenMax": "8"
         },
         "vacuous": false
       }
@@ -481,8 +475,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_BYTES",
         "constraint": {
           "lenMin": "0",
-          "lenMax": "64",
-          "matches": []
+          "lenMax": "64"
         },
         "vacuous": false
       }
@@ -1985,8 +1978,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                       "class": "SCALAR_CLASS_STRING",
                       "constraint": {
                         "lenMin": "0",
-                        "lenMax": "8",
-                        "matches": []
+                        "lenMax": "8"
                       },
                       "vacuous": false
                     }

@@ -1053,7 +1053,7 @@ fn diff_interaction(
                     Some(class_str(b.family, b.shape)),
                 );
             }
-            if a.params != b.params {
+            if !params_equal(&a.params, &b.params) {
                 emit(
                     changes,
                     path.to_string(),
@@ -1094,7 +1094,7 @@ fn diff_interaction(
                     Some(class_str(b.family, 0)),
                 );
             }
-            if a.params != b.params {
+            if !params_equal(&a.params, &b.params) {
                 emit(
                     changes,
                     path.to_string(),
@@ -1103,7 +1103,7 @@ fn diff_interaction(
                     Some(params_str(&b.params)),
                 );
             }
-            if a.return_type != b.return_type {
+            if !returns_equal(a.return_type.as_ref(), b.return_type.as_ref()) {
                 emit(
                     changes,
                     path.to_string(),
@@ -1329,7 +1329,70 @@ fn without_numbers(mut values: Vec<v2::EnumValue>) -> Vec<v2::EnumValue> {
     values
 }
 
-/// Compare inline scalar constraints with the same semantics as named types.
+/// Compare types recursively, treating inline constraints like named ones.
+fn field_types_equal(old: Option<&v2::FieldType>, new: Option<&v2::FieldType>) -> bool {
+    let (Some(old), Some(new)) = (old, new) else {
+        return old == new;
+    };
+    let mut new = new.clone();
+    use v2::field_type::Kind;
+    match (&old.kind, &mut new.kind) {
+        (Some(Kind::InlineScalar(old)), Some(Kind::InlineScalar(new))) => {
+            if crate::classify::constraints_equal(old.constraint.as_ref(), new.constraint.as_ref())
+            {
+                new.constraint = old.constraint.clone();
+            }
+        }
+        (Some(Kind::Tuple(old)), Some(Kind::Tuple(new))) => {
+            for (old, new) in old.fields.iter().zip(&mut new.fields) {
+                if field_types_equal(old.r#type.as_ref(), new.r#type.as_ref()) {
+                    new.r#type = old.r#type.clone();
+                }
+            }
+        }
+        (Some(Kind::Array(old)), Some(Kind::Array(new))) => {
+            if field_types_equal(old.element.as_deref(), new.element.as_deref()) {
+                new.element = old.element.clone();
+            }
+        }
+        (Some(Kind::Map(old)), Some(Kind::Map(new))) => {
+            if field_types_equal(old.key.as_deref(), new.key.as_deref()) {
+                new.key = old.key.clone();
+            }
+            if field_types_equal(old.value.as_deref(), new.value.as_deref()) {
+                new.value = old.value.clone();
+            }
+        }
+        _ => {}
+    }
+    old == &new
+}
+
+fn params_equal(old: &[v2::Param], new: &[v2::Param]) -> bool {
+    let mut new = new.to_vec();
+    for (old, new) in old.iter().zip(&mut new) {
+        if field_types_equal(old.r#type.as_ref(), new.r#type.as_ref()) {
+            new.r#type = old.r#type.clone();
+        }
+    }
+    old == new
+}
+
+fn returns_equal(old: Option<&v2::ReturnType>, new: Option<&v2::ReturnType>) -> bool {
+    let (Some(old), Some(new)) = (old, new) else {
+        return old == new;
+    };
+    let mut new = new.clone();
+    if let (Some(v2::return_type::Kind::Value(old)), Some(v2::return_type::Kind::Value(new))) =
+        (&old.kind, &mut new.kind)
+        && field_types_equal(Some(old), Some(new))
+    {
+        *new = old.clone();
+    }
+    old == &new
+}
+
+/// Compare every struct member with recursive inline constraint equality.
 fn structs_equal(old: &v2::StructDef, new: &v2::StructDef) -> bool {
     let mut new = new.clone();
     for (old, new) in old.members.iter().zip(&mut new.members) {
@@ -1337,14 +1400,9 @@ fn structs_equal(old: &v2::StructDef, new: &v2::StructDef) -> bool {
             Some(v2::struct_member::Member::Field(old)),
             Some(v2::struct_member::Member::Field(new)),
         ) = (&old.member, &mut new.member)
-            && let (Some(old), Some(new)) = (&old.r#type, &mut new.r#type)
-            && let (
-                Some(v2::field_type::Kind::InlineScalar(old)),
-                Some(v2::field_type::Kind::InlineScalar(new)),
-            ) = (&old.kind, &mut new.kind)
-            && crate::classify::constraints_equal(old.constraint.as_ref(), new.constraint.as_ref())
+            && field_types_equal(old.r#type.as_ref(), new.r#type.as_ref())
         {
-            new.constraint = old.constraint.clone();
+            new.r#type = old.r#type.clone();
         }
     }
     old == &new

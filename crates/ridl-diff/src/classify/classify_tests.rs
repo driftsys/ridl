@@ -880,7 +880,9 @@ fn a_removed_pattern_is_compatible() {
 #[allow(deprecated)]
 fn match_constraint(clauses: &[(&str, Option<&str>)]) -> v2::Constraint {
     v2::Constraint {
-        pattern: clauses.first().map(|(pattern, _)| (*pattern).into()),
+        pattern: clauses
+            .first()
+            .map(|(pattern, _)| ridl_ir::pattern::deprecated_ir_literal(pattern)),
         pattern_const: clauses
             .first()
             .and_then(|(_, constant)| constant.map(str::to_owned)),
@@ -4358,6 +4360,161 @@ mod constraint_direction {
         assert_eq!(
             row(&report, Category::ConstraintChanged).verdict,
             Verdict::Compatible
+        );
+    }
+}
+
+fn inline_match_type(constraint: v2::Constraint) -> v2::FieldType {
+    v2::FieldType {
+        kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(constraint),
+            ..Default::default()
+        }))),
+        ..Default::default()
+    }
+}
+
+fn nested_match_type(shape: &str, constraint: v2::Constraint) -> v2::FieldType {
+    use v2::field_type::Kind;
+    let inner = inline_match_type(constraint);
+    let kind = match shape {
+        "tuple" => Kind::Tuple(v2::TupleType {
+            fields: vec![v2::TupleField {
+                name: "text".into(),
+                r#type: Some(inner),
+            }],
+        }),
+        "array" => Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(inner)),
+            min: 1,
+            max: 2,
+        })),
+        "map" => Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(named("Key"))),
+            value: Some(Box::new(inner)),
+            min: 1,
+            max: 2,
+        })),
+        "scalar" => return inner,
+        _ => unreachable!(),
+    };
+    v2::FieldType {
+        kind: Some(kind),
+        ..Default::default()
+    }
+}
+
+fn inline_match_package(site: &str, shape: &str, constraint: v2::Constraint) -> v2::Package {
+    let ty = nested_match_type(shape, constraint);
+    match site {
+        "struct" => {
+            let mut second = field("text", 2, "unused");
+            let Some(v2::struct_member::Member::Field(member_field)) = &mut second.member else {
+                unreachable!()
+            };
+            member_field.r#type = Some(ty);
+            decl_pkg(vec![struct_decl(
+                "S",
+                vec![field("first", 1, "Key"), second],
+            )])
+        }
+        "command" => pkg(vec![command(
+            "send",
+            1,
+            vec![param("first", named("Key")), param("text", ty)],
+            vec![],
+        )]),
+        "query" => pkg(vec![query(
+            "read",
+            1,
+            vec![param("first", named("Key")), param("text", ty)],
+            value_return("Key"),
+            vec![],
+        )]),
+        "return" => pkg(vec![query(
+            "read",
+            1,
+            vec![],
+            v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(ty)),
+            },
+            vec![],
+        )]),
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn nested_inline_match_constraints_compare_semantically() {
+    let legacy = v2::Constraint {
+        pattern: Some("/a/".into()),
+        ..Default::default()
+    };
+    for site in ["struct", "command", "query", "return"] {
+        for shape in ["scalar", "tuple", "array", "map"] {
+            for (old, new) in [
+                (legacy.clone(), match_constraint(&[("/a/", None)])),
+                (
+                    match_constraint(&[("/a/", None), ("/b/", None)]),
+                    match_constraint(&[("/b/", None), ("/a/", None)]),
+                ),
+            ] {
+                let (old, new) = (
+                    inline_match_package(site, shape, old),
+                    inline_match_package(site, shape, new),
+                );
+                for (old, new) in [(&old, &new), (&new, &old)] {
+                    let report = diff_packages(old, new);
+                    assert!(report.changes.is_empty(), "{site}/{shape}: {report:?}");
+                }
+            }
+            let old = inline_match_package(site, shape, match_constraint(&[("/a/", None)]));
+            let new = inline_match_package(site, shape, match_constraint(&[("/b/", None)]));
+            assert!(
+                !diff_packages(&old, &new).changes.is_empty(),
+                "{site}/{shape}: a changed pattern must be reported"
+            );
+        }
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn moved_inline_field_with_legacy_constraint_reports_only_reorder() {
+    let old = inline_match_package(
+        "struct",
+        "scalar",
+        v2::Constraint {
+            pattern: Some("/a/".into()),
+            ..Default::default()
+        },
+    );
+    let mut new = inline_match_package("struct", "scalar", match_constraint(&[("/a/", None)]));
+    let Some(v2::decl::Kind::StructDef(body)) = &mut new.decls[0].kind else {
+        unreachable!()
+    };
+    body.members.swap(0, 1);
+    for (index, member) in body.members.iter_mut().enumerate() {
+        let Some(v2::struct_member::Member::Field(field)) = &mut member.member else {
+            unreachable!()
+        };
+        field.ordinal = index as u32 + 1;
+    }
+    for (old, new) in [(&old, &new), (&new, &old)] {
+        let report = diff_packages(old, new);
+        assert_eq!(report.changes.len(), 2, "{report:?}");
+        assert!(
+            report
+                .changes
+                .iter()
+                .all(|row| row.category == Category::MemberReordered),
+            "{report:?}"
         );
     }
 }

@@ -24,8 +24,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "constraint": {
           "min": "0",
           "max": "250",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "init": {
           "derivable": true,
@@ -51,8 +50,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.1",
-          "matches": []
+          "step": "0.1"
         },
         "init": {
           "derivable": true,
@@ -78,8 +76,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "constraint": {
           "min": "0",
           "max": "8000",
-          "step": "10",
-          "matches": []
+          "step": "10"
         },
         "init": {
           "derivable": true,
@@ -105,8 +102,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "constraint": {
           "min": "0",
           "max": "100",
-          "step": "0.1",
-          "matches": []
+          "step": "0.1"
         },
         "init": {
           "derivable": true,
@@ -131,8 +127,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         },
         "constraint": {
           "min": "0",
-          "max": "65535",
-          "matches": []
+          "max": "65535"
         },
         "init": {
           "derivable": true,
@@ -158,8 +153,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "constraint": {
           "min": "0",
           "max": "1",
-          "step": "0.01",
-          "matches": []
+          "step": "0.01"
         },
         "init": {
           "derivable": true,
@@ -509,8 +503,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "6",
-                    "matches": []
+                    "max": "6"
                   },
                   "intWidth": "INT_WIDTH_U8"
                 }
@@ -846,8 +839,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "constraint": {
                     "lenMin": "8",
-                    "lenMax": "8",
-                    "matches": []
+                    "lenMax": "8"
                   }
                 }
               },
@@ -900,8 +892,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "15",
-                    "matches": []
+                    "max": "15"
                   },
                   "intWidth": "INT_WIDTH_U8"
                 }
@@ -964,8 +955,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "5",
-                    "matches": []
+                    "max": "5"
                   },
                   "intWidth": "INT_WIDTH_U8"
                 }
@@ -1027,8 +1017,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "65535",
-                    "matches": []
+                    "max": "65535"
                   },
                   "intWidth": "INT_WIDTH_U16"
                 }
@@ -1183,8 +1172,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         },
         "constraint": {
           "min": "0",
-          "max": "65535",
-          "matches": []
+          "max": "65535"
         },
         "init": {
           "derivable": true,
@@ -1302,8 +1290,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         },
         "constraint": {
           "min": "0",
-          "max": "7",
-          "matches": []
+          "max": "7"
         },
         "init": {
           "derivable": true,
@@ -1336,8 +1323,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   },
                   "constraint": {
                     "min": "0",
-                    "max": "65535",
-                    "matches": []
+                    "max": "65535"
                   },
                   "intWidth": "INT_WIDTH_U16"
                 }
@@ -1543,8 +1529,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         },
         "constraint": {
           "lenMin": "1",
-          "lenMax": "32",
-          "matches": []
+          "lenMax": "32"
         },
         "declaredInit": "unset",
         "init": {

@@ -72,8 +72,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "0",
-          "max": "7",
-          "matches": []
+          "max": "7"
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_U8"
@@ -138,8 +137,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "constraint": {
           "min": "0",
           "max": "100",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -194,8 +192,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "0",
-          "max": "4294967295",
-          "matches": []
+          "max": "4294967295"
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_U32"
@@ -2901,8 +2898,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "constraint": {
             "min": "0",
             "max": "100",
-            "step": "0.5",
-            "matches": []
+            "step": "0.5"
           },
           "vacuous": false,
           "floatWidth": "FLOAT_WIDTH_F32"
@@ -2960,8 +2956,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "class": "SCALAR_CLASS_INTEGER",
           "constraint": {
             "min": "0",
-            "max": "7",
-            "matches": []
+            "max": "7"
           },
           "vacuous": false,
           "intWidth": "INT_WIDTH_U8"
