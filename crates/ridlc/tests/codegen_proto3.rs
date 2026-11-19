@@ -949,3 +949,195 @@ fn an_outside_int32_enum_refuses_its_local_and_foreign_users() {
         }
     }
 }
+
+/// Every corpus workspace, with its sibling packages and standard package.
+fn corpus_packages() -> Vec<(String, Vec<v2::Package>)> {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/corpus");
+    let mut entries: Vec<_> = std::fs::read_dir(&root)
+        .expect("the corpus directory is readable")
+        .map(|entry| entry.expect("a corpus entry").path())
+        .filter(|path| path.is_dir())
+        .collect();
+    entries.sort();
+    assert!(!entries.is_empty(), "the corpus must not be empty");
+    entries
+        .into_iter()
+        .map(|entry| {
+            let name = entry
+                .file_name()
+                .expect("a named entry")
+                .to_string_lossy()
+                .into_owned();
+            let mut db = RidlDatabase::default();
+            let output = ridlc::compile_workspace(&mut db, &entry).expect("a corpus entry loads");
+            let mut packages: Vec<_> = output
+                .checked
+                .into_iter()
+                .map(|checked| checked.ir)
+                .collect();
+            packages.push(output.std_ir);
+            (name, packages)
+        })
+        .collect()
+}
+
+#[test]
+fn every_corpus_projection_survives_the_json_round_trip() {
+    let mut with_messages = 0usize;
+    for (entry, packages) in corpus_packages() {
+        let others: Vec<_> = packages.iter().collect();
+        for package in &packages {
+            let model = codegen::lower(package, &others);
+            let projection = model
+                .proto3
+                .as_ref()
+                .expect("every package has a proto3 projection");
+            let json = codegen::to_json_pretty(&model).expect("the model serializes");
+            let decoded = codegen::from_json(&json).expect("the model reads back");
+            assert_eq!(decoded.proto3, model.proto3, "{entry}: {}", package.name);
+            let value: serde_json::Value = serde_json::from_str(&json).expect("JSON");
+            assert!(
+                value["proto3"].is_object(),
+                "{entry}: {} carries its projection in JSON",
+                package.name
+            );
+            if !projection.messages.is_empty() {
+                with_messages += 1;
+                assert!(
+                    value["proto3"]["messages"]
+                        .as_array()
+                        .is_some_and(|messages| !messages.is_empty())
+                );
+            }
+        }
+    }
+    assert!(
+        with_messages > 0,
+        "the corpus offers messages to round trip"
+    );
+}
+
+#[test]
+fn every_corpus_index_points_inside_its_list() {
+    fn wire(
+        model: &v1::Model,
+        projection: &v1::Proto3Projection,
+        w: &v1::Proto3Wire,
+        checked: &mut [usize; 4],
+    ) {
+        match w.kind.as_ref().expect("a wire kind") {
+            v1::proto3_wire::Kind::Message(reference) => {
+                match reference.target.expect("a message target") {
+                    v1::proto3_message_ref::Target::Message(index) => {
+                        assert!(
+                            (index as usize) < projection.messages.len(),
+                            "a message index is inside the projection"
+                        );
+                        checked[2] += 1;
+                    }
+                    v1::proto3_message_ref::Target::Foreign(index) => {
+                        assert!(
+                            (index as usize) < model.foreign.len(),
+                            "a foreign index is inside the model"
+                        );
+                        checked[3] += 1;
+                    }
+                }
+            }
+            v1::proto3_wire::Kind::Enumeration(enumeration) => {
+                let reference = enumeration.r#type.as_ref().expect("an enum reference");
+                let (count, seen) = if reference.foreign {
+                    (model.foreign.len(), &mut checked[3])
+                } else {
+                    (model.declarations.len(), &mut checked[0])
+                };
+                assert!(
+                    (reference.index as usize) < count,
+                    "an enum index is inside its list"
+                );
+                *seen += 1;
+            }
+            v1::proto3_wire::Kind::Array(array) => {
+                wire(
+                    model,
+                    projection,
+                    array.element.as_deref().expect("an element"),
+                    checked,
+                );
+            }
+            v1::proto3_wire::Kind::Map(map) => {
+                wire(
+                    model,
+                    projection,
+                    map.key.as_deref().expect("a key"),
+                    checked,
+                );
+                wire(
+                    model,
+                    projection,
+                    map.value.as_deref().expect("a value"),
+                    checked,
+                );
+            }
+            _ => {}
+        }
+    }
+    let mut checked = [0usize; 4];
+    for (entry, packages) in corpus_packages() {
+        let others: Vec<_> = packages.iter().collect();
+        for package in &packages {
+            let model = codegen::lower(package, &others);
+            let projection = model
+                .proto3
+                .as_ref()
+                .expect("every package has a proto3 projection");
+            for message in &projection.messages {
+                let (index, count, seen) = match message.source.expect("a message source") {
+                    v1::proto3_message::Source::StructDeclaration(index)
+                    | v1::proto3_message::Source::UnionDeclaration(index)
+                    | v1::proto3_message::Source::RootBox(index) => {
+                        (index, model.declarations.len(), &mut checked[0])
+                    }
+                    v1::proto3_message::Source::Tuple(index) => {
+                        (index, model.tuples.len(), &mut checked[1])
+                    }
+                };
+                assert!(
+                    (index as usize) < count,
+                    "{entry}: {}.{} source index is inside its list",
+                    package.name,
+                    message.name
+                );
+                *seen += 1;
+                for field in &message.fields {
+                    wire(
+                        &model,
+                        projection,
+                        field.wire.as_ref().expect("a wire"),
+                        &mut checked,
+                    );
+                }
+            }
+            for refused in &projection.refused {
+                let (index, count, seen) = match refused.source.expect("a refusal source") {
+                    v1::proto3_refused::Source::Declaration(index) => {
+                        (index, model.declarations.len(), &mut checked[0])
+                    }
+                    v1::proto3_refused::Source::Tuple(index) => {
+                        (index, model.tuples.len(), &mut checked[1])
+                    }
+                };
+                assert!(
+                    (index as usize) < count,
+                    "{entry}: {} refusal source index is inside its list",
+                    package.name
+                );
+                *seen += 1;
+            }
+        }
+    }
+    for (list, count) in ["declaration", "tuple", "message"].into_iter().zip(checked) {
+        assert!(count > 0, "the corpus offers {list} indices to check");
+    }
+    println!("indices checked (declaration, tuple, message, foreign): {checked:?}");
+}

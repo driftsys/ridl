@@ -54,6 +54,7 @@ use proptest::strategy::ValueTree;
 use proptest::test_runner::{Config, RngAlgorithm, TestRng, TestRunner};
 use protox::prost_reflect::{DescriptorPool, Kind};
 use ridl_backend_rust::{Proto3Label, Proto3MessageLayout};
+use ridl_ir::codegen::v1;
 use ridl_ir::v2;
 
 /// The Rust `prost` writes for the fixture's two packages, composed as
@@ -3405,4 +3406,323 @@ fn main() {
 "#,
         ),
     );
+}
+
+/// Spells a projected wire using only its wire and model names.
+fn projection_wire(model: &v1::Model, wire: &v1::Proto3Wire) -> String {
+    use v1::proto3_wire::Kind;
+
+    match wire.kind.as_ref().expect("a projected wire kind") {
+        Kind::Scalar(scalar) => {
+            match v1::Proto3ScalarType::try_from(scalar.r#type).expect("a scalar type") {
+                v1::Proto3ScalarType::Bool => "bool",
+                v1::Proto3ScalarType::Int64 => "int64",
+                v1::Proto3ScalarType::Uint32 => "uint32",
+                v1::Proto3ScalarType::Uint64 => "uint64",
+                v1::Proto3ScalarType::Sint32 => "sint32",
+                v1::Proto3ScalarType::Sint64 => "sint64",
+                v1::Proto3ScalarType::Float => "float",
+                v1::Proto3ScalarType::Double => "double",
+                v1::Proto3ScalarType::Unspecified => panic!("an unspecified scalar type"),
+            }
+            .to_string()
+        }
+        Kind::Text(_) => "string".to_string(),
+        Kind::Bytes(_) => "bytes".to_string(),
+        Kind::Enumeration(enumeration) => {
+            let reference = enumeration.r#type.as_ref().expect("an enum reference");
+            let declaration = if reference.foreign {
+                model.foreign[reference.index as usize]
+                    .declaration
+                    .as_ref()
+                    .expect("a foreign declaration")
+            } else {
+                &model.declarations[reference.index as usize]
+            };
+            let name = &declaration
+                .name
+                .as_ref()
+                .expect("a declaration name")
+                .declared;
+            local_or_qualified(
+                &model.scope.as_ref().expect("a scope").package,
+                &format!("{}.{name}", reference.package),
+            )
+        }
+        Kind::Message(reference) => match reference.target.expect("a message target") {
+            v1::proto3_message_ref::Target::Message(index) => {
+                model.proto3.as_ref().expect("a projection").messages[index as usize]
+                    .name
+                    .clone()
+            }
+            v1::proto3_message_ref::Target::Foreign(index) => {
+                let foreign = &model.foreign[index as usize];
+                let name = &foreign
+                    .declaration
+                    .as_ref()
+                    .expect("a foreign declaration")
+                    .name
+                    .as_ref()
+                    .expect("a name")
+                    .declared;
+                local_or_qualified(
+                    &model.scope.as_ref().expect("a scope").package,
+                    &format!("{}.{name}", foreign.package),
+                )
+            }
+        },
+        Kind::Array(array) => {
+            projection_wire(model, array.element.as_deref().expect("an array element"))
+        }
+        Kind::Map(map) => format!(
+            "map<{}, {}>",
+            projection_wire(model, map.key.as_deref().expect("a map key")),
+            projection_wire(model, map.value.as_deref().expect("a map value")),
+        ),
+    }
+}
+
+/// Reads optionality from the model member identified by the projected source.
+fn projection_optional(
+    model: &v1::Model,
+    message: &v1::Proto3Message,
+    field: &v1::Proto3Field,
+) -> bool {
+    match (
+        message.source.expect("a message source"),
+        field.source.as_ref().expect("a field source"),
+    ) {
+        (
+            v1::proto3_message::Source::StructDeclaration(index),
+            v1::proto3_field::Source::Field(name),
+        ) => {
+            let Some(v1::declaration::Kind::Struct(def)) =
+                model.declarations[index as usize].kind.as_ref()
+            else {
+                panic!("a struct declaration");
+            };
+            def.slots
+                .iter()
+                .find_map(|slot| match slot.occupant.as_ref() {
+                    Some(v1::slot::Occupant::Field(member))
+                        if member.name.as_ref().expect("a member name").declared == *name =>
+                    {
+                        Some(member.r#type.as_ref().expect("a member type").optional)
+                    }
+                    _ => None,
+                })
+                .expect("the projected struct field exists")
+        }
+        (
+            v1::proto3_message::Source::Tuple(index),
+            v1::proto3_field::Source::TuplePosition(position),
+        ) => {
+            model.tuples[index as usize].fields[*position as usize]
+                .r#type
+                .as_ref()
+                .expect("a tuple field type")
+                .optional
+        }
+        (v1::proto3_message::Source::UnionDeclaration(_), v1::proto3_field::Source::Arm(_))
+        | (v1::proto3_message::Source::RootBox(_), v1::proto3_field::Source::BoxValue(true)) => {
+            false
+        }
+        other => panic!("inconsistent projection sources: {other:?}"),
+    }
+}
+
+/// The projected fields in the spelling and number order of the codec layout.
+fn projection_fields(model: &v1::Model, message: &v1::Proto3Message) -> Fields {
+    use v1::proto3_wire::Kind;
+
+    let mut fields: Fields = message
+        .fields
+        .iter()
+        .map(|field| {
+            let wire = field.wire.as_ref().expect("a field wire");
+            let label = if matches!(wire.kind, Some(Kind::Array(_) | Kind::Map(_))) {
+                Proto3Label::Repeated
+            } else if projection_optional(model, message, field) {
+                Proto3Label::Optional
+            } else {
+                Proto3Label::Implicit
+            };
+            (field.number, projection_wire(model, wire), label)
+        })
+        .collect();
+    fields.sort_by_key(|field| field.0);
+    fields
+}
+
+/// Counts shapes only in messages whose fields were compared with the codec.
+fn projection_shapes(message: &v1::Proto3Message) -> [bool; 5] {
+    fn visit(wire: &v1::Proto3Wire, shapes: &mut [bool; 5]) {
+        match wire.kind.as_ref().expect("a wire kind") {
+            v1::proto3_wire::Kind::Array(array) => {
+                shapes[0] |= array.packed;
+                visit(array.element.as_deref().expect("an element"), shapes);
+            }
+            v1::proto3_wire::Kind::Map(map) => {
+                shapes[1] = true;
+                visit(map.key.as_deref().expect("a key"), shapes);
+                visit(map.value.as_deref().expect("a value"), shapes);
+            }
+            v1::proto3_wire::Kind::Message(reference) => {
+                shapes[4] |= matches!(
+                    reference.target,
+                    Some(v1::proto3_message_ref::Target::Foreign(_))
+                );
+            }
+            v1::proto3_wire::Kind::Enumeration(enumeration) => {
+                shapes[4] |= enumeration
+                    .r#type
+                    .as_ref()
+                    .expect("an enum reference")
+                    .foreign;
+            }
+            _ => {}
+        }
+    }
+    let mut shapes = [false; 5];
+    shapes[2] = matches!(
+        message.source,
+        Some(v1::proto3_message::Source::UnionDeclaration(_))
+    );
+    shapes[3] = matches!(message.source, Some(v1::proto3_message::Source::RootBox(_)));
+    for field in &message.fields {
+        visit(field.wire.as_ref().expect("a wire"), &mut shapes);
+    }
+    shapes
+}
+
+/// Compares every codec message and permits only tuple sources outside its layout.
+#[test]
+fn the_model_projection_matches_the_codec_layout() {
+    use ridl_ir::codegen::{self, v1};
+
+    let (main, others) = proto3::fixture();
+    let mut fixture = vec![main];
+    fixture.extend(others);
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let entries = std::iter::once(("fixture", fixture)).chain(
+        CORPUS
+            .iter()
+            .map(|(entry, _)| (*entry, proto3::compile_workspace(&root.join(entry)))),
+    );
+    let std_ir = ridlc::std_ir();
+    let mut shapes = [0usize; 5];
+    let mut packages_with_every_shape = 0usize;
+    for (entry, packages) in entries {
+        assert!(!packages.is_empty(), "{entry}: at least one package");
+        let mut counts = [0usize; 3];
+        let mut size_refusals = 0;
+        for (at, package) in packages.iter().enumerate() {
+            let mut others: Vec<&v2::Package> = packages
+                .iter()
+                .enumerate()
+                .filter(|(other, _)| *other != at)
+                .map(|(_, other)| other)
+                .collect();
+            others.push(&std_ir);
+            let model = codegen::lower(package, &others);
+            let projection = model
+                .proto3
+                .as_ref()
+                .expect("every package has a proto3 projection");
+            let layout = match ridl_backend_rust::proto3_layout(package, &others) {
+                Ok(layout) => layout,
+                Err(error) => {
+                    assert_eq!(
+                        entry, "evals/corpus/ros2",
+                        "unexpected layout refusal: {}",
+                        error.message
+                    );
+                    assert!(
+                        error.message.starts_with(&format!("`{}.", package.name))
+                            && error.message.contains("` has no proto3 codec: ")
+                            && error.message.contains("(NoBound)"),
+                        "{}: expected a size-state refusal, got {}",
+                        package.name,
+                        error.message
+                    );
+                    size_refusals += 1;
+                    continue;
+                }
+            };
+            let projected: BTreeMap<_, _> = projection
+                .messages
+                .iter()
+                .map(|message| (message.name.as_str(), message))
+                .collect();
+            assert_eq!(
+                projected.len(),
+                projection.messages.len(),
+                "{entry}: {} has unique message names",
+                package.name
+            );
+            let mut package_shapes = [0usize; 5];
+            let names: BTreeSet<_> = layout.iter().map(|message| message.name.as_str()).collect();
+            for message in &layout {
+                let projected = projected.get(message.name.as_str()).unwrap_or_else(|| {
+                    panic!(
+                        "{entry}: {}.{} is missing from the projection",
+                        package.name, message.name
+                    )
+                });
+                let mut fields = message.fields.clone();
+                fields.sort_by_key(|field| field.0);
+                assert_eq!(
+                    projection_fields(&model, projected),
+                    fields,
+                    "{entry}: {}.{}",
+                    package.name,
+                    message.name
+                );
+                for (count, present) in package_shapes.iter_mut().zip(projection_shapes(projected))
+                {
+                    *count += usize::from(present);
+                }
+                counts[0] += 1;
+            }
+            packages_with_every_shape += usize::from(package_shapes.iter().all(|count| *count > 0));
+            for (total, count) in shapes.iter_mut().zip(package_shapes) {
+                *total += count;
+            }
+            for message in &projection.messages {
+                if !names.contains(message.name.as_str()) {
+                    assert!(
+                        matches!(message.source, Some(v1::proto3_message::Source::Tuple(_))),
+                        "{entry}: {}.{} is missing from the codec layout",
+                        package.name,
+                        message.name
+                    );
+                    counts[1] += 1;
+                }
+            }
+            for refused in &projection.refused {
+                assert!(
+                    matches!(refused.source, Some(v1::proto3_refused::Source::Tuple(_))),
+                    "{entry}: {} has a refused declaration with an accepted codec layout: {refused:?}",
+                    package.name
+                );
+                counts[2] += 1;
+            }
+        }
+        assert!(counts[0] > 0, "{entry}: at least one message compared");
+        println!(
+            "{entry}: {} messages compared, {} tuple-only messages allowed, {} tuple-only refusals allowed, {size_refusals} size-state package refusals",
+            counts[0], counts[1], counts[2]
+        );
+    }
+    assert!(
+        packages_with_every_shape > 0,
+        "at least one package compares every required shape"
+    );
+    for (name, count) in ["packed array", "map", "union", "box", "foreign reference"]
+        .into_iter()
+        .zip(shapes)
+    {
+        assert!(count > 0, "at least one compared message with a {name}");
+        println!("{name}: {count} compared messages");
+    }
 }
