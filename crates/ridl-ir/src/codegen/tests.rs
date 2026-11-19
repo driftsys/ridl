@@ -9,6 +9,24 @@
 use super::{from_binary, from_json, lower, to_binary, to_json_pretty, to_text_format, v1};
 use crate::v2;
 
+#[test]
+fn explicit_empty_matches_json_equals_absent_matches() {
+    for fields in [
+        r#""min":"0","max":"8""#,
+        r#""pattern":"a","patternConst":"P""#,
+    ] {
+        let read = |constraint| {
+            from_json(&format!(
+                r#"{{"declarations":[{{"scalar":{{"constraint":{{{constraint}}}}}}}]}}"#
+            ))
+            .unwrap()
+        };
+        let absent = read(fields.to_owned());
+        let empty = read(format!(r#"{fields},"matches":[]"#));
+        assert_eq!(empty, absent);
+    }
+}
+
 /// A package with one named scalar, one enum whose lowest member is not zero,
 /// and one struct holding a field of each.
 fn package() -> v2::Package {

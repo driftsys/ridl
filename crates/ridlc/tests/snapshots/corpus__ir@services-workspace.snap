@@ -23,8 +23,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         },
         "constraint": {
           "min": "0",
-          "max": "7",
-          "matches": []
+          "max": "7"
         },
         "init": {
           "derivable": true,
@@ -50,8 +49,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         "constraint": {
           "min": "0",
           "max": "100",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "init": {
           "derivable": true,
@@ -76,8 +74,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
         },
         "constraint": {
           "min": "0",
-          "max": "4294967295",
-          "matches": []
+          "max": "4294967295"
         },
         "init": {
           "derivable": true,

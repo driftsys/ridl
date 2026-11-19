@@ -81,8 +81,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "constraint": {
           "min": "0",
           "max": "250",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -147,8 +146,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.1",
-          "matches": []
+          "step": "0.1"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -277,6 +275,45 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "SpeedBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      },
+      {
+        "name": "TemperatureBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 1
+      }
+    ],
+    "refused": []
   }
 }
 
@@ -493,8 +530,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
           "constraint": {
             "min": "0",
             "max": "250",
-            "step": "0.5",
-            "matches": []
+            "step": "0.5"
           },
           "vacuous": false,
           "floatWidth": "FLOAT_WIDTH_F32"
@@ -536,5 +572,27 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
     ],
     "refused": [],
     "boxes": []
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "ClusterReading",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "speed"
+          }
+        ],
+        "structDeclaration": 0
+      }
+    ],
+    "refused": []
   }
 }

@@ -2493,24 +2493,30 @@ mod tests {
             pattern_const: None,
         });
         assert_ne!(catalog_hash("p", &[&package]), legacy_hash);
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn match_clause_swap_alone_changes_catalog_hash() {
+        let mut package = match_hash_fixture();
         let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
             unreachable!()
         };
-        text.constraint
-            .as_mut()
-            .unwrap()
-            .matches
-            .push(crate::v2::Match {
-                pattern: Some("/b/".into()),
+        let constraint = text.constraint.as_mut().unwrap();
+        constraint.pattern = Some(crate::pattern::deprecated_ir_literal("/a/"));
+        constraint.matches = ["/a/", "/b/"]
+            .into_iter()
+            .map(|pattern| crate::v2::Match {
+                pattern: Some(pattern.into()),
                 pattern_const: None,
-            });
+            })
+            .collect();
         let before_swap = catalog_hash("p", &[&package]);
         let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
             unreachable!()
         };
         let constraint = text.constraint.as_mut().unwrap();
         constraint.matches.swap(0, 1);
-        constraint.pattern = constraint.matches[0].pattern.clone();
         assert_ne!(catalog_hash("p", &[&package]), before_swap);
     }
 }

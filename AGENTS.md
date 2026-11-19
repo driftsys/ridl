@@ -320,6 +320,14 @@ member; rsdl is the apex.
                          needs Deno, flatc and a Chromium-family browser.
                          Runs in CI; not a member of build, for the same
                          reason as ts-browser-e2e
+    just fuzz TARGET [SECONDS]
+                         run one cargo-fuzz target of fuzz/ (proto3_verify,
+                         flatbuffers_verify, podbuf_verify, descriptor_verify,
+                         frame_decode) for SECONDS (default 60), with the
+                         nightly that fuzz/rust-toolchain.toml pins. fuzz/ is
+                         its own cargo workspace outside this one. Not a member
+                         of build and not run in CI; fuzz/README.md says how a
+                         crash becomes a regression test on stable
     just ts-npm-check    build packages/ridl-runtime and packages/ridl-transport-ws
                          into npm packages with dnt, verify the built manifest and tarball,
                          install a tarball in a temporary directory (the

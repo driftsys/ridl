@@ -52,6 +52,10 @@ pub mod v1 {
         use super::*;
 
         include!(concat!(env!("OUT_DIR"), "/ridl.codegen.v1.serde.rs"));
+        include!(concat!(
+            env!("OUT_DIR"),
+            "/constraints/ridl.codegen.v1.serde.rs"
+        ));
     }
 }
 
@@ -67,6 +71,7 @@ mod lower;
 mod names;
 mod path;
 mod podbuf;
+mod proto3;
 mod resolve;
 mod unbounded;
 pub mod wire;

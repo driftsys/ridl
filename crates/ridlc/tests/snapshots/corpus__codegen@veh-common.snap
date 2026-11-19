@@ -81,8 +81,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "0",
           "max": "250",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -147,8 +146,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.1",
-          "matches": []
+          "step": "0.1"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -213,8 +211,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "0",
           "max": "8000",
-          "step": "10",
-          "matches": []
+          "step": "10"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -279,8 +276,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "0",
           "max": "100",
-          "step": "0.1",
-          "matches": []
+          "step": "0.1"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -335,8 +331,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "0",
-          "max": "65535",
-          "matches": []
+          "max": "65535"
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_U16"
@@ -396,8 +391,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         "constraint": {
           "min": "0",
           "max": "1",
-          "step": "0.01",
-          "matches": []
+          "step": "0.01"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -1175,8 +1169,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                   "class": "SCALAR_CLASS_INTEGER",
                   "constraint": {
                     "min": "0",
-                    "max": "6",
-                    "matches": []
+                    "max": "6"
                   },
                   "vacuous": false,
                   "intWidth": "INT_WIDTH_U8"
@@ -1894,8 +1887,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
                   "class": "SCALAR_CLASS_BYTES",
                   "constraint": {
                     "lenMin": "8",
-                    "lenMax": "8",
-                    "matches": []
+                    "lenMax": "8"
                   },
                   "vacuous": false
                 }
@@ -2762,8 +2754,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
           "class": "SCALAR_CLASS_INTEGER",
           "constraint": {
             "min": "0",
-            "max": "9223372036854775807",
-            "matches": []
+            "max": "9223372036854775807"
           },
           "vacuous": false,
           "intWidth": "INT_WIDTH_U64"
@@ -3737,5 +3728,446 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "SpeedBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      },
+      {
+        "name": "TemperatureBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 1
+      },
+      {
+        "name": "RPMBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 2
+      },
+      {
+        "name": "RatioBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 3
+      },
+      {
+        "name": "CounterBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 4
+      },
+      {
+        "name": "GainBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 5
+      },
+      {
+        "name": "GearPositionBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "enumeration": {
+                "type": {
+                  "reference": "GearPosition",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 10,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 10
+      },
+      {
+        "name": "WarningBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "enumeration": {
+                "type": {
+                  "reference": "Warning",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 11,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 11
+      },
+      {
+        "name": "WarningFlagsBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 12
+      },
+      {
+        "name": "SpeedLimitPayload",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "limit"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "actual"
+          }
+        ],
+        "structDeclaration": 13
+      },
+      {
+        "name": "DriverProfile",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": false,
+              "text": true
+            },
+            "field": "name"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "speed"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "override"
+          },
+          {
+            "number": 4,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "gears"
+          }
+        ],
+        "structDeclaration": 14
+      },
+      {
+        "name": "SensorBounds",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "message": {
+                "message": 16
+              }
+            },
+            "field": "range"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": false,
+              "array": {
+                "element": {
+                  "defaultIsLegal": true,
+                  "scalar": {
+                    "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                    "wireType": "PROTO3_WIRE_TYPE_I32"
+                  }
+                },
+                "packed": true
+              }
+            },
+            "field": "readings"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "defaultIsLegal": false,
+              "array": {
+                "element": {
+                  "defaultIsLegal": false,
+                  "text": true
+                },
+                "packed": false
+              }
+            },
+            "field": "labels"
+          },
+          {
+            "number": 4,
+            "wire": {
+              "defaultIsLegal": true,
+              "map": {
+                "key": {
+                  "defaultIsLegal": false,
+                  "text": true
+                },
+                "value": {
+                  "defaultIsLegal": false,
+                  "text": true
+                }
+              }
+            },
+            "field": "meta"
+          }
+        ],
+        "structDeclaration": 15
+      },
+      {
+        "name": "SensorResult",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "message": {
+                "message": 13
+              }
+            },
+            "arm": "ok"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "message": {
+                "message": 14
+              }
+            },
+            "arm": "err"
+          }
+        ],
+        "unionDeclaration": 16
+      },
+      {
+        "name": "SensorReading",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "value"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT64",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "timestamp"
+          }
+        ],
+        "structDeclaration": 17
+      },
+      {
+        "name": "SensorFault",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "code"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": false,
+              "text": true
+            },
+            "field": "message"
+          }
+        ],
+        "structDeclaration": 18
+      },
+      {
+        "name": "RawWheelFrame",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "ticks"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": false,
+              "bytes": true
+            },
+            "field": "frame"
+          }
+        ],
+        "structDeclaration": 19
+      },
+      {
+        "name": "SensorBoundsRange",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 0
+      }
+    ],
+    "refused": []
   }
 }

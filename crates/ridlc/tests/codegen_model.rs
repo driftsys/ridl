@@ -2312,3 +2312,16 @@ fn a_foreign_union_and_a_foreign_tuple_keep_their_heads() {
         ]
     );
 }
+
+#[test]
+fn model_constraints_without_matches_omit_the_list() {
+    let output = ridlc::compile(
+        "bounds.typl",
+        "package p\ntype Count: integer [0..10]\ntype Label: string [1..8]\n",
+    );
+    let model = codegen::lower(&output.package, &[&output.package]);
+    let json = codegen::to_json_pretty(&model).unwrap();
+    assert!(!json.contains("\"matches\""), "{json}");
+    assert!(json.contains("\"lenMin\""));
+    assert_eq!(codegen::from_json(&json).unwrap(), model);
+}

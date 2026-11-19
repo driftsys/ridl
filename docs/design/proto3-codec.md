@@ -39,6 +39,7 @@ third party writes.
 | The scalar a width projects to, and its wire type, which both emitters read          | `crates/ridl-ir/src/projection/proto3.rs` (`int_width_scalar`, `float_width_scalar`, `Scalar::wire_type`) |
 | The proto3 size bound of a root message                                              | `crates/ridl-ir/src/projection/size/proto3.rs`                                                            |
 | `Declaration.proto3` in the codegen model                                            | `crates/ridl-ir/proto/ridl/codegen/v1/model.proto`, filled by `crates/ridl-ir/src/codegen/lower.rs`       |
+| `Model.proto3`, the message layout and refusals                                      | `crates/ridl-ir/src/codegen/proto3.rs`, set by `crates/ridl-ir/src/codegen/lower.rs`                      |
 | The `.proto` schema emitter                                                          | `crates/ridl-backend-proto/src/lib.rs`                                                                    |
 | The codec emitter                                                                    | `crates/ridl-backend-rust/src/codec_proto3.rs`                                                            |
 | The `Sizes<Proto3>` table                                                            | `crates/ridl-backend-rust/src/descriptors.rs`                                                             |
@@ -206,22 +207,33 @@ Every row is what `crates/ridl-backend-proto/src/lib.rs` emits for the same IR.
 
 **What the two emitters share, and how agreement is kept.** A field number is
 the ordinal both emitters read, a tuple field's number is its position from 1, a
-map entry's key and value are 1 and 2, and a box's value is 1. The one fact two
-emitters could pick differently is the scalar a width projects to, and that is
-one table in `ridl_ir::projection::proto3`, which the `.proto` emitter, the
-proto3 sizer and this codec all read. The codec's own walk of a message is not
-shared with the `.proto` emitter: the emitter reads the IR and the codec reads
-the codegen model, and porting the emitter onto the model is driftsys/ridl#690's
-territory. What holds the two walks together is the drift test
-`proto3_layout_matches_the_emitted_schema`: it compiles the emitted `.proto` of
-every corpus package (`examples/cabin`, `crates/ridlc/tests/corpus/veh-cluster`,
-`evals/corpus/mavlink`, `ros2` and `vss`) and of the conformance fixture with
-`protox`, and compares each message field by field — number, scalar or message
-name, label — with the layout the codec emitted from
-(`ridl_backend_rust::proto3_layout`), keyed by the `.proto` message name. A
-field-number or scalar drift fails it without running any generated code. Each
-corpus entry lists the messages the codec does not lay out, with the reason; the
-only one is the `fixed` tuple above.
+map entry's key and value are 1 and 2, and a box's value is 1. The scalar a
+width projects to is one table in `ridl_ir::projection::proto3`, which the
+`.proto` emitter, the proto3 sizer, this codec and the model's proto3 walk all
+read. The codec's own walk of a message is not shared with the `.proto` emitter:
+the emitter reads the IR and the codec reads the codegen model, and porting the
+emitter onto the model is driftsys/ridl#690's territory. What holds the two
+walks together is the drift test `proto3_layout_matches_the_emitted_schema`: it
+compiles the emitted `.proto` of every corpus package (`examples/cabin`,
+`crates/ridlc/tests/corpus/veh-cluster`, `evals/corpus/mavlink`, `ros2` and
+`vss`) and of the conformance fixture with `protox`, and compares each message
+field by field — number, scalar or message name, label — with the layout the
+codec emitted from (`ridl_backend_rust::proto3_layout`), keyed by the `.proto`
+message name. A field-number or scalar drift fails it without running any
+generated code. Each corpus entry lists the messages the codec does not lay out,
+with the reason; the only one is the `fixed` tuple above.
+
+The model also carries `Model.proto3`, whose contract is defined in
+[the codegen plugin record](codegen-plugins.md#the-proto3-projection). The Rust
+codec still computes its own layout rather than reading that projection.
+`the_model_projection_matches_the_codec_layout` in
+`crates/ridl-backend-rust/tests/proto3_conformance.rs` keeps the projection and
+the codec equal for field numbers, types and labels over the conformance
+fixture, every ridlc corpus workspace that compiles without an error diagnostic,
+and the encoding corpus. It compares every codec message and requires every
+projection message outside the codec layout and every `refused` entry to have a
+tuple source. It does not compare packing or `default_is_legal`: the codec
+layout carries only a number, a type and a label per field.
 
 ## The writer
 
@@ -587,7 +599,7 @@ regenerate byte for byte.
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | Neither codec generates a type with no finite bound, so the ros2 corpus packages do not generate with proto3; the cap of such bounds that ADR-0030 decision 3 proposed was withdrawn, and the question stays open | driftsys/ridl#996 |
 | The codec does not reproduce the proto backend's name-collision refusals: a package the `.proto` emitter refuses for a name reason still gets a Rust codec                                                        | driftsys/ridl#997 |
-| The `.proto` emitter and the codec walk a message separately, held together by the drift test rather than by one shared walk                                                                                      | driftsys/ridl#690 |
+| The `.proto` emitter, the Rust codec and `codegen/proto3.rs` walk messages separately; comparison tests check their agreement                                                                                     | driftsys/ridl#690 |
 
 ## Alternatives considered
 

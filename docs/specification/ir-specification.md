@@ -116,13 +116,17 @@ and a change to any of them is a breaking change under §6.
    stated.
 2. **Presence.** A non-`optional` field holding its default is emitted; an unset
    proto3 `optional` field, an unset message field and an unset `oneof` produce
-   no key. `null` never appears (ADR-0014 decision 2).
+   no key. The repeated `Constraint.matches` field in `ridl.ir.v2` and
+   `ridl.codegen.v1` is an exception: an empty list produces no key, preserving
+   the canonical bytes written before that field was added. A reader treats an
+   absent `matches` as empty. `null` never appears (ADR-0014 decision 2).
 3. **Order.** Fields appear in the order the `.proto` declares them within each
-   message. A repeated field's elements appear in the order the writer holds
-   them, which for every list in the IR is source order or an order the schema's
-   own comments name per field. The schema declares no `map<>` field; adding one
-   is a breaking change (§6), because a map's key order would need a rule this
-   list does not have.
+   message. A repeated field is emitted even when empty, except for
+   `Constraint.matches` as stated above. Its elements appear in the order the
+   writer holds them, which for every list in the IR is source order or an order
+   the schema's own comments name per field. The schema declares no `map<>`
+   field; adding one is a breaking change (§6), because a map's key order would
+   need a rule this list does not have.
 4. **Layout.** Pretty-printed: two-space indentation, one field per line, `\n`
    line endings on every host, no trailing newline, and no byte-order mark.
 5. **No host input.** Nothing in the writer reads the locale, the clock, an

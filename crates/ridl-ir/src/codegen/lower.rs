@@ -80,6 +80,7 @@ pub fn lower_with(
         foreign: lowering.foreign.clone(),
         tuple_collisions: lowering.collisions.clone(),
         podbuf: None,
+        proto3: None,
     };
 
     // The FlatBuffers projection is its own walk over the IR, in the order the
@@ -129,6 +130,7 @@ pub fn lower_with(
         &lowering.foreign_at,
         &keys,
     ));
+    model.proto3 = Some(super::proto3::project(&model));
     model
 }
 

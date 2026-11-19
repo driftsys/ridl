@@ -534,3 +534,32 @@ fn empty_transaction_marker_refuses_a_snapshot_directory_side() {
         "{error}"
     );
 }
+
+#[test]
+fn pre_match_json_with_constraints_keeps_its_baseline_context() {
+    let golden = include_str!("snapshots/corpus__ir@veh-cluster.snap")
+        .split_once("\n---\n")
+        .unwrap()
+        .1
+        .trim_end();
+    let dir = tempfile::tempdir().unwrap();
+    let mut fingerprints = BTreeMap::new();
+    for section in golden.split("// ===== package ").skip(1) {
+        let (_, json) = section.split_once(" =====\n").unwrap();
+        let json = json.trim_end();
+        let package = v2::from_json(json).unwrap();
+        fingerprints.insert(
+            package.name.clone(),
+            format!("{:x}", Sha256::digest(json.as_bytes())),
+        );
+        fs::write(dir.path().join(format!("{}.ir.json", package.name)), json).unwrap();
+    }
+    let expected = BaselineContext {
+        version: 1,
+        local_packages: fingerprints,
+        remote_units: vec![],
+    };
+    write_context(dir.path(), &expected).unwrap();
+    let side = load(dir.path()).expect("pre-match constraint snapshots retain their fingerprints");
+    assert_eq!(side.packages.len(), expected.local_packages.len());
+}

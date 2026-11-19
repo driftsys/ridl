@@ -70,8 +70,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "0",
-          "max": "200",
-          "matches": []
+          "max": "200"
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_U8"
@@ -126,8 +125,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_INTEGER",
         "constraint": {
           "min": "-5",
-          "max": "10",
-          "matches": []
+          "max": "10"
         },
         "vacuous": false,
         "intWidth": "INT_WIDTH_I8"
@@ -192,8 +190,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -251,8 +248,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_FLOAT",
         "constraint": {
           "min": "0",
-          "step": "0.25",
-          "matches": []
+          "step": "0.25"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F64"
@@ -372,8 +368,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_STRING",
         "constraint": {
           "lenMin": "0",
-          "lenMax": "32",
-          "matches": []
+          "lenMax": "32"
         },
         "vacuous": false
       }
@@ -426,8 +421,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_BYTES",
         "constraint": {
           "lenMin": "8",
-          "lenMax": "8",
-          "matches": []
+          "lenMax": "8"
         },
         "vacuous": false
       }
@@ -481,8 +475,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "class": "SCALAR_CLASS_BYTES",
         "constraint": {
           "lenMin": "0",
-          "lenMax": "64",
-          "matches": []
+          "lenMax": "64"
         },
         "vacuous": false
       }
@@ -1985,8 +1978,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                       "class": "SCALAR_CLASS_STRING",
                       "constraint": {
                         "lenMin": "0",
-                        "lenMax": "8",
-                        "matches": []
+                        "lenMax": "8"
                       },
                       "vacuous": false
                     }
@@ -9590,5 +9582,878 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "CountBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      },
+      {
+        "name": "LevelBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 1
+      },
+      {
+        "name": "HeatBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 2
+      },
+      {
+        "name": "FloorBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_DOUBLE",
+                "wireType": "PROTO3_WIRE_TYPE_I64"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 3
+      },
+      {
+        "name": "TagBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": false,
+              "text": true
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 4
+      },
+      {
+        "name": "LabelBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "text": true
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 5
+      },
+      {
+        "name": "FrameBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": false,
+              "bytes": true
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 6
+      },
+      {
+        "name": "BlobBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "bytes": true
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 7
+      },
+      {
+        "name": "ModeBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "enumeration": {
+                "type": {
+                  "reference": "Mode",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 11,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 11
+      },
+      {
+        "name": "ModesBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 12
+      },
+      {
+        "name": "FailureBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "enumeration": {
+                "type": {
+                  "reference": "Failure",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 13,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 13
+      },
+      {
+        "name": "LampBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "enumeration": {
+                "type": {
+                  "reference": "Lamp",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 14,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 14
+      },
+      {
+        "name": "LampsBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 15
+      },
+      {
+        "name": "FaultsBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT64",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 16
+      },
+      {
+        "name": "Inner",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "count"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "text": true
+            },
+            "field": "label"
+          }
+        ],
+        "structDeclaration": 17
+      },
+      {
+        "name": "Fault",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "code"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "text": true
+            },
+            "field": "message"
+          }
+        ],
+        "structDeclaration": 18
+      },
+      {
+        "name": "Panel",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "count"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "level"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "field": "heat"
+          },
+          {
+            "number": 4,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_DOUBLE",
+                "wireType": "PROTO3_WIRE_TYPE_I64"
+              }
+            },
+            "field": "floor"
+          },
+          {
+            "number": 5,
+            "wire": {
+              "defaultIsLegal": false,
+              "text": true
+            },
+            "field": "tag"
+          },
+          {
+            "number": 6,
+            "wire": {
+              "defaultIsLegal": true,
+              "text": true
+            },
+            "field": "note"
+          },
+          {
+            "number": 7,
+            "wire": {
+              "defaultIsLegal": false,
+              "bytes": true
+            },
+            "field": "frame"
+          },
+          {
+            "number": 8,
+            "wire": {
+              "defaultIsLegal": true,
+              "bytes": true
+            },
+            "field": "blob"
+          },
+          {
+            "number": 9,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_BOOL",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "flag"
+          },
+          {
+            "number": 10,
+            "wire": {
+              "defaultIsLegal": true,
+              "enumeration": {
+                "type": {
+                  "reference": "Mode",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 11,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "field": "mode"
+          },
+          {
+            "number": 11,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "modes"
+          },
+          {
+            "number": 12,
+            "wire": {
+              "defaultIsLegal": true,
+              "message": {
+                "message": 14
+              }
+            },
+            "field": "inner"
+          },
+          {
+            "number": 13,
+            "wire": {
+              "defaultIsLegal": true,
+              "message": {
+                "message": 21
+              }
+            },
+            "field": "span"
+          },
+          {
+            "number": 14,
+            "wire": {
+              "defaultIsLegal": false,
+              "array": {
+                "element": {
+                  "defaultIsLegal": true,
+                  "scalar": {
+                    "type": "PROTO3_SCALAR_TYPE_UINT32",
+                    "wireType": "PROTO3_WIRE_TYPE_VARINT"
+                  }
+                },
+                "packed": true
+              }
+            },
+            "field": "fixed4"
+          },
+          {
+            "number": 15,
+            "wire": {
+              "defaultIsLegal": true,
+              "array": {
+                "element": {
+                  "defaultIsLegal": true,
+                  "scalar": {
+                    "type": "PROTO3_SCALAR_TYPE_SINT32",
+                    "wireType": "PROTO3_WIRE_TYPE_VARINT"
+                  }
+                },
+                "packed": true
+              }
+            },
+            "field": "levels"
+          },
+          {
+            "number": 16,
+            "wire": {
+              "defaultIsLegal": true,
+              "array": {
+                "element": {
+                  "defaultIsLegal": true,
+                  "text": true
+                },
+                "packed": false
+              }
+            },
+            "field": "texts"
+          },
+          {
+            "number": 17,
+            "wire": {
+              "defaultIsLegal": true,
+              "map": {
+                "key": {
+                  "defaultIsLegal": false,
+                  "text": true
+                },
+                "value": {
+                  "defaultIsLegal": true,
+                  "scalar": {
+                    "type": "PROTO3_SCALAR_TYPE_UINT32",
+                    "wireType": "PROTO3_WIRE_TYPE_VARINT"
+                  }
+                }
+              }
+            },
+            "field": "byTag"
+          },
+          {
+            "number": 18,
+            "wire": {
+              "defaultIsLegal": true,
+              "array": {
+                "element": {
+                  "defaultIsLegal": true,
+                  "message": {
+                    "message": 14
+                  }
+                },
+                "packed": false
+              }
+            },
+            "field": "nested"
+          },
+          {
+            "number": 19,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "legacy"
+          }
+        ],
+        "structDeclaration": 19
+      },
+      {
+        "name": "Lights",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "enumeration": {
+                "type": {
+                  "reference": "Lamp",
+                  "resolved": true,
+                  "package": "lint.shapes",
+                  "foreign": false,
+                  "index": 14,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "field": "lamp"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "lamps"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "defaultIsLegal": true,
+              "array": {
+                "element": {
+                  "defaultIsLegal": true,
+                  "enumeration": {
+                    "type": {
+                      "reference": "Lamp",
+                      "resolved": true,
+                      "package": "lint.shapes",
+                      "foreign": false,
+                      "index": 14,
+                      "kind": "DECL_KIND_ENUM"
+                    }
+                  }
+                },
+                "packed": true
+              }
+            },
+            "field": "trail"
+          },
+          {
+            "number": 4,
+            "wire": {
+              "defaultIsLegal": true,
+              "array": {
+                "element": {
+                  "defaultIsLegal": true,
+                  "scalar": {
+                    "type": "PROTO3_SCALAR_TYPE_UINT32",
+                    "wireType": "PROTO3_WIRE_TYPE_VARINT"
+                  }
+                },
+                "packed": true
+              }
+            },
+            "field": "sets"
+          },
+          {
+            "number": 5,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT64",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "faults"
+          }
+        ],
+        "structDeclaration": 20
+      },
+      {
+        "name": "Outcome",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "arm": "number"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "text": true
+            },
+            "arm": "text"
+          },
+          {
+            "number": 3,
+            "wire": {
+              "defaultIsLegal": true,
+              "message": {
+                "message": 16
+              }
+            },
+            "arm": "panel"
+          }
+        ],
+        "unionDeclaration": 21
+      },
+      {
+        "name": "Checked",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "message": {
+                "message": 14
+              }
+            },
+            "arm": "ok"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "message": {
+                "message": 15
+              }
+            },
+            "arm": "err"
+          }
+        ],
+        "unionDeclaration": 22
+      },
+      {
+        "name": "Raw",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "ticks"
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": false,
+              "bytes": true
+            },
+            "field": "frame"
+          }
+        ],
+        "structDeclaration": 23
+      },
+      {
+        "name": "PanelSpan",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 0
+      },
+      {
+        "name": "StationSetParams",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 1
+      },
+      {
+        "name": "StationOutcomeParams",
+        "fields": [],
+        "tuple": 2
+      },
+      {
+        "name": "StationCheckedParams",
+        "fields": [],
+        "tuple": 3
+      },
+      {
+        "name": "StationBoundsParams",
+        "fields": [],
+        "tuple": 4
+      },
+      {
+        "name": "StationBoundsReply",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 5
+      },
+      {
+        "name": "StationOldParams",
+        "fields": [],
+        "tuple": 6
+      },
+      {
+        "name": "StationDumpParams",
+        "fields": [],
+        "tuple": 7
+      },
+      {
+        "name": "StationLoadParams",
+        "fields": [],
+        "tuple": 8
+      },
+      {
+        "name": "StationFeedParams",
+        "fields": [],
+        "tuple": 9
+      },
+      {
+        "name": "StationBlendParams",
+        "fields": [],
+        "tuple": 10
+      },
+      {
+        "name": "ArchiveBoundsParams",
+        "fields": [],
+        "tuple": 11
+      },
+      {
+        "name": "ArchiveBoundsReply",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 0
+          },
+          {
+            "number": 2,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_SINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "tuplePosition": 1
+          }
+        ],
+        "tuple": 12
+      },
+      {
+        "name": "ArchiveReplayParams",
+        "fields": [],
+        "tuple": 13
+      },
+      {
+        "name": "ProbeSampleParams",
+        "fields": [],
+        "tuple": 14
+      }
+    ],
+    "refused": []
   }
 }

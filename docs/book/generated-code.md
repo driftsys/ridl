@@ -999,14 +999,15 @@ scalar value and which `TextEncoder` replaces with U+FFFD without an error, so a
 string with one breaks the `utf8` rule before any other. A string length counts
 Unicode code points, as the Rust `chars().count()` does, so `"😀"` has length 1,
 and a bytes length counts bytes. Each clause has one `RegExp`, named
-`__ridlPattern<Name>_<index>`, built once for the module with the
-[pattern engine text](#pattern-engine-texts) above. Its `test` checks the whole
-value, and every clause must match. Normalisation writes a dot outside a class
-as `[^\n\r]`, so the checker, Rust output and TypeScript output give the same
-verdict; a dot accepts U+2028 and U+2029, and an astral character counts as one
-character. See the
+`__ridlPattern<Name>_<index>`; input that holds only the deprecated `pattern`
+field gives `__ridlPattern<Name>` with no index. Each is built once for the
+module with the [pattern engine text](#pattern-engine-texts) above. Its `test`
+checks the whole value, and every clause must match. Normalisation writes a dot
+outside a class as `[^\n\r]`, so the checker, Rust output and TypeScript output
+give the same verdict; a dot accepts U+2028 and U+2029, and an astral character
+counts as one character. See the
 [pattern language](../specification/typl-language-reference.md#27-regex-literals).
-The TypeScript pattern check is always on.
+Unlike the Rust `new`, the pattern check has no feature switch.
 
 `make<Name>Unchecked` returns the value without a check, for a value already
 known to satisfy the constraints. It exists only for a scalar whose `make<Name>`

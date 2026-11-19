@@ -595,8 +595,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
           "constraint": {
             "min": "0",
             "max": "250",
-            "step": "0.5",
-            "matches": []
+            "step": "0.5"
           },
           "vacuous": false,
           "floatWidth": "FLOAT_WIDTH_F32"
@@ -701,6 +700,10 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     "heads": [],
     "refused": [],
     "boxes": []
+  },
+  "proto3": {
+    "messages": [],
+    "refused": []
   }
 }
 
@@ -784,8 +787,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         "constraint": {
           "min": "0",
           "max": "250",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "vacuous": false,
         "floatWidth": "FLOAT_WIDTH_F32"
@@ -976,8 +978,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   "class": "SCALAR_CLASS_INTEGER",
                   "constraint": {
                     "min": "0",
-                    "max": "255",
-                    "matches": []
+                    "max": "255"
                   },
                   "vacuous": false,
                   "intWidth": "INT_WIDTH_U8"
@@ -1248,6 +1249,85 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "SpeedBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_FLOAT",
+                "wireType": "PROTO3_WIRE_TYPE_I32"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      },
+      {
+        "name": "EngagedBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_BOOL",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 1
+      },
+      {
+        "name": "LeverCmdBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": false,
+              "enumeration": {
+                "type": {
+                  "reference": "LeverCmd",
+                  "resolved": true,
+                  "package": "veh.common",
+                  "foreign": false,
+                  "index": 2,
+                  "kind": "DECL_KIND_ENUM"
+                }
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 2
+      },
+      {
+        "name": "FaultReport",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_UINT32",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "field": "count"
+          }
+        ],
+        "structDeclaration": 3
+      }
+    ],
+    "refused": []
   }
 }
 
@@ -1554,8 +1634,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                     "class": "SCALAR_CLASS_INTEGER",
                     "constraint": {
                       "min": "0",
-                      "max": "255",
-                      "matches": []
+                      "max": "255"
                     },
                     "vacuous": false,
                     "intWidth": "INT_WIDTH_U8"
@@ -1602,6 +1681,16 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     ],
     "refused": [],
     "boxes": []
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "VehDiagAccessReadFaultsParams",
+        "fields": [],
+        "tuple": 0
+      }
+    ],
+    "refused": []
   }
 }
 
@@ -1645,5 +1734,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     "heads": [],
     "refused": [],
     "boxes": []
+  },
+  "proto3": {
+    "messages": [],
+    "refused": []
   }
 }

@@ -24,8 +24,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "constraint": {
           "min": "0",
           "max": "250",
-          "step": "0.5",
-          "matches": []
+          "step": "0.5"
         },
         "init": {
           "derivable": true,
@@ -51,8 +50,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
         "constraint": {
           "min": "-40",
           "max": "125",
-          "step": "0.1",
-          "matches": []
+          "step": "0.1"
         },
         "init": {
           "derivable": true,
