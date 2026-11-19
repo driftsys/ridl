@@ -3554,7 +3554,7 @@ fn projection_fields(model: &v1::Model, message: &v1::Proto3Message) -> Fields {
     fields
 }
 
-/// Counts shapes only in messages whose fields were compared with the codec.
+/// Returns flags for packed arrays, maps, unions, boxes and foreign references.
 fn projection_shapes(message: &v1::Proto3Message) -> [bool; 5] {
     fn visit(wire: &v1::Proto3Wire, shapes: &mut [bool; 5]) {
         match wire.kind.as_ref().expect("a wire kind") {
@@ -3596,6 +3596,8 @@ fn projection_shapes(message: &v1::Proto3Message) -> [bool; 5] {
 }
 
 /// Compares every codec message and permits only tuple sources outside its layout.
+/// Packing is not compared: the codec layout carries a number, a type and a
+/// label per field, and no packing.
 #[test]
 fn the_model_projection_matches_the_codec_layout() {
     use ridl_ir::codegen::{self, v1};
@@ -3615,7 +3617,6 @@ fn the_model_projection_matches_the_codec_layout() {
     for (entry, packages) in entries {
         assert!(!packages.is_empty(), "{entry}: at least one package");
         let mut counts = [0usize; 3];
-        let mut size_refusals = 0;
         for (at, package) in packages.iter().enumerate() {
             let mut others: Vec<&v2::Package> = packages
                 .iter()
@@ -3629,26 +3630,10 @@ fn the_model_projection_matches_the_codec_layout() {
                 .proto3
                 .as_ref()
                 .expect("every package has a proto3 projection");
-            let layout = match ridl_backend_rust::proto3_layout(package, &others) {
-                Ok(layout) => layout,
-                Err(error) => {
-                    assert_eq!(
-                        entry, "evals/corpus/ros2",
-                        "unexpected layout refusal: {}",
-                        error.message
-                    );
-                    assert!(
-                        error.message.starts_with(&format!("`{}.", package.name))
-                            && error.message.contains("` has no proto3 codec: ")
-                            && error.message.contains("(NoBound)"),
-                        "{}: expected a size-state refusal, got {}",
-                        package.name,
-                        error.message
-                    );
-                    size_refusals += 1;
-                    continue;
-                }
-            };
+            let layout =
+                ridl_backend_rust::proto3_layout(package, &others).unwrap_or_else(|error| {
+                    panic!("{entry}: {} layout failed: {}", package.name, error.message)
+                });
             let projected: BTreeMap<_, _> = projection
                 .messages
                 .iter()
@@ -3710,7 +3695,7 @@ fn the_model_projection_matches_the_codec_layout() {
         }
         assert!(counts[0] > 0, "{entry}: at least one message compared");
         println!(
-            "{entry}: {} messages compared, {} tuple-only messages allowed, {} tuple-only refusals allowed, {size_refusals} size-state package refusals",
+            "{entry}: {} messages compared, {} tuple-only messages allowed, {} tuple-only refusals allowed",
             counts[0], counts[1], counts[2]
         );
     }

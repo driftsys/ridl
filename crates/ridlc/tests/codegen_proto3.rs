@@ -1023,7 +1023,7 @@ fn every_corpus_index_points_inside_its_list() {
         model: &v1::Model,
         projection: &v1::Proto3Projection,
         w: &v1::Proto3Wire,
-        checked: &mut [usize; 4],
+        checked: &mut [usize; 5],
     ) {
         match w.kind.as_ref().expect("a wire kind") {
             v1::proto3_wire::Kind::Message(reference) => {
@@ -1040,16 +1040,16 @@ fn every_corpus_index_points_inside_its_list() {
                             (index as usize) < model.foreign.len(),
                             "a foreign index is inside the model"
                         );
-                        checked[3] += 1;
+                        checked[4] += 1;
                     }
                 }
             }
             v1::proto3_wire::Kind::Enumeration(enumeration) => {
                 let reference = enumeration.r#type.as_ref().expect("an enum reference");
                 let (count, seen) = if reference.foreign {
-                    (model.foreign.len(), &mut checked[3])
+                    (model.foreign.len(), &mut checked[4])
                 } else {
-                    (model.declarations.len(), &mut checked[0])
+                    (model.declarations.len(), &mut checked[3])
                 };
                 assert!(
                     (reference.index as usize) < count,
@@ -1082,7 +1082,7 @@ fn every_corpus_index_points_inside_its_list() {
             _ => {}
         }
     }
-    let mut checked = [0usize; 4];
+    let mut checked = [0usize; 5];
     for (entry, packages) in corpus_packages() {
         let others: Vec<_> = packages.iter().collect();
         for package in &packages {
@@ -1136,8 +1136,15 @@ fn every_corpus_index_points_inside_its_list() {
             }
         }
     }
-    for (list, count) in ["declaration", "tuple", "message"].into_iter().zip(checked) {
+    // The corpus has no foreign proto3 index. Keep its bound checks above,
+    // but require coverage only for the index kinds the corpus contains.
+    for (list, count) in ["declaration source", "tuple", "message", "enum reference"]
+        .into_iter()
+        .zip(checked)
+    {
         assert!(count > 0, "the corpus offers {list} indices to check");
     }
-    println!("indices checked (declaration, tuple, message, foreign): {checked:?}");
+    println!(
+        "indices checked (declaration source, tuple, message, enum reference, foreign): {checked:?}"
+    );
 }
