@@ -1608,9 +1608,12 @@ message Proto3Wire {
   // 0 inside the range and on the step grid of a numeric scalar, a length
   // lower bound of 0 for text and bytes, a zero member or an open enum, a
   // count lower bound of 0 for an array or a map, always for an enum set and
-  // for a message. An absent field with implicit presence, map key or map
-  // value reads as the default when this is true and is malformed when it is
-  // false; a writer omits a value at its default only when this is true.
+  // for a message. When this is true, an absent field with implicit presence,
+  // map key or map value is taken as the proto3 default and then verified as a
+  // present value would be; when false, an absent value is malformed.
+  // A writer omits a value at its default only when this is true.
+  // This field has existed since Model.proto3, so every writer that writes a
+  // Proto3Wire sets it, and false always means the default is not legal.
   bool default_is_legal = 1;
   oneof kind {
     Proto3Scalar scalar = 10;     // numeric, boolean, or an enum set's integer

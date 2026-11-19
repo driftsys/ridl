@@ -780,7 +780,15 @@ projection".
   lower bound is absent or 0. For an enum, it is true when its zero member
   indexes a declared value or the enum is open. For an enum set or a message, it
   is always true. For an array or a map, it is true when the count lower bound
-  is 0; an element, key or value follows its own type's rule.
+  is 0; an element, key or value follows its own type's rule. When the flag is
+  true, an absent field with implicit presence, map key or map value is taken as
+  the proto3 default and then verified as a present value would be; when false,
+  an absent value is malformed. An empty string is still checked against its
+  pattern, and an absent message is verified as the empty message, which can
+  fail on a field of its own or on a union with no arm. A writer omits a value
+  at its default only when the flag is true. This field has existed since
+  `Model.proto3`, so every writer that writes a `Proto3Wire` sets it, and
+  `false` always means the default is not legal.
 - **Refusals.** A refused declaration or tuple has no message. `refused` lists
   its source index and a `Proto3RefusalCause`, in declaration order and then
   tuple order. The causes are `OPTIONAL_COLLECTION` (an optional array or map
