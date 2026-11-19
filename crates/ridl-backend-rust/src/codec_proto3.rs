@@ -46,9 +46,11 @@
 //! # The wire mapping
 //!
 //! `Model.proto3` supplies message references, field numbers, scalar types,
-//! scalar wire types, array packing and whether defaults are legal. The codec
-//! joins projected fields to model members by source to obtain their Rust
-//! representation, constraints and collection count bounds.
+//! scalar wire types, array packing and whether defaults are legal. An enum
+//! uses the projection's `enumeration` arm, with no scalar; the codec holds
+//! it as a varint in an `Int64`, which gives the same bytes for every int32
+//! value. The codec joins projected fields to model members by source to
+//! obtain their Rust representation, constraints and collection count bounds.
 //! The writer writes the canonical form: fields in number
 //! order, an implicit-presence field omitted at its proto3 default — 0,
 //! `false`, the empty string or bytes, enum value 0, the empty set, the
@@ -286,7 +288,8 @@ struct Scalar {
     repr: Repr,
     /// The inline constraint `verify` checks, for an anonymous scalar.
     constraint: Option<v1::Scalar>,
-    /// The wire type supplied by the proto3 projection.
+    /// The projection's scalar wire type, or `Varint` for an enum carried
+    /// by the projection's `enumeration` arm without a scalar.
     wire_type: pb::WireType,
 }
 
@@ -1229,6 +1232,18 @@ impl<'a> Codec<'a> {
             _ => return Ok(None),
         };
         let projected = self.projected_message(source)?;
+        if let Some(v1::declaration::Kind::Struct(def)) = decl.kind.as_ref() {
+            let members = def
+                .slots
+                .iter()
+                .filter(|slot| matches!(slot.occupant, Some(v1::slot::Occupant::Field(_))))
+                .count();
+            if projected.fields.len() != members {
+                return Err(invalid_projection(
+                    "a struct's projected field count differs from its model field count",
+                ));
+            }
+        }
         let mut fields = Vec::new();
         for field in &projected.fields {
             use v1::proto3_field::Source as FieldSource;
@@ -1336,9 +1351,17 @@ impl<'a> Codec<'a> {
         index: u32,
         root: Option<u32>,
     ) -> Result<Message, GenerateError> {
-        let owner = induced.name.as_ref().map(|name| name.rust.as_str())
-            .filter(|rust| !rust.is_empty()).ok_or_else(|| GenerateError {
-                message: format!("an induced tuple of `{}` carries no Rust name, so the proto3 codec cannot name its functions", self.ctx.package_name()),
+        let owner = induced
+            .name
+            .as_ref()
+            .map(|name| name.rust.as_str())
+            .filter(|rust| !rust.is_empty())
+            .ok_or_else(|| GenerateError {
+                message: format!(
+                    "an induced tuple of `{}` carries no Rust name, so the proto3 codec \
+                     cannot name its functions",
+                    self.ctx.package_name(),
+                ),
             })?;
         let projected = self.projected_message(v1::proto3_message::Source::Tuple(index))?;
         let mut fields = Vec::new();
@@ -1466,6 +1489,8 @@ impl<'a> Codec<'a> {
                     })
                 }
                 Some(Kind::Enumeration(enumeration)) => {
+                    // The projection carries an enum reference without a scalar.
+                    // An int64 varint has the same bytes for every int32 value.
                     let ty = v1::Type {
                         optional: false,
                         kind: Some(v1::r#type::Kind::Named(

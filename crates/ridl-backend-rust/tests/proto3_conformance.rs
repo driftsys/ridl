@@ -3408,7 +3408,7 @@ fn main() {
     );
 }
 
-/// The codec reads scalar selection and proto3 legality from the model projection.
+/// The codec source does not call these projection helpers by these names.
 #[test]
 fn the_codec_selects_no_proto3_scalar_itself() {
     let source = include_str!("../src/codec_proto3.rs");
@@ -3428,6 +3428,213 @@ fn the_codec_selects_no_proto3_scalar_itself() {
             "codec_proto3.rs must read the projection instead of using {forbidden}"
         );
     }
+}
+
+fn projection_model(body: &str) -> v1::Model {
+    let compiled = ridlc::compile(
+        "projection.typl",
+        &format!("package p.projection\n{body}\n"),
+    );
+    assert!(
+        !compiled
+            .diagnostics
+            .iter()
+            .any(|diagnostic| { diagnostic.severity == ridl_core::diag::Severity::Error }),
+        "{:?}",
+        compiled.diagnostics
+    );
+    ridl_ir::codegen::lower(&compiled.package, &[])
+}
+
+fn projected_response(model: &v1::Model) -> v1::CodegenResponse {
+    use ridl_ir::codegen::Backend as _;
+
+    ridl_backend_rust::Backend.generate(&v1::CodegenRequest {
+        model: Some(model.clone()),
+        options: vec![v1::BackendOption {
+            key: ridl_backend_rust::ENCODINGS_OPTION.to_string(),
+            value: "proto3".to_string(),
+        }],
+        ..Default::default()
+    })
+}
+
+fn projected_code(model: &v1::Model) -> String {
+    let response = projected_response(model);
+    assert!(
+        response.diagnostics.is_empty(),
+        "{:?}",
+        response.diagnostics
+    );
+    assert_eq!(response.files.len(), 1);
+    let Some(v1::generated_file::Content::Text(text)) = &response.files[0].content else {
+        panic!("the backend emits Rust text");
+    };
+    text.clone()
+}
+
+fn sample_wire(model: &mut v1::Model) -> &mut v1::Proto3Wire {
+    model.proto3.as_mut().unwrap().messages[0].fields[0]
+        .wire
+        .as_mut()
+        .unwrap()
+}
+
+#[test]
+fn the_codec_follows_projected_array_packing() {
+    let mut model = projection_model("struct Sample { values : [integer [0..255]; 0..2] }");
+    let original = projected_code(&model);
+    let Some(v1::proto3_wire::Kind::Array(array)) = sample_wire(&mut model).kind.as_mut() else {
+        panic!("an array wire");
+    };
+    assert!(array.packed);
+    array.packed = false;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("writer.varint(__l as ::core::primitive::u64)"));
+    assert!(!changed.contains("writer.varint(__l as ::core::primitive::u64)"));
+    assert!(changed.contains("writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint)"));
+}
+
+#[test]
+fn the_codec_follows_projected_scalar_default_legality() {
+    let mut model = projection_model("struct Sample { value : integer [0..255] }");
+    let original = projected_code(&model);
+    assert!(sample_wire(&mut model).default_is_legal);
+    sample_wire(&mut model).default_is_legal = false;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("if __r != 0"));
+    assert!(!changed.contains("if __r != 0"));
+    assert!(!original.contains("Malformed::MissingRequired"));
+    assert!(changed.contains("Malformed::MissingRequired"));
+}
+
+#[test]
+fn the_codec_follows_projected_array_default_legality() {
+    let mut model = projection_model("struct Sample { values : [integer [0..255]; 0..2] }");
+    let original = projected_code(&model);
+    assert!(sample_wire(&mut model).default_is_legal);
+    sample_wire(&mut model).default_is_legal = false;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(!original.contains("Malformed::MissingRequired"));
+    assert!(changed.contains("Malformed::MissingRequired"));
+}
+
+#[test]
+fn the_codec_follows_projected_map_default_legality() {
+    let mut model = projection_model("struct Sample { values : [integer : boolean; 1..2] }");
+    let original = projected_code(&model);
+    assert!(!sample_wire(&mut model).default_is_legal);
+    sample_wire(&mut model).default_is_legal = true;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("Malformed::MissingRequired"));
+    assert!(!changed.contains("Malformed::MissingRequired"));
+}
+
+#[test]
+fn the_codec_follows_projected_map_key_default_legality() {
+    let mut model = projection_model("struct Sample { values : [integer : boolean; 0..2] }");
+    let original = projected_code(&model);
+    let Some(v1::proto3_wire::Kind::Map(map)) = sample_wire(&mut model).kind.as_mut() else {
+        panic!("a map wire");
+    };
+    let key = map.key.as_deref_mut().unwrap();
+    assert!(key.default_is_legal);
+    key.default_is_legal = false;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(!original.contains("Malformed::MissingRequired"));
+    assert!(changed.contains("Malformed::MissingRequired"));
+}
+
+#[test]
+fn the_codec_follows_projected_field_numbers() {
+    let mut model = projection_model("struct Sample { value : integer [0..255] }");
+    let original = projected_code(&model);
+    model.proto3.as_mut().unwrap().messages[0].fields[0].number = 17;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("writer.tag(1u32,"));
+    assert!(changed.contains("writer.tag(17u32,"));
+    assert!(changed.contains("__field.number == 17u32"));
+    assert!(!changed.contains("writer.tag(1u32,"));
+}
+
+#[test]
+fn the_codec_follows_projected_scalar_types() {
+    let mut model = projection_model("struct Sample { value : integer [0..255] }");
+    let original = projected_code(&model);
+    let Some(v1::proto3_wire::Kind::Scalar(scalar)) = sample_wire(&mut model).kind.as_mut() else {
+        panic!("a scalar wire");
+    };
+    assert_eq!(scalar.r#type, v1::Proto3ScalarType::Uint32 as i32);
+    scalar.r#type = v1::Proto3ScalarType::Sint32 as i32;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(!original.contains("::ridl_rt::proto3::zigzag32("));
+    assert!(changed.contains("::ridl_rt::proto3::zigzag32("));
+    assert!(changed.contains("::ridl_rt::proto3::unzigzag32_checked("));
+}
+
+#[test]
+fn a_map_count_floor_requires_a_present_field() {
+    let model = projection_model("struct Sample { values : [integer : boolean; 1..2] }");
+    let code = projected_code(&model);
+    rustc::run_program(
+        "pb_map_count_floor",
+        &format!(
+            r#"
+#![allow(dead_code)]
+{code}
+use ridl_rt::encoding::Proto3;
+use ridl_rt::payload::{{Malformed, Ref, VerifyError}};
+fn main() {{
+    assert!(matches!(Ref::<Sample, Proto3>::verify(&[]),
+        Err(VerifyError::Structure(Malformed::MissingRequired))));
+    let value = Ref::<Sample, Proto3>::verify(&[0x0a, 0x00]).expect("one entry").decode();
+    assert_eq!(value.values, vec![(0, false)]);
+}}
+"#
+        ),
+    );
+}
+
+#[test]
+fn a_projected_struct_with_too_few_fields_is_refused() {
+    let mut model = projection_model("struct Sample { value : boolean }");
+    model.proto3.as_mut().unwrap().messages[0]
+        .fields
+        .pop()
+        .unwrap();
+    assert_invalid_struct_projection(&model);
+}
+
+#[test]
+fn a_projected_struct_with_too_many_fields_is_refused() {
+    let mut model = projection_model("struct Sample { value : boolean }");
+    let fields = &mut model.proto3.as_mut().unwrap().messages[0].fields;
+    let mut extra = fields[0].clone();
+    extra.number = 2;
+    fields.push(extra);
+    assert_invalid_struct_projection(&model);
+}
+
+fn assert_invalid_struct_projection(model: &v1::Model) {
+    let response = projected_response(model);
+    assert!(response.files.is_empty(), "a refused model emits no files");
+    assert_eq!(response.diagnostics.len(), 1);
+    assert!(
+        response.diagnostics[0]
+            .message
+            .starts_with("invalid proto3 projection:")
+    );
+    assert_eq!(
+        response.diagnostics[0].severity,
+        v1::DiagnosticSeverity::Error as i32
+    );
 }
 
 #[test]
@@ -3541,9 +3748,22 @@ fn every_clean_ridlc_corpus_package_has_a_proto3_layout() {
                 .map(|(_, other)| other)
                 .collect();
             others.push(&std_ir);
-            ridl_backend_rust::proto3_layout(package, &others).unwrap_or_else(|error| {
-                panic!("{entry}: {} layout failed: {}", package.name, error.message)
-            });
+            let layout =
+                ridl_backend_rust::proto3_layout(package, &others).unwrap_or_else(|error| {
+                    panic!("{entry}: {} layout failed: {}", package.name, error.message)
+                });
+            let model = ridl_ir::codegen::lower(package, &others);
+            for message in &model.proto3.as_ref().unwrap().messages {
+                if matches!(message.source, Some(v1::proto3_message::Source::Tuple(_))) {
+                    continue;
+                }
+                assert!(
+                    layout.iter().any(|actual| actual.name == message.name),
+                    "{entry}: {} has no layout for declaration message {}",
+                    package.name,
+                    message.name
+                );
+            }
         }
     }
 }
