@@ -573,6 +573,16 @@ as its public contract.
    the existing option map, so the request has no new field and no change to
    `SCHEMA`.
 
+   **Amendment (2026-11-19) — the model carries the proto3 projection.**
+   `Model.proto3` (field 12, `Proto3Projection`) carries the message layout and
+   refusals for plugins. The addition is additive under the
+   [IR specification §6](../specification/ir-specification.md#6-the-compatibility-rule)
+   with no change to `SCHEMA`. The as-built contract is
+   [the codegen plugin record, "The proto3 projection"](../design/codegen-plugins.md#the-proto3-projection).
+   The Rust codec still computes its own layout; its comparison with the model
+   is recorded in
+   [the proto3 codec record](../design/proto3-codec.md#the-wire-mapping).
+
 10. **Two hosts for that contract; the process host is this release's.** The
     in-tree Rust and TypeScript backends implement the contract in-process. The
     process host implements it by running an executable named

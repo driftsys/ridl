@@ -1,0 +1,77 @@
+# Coverage-guided fuzz targets for the decoders that read bytes from a peer
+# (driftsys/ridl#1144). Nightly Rust only: cargo-fuzz instruments the build
+# with sanitizer flags that stable rejects. The directory is its own workspace
+# root, so the workspace of the repository, its stable toolchain pin and its
+# Cargo.lock do not see it, and no member of `just build` builds it.
+[package]
+name = "ridl-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+planus = { version = "=1.3.0", default-features = false, features = ["std"] }
+ridl-descriptor = { path = "../crates/ridl-descriptor" }
+ridl-rt = { path = "../crates/ridl-rt", features = [
+  "flatbuffers",
+  "proto3",
+  "podbuf",
+  "std",
+] }
+ridl-transport-ws = { path = "../crates/ridl-transport-ws", default-features = false }
+
+[build-dependencies]
+# The generated codecs are produced from the fixtures of ridl-backend-rust's
+# tests, so that a target decodes into the code that `ridl build` emits.
+ridl-backend-rust = { path = "../crates/ridl-backend-rust" }
+ridl-core = { path = "../crates/ridl-core" }
+ridlc = { path = "../crates/ridlc" }
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "proto3_verify"
+path = "fuzz_targets/proto3_verify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "flatbuffers_verify"
+path = "fuzz_targets/flatbuffers_verify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "podbuf_verify"
+path = "fuzz_targets/podbuf_verify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "descriptor_verify"
+path = "fuzz_targets/descriptor_verify.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "frame_decode"
+path = "fuzz_targets/frame_decode.rs"
+test = false
+doc = false
+bench = false
+
+[features]
+default = ["std"]
+std = []

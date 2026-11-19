@@ -410,6 +410,7 @@ ridl.codegen.v1.Model.foreign = 9 repeated ridl.codegen.v1.ForeignDeclaration
 ridl.codegen.v1.Model.interfaces = 5 repeated ridl.codegen.v1.Interface
 ridl.codegen.v1.Model.name = 1 singular ridl.codegen.v1.DottedName
 ridl.codegen.v1.Model.podbuf = 11 singular ridl.codegen.v1.PodbufProjection
+ridl.codegen.v1.Model.proto3 = 12 singular ridl.codegen.v1.Proto3Projection
 ridl.codegen.v1.Model.scope = 2 singular ridl.codegen.v1.Scope
 ridl.codegen.v1.Model.services = 6 repeated ridl.codegen.v1.Service
 ridl.codegen.v1.Model.tuple_collisions = 10 repeated ridl.codegen.v1.TupleCollision
@@ -510,6 +511,68 @@ ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_FLOAT = 3
 ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_INTEGER = 2
 ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_STRING = 4
 ridl.codegen.v1.PrimitiveType.PRIMITIVE_TYPE_UNSPECIFIED = 0
+ridl.codegen.v1.Proto3Array.element = 1 singular ridl.codegen.v1.Proto3Wire
+ridl.codegen.v1.Proto3Array.packed = 2 singular bool
+ridl.codegen.v1.Proto3Enum.type = 1 singular ridl.codegen.v1.TypeRef
+ridl.codegen.v1.Proto3Field.arm = 11 singular string oneof=source
+ridl.codegen.v1.Proto3Field.box_value = 13 singular bool oneof=source
+ridl.codegen.v1.Proto3Field.field = 10 singular string oneof=source
+ridl.codegen.v1.Proto3Field.number = 1 singular uint32
+ridl.codegen.v1.Proto3Field.tuple_position = 12 singular uint32 oneof=source
+ridl.codegen.v1.Proto3Field.wire = 2 singular ridl.codegen.v1.Proto3Wire
+ridl.codegen.v1.Proto3Map.key = 1 singular ridl.codegen.v1.Proto3Wire
+ridl.codegen.v1.Proto3Map.value = 2 singular ridl.codegen.v1.Proto3Wire
+ridl.codegen.v1.Proto3Message.fields = 2 repeated ridl.codegen.v1.Proto3Field
+ridl.codegen.v1.Proto3Message.name = 1 singular string
+ridl.codegen.v1.Proto3Message.root_box = 12 singular uint32 oneof=source
+ridl.codegen.v1.Proto3Message.struct_declaration = 10 singular uint32 oneof=source
+ridl.codegen.v1.Proto3Message.tuple = 13 singular uint32 oneof=source
+ridl.codegen.v1.Proto3Message.union_declaration = 11 singular uint32 oneof=source
+ridl.codegen.v1.Proto3MessageRef.foreign = 11 singular uint32 oneof=target
+ridl.codegen.v1.Proto3MessageRef.message = 10 singular uint32 oneof=target
+ridl.codegen.v1.Proto3Projection.messages = 1 repeated ridl.codegen.v1.Proto3Message
+ridl.codegen.v1.Proto3Projection.refused = 2 repeated ridl.codegen.v1.Proto3Refused
+ridl.codegen.v1.Proto3RefusalCause values PROTO3_REFUSAL_CAUSE_ENUM_VALUE PROTO3_REFUSAL_CAUSE_FIELD_NUMBER PROTO3_REFUSAL_CAUSE_MAP_KEY PROTO3_REFUSAL_CAUSE_NESTED_COLLECTION PROTO3_REFUSAL_CAUSE_OPTIONAL_COLLECTION PROTO3_REFUSAL_CAUSE_OPTIONAL_ELEMENT PROTO3_REFUSAL_CAUSE_OTHER PROTO3_REFUSAL_CAUSE_REFUSED_DEPENDENCY PROTO3_REFUSAL_CAUSE_UNSPECIFIED
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_ENUM_VALUE = 5
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_FIELD_NUMBER = 6
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_MAP_KEY = 4
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_NESTED_COLLECTION = 3
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_OPTIONAL_COLLECTION = 1
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_OPTIONAL_ELEMENT = 2
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_OTHER = 8
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_REFUSED_DEPENDENCY = 7
+ridl.codegen.v1.Proto3RefusalCause.PROTO3_REFUSAL_CAUSE_UNSPECIFIED = 0
+ridl.codegen.v1.Proto3Refused.cause = 2 singular ridl.codegen.v1.Proto3RefusalCause
+ridl.codegen.v1.Proto3Refused.declaration = 10 singular uint32 oneof=source
+ridl.codegen.v1.Proto3Refused.member = 3 optional string
+ridl.codegen.v1.Proto3Refused.message = 4 singular string
+ridl.codegen.v1.Proto3Refused.tuple = 11 singular uint32 oneof=source
+ridl.codegen.v1.Proto3Scalar.type = 1 singular ridl.codegen.v1.Proto3ScalarType
+ridl.codegen.v1.Proto3Scalar.wire_type = 2 singular ridl.codegen.v1.Proto3WireType
+ridl.codegen.v1.Proto3ScalarType values PROTO3_SCALAR_TYPE_BOOL PROTO3_SCALAR_TYPE_DOUBLE PROTO3_SCALAR_TYPE_FLOAT PROTO3_SCALAR_TYPE_INT64 PROTO3_SCALAR_TYPE_SINT32 PROTO3_SCALAR_TYPE_SINT64 PROTO3_SCALAR_TYPE_UINT32 PROTO3_SCALAR_TYPE_UINT64 PROTO3_SCALAR_TYPE_UNSPECIFIED
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_BOOL = 1
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_DOUBLE = 8
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_FLOAT = 7
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_INT64 = 2
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_SINT32 = 5
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_SINT64 = 6
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_UINT32 = 3
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_UINT64 = 4
+ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_UNSPECIFIED = 0
+ridl.codegen.v1.Proto3Wire.array = 15 singular ridl.codegen.v1.Proto3Array oneof=kind
+ridl.codegen.v1.Proto3Wire.bytes = 12 singular bool oneof=kind
+ridl.codegen.v1.Proto3Wire.default_is_legal = 1 singular bool
+ridl.codegen.v1.Proto3Wire.enumeration = 13 singular ridl.codegen.v1.Proto3Enum oneof=kind
+ridl.codegen.v1.Proto3Wire.map = 16 singular ridl.codegen.v1.Proto3Map oneof=kind
+ridl.codegen.v1.Proto3Wire.message = 14 singular ridl.codegen.v1.Proto3MessageRef oneof=kind
+ridl.codegen.v1.Proto3Wire.scalar = 10 singular ridl.codegen.v1.Proto3Scalar oneof=kind
+ridl.codegen.v1.Proto3Wire.text = 11 singular bool oneof=kind
+ridl.codegen.v1.Proto3WireType values PROTO3_WIRE_TYPE_I32 PROTO3_WIRE_TYPE_I64 PROTO3_WIRE_TYPE_LEN PROTO3_WIRE_TYPE_UNSPECIFIED PROTO3_WIRE_TYPE_VARINT
+ridl.codegen.v1.Proto3WireType.PROTO3_WIRE_TYPE_I32 = 4
+ridl.codegen.v1.Proto3WireType.PROTO3_WIRE_TYPE_I64 = 2
+ridl.codegen.v1.Proto3WireType.PROTO3_WIRE_TYPE_LEN = 3
+ridl.codegen.v1.Proto3WireType.PROTO3_WIRE_TYPE_UNSPECIFIED = 0
+ridl.codegen.v1.Proto3WireType.PROTO3_WIRE_TYPE_VARINT = 1
 ridl.codegen.v1.QueryShape.clauses = 5 repeated ridl.codegen.v1.Clause
 ridl.codegen.v1.QueryShape.params = 1 repeated ridl.codegen.v1.Param
 ridl.codegen.v1.QueryShape.reply = 3 singular ridl.codegen.v1.Reply

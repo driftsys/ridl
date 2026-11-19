@@ -273,6 +273,28 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "EngagedBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_BOOL",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      }
+    ],
+    "refused": []
   }
 }
 
@@ -546,5 +568,27 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
         }
       }
     ]
+  },
+  "proto3": {
+    "messages": [
+      {
+        "name": "MovingBox",
+        "fields": [
+          {
+            "number": 1,
+            "wire": {
+              "defaultIsLegal": true,
+              "scalar": {
+                "type": "PROTO3_SCALAR_TYPE_BOOL",
+                "wireType": "PROTO3_WIRE_TYPE_VARINT"
+              }
+            },
+            "boxValue": true
+          }
+        ],
+        "rootBox": 0
+      }
+    ],
+    "refused": []
   }
 }
