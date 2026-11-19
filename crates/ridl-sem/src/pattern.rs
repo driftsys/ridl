@@ -119,7 +119,10 @@ impl<'a> Parser<'a> {
                     return Err(self.special_group(start));
                 }
                 if self.group_depth == 250 {
-                    return Err(refusal("(", "groups are nested deeper than 250"));
+                    return Err(refusal(
+                        "(",
+                        "groups are nested deeper than 250; reduce the nesting",
+                    ));
                 }
                 self.group_depth += 1;
                 let result = self.expression(Some(start));
@@ -302,7 +305,9 @@ impl<'a> Parser<'a> {
             let construct = &self.source[start..self.pos];
             return Err(refusal(
                 construct,
-                format!("the quantifier `{construct}` has a maximum below its minimum"),
+                format!(
+                    "the quantifier `{construct}` has a maximum below its minimum; write the smaller number first"
+                ),
             ));
         }
         Ok(())
@@ -516,11 +521,14 @@ mod tests {
     fn group_nesting_is_limited_to_250() {
         let nested = |count| format!("{}a{}", "(".repeat(count), ")".repeat(count));
         assert_eq!(check(&nested(250)), Ok(()));
-        let expected = refusal("(", "groups are nested deeper than 250");
+        let expected = refusal("(", "groups are nested deeper than 250; reduce the nesting");
         assert_eq!(check(&nested(251)), Err(expected));
         assert_eq!(
             check(&"(".repeat(100_000)),
-            Err(refusal("(", "groups are nested deeper than 250"))
+            Err(refusal(
+                "(",
+                "groups are nested deeper than 250; reduce the nesting"
+            ))
         );
         assert_eq!(check(&"(a)".repeat(251)), Ok(()));
     }
@@ -531,12 +539,12 @@ mod tests {
             (
                 "a{18446744073709551617,18446744073709551616}",
                 "{18446744073709551617,18446744073709551616}",
-                "the quantifier `{18446744073709551617,18446744073709551616}` has a maximum below its minimum",
+                "the quantifier `{18446744073709551617,18446744073709551616}` has a maximum below its minimum; write the smaller number first",
             ),
             (
                 "a{007,6}",
                 "{007,6}",
-                "the quantifier `{007,6}` has a maximum below its minimum",
+                "the quantifier `{007,6}` has a maximum below its minimum; write the smaller number first",
             ),
         ] {
             assert_eq!(
@@ -800,7 +808,7 @@ mod tests {
             (
                 r"a{3,2}",
                 r"{3,2}",
-                r"the quantifier `{3,2}` has a maximum below its minimum",
+                r"the quantifier `{3,2}` has a maximum below its minimum; write the smaller number first",
             ),
             (r"[z-a]", r"[z-a]", r"the range `z-a` ends before it starts"),
             (

@@ -57,7 +57,7 @@ type Short : string [0..8]
 /// A string with the default length bound of 0 through 256 characters.
 type Free : string
 
-/// A string whose pattern is anchored at both ends.
+/// A string whose pattern matches the whole value.
 type Capitals : string [1..8 match /[A-Z]+/]
 
 /// A string that contains `ab`, with an explicit search pattern.

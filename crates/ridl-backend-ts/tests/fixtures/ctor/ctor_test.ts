@@ -345,7 +345,7 @@ Deno.test("a pattern with anchors matches the whole value", () => {
   refuses("Capitals", () => makeCapitals("ABC1"), "pattern");
 });
 
-Deno.test("an anchored pattern refuses a trailing newline", () => {
+Deno.test("a pattern that matches the whole value refuses a trailing newline", () => {
   // `$` without the multiline flag matches only at the end of the input.
   refuses("Capitals", () => makeCapitals("ABC\n"), "pattern");
   refuses("Capitals", () => makeCapitals("AB\nC"), "pattern");

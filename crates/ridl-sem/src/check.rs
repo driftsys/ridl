@@ -10445,6 +10445,29 @@ mod tests {
         }
     }
 
+    /// Normalising a dot can exceed Rust's size limit even when the raw dot fits.
+    #[test]
+    fn typl_220_compiles_the_normalised_engine_text() {
+        let literal = "/.{10300}/";
+        let normalised =
+            ridl_ir::pattern::rust_engine_text(&ridl_ir::pattern::normalised_pattern(literal));
+        let raw = ridl_ir::pattern::rust_engine_text(&ridl_ir::pattern::pattern_text(literal));
+        assert!(
+            regex::Regex::new(&raw).is_ok(),
+            "raw dot fits the size limit"
+        );
+        assert!(matches!(
+            regex::Regex::new(&normalised),
+            Err(regex::Error::CompiledTooBig(_))
+        ));
+        let checked = check_source(
+            "app",
+            &format!("package app\ntype T : string [1..11000 match {literal}]\n"),
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-220", "TYPL-115"]);
+        assert!(checked.diagnostics[0].message.contains("size limit"));
+    }
+
     /// An inline `match` pattern the `regex` crate cannot compile is TYPL-220,
     /// on the pattern literal. The `match`-typed type is TYPL-115 (info) as
     /// for any pattern.

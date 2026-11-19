@@ -688,5 +688,65 @@
     "normalised": "[a&b]",
     "value": "~",
     "accepted": false
+  },
+  {
+    "literal": "/[\\.]/",
+    "normalised": "[\\.]",
+    "value": ".",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\.]/",
+    "normalised": "[\\.]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\^]/",
+    "normalised": "[\\^]",
+    "value": "^",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\^]/",
+    "normalised": "[\\^]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\-]/",
+    "normalised": "[\\-]",
+    "value": "-",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\-]/",
+    "normalised": "[\\-]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\./",
+    "normalised": "\\.",
+    "value": ".",
+    "accepted": true
+  },
+  {
+    "literal": "/\\./",
+    "normalised": "\\.",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\^/",
+    "normalised": "\\^",
+    "value": "^",
+    "accepted": true
+  },
+  {
+    "literal": "/\\^/",
+    "normalised": "\\^",
+    "value": "x",
+    "accepted": false
   }
 ]
