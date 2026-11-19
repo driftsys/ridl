@@ -18,7 +18,7 @@ syntax = "proto3";
 // Encoding: canonical protobuf JSON, the dialect ADR-0014 decision 14 fixes
 // for the IR, through the same pbjson-generated impls and the same reader
 // guards (`ridl_ir::codegen::to_json_pretty`, `from_json`). The nesting bound
-// a reader must provision is 264 JSON levels and 261 message levels below the
+// a reader must provision is 266 JSON levels and 262 message levels below the
 // root (design note §6.2).
 //
 // Field numbering scheme, as `ir.proto` has it: envelope and data fields
@@ -229,7 +229,8 @@ message Constraint {
 message Match {
   // The normalised pattern (ridl_ir::pattern), matched against the whole value.
   optional string pattern = 1;
-  // The canonical reference to the regex constant, when the clause names one.
+  // The canonical reference when the name resolves to a regex constant;
+  // otherwise the name as written.
   optional string pattern_const = 2;
 }
 
@@ -1004,7 +1005,7 @@ message Rule {
     // The canonical UCUM unit.
     string unit = 12;
     Length length = 13;
-    // The regex source text of a string's `match` pattern.
+    // The regex source text of one string `match` clause; one rule per clause.
     string pattern = 14;
     CollectionBound collection_bound = 15;
     Timing timing = 16;

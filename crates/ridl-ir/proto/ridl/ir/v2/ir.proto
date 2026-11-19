@@ -23,7 +23,8 @@ syntax = "proto3";
 //
 // Type-reference canonical form: every resolved type-reference string in
 // this schema (FieldType.named, UnionArm.type_ref, ConstDef.type_ref,
-// EnumSetDef.backing_enum, Constraint.pattern_const, SignalDef.payload,
+// EnumSetDef.backing_enum, Constraint.pattern_const, Match.pattern_const,
+// SignalDef.payload,
 // EventDef.payload, StreamType.named, FallibleType.ok, FallibleType.err,
 // Service.interface_ref) is the fully qualified `pkg.Name` for a
 // cross-package reference and the bare `Name` for a same-package
@@ -236,7 +237,8 @@ message Constraint {
 message Match {
   // The source literal with its delimiters.
   optional string pattern = 1;
-  // The canonical reference to the regex constant, when the clause names one.
+  // The canonical reference when the name resolves to a regex constant;
+  // otherwise the name as written.
   optional string pattern_const = 2;
 }
 

@@ -78,7 +78,7 @@ impl<'a> Parser<'a> {
                         self.quantifier()?;
                         if let Some(next @ ('*' | '+' | '?' | '{')) = self.peek() {
                             let first = &self.source[quantifier_start..self.pos];
-                            if matches!((first, next), ("*", '?') | ("+", '+')) {
+                            if matches!(next, '?' | '+') {
                                 let construct = format!("{first}{next}");
                                 return Err(refusal(
                                     &construct,
@@ -571,7 +571,7 @@ mod tests {
         ("[a-[]", "["),
         ("[a-", "[a-"),
         (r"[\d]", r"\d"),
-        ("a{2}?", "?"),
+        ("a{2}?", "{2}?"),
         ("a?{2}", "{2}"),
         ("+", "+"),
         ("?", "?"),
@@ -631,7 +631,7 @@ mod tests {
             ("a**", "*"),
             ("a+*", "*"),
             ("a?{2}", "{2}"),
-            ("a{2}?", "?"),
+            ("a?*", "*"),
             ("a*{3,2}", "{3,2}"),
             ("a*{,3}", "{,3}"),
         ] {
@@ -648,22 +648,19 @@ mod tests {
 
     #[test]
     fn lazy_and_possessive_quantifiers_have_specific_messages() {
-        for (pattern, construct, message) in [
-            (
-                "a*?",
-                "*?",
-                "`*?` is not accepted: a pattern has no lazy or possessive quantifier",
-            ),
-            (
-                "a++",
-                "++",
-                "`++` is not accepted: a pattern has no lazy or possessive quantifier",
-            ),
+        for construct in [
+            "*?", "+?", "??", "{2}?", "{2,}?", "{2,3}?", "*+", "++", "?+", "{2}+", "{2,}+",
+            "{2,3}+",
         ] {
             assert_eq!(
-                check(pattern),
-                Err(refusal(construct, message)),
-                "{pattern}"
+                check(&format!("a{construct}")),
+                Err(refusal(
+                    construct,
+                    format!(
+                        "`{construct}` is not accepted: a pattern has no lazy or possessive quantifier"
+                    ),
+                )),
+                "{construct}"
             );
         }
     }
@@ -702,6 +699,94 @@ mod tests {
                 "(?#",
                 "a comment group is not accepted: remove the comment group",
             ),
+        ] {
+            assert_eq!(
+                check(pattern),
+                Err(refusal(construct, message)),
+                "{pattern}"
+            );
+        }
+    }
+
+    #[test]
+    fn remaining_refusals_pin_construct_and_message() {
+        for (pattern, construct, message) in [
+            (
+                r"\A",
+                r"\A",
+                r"`\A` is not accepted: a pattern matches the whole value, so remove the anchor",
+            ),
+            (
+                r"\z",
+                r"\z",
+                r"`\z` is not accepted: a pattern matches the whole value, so remove the anchor",
+            ),
+            (
+                r"\Z",
+                r"\Z",
+                r"`\Z` is not accepted: a pattern matches the whole value, so remove the anchor",
+            ),
+            (
+                r"\u0041",
+                r"\u",
+                r"`\u` is not accepted: write the character itself, or a range such as `[ -~]`",
+            ),
+            (
+                r"\x41",
+                r"\x",
+                r"`\x` is not accepted: write the character itself, or a range such as `[ -~]`",
+            ),
+            (
+                r"(a)\1",
+                r"\1",
+                "a backreference is not accepted: write the alternatives out",
+            ),
+            (
+                "(?:a)",
+                "(?:",
+                "`(?:` is not accepted: write a plain group `(…)`",
+            ),
+            (
+                "(?i)a",
+                "(?",
+                "inline flags are not accepted: write each case in a class, such as `[Aa]`",
+            ),
+            (
+                "[[a]]",
+                "[",
+                r"a nested class is not accepted: a literal `[` is `\[`",
+            ),
+            (
+                "[[:alpha:]]",
+                "[:alpha:]",
+                "a POSIX class is not accepted: write the range, such as `[a-z]`",
+            ),
+            (
+                "(a",
+                "(a",
+                "invalid regular expression syntax: unclosed group",
+            ),
+            (
+                "[a",
+                "[a",
+                "invalid regular expression syntax: unclosed class",
+            ),
+            (
+                "*a",
+                "*",
+                "invalid regular expression syntax: a quantifier with nothing to repeat",
+            ),
+            (
+                "{2}a",
+                "{2}",
+                "invalid regular expression syntax: a quantifier with nothing to repeat",
+            ),
+            (r"\q", r"\q", r"`\q` is not an I-Regexp escape"),
+            ("\\", "\\", "`\\` is not an I-Regexp escape"),
+            (")", ")", "invalid regular expression syntax: unmatched )"),
+            ("a{", "{", "invalid regular expression syntax: unescaped {"),
+            ("}", "}", "invalid regular expression syntax: unescaped }"),
+            ("]", "]", "invalid regular expression syntax: unescaped ]"),
         ] {
             assert_eq!(
                 check(pattern),

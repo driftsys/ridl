@@ -45,7 +45,8 @@ pub enum Rule {
     /// The length bounds of a string, in characters (typl §5.3), or of bytes,
     /// in bytes (typl §5.4); `Constraint.len_min` and `len_max`.
     Length { min: Option<u64>, max: Option<u64> },
-    /// The regex source text of a string's `match` pattern (typl §5.3).
+    /// The regex source text of one string `match` clause (typl §5.3),
+    /// with one `Rule::Pattern` per clause.
     Pattern(String),
     /// The element bound of an array, or the entry bound of a map
     /// (typl §12.1, §12.2). Both bounds are mandatory in the IR.
