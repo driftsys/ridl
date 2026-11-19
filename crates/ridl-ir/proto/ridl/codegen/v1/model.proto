@@ -61,8 +61,9 @@ message Model {
   // `PodbufProjection.refused`, not left out silently.
   PodbufProjection podbuf = 11;
   // The proto3 layout of the package. Set whenever the toolchain lowers a
-  // package; a declaration with no message is listed in
-  // `Proto3Projection.refused`, not left out silently.
+  // package; a struct, union, named scalar, enum, enum set or tuple that proto3
+  // cannot represent is listed in `Proto3Projection.refused`. A constant has
+  // neither a message nor a refusal.
   Proto3Projection proto3 = 12;
 }
 
@@ -1578,7 +1579,7 @@ message Proto3Projection {
 message Proto3Message {
   // The `.proto` message name without its package, as `ridl-backend-proto`
   // emits it: the declaration's name, `<Name>Box` for a root box, the wire
-  // name of a tuple.
+  // name of a tuple, or its Rust name when the wire name is empty.
   string name = 1;
   // In field-number order, the order the canonical writer writes. The
   // numbers are not dense: a reserved or retired slot has no field.

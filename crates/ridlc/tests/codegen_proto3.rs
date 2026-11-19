@@ -640,6 +640,47 @@ fn a_retired_enum_value_outside_int32_is_refused() {
 }
 
 #[test]
+fn an_enum_with_several_values_outside_int32_lists_each() {
+    for (user, name, member) in [
+        ("", "Bad", None),
+        (
+            "struct Holder {\n mode : Bad\n}\n",
+            "Holder",
+            Some("Holder.mode"),
+        ),
+    ] {
+        let p = package(&format!(
+            "package p.refusal\n{user}\
+             enum Bad {{\n OFF = 0\n reserved 2147483648\n reserved 2147483649\n}}\n"
+        ));
+        check_refusal(&p, name, v1::Proto3RefusalCause::EnumValue, member);
+        let model = codegen::lower(&p, &[]);
+        let projection = model.proto3.as_ref().unwrap();
+        assert_eq!(
+            projection.refused.len(),
+            if user.is_empty() { 2 } else { 4 }
+        );
+        let first = refusal(projection, &model, name);
+        let entries: Vec<_> = projection
+            .refused
+            .iter()
+            .filter(|entry| entry.source == first.source)
+            .collect();
+        assert_eq!(entries.len(), 2);
+        for (entry, value) in entries.iter().zip([2147483648_i64, 2147483649]) {
+            assert_eq!(entry.cause, v1::Proto3RefusalCause::EnumValue as i32);
+            assert_eq!(entry.member.as_deref(), member);
+            assert!(
+                entry
+                    .message
+                    .contains(&format!("is {value}, outside int32"))
+            );
+        }
+        assert_ne!(entries[0].message, entries[1].message);
+    }
+}
+
+#[test]
 fn a_named_retired_enum_value_in_ir_is_refused() {
     let mut p = package("package p.refusal\nenum Bad {\n OFF = 0\n}\n");
     let Some(v2::decl::Kind::EnumDef(e)) = p.decls[0].kind.as_mut() else {

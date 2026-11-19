@@ -194,7 +194,15 @@ impl Failure {
     }
 }
 
-type WireResult = Result<v1::Proto3Wire, Failure>;
+struct Failures(Vec<Failure>);
+
+impl From<Failure> for Failures {
+    fn from(failure: Failure) -> Self {
+        Self(vec![failure])
+    }
+}
+
+type WireResult = Result<v1::Proto3Wire, Failures>;
 
 struct Walk<'a> {
     model: &'a v1::Model,
@@ -231,9 +239,9 @@ impl Walk<'_> {
 
         let mut fields = Vec::new();
         let mut failures = Vec::new();
-        let mut record = |result| match result {
+        let mut record = |result: Result<_, Failures>| match result {
             Ok(field) => fields.push(field),
-            Err(failure) => failures.push(failure),
+            Err(found) => failures.extend(found.0),
         };
         match source {
             Source::Tuple(index) => {
@@ -244,6 +252,9 @@ impl Walk<'_> {
                     .map(|name| name.rust.as_str())
                     .unwrap_or_default();
                 // The Rust name is a backend naming requirement, not a proto3 refusal.
+                // A tuple with neither a wire name nor a Rust name, and messages
+                // that use it, are omitted from `messages` with no entry in `refused`.
+                // Lowering always names tuples; only hand-built IR reaches this case.
                 if owner.is_empty() {
                     return (None, failures);
                 }
@@ -381,7 +392,7 @@ impl Walk<'_> {
         number: u32,
         ty: &v1::Type,
         source: v1::proto3_field::Source,
-    ) -> Result<v1::Proto3Field, Failure> {
+    ) -> Result<v1::Proto3Field, Failures> {
         refuse_optional_repeated(owner, name, tuple, ty)?;
         Ok(v1::Proto3Field {
             number: field_number(owner, name, number)?,
@@ -404,7 +415,8 @@ impl Walk<'_> {
                     _ => {
                         return Err(Failure::other(
                             "a proto3 codec cannot carry an unbounded primitive",
-                        ));
+                        )
+                        .into());
                     }
                 }
             }
@@ -433,7 +445,8 @@ impl Walk<'_> {
                         Cause::NestedCollection,
                         "an array of arrays or of maps is one proto3 does not admit, \
                          as the proto backend refuses it",
-                    ));
+                    )
+                    .into());
                 }
                 let packed = matches!(element.kind, Some(Kind::Scalar(_) | Kind::Enumeration(_)));
                 Kind::Array(
@@ -468,7 +481,8 @@ impl Walk<'_> {
                         Cause::MapKey,
                         "a map key must be an integral or string type, as the proto \
                          backend requires",
-                    ));
+                    )
+                    .into());
                 }
                 let value = self.wire(value)?;
                 if repeated(&value) {
@@ -476,7 +490,8 @@ impl Walk<'_> {
                         Cause::NestedCollection,
                         "a map whose value is an array or a map is one proto3 does \
                          not admit, as the proto backend refuses it",
-                    ));
+                    )
+                    .into());
                 }
                 Kind::Map(
                     v1::Proto3Map {
@@ -487,9 +502,9 @@ impl Walk<'_> {
                 )
             }
             _ => {
-                return Err(Failure::other(
-                    "a proto3 codec cannot carry this type position",
-                ));
+                return Err(
+                    Failure::other("a proto3 codec cannot carry this type position").into(),
+                );
             }
         };
         Ok(v1::Proto3Wire { kind: Some(kind) })
@@ -532,9 +547,10 @@ impl Walk<'_> {
                 if !def.open && def.values.is_empty() {
                     return Err(Failure::other(format!(
                         "`{name}` declares no value, so no proto3 codec can decode one"
-                    )));
+                    ))
+                    .into());
                 }
-                let outside = def
+                let failures: Vec<_> = def
                     .values
                     .iter()
                     .map(|value| (declared(value.name.as_ref()), value.value))
@@ -543,32 +559,36 @@ impl Walk<'_> {
                             .value
                             .map(|value| (declared(retired.name.as_ref()), value))
                     }))
-                    .find(|(_, value)| i32::try_from(*value).is_err());
-                if let Some((member, value)) = outside {
-                    let full = if owner.contains('.') {
-                        owner.clone()
-                    } else {
-                        format!(
-                            "{}.{owner}",
-                            self.model
-                                .scope
-                                .as_ref()
-                                .map(|s| s.package.as_str())
-                                .unwrap_or_default()
-                        )
-                    };
-                    let failure = Failure::new(
-                        Cause::EnumValue,
-                        format!(
-                            "`{full}` has no proto3 codec: its value `{member}` is {value}, \
+                    .filter(|(_, value)| i32::try_from(*value).is_err())
+                    .map(|(member, value)| {
+                        let full = if owner.contains('.') {
+                            owner.clone()
+                        } else {
+                            format!(
+                                "{}.{owner}",
+                                self.model
+                                    .scope
+                                    .as_ref()
+                                    .map(|s| s.package.as_str())
+                                    .unwrap_or_default()
+                            )
+                        };
+                        let failure = Failure::new(
+                            Cause::EnumValue,
+                            format!(
+                                "`{full}` has no proto3 codec: its value `{member}` is {value}, \
                              outside int32, which the proto backend refuses"
-                        ),
-                    );
-                    return Err(if member.is_empty() {
-                        failure
-                    } else {
-                        failure.member(format!("{name}.{member}"))
-                    });
+                            ),
+                        );
+                        if member.is_empty() {
+                            failure
+                        } else {
+                            failure.member(format!("{name}.{member}"))
+                        }
+                    })
+                    .collect();
+                if !failures.is_empty() {
+                    return Err(Failures(failures));
                 }
                 Kind::Enumeration(v1::Proto3Enum {
                     r#type: Some(reference.clone()),
@@ -603,7 +623,8 @@ impl Walk<'_> {
                 return Err(Failure::other(format!(
                     "`{}` names a declaration a proto3 codec cannot carry",
                     reference.reference
-                )));
+                ))
+                .into());
             }
         };
         Ok(v1::Proto3Wire { kind: Some(kind) })
@@ -648,12 +669,13 @@ fn missing_type(owner: &str, name: &str, text: &str) -> Failure {
     Failure::other(format!("`{owner}.{name}` {text}")).member(format!("{owner}.{name}"))
 }
 
-fn member_enum(failure: Failure, owner: &str, name: &str) -> Failure {
-    if failure.cause == Cause::EnumValue {
-        failure.member(format!("{owner}.{name}"))
-    } else {
-        failure
+fn member_enum(mut failures: Failures, owner: &str, name: &str) -> Failures {
+    for failure in &mut failures.0 {
+        if failure.cause == Cause::EnumValue {
+            failure.member = Some(format!("{owner}.{name}"));
+        }
     }
+    failures
 }
 
 fn repeated(wire: &v1::Proto3Wire) -> bool {
@@ -740,7 +762,7 @@ fn scalar_type(scalar: &v1::Scalar) -> Result<pb::Scalar, Failure> {
 }
 
 fn project_scalar(scalar: &v1::Scalar) -> WireResult {
-    scalar_type(scalar).map(scalar_wire)
+    scalar_type(scalar).map(scalar_wire).map_err(Into::into)
 }
 
 fn scalar_wire(scalar: pb::Scalar) -> v1::Proto3Wire {
