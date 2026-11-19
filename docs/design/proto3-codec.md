@@ -216,9 +216,10 @@ projected fields to model members by `Proto3Field.source`, because the
 projection describes the wire rather than the Rust representation. It also
 checks size states with `bound_state`, because a representable message can lack
 a finite bound. `reachable_tuples` chooses which tuples to emit and their
-discovery order, so an unused tuple adds no generated functions. A reached tuple
-without a Rust name is refused because its codec functions need that name. The
-codec selects the first projection refusal whose cause is not
+discovery order, so an unused tuple adds no generated functions. It skips a
+tuple without a Rust name, because the codec functions of a tuple need that
+name; `tuple_message` also refuses such a tuple, as a check that discovery makes
+unreachable. The codec selects the first projection refusal whose cause is not
 `REFUSED_DEPENDENCY` and whose source is a declaration or an emitted tuple, and
 reports its message unchanged; an unused tuple's refusal does not stop emission.
 
@@ -242,6 +243,35 @@ admission into the codec. Separately,
 `every_clean_ridlc_corpus_package_has_a_proto3_layout` requires every clean
 ridlc corpus package to lay out, classifies every corpus directory, and requires
 skipped directories to retain their deliberate errors.
+
+**Why the projection is the single source.** The Rust codec reads the projection
+instead of keeping its own copy of the rules, so the codec and every plugin read
+the same facts and cannot differ on them. Two other forms were rejected: a
+projection kept equal to the codec only by a comparison test, which would be a
+fourth copy of the rules that agrees only on the inputs of the test corpus; and
+moving the codec, the `.proto` emitter and the sizer onto the projection in one
+change, which was too large to review. The emitter and the sizer remain
+(driftsys/ridl#690).
+
+The walk reads the lowered model and not the raw IR, because the Rust codec read
+the model and its refusal texts name model-level things. The cost is that the
+sizer runs on the raw IR while the model is being built, so it cannot call the
+walk. Moving it onto the projection needs a correction step after lowering,
+which sets the size states of a refused declaration, as the FlatBuffers
+projection does for its own. That step is not designed.
+
+`Proto3Wire.default_is_legal` is carried on the wire and not on the field,
+because the rule also applies to a map key and a map value. It was added because
+the model did not carry the fact: a plugin would have had to re-derive it for
+every kind, and `FbSlot.needs_null_default` is a different predicate, about the
+`.fbs` schema.
+
+The projection refuses field number 0, as the Rust codec always did. The
+`.proto` emitter does not refuse it; this is the one known difference between
+the two, left to driftsys/ridl#690. When a package holds several independent
+refusals, the Rust backend reports the first one in projection order among those
+it emits, which can differ from the one it reported before; the text of each is
+unchanged.
 
 ## The writer
 
@@ -607,7 +637,7 @@ regenerate byte for byte.
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
 | Neither codec generates a type with no finite bound, so the ros2 corpus packages do not generate with proto3; the cap of such bounds that ADR-0030 decision 3 proposed was withdrawn, and the question stays open | driftsys/ridl#996 |
 | The codec does not reproduce the proto backend's name-collision refusals: a package the `.proto` emitter refuses for a name reason still gets a Rust codec                                                        | driftsys/ridl#997 |
-| The `.proto` emitter and proto3 sizer still walk the raw IR independently of the model projection; see [the wire mapping](#the-wire-mapping)                                                                      | driftsys/ridl#690 |
+| The `.proto` emitter and proto3 sizer still walk the raw IR independently of the model projection, and the emitter does not refuse field number 0; see [the wire mapping](#the-wire-mapping)                      | driftsys/ridl#690 |
 
 ## Alternatives considered
 

@@ -16,7 +16,7 @@ codec's own proto3 rules.
 **Tech stack:** Rust, prost and pbjson (generated from `model.proto` by
 `crates/ridl-ir/build.rs`), `cargo xtask freeze`.
 
-**Spec:** `docs/wip/2026-11-18-proto3-model-projection-design.md`. Read it
+**Spec:** `docs/archive/2026-11-18-proto3-model-projection-design.md`. Read it
 before any task. The `.proto` text of every new message is in its section "The
 model messages" and is copied from there, not from this plan.
 
