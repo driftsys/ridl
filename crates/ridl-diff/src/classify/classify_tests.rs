@@ -876,6 +876,95 @@ fn a_removed_pattern_is_compatible() {
     assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
 }
 
+/// Build clauses without compatibility fields so the classifier must read the list.
+fn match_constraint(clauses: &[(&str, Option<&str>)]) -> v2::Constraint {
+    v2::Constraint {
+        matches: clauses
+            .iter()
+            .map(|(pattern, constant)| v2::Match {
+                pattern: Some((*pattern).into()),
+                pattern_const: constant.map(str::to_owned),
+            })
+            .collect(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn adding_a_second_match_clause_is_breaking() {
+    let (old, new) = constraint_case(
+        match_constraint(&[("/a/", None)]),
+        match_constraint(&[("/a/", None), ("/b/", None)]),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+}
+
+#[test]
+fn removing_a_match_clause_is_compatible() {
+    let (old, new) = constraint_case(
+        match_constraint(&[("/a/", None), ("/b/", None)]),
+        match_constraint(&[("/a/", None)]),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+}
+
+#[test]
+fn swapping_match_clauses_is_compatible() {
+    let (old, new) = constraint_case(
+        match_constraint(&[("/a/", None), ("/b/", None)]),
+        match_constraint(&[("/b/", None), ("/a/", None)]),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+}
+
+#[test]
+#[allow(deprecated)]
+fn a_legacy_pattern_and_the_same_match_clause_are_compatible() {
+    let legacy = v2::Constraint {
+        pattern: Some("/a/".into()),
+        ..Default::default()
+    };
+    let (old, new) = constraint_case(legacy, match_constraint(&[("/a/", None)]));
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+    assert_row(&new, &old, Category::ConstraintChanged, Verdict::Compatible);
+}
+
+#[test]
+fn rewriting_a_match_clause_is_breaking() {
+    let (old, new) = constraint_case(
+        match_constraint(&[("/a/", None), ("/b/", None)]),
+        match_constraint(&[("/a/", None), ("/c/", None)]),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+}
+
+#[test]
+fn changing_a_match_clause_constant_is_breaking() {
+    let (old, new) = constraint_case(
+        match_constraint(&[("/a/", Some("A"))]),
+        match_constraint(&[("/a/", Some("B"))]),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+}
+
+#[test]
+fn duplicating_a_match_clause_is_compatible() {
+    let (old, new) = constraint_case(
+        match_constraint(&[("/a/", None)]),
+        match_constraint(&[("/a/", None), ("/a/", None)]),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+}
+
+#[test]
+fn constraint_text_includes_every_match_clause_in_order() {
+    let constraint = match_constraint(&[("/b/", None), ("/a/", Some("A"))]);
+    assert_eq!(
+        crate::walk::constraint_str(Some(&constraint)),
+        "[pattern=/b/ pattern=/a/]"
+    );
+}
+
 // ==========================================================================
 // Timing.
 // ==========================================================================

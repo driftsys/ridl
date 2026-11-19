@@ -1912,7 +1912,6 @@ fn float_width_name(width: i32) -> &'static str {
     }
 }
 
-#[allow(deprecated)]
 pub(crate) fn constraint_str(constraint: Option<&v2::Constraint>) -> String {
     let Some(constraint) = constraint else {
         return "(none)".to_string();
@@ -1933,8 +1932,10 @@ pub(crate) fn constraint_str(constraint: Option<&v2::Constraint>) -> String {
     if let Some(len_max) = constraint.len_max {
         parts.push(format!("len_max={len_max}"));
     }
-    if let Some(pattern) = &constraint.pattern {
-        parts.push(format!("pattern={pattern}"));
+    for clause in ridl_ir::pattern::ir_match_clauses(constraint).clauses {
+        if let Some(pattern) = clause.pattern {
+            parts.push(format!("pattern={pattern}"));
+        }
     }
     format!("[{}]", parts.join(" "))
 }

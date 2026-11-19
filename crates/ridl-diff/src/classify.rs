@@ -598,7 +598,6 @@ fn constraint(
 /// change, so a mixed edit — a lowered `min` with a lowered `max` — is breaking
 /// on the half that narrows. A stepped minimum also defines the grid origin,
 /// so a shifted grid is breaking even when the interval widens.
-#[allow(deprecated)]
 pub(crate) fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
     let (Some(old), Some(new)) = (old, new) else {
         // A constraint appearing where there was none bounds a previously
@@ -629,14 +628,14 @@ pub(crate) fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>
     {
         return true;
     }
-    // A pattern added or rewritten can reject strings that matched before.
-    // Removed, it widens.
-    if (new.pattern.is_some() && old.pattern != new.pattern)
-        || (new.pattern_const.is_some() && old.pattern_const != new.pattern_const)
-    {
-        return true;
-    }
-    false
+    // A clause added or rewritten can reject strings that matched before.
+    // Removing a clause widens; order and duplicate clauses have no effect.
+    let old_clauses = ridl_ir::pattern::ir_match_clauses(old);
+    let new_clauses = ridl_ir::pattern::ir_match_clauses(new);
+    new_clauses
+        .clauses
+        .iter()
+        .any(|clause| !old_clauses.clauses.contains(clause))
 }
 
 /// Whether two origins differ by a whole positive step, in exact decimal
