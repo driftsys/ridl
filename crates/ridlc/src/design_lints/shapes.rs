@@ -90,6 +90,7 @@ pub(crate) fn check(ctx: &Ctx<'_>) -> Vec<Diagnostic> {
     diagnostics
 }
 
+#[allow(deprecated)]
 fn canonicalize(pkg: &str, ty: &mut v2::FieldType) {
     match &mut ty.kind {
         Some(field_type::Kind::Named(name)) => qualify(pkg, name),
@@ -116,12 +117,15 @@ fn canonicalize(pkg: &str, ty: &mut v2::FieldType) {
             }
         }
         Some(field_type::Kind::InlineScalar(scalar)) => {
-            if let Some(name) = scalar
-                .constraint
-                .as_mut()
-                .and_then(|c| c.pattern_const.as_mut())
-            {
-                qualify(pkg, name);
+            if let Some(c) = &mut scalar.constraint {
+                for clause in &mut c.matches {
+                    if let Some(name) = &mut clause.pattern_const {
+                        qualify(pkg, name);
+                    }
+                }
+                if let Some(name) = &mut c.pattern_const {
+                    qualify(pkg, name);
+                }
             }
         }
         Some(field_type::Kind::Primitive(_)) | None => {}

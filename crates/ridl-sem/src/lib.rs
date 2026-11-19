@@ -14,6 +14,8 @@ pub mod expr_eval;
 pub mod init;
 /// The ridl lint pass — advisory codes over the interaction layer.
 pub mod lint;
+/// Recognition of the typl I-Regexp pattern language.
+pub mod pattern;
 pub mod resolve;
 /// The rsdl checker: one workspace-level query over every `.rsdl` file (rsdl
 /// reference v0.2).

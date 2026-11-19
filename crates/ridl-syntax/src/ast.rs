@@ -667,10 +667,22 @@ impl Constraint {
         self.scalar(ScalarRole::Step)
     }
 
-    /// The pattern after the `match` keyword — a regex literal or a named
-    /// constant reference (typl reference §5.3).
-    pub fn match_pattern(&self) -> Option<Literal> {
-        self.scalar(ScalarRole::Pattern)
+    /// The literals after `match` keywords in source order: inline regexes or
+    /// named constant references (typl reference §5.3), excluding length bounds.
+    pub fn match_patterns(&self) -> impl Iterator<Item = Literal> {
+        let mut after_match = false;
+        self.syntax()
+            .children_with_tokens()
+            .filter_map(move |element| match element {
+                rowan::NodeOrToken::Token(token) => {
+                    if token.kind() == SyntaxKind::MatchKw {
+                        after_match = true;
+                    }
+                    None
+                }
+                rowan::NodeOrToken::Node(node) if after_match => Literal::cast(node),
+                _ => None,
+            })
     }
 
     /// The first direct `Literal` child in the given role. The scalar
@@ -1005,7 +1017,7 @@ mod tests {
             constraint.step().unwrap().syntax().text().to_string(),
             "0.5"
         );
-        assert!(constraint.match_pattern().is_none());
+        assert!(constraint.match_patterns().next().is_none());
         assert!(constraint.len().is_none());
 
         let init = type_def.init_value().expect("TypeDef has an InitValue");
@@ -1222,7 +1234,7 @@ mod tests {
         assert!(upper_only.min().is_none());
         assert_eq!(upper_only.max().unwrap().syntax().text().to_string(), "255");
         assert!(upper_only.step().is_none());
-        assert!(upper_only.match_pattern().is_none());
+        assert!(upper_only.match_patterns().next().is_none());
         assert!(upper_only.len().is_none());
 
         // `[0..]` — the literal before a trailing `..` is the min.
@@ -1233,7 +1245,30 @@ mod tests {
         assert_eq!(lower_only.min().unwrap().syntax().text().to_string(), "0");
         assert!(lower_only.max().is_none());
         assert!(lower_only.step().is_none());
-        assert!(lower_only.match_pattern().is_none());
+        assert!(lower_only.match_patterns().next().is_none());
+    }
+
+    #[test]
+    fn match_patterns_preserve_every_clause_in_source_order() {
+        let several = constraint(|b| {
+            bound(b, "1", Some("8"));
+            for (kind, text) in [(SyntaxKind::Regex, "/a/"), (SyntaxKind::Ident, "P")] {
+                token(b, SyntaxKind::Whitespace, " ");
+                token(b, SyntaxKind::MatchKw, "match");
+                token(b, SyntaxKind::Whitespace, " ");
+                literal(b, kind, text);
+            }
+        });
+        assert_eq!(
+            several
+                .match_patterns()
+                .map(|literal| literal.syntax().text().to_string())
+                .collect::<Vec<_>>(),
+            ["/a/", "P"],
+        );
+        assert!(several.min().is_none());
+        assert!(several.max().is_none());
+        assert!(several.step().is_none());
     }
 
     /// `[match PATTERN]` — a bare match pattern is not a scalar endpoint.
@@ -1250,7 +1285,8 @@ mod tests {
         assert!(bare_match.len().is_none());
         assert_eq!(
             bare_match
-                .match_pattern()
+                .match_patterns()
+                .next()
                 .unwrap()
                 .syntax()
                 .text()
@@ -1279,7 +1315,8 @@ mod tests {
         assert!(len.max().is_none());
         assert_eq!(
             exact_len
-                .match_pattern()
+                .match_patterns()
+                .next()
                 .unwrap()
                 .syntax()
                 .text()
@@ -1302,7 +1339,8 @@ mod tests {
         assert_eq!(len.max().unwrap().syntax().text().to_string(), "6");
         assert_eq!(
             len_range
-                .match_pattern()
+                .match_patterns()
+                .next()
                 .unwrap()
                 .syntax()
                 .text()

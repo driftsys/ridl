@@ -89,15 +89,15 @@ InitValue =
 
 // The constraint clause (typl reference §5.2–§5.5). Three shapes share
 // the brackets: a scalar range with optional step, a length bound with
-// optional match, and a bare match. Scalar endpoints are direct Literal
+// match clauses, and bare match clauses. Scalar endpoints are direct Literal
 // children told apart by the anchor tokens ('..', 'step', 'match'), so
 // their accessors are hand-written in src/ast.rs; length bounds nest in
 // a Bound node.
 Constraint =
   '[' (
       min:Literal? '..' max:Literal? ('step' step:Literal)?
-    | len:Bound ('match' match_pattern:Literal)?
-    | 'match' match_pattern:Literal
+    | len:Bound ('match' match_pattern:Literal)*
+    | 'match' match_pattern:Literal ('match' match_pattern:Literal)*
   ) ']'
 
 // A collection or length bound: an exact count or an inclusive range

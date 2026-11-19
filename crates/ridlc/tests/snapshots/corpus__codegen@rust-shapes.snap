@@ -308,7 +308,12 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "constraint": {
           "lenMin": "1",
           "lenMax": "16",
-          "pattern": "^[a-z][a-z0-9-]*$"
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "matches": [
+            {
+              "pattern": "^[a-z][a-z0-9-]*$"
+            }
+          ]
         },
         "vacuous": false,
         "declaredInit": "unit"
@@ -6281,7 +6286,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
   "services": [],
   "catalog": {
     "package": "lint.shapes",
-    "hash": "4pNulIezMScQ77wSQmfzfpIXNu3rUAebKpqnTzRUW8Q=",
+    "hash": "2C39a8V2f5+TOV27a5Y2AXHyPU/shnOCpq5Gz+dz/jI=",
     "retired": [],
     "compatible": []
   },

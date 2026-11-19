@@ -7687,8 +7687,8 @@ impl ::ridl_rt::contract::Interface for Station {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "lint.shapes",
         hash: ::ridl_rt::contract::CatalogHash([
-            226, 147, 110, 148, 135, 179, 49, 39, 16, 239, 188, 18, 66, 103, 243, 126,
-            146, 23, 54, 237, 235, 80, 7, 155, 42, 154, 167, 79, 52, 84, 91, 196,
+            216, 45, 253, 107, 197, 118, 127, 159, 147, 57, 93, 187, 107, 150, 54, 1,
+            113, 242, 61, 79, 236, 134, 115, 130, 166, 174, 70, 207, 231, 115, 254, 50,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(3);
@@ -17158,8 +17158,8 @@ impl ::ridl_rt::contract::Interface for Probe {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "lint.shapes",
         hash: ::ridl_rt::contract::CatalogHash([
-            226, 147, 110, 148, 135, 179, 49, 39, 16, 239, 188, 18, 66, 103, 243, 126,
-            146, 23, 54, 237, 235, 80, 7, 155, 42, 154, 167, 79, 52, 84, 91, 196,
+            216, 45, 253, 107, 197, 118, 127, 159, 147, 57, 93, 187, 107, 150, 54, 1,
+            113, 242, 61, 79, 236, 134, 115, 130, 166, 174, 70, 207, 231, 115, 254, 50,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(2);

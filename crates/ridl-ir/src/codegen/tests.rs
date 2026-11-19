@@ -9,6 +9,24 @@
 use super::{from_binary, from_json, lower, to_binary, to_json_pretty, to_text_format, v1};
 use crate::v2;
 
+#[test]
+fn explicit_empty_matches_json_equals_absent_matches() {
+    for fields in [
+        r#""min":"0","max":"8""#,
+        r#""pattern":"a","patternConst":"P""#,
+    ] {
+        let read = |constraint| {
+            from_json(&format!(
+                r#"{{"declarations":[{{"scalar":{{"constraint":{{{constraint}}}}}}}]}}"#
+            ))
+            .unwrap()
+        };
+        let absent = read(fields.to_owned());
+        let empty = read(format!(r#"{fields},"matches":[]"#));
+        assert_eq!(empty, absent);
+    }
+}
+
 /// A package with one named scalar, one enum whose lowest member is not zero,
 /// and one struct holding a field of each.
 fn package() -> v2::Package {
@@ -3362,6 +3380,7 @@ fn doc_field(ordinal: u32, name: &str, ty: v2::FieldType) -> v2::StructMember {
 /// a step, a string with a length and a pattern, an array field with a
 /// collection bound, a signal with timing, and a fallible query with a
 /// response bound, a `require` and an `ensure`.
+#[allow(deprecated)]
 fn docs_package() -> v2::Package {
     let speed = v2::TypeDef {
         backing: Some(v2::Backing {
@@ -5871,4 +5890,63 @@ fn a_service_global_name_reaches_the_codegen_model() {
         model.interfaces[0].identity,
         Some(v1::interface::Identity::Service(name.clone()))
     );
+}
+
+#[test]
+#[allow(deprecated)]
+fn match_clauses_lower_all_bodies_and_preserve_legacy_search_input() {
+    for legacy in [false, true] {
+        let mut pkg = package();
+        pkg.decls[0].kind = Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                pattern: Some("/a.b/".into()),
+                pattern_const: Some("P".into()),
+                matches: if legacy {
+                    vec![]
+                } else {
+                    vec![
+                        v2::Match {
+                            pattern: Some("/a.b/".into()),
+                            pattern_const: Some("P".into()),
+                        },
+                        v2::Match {
+                            pattern: Some(r"/c\/d/".into()),
+                            pattern_const: None,
+                        },
+                    ]
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        }));
+        let model = lower(&pkg, &[]);
+        let v1::declaration::Kind::Scalar(sc) = model.declarations[0].kind.as_ref().unwrap() else {
+            panic!("scalar")
+        };
+        let c = sc.constraint.as_ref().unwrap();
+        assert_eq!(c.pattern.as_deref(), Some("a.b"));
+        assert_eq!(c.pattern_const.as_deref(), Some("P"));
+        if legacy {
+            assert!(c.matches.is_empty());
+        } else {
+            assert_eq!(
+                c.matches,
+                vec![
+                    v1::Match {
+                        pattern: Some("a.b".into()),
+                        pattern_const: Some("P".into())
+                    },
+                    v1::Match {
+                        pattern: Some(r"c\/d".into()),
+                        pattern_const: None
+                    }
+                ]
+            );
+        }
+    }
 }

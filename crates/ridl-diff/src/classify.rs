@@ -592,13 +592,49 @@ fn constraint(
     }
 }
 
+/// Compare constraints with match clauses treated as a set of pattern text and
+/// constant name pairs. Names take part in equality, so adding, changing or
+/// removing a name remains a reported change. Deprecated fields supply one
+/// clause only when `matches` is empty. Order and duplicates do not count;
+/// every other constraint field retains its protobuf equality semantics.
+#[allow(deprecated)]
+pub(crate) fn constraints_equal(
+    old: Option<&v2::Constraint>,
+    new: Option<&v2::Constraint>,
+) -> bool {
+    let canonical = |constraint: &v2::Constraint| {
+        let clauses: BTreeSet<_> = ridl_ir::pattern::ir_match_clauses(constraint)
+            .clauses
+            .into_iter()
+            .map(|clause| (clause.pattern, clause.pattern_const))
+            .collect();
+        let mut canonical = constraint.clone();
+        canonical.pattern = None;
+        canonical.pattern_const = None;
+        canonical.matches = clauses
+            .into_iter()
+            .map(|(pattern, pattern_const)| v2::Match {
+                pattern: pattern.map(str::to_owned),
+                pattern_const: pattern_const.map(str::to_owned),
+            })
+            .collect();
+        canonical
+    };
+    old.map(canonical) == new.map(canonical)
+}
+
 /// Whether the constraint moved in the narrowing direction on any facet.
 ///
 /// Each bound is judged independently and any narrowing decides the whole
 /// change, so a mixed edit — a lowered `min` with a lowered `max` — is breaking
 /// on the half that narrows. A stepped minimum also defines the grid origin,
 /// so a shifted grid is breaking even when the interval widens.
+/// A clause with unchanged text narrows when it gains or changes a constant
+/// name. Removing only its constant name does not narrow.
 pub(crate) fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>) -> bool {
+    if constraints_equal(old, new) {
+        return false;
+    }
     let (Some(old), Some(new)) = (old, new) else {
         // A constraint appearing where there was none bounds a previously
         // unbounded value; dropping one entirely only widens.
@@ -628,14 +664,17 @@ pub(crate) fn narrows(old: Option<&v2::Constraint>, new: Option<&v2::Constraint>
     {
         return true;
     }
-    // A pattern added or rewritten can reject strings that matched before.
-    // Removed, it widens.
-    if (new.pattern.is_some() && old.pattern != new.pattern)
-        || (new.pattern_const.is_some() && old.pattern_const != new.pattern_const)
-    {
-        return true;
-    }
-    false
+    // A clause added or rewritten can reject strings that matched before.
+    // Removing a clause widens; order and duplicate clauses have no effect.
+    let old_clauses = ridl_ir::pattern::ir_match_clauses(old);
+    let new_clauses = ridl_ir::pattern::ir_match_clauses(new);
+    new_clauses.clauses.iter().any(|clause| {
+        !old_clauses.clauses.iter().any(|old_clause| {
+            old_clause.pattern == clause.pattern
+                && (clause.pattern_const.is_none()
+                    || old_clause.pattern_const == clause.pattern_const)
+        })
+    })
 }
 
 /// Whether two origins differ by a whole positive step, in exact decimal

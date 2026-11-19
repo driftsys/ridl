@@ -1,0 +1,4 @@
+package several.matching
+
+type A : string [8..64 match /a/ match /b/]
+type B : string [match /a/ match P]

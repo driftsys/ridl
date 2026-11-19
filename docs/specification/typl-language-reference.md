@@ -263,12 +263,12 @@ crate also compiles. Forward slashes inside the pattern are escaped `\/`.
 
 A pattern that is not ECMA-262 syntax is TYPL-106. A pattern that is ECMA-262
 syntax but that the `regex` crate cannot compile is TYPL-220. The Rust backend
-emits a `match` constraint on a `string`-backed type as a `regex::Regex::new`
-call in the generated code, under the generated crate's `validate-pattern`
-feature (on by default), and a pattern that call refuses would fail at run time
-instead of at build time. A regex constant is emitted as text and is not
-compiled, but a `match` that names the constant is, so the constant is checked
-at its declaration (§6.2).
+emits one `regex::Regex::new` call per `match` clause on a `string`-backed type
+in the generated code, under the generated crate's `validate-pattern` feature
+(on by default), and a pattern that call refuses would fail at run time instead
+of at build time. A regex constant is emitted as text and is not compiled, but a
+`match` that names the constant is, so the constant is checked at its
+declaration (§6.2).
 
 The ECMA-262 constructs that the `regex` crate refuses, and that a typl pattern
 therefore cannot use, include:
@@ -642,7 +642,18 @@ type Frame   : bytes   [8]
 | `string [N match PATTERN]`        | exactly N, validated  |
 | `string [min..max match PATTERN]` | range with validation |
 
-`match` references a named regex constant or an inline regex literal.
+A constraint takes `match` zero or more times after a length bound, and one or
+more times without a length bound. A value must match every clause. Clause order
+does not change which values match, and `ridl diff` ignores it. The IR keeps
+source order, and changing the order changes the catalog hash when the unit
+reaches the type. Each clause references a named regex constant or an inline
+regex literal.
+
+```ridl
+type Token : string [8..64 match /[0-9]/ match /[A-Z]/]
+```
+
+See [§5.8](#58-init-values) for declared and derived init values.
 
 ### 5.4 Bytes Constraint Syntax
 
@@ -2214,11 +2225,8 @@ constraint_spec
               = scalar ".." scalar ( "step" scalar )?
               | scalar ".."
               | ".." scalar
-              | int_lit
-              | int_lit ".." int_lit
-              | int_lit "match" pattern
-              | int_lit ".." int_lit "match" pattern
-              | "match" pattern
+              | int_lit ( ".." int_lit )? ( "match" pattern )*
+              | ( "match" pattern )+
               ;
 
 pattern       = regex_lit | SCREAMING_SNAKE_ID ;

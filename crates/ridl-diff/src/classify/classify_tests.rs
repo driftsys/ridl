@@ -276,8 +276,7 @@ fn bounds(min: Option<&str>, max: Option<&str>) -> v2::Constraint {
         step: None,
         len_min: None,
         len_max: None,
-        pattern: None,
-        pattern_const: None,
+        ..Default::default()
     }
 }
 
@@ -857,6 +856,7 @@ fn a_loosened_length_is_compatible() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn a_changed_pattern_is_breaking() {
     let pattern = |text: &str| {
         let mut constraint = bounds(None, None);
@@ -868,11 +868,306 @@ fn a_changed_pattern_is_breaking() {
 }
 
 #[test]
+#[allow(deprecated)]
 fn a_removed_pattern_is_compatible() {
     let mut patterned = bounds(None, None);
     patterned.pattern = Some("^[A-Z]+$".to_string());
     let (old, new) = constraint_case(patterned, bounds(None, None));
     assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+}
+
+#[derive(Clone, Copy)]
+enum DeprecatedPattern {
+    Verbatim,
+    WholeValue,
+}
+
+const DEPRECATED_PATTERN_SHAPES: &[DeprecatedPattern] =
+    &[DeprecatedPattern::Verbatim, DeprecatedPattern::WholeValue];
+
+/// The lowering currently copies the first clause verbatim. A whole-value
+/// writer uses the wrapped literal instead; comparisons must accept both.
+#[allow(deprecated)]
+fn match_constraint(clauses: &[(&str, Option<&str>)], shape: DeprecatedPattern) -> v2::Constraint {
+    v2::Constraint {
+        pattern: clauses.first().map(|(pattern, _)| match shape {
+            DeprecatedPattern::Verbatim => (*pattern).to_owned(),
+            DeprecatedPattern::WholeValue => ridl_ir::pattern::deprecated_ir_literal(pattern),
+        }),
+        pattern_const: clauses
+            .first()
+            .and_then(|(_, constant)| constant.map(str::to_owned)),
+        matches: clauses
+            .iter()
+            .map(|(pattern, constant)| v2::Match {
+                pattern: Some((*pattern).into()),
+                pattern_const: constant.map(str::to_owned),
+            })
+            .collect(),
+        ..Default::default()
+    }
+}
+
+fn assert_match_constraints_unchanged(old: v2::Constraint, new: v2::Constraint, remote: bool) {
+    for received in [false, true] {
+        let (mut old, mut new) = constraint_case(old.clone(), new.clone());
+        if received {
+            old.interfaces[0].interactions = vec![signal("receive", 1, "S")];
+            new.interfaces[0].interactions = old.interfaces[0].interactions.clone();
+        }
+        for (old, new) in [(&old, &new), (&new, &old)] {
+            let report = if remote {
+                let mut holder = old.clone();
+                holder.name = "app".into();
+                holder.decls.clear();
+                holder.interfaces[0].interactions = if received {
+                    vec![signal("receive", 1, &format!("{}.S", old.name))]
+                } else {
+                    vec![command(
+                        "send",
+                        1,
+                        vec![param("value", named(&format!("{}.S", old.name)))],
+                        vec![],
+                    )]
+                };
+                crate::diff_refs_with_contexts(&[&holder], &[&holder], &[old], &[new], &[])
+                    .expect("both remote scalar definitions are present")
+            } else {
+                diff_packages(old, new)
+            };
+            assert!(
+                report.changes.is_empty(),
+                "received={received}, remote={remote}: {report:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn match_clause_narrowing_ignores_order() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        for remaining in ["/b/", "/a/"] {
+            let (old, new) = constraint_case(
+                match_constraint(&[("/a/", None), ("/b/", None)], deprecated_shape),
+                match_constraint(&[(remaining, None)], deprecated_shape),
+            );
+            assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+        }
+        for clauses in [
+            [("/b/", None), ("/a/", None)],
+            [("/a/", None), ("/b/", None)],
+        ] {
+            let (old, new) = constraint_case(
+                match_constraint(&[("/b/", None)], deprecated_shape),
+                match_constraint(&clauses, deprecated_shape),
+            );
+            assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+        }
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn inline_scalar_match_constraints_compare_semantically() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let package = |constraint| {
+            let mut member = field("text", 1, "unused");
+            let Some(v2::struct_member::Member::Field(field)) = &mut member.member else {
+                unreachable!()
+            };
+            field.r#type = Some(v2::FieldType {
+                kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+                    backing: Some(v2::Backing {
+                        kind: Some(v2::backing::Kind::Primitive(
+                            v2::PrimitiveType::String as i32,
+                        )),
+                    }),
+                    constraint: Some(constraint),
+                    ..Default::default()
+                }))),
+                ..Default::default()
+            });
+            decl_pkg(vec![struct_decl("S", vec![member])])
+        };
+        let legacy = v2::Constraint {
+            pattern: Some("/a/".into()),
+            ..Default::default()
+        };
+        for (old, new) in [
+            (legacy, match_constraint(&[("/a/", None)], deprecated_shape)),
+            (
+                match_constraint(&[("/a/", None), ("/b/", None)], deprecated_shape),
+                match_constraint(&[("/b/", None), ("/a/", None)], deprecated_shape),
+            ),
+        ] {
+            for (old, new) in [
+                (package(old.clone()), package(new.clone())),
+                (package(new), package(old)),
+            ] {
+                assert!(
+                    diff_packages(&old, &new).changes.is_empty(),
+                    "{:?}",
+                    diff_packages(&old, &new)
+                );
+            }
+        }
+        assert_row(
+            &package(match_constraint(&[("/a/", None)], deprecated_shape)),
+            &package(match_constraint(&[("/b/", None)], deprecated_shape)),
+            Category::ConstraintChanged,
+            Verdict::Breaking,
+        );
+    }
+}
+
+#[test]
+fn adding_a_second_match_clause_is_breaking() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let (old, new) = constraint_case(
+            match_constraint(&[("/a/", None)], deprecated_shape),
+            match_constraint(&[("/a/", None), ("/b/", None)], deprecated_shape),
+        );
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+    }
+}
+
+#[test]
+fn removing_a_match_clause_is_compatible() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let (old, new) = constraint_case(
+            match_constraint(&[("/a/", None), ("/b/", None)], deprecated_shape),
+            match_constraint(&[("/a/", None)], deprecated_shape),
+        );
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+    }
+}
+
+#[test]
+fn swapping_match_clauses_is_compatible() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        assert_match_constraints_unchanged(
+            match_constraint(&[("/a/", Some("A")), ("/b/", Some("B"))], deprecated_shape),
+            match_constraint(&[("/b/", Some("B")), ("/a/", Some("A"))], deprecated_shape),
+            false,
+        );
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn a_legacy_pattern_and_the_same_match_clause_are_compatible() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let legacy = v2::Constraint {
+            pattern: Some("/a/".into()),
+            ..Default::default()
+        };
+        let current = match_constraint(&[("/a/", None)], deprecated_shape);
+        assert_match_constraints_unchanged(legacy, current, false);
+    }
+}
+
+#[test]
+fn deprecated_pattern_does_not_override_match_clauses() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let authoritative = match_constraint(&[("/a/", None)], deprecated_shape);
+        let mut stale = match_constraint(&[("/stale/", None)], deprecated_shape);
+        stale.matches = authoritative.matches.clone();
+        assert_match_constraints_unchanged(authoritative, stale, false);
+    }
+}
+
+#[test]
+fn rewriting_a_match_clause_is_breaking() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let (old, new) = constraint_case(
+            match_constraint(&[("/a/", None), ("/b/", None)], deprecated_shape),
+            match_constraint(&[("/a/", None), ("/c/", None)], deprecated_shape),
+        );
+        assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+    }
+}
+
+#[test]
+fn changing_a_match_clause_constant_is_breaking() {
+    assert_match_constant_change(Some("A"), Some("B"), true, Verdict::Breaking);
+}
+
+#[test]
+fn adding_a_match_clause_constant_is_breaking() {
+    assert_match_constant_change(None, Some("A"), true, Verdict::Breaking);
+}
+
+#[test]
+fn removing_a_match_clause_constant_does_not_narrow() {
+    assert_match_constant_change(Some("A"), None, false, Verdict::Compatible);
+}
+
+fn assert_match_constant_change(
+    old_constant: Option<&str>,
+    new_constant: Option<&str>,
+    narrows: bool,
+    sent_verdict: Verdict,
+) {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let old = match_constraint(&[("/a/", old_constant)], deprecated_shape);
+        let new = match_constraint(&[("/a/", new_constant)], deprecated_shape);
+        assert_eq!(super::narrows(Some(&old), Some(&new)), narrows);
+        for (received, verdict) in [(false, sent_verdict), (true, Verdict::Breaking)] {
+            let (mut old, mut new) = constraint_case(old.clone(), new.clone());
+            if received {
+                old.interfaces[0].interactions = vec![signal("receive", 1, "S")];
+                new.interfaces[0].interactions = old.interfaces[0].interactions.clone();
+            }
+            assert_row(&old, &new, Category::ConstraintChanged, verdict);
+        }
+    }
+}
+
+#[test]
+fn duplicating_a_match_clause_is_compatible() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        assert_match_constraints_unchanged(
+            match_constraint(&[("/a/", None)], deprecated_shape),
+            match_constraint(&[("/a/", None), ("/a/", None)], deprecated_shape),
+            false,
+        );
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn equivalent_remote_match_constraints_draw_no_rows() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let legacy = v2::Constraint {
+            pattern: Some("/a/".into()),
+            ..Default::default()
+        };
+        let current = match_constraint(&[("/a/", None)], deprecated_shape);
+        for (old, new) in [
+            (legacy, current),
+            (
+                match_constraint(&[("/a/", None), ("/b/", None)], deprecated_shape),
+                match_constraint(&[("/b/", None), ("/a/", None)], deprecated_shape),
+            ),
+            (
+                match_constraint(&[("/a/", None)], deprecated_shape),
+                match_constraint(&[("/a/", None), ("/a/", None)], deprecated_shape),
+            ),
+        ] {
+            assert_match_constraints_unchanged(old, new, true);
+        }
+    }
+}
+
+#[test]
+fn constraint_text_includes_every_match_clause_in_order() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let constraint = match_constraint(&[("/b/", None), ("/a/", Some("A"))], deprecated_shape);
+        assert_eq!(
+            crate::walk::constraint_str(Some(&constraint)),
+            "[pattern=/b/ pattern=/a/]"
+        );
+    }
 }
 
 // ==========================================================================
@@ -4028,6 +4323,7 @@ mod constraint_direction {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn every_widened_facet_uses_consumer_direction() {
         let empty = bounds(None, None);
         let cases = vec![
@@ -4106,5 +4402,185 @@ mod constraint_direction {
             row(&report, Category::ConstraintChanged).verdict,
             Verdict::Compatible
         );
+    }
+}
+
+fn inline_match_type(constraint: v2::Constraint) -> v2::FieldType {
+    v2::FieldType {
+        kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(constraint),
+            ..Default::default()
+        }))),
+        ..Default::default()
+    }
+}
+
+fn nested_match_type(shape: &str, constraint: v2::Constraint) -> v2::FieldType {
+    use v2::field_type::Kind;
+    let inner = inline_match_type(constraint);
+    let kind = match shape {
+        "tuple" => Kind::Tuple(v2::TupleType {
+            fields: vec![v2::TupleField {
+                name: "text".into(),
+                r#type: Some(inner),
+            }],
+        }),
+        "array" => Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(inner)),
+            min: 1,
+            max: 2,
+        })),
+        "map" => Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(named("Key"))),
+            value: Some(Box::new(inner)),
+            min: 1,
+            max: 2,
+        })),
+        "map-key" => Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(inner)),
+            value: Some(Box::new(named("Value"))),
+            min: 1,
+            max: 2,
+        })),
+        "scalar" => return inner,
+        _ => unreachable!(),
+    };
+    v2::FieldType {
+        kind: Some(kind),
+        ..Default::default()
+    }
+}
+
+fn inline_match_package(site: &str, shape: &str, constraint: v2::Constraint) -> v2::Package {
+    let ty = nested_match_type(shape, constraint);
+    match site {
+        "struct" => {
+            let mut second = field("text", 2, "unused");
+            let Some(v2::struct_member::Member::Field(member_field)) = &mut second.member else {
+                unreachable!()
+            };
+            member_field.r#type = Some(ty);
+            decl_pkg(vec![struct_decl(
+                "S",
+                vec![field("first", 1, "Key"), second],
+            )])
+        }
+        "command" => pkg(vec![command(
+            "send",
+            1,
+            vec![param("first", named("Key")), param("text", ty)],
+            vec![],
+        )]),
+        "query" => pkg(vec![query(
+            "read",
+            1,
+            vec![param("first", named("Key")), param("text", ty)],
+            value_return("Key"),
+            vec![],
+        )]),
+        "return" => pkg(vec![query(
+            "read",
+            1,
+            vec![],
+            v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(ty)),
+            },
+            vec![],
+        )]),
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn nested_inline_match_constraints_compare_semantically() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let legacy = v2::Constraint {
+            pattern: Some("/a/".into()),
+            ..Default::default()
+        };
+        for site in ["struct", "command", "query", "return"] {
+            for shape in ["scalar", "tuple", "array", "map", "map-key"] {
+                for (old, new) in [
+                    (
+                        legacy.clone(),
+                        match_constraint(&[("/a/", None)], deprecated_shape),
+                    ),
+                    (
+                        match_constraint(&[("/a/", None), ("/b/", None)], deprecated_shape),
+                        match_constraint(&[("/b/", None), ("/a/", None)], deprecated_shape),
+                    ),
+                ] {
+                    let (old, new) = (
+                        inline_match_package(site, shape, old),
+                        inline_match_package(site, shape, new),
+                    );
+                    for (old, new) in [(&old, &new), (&new, &old)] {
+                        let report = diff_packages(old, new);
+                        assert!(report.changes.is_empty(), "{site}/{shape}: {report:?}");
+                    }
+                }
+                let old = inline_match_package(
+                    site,
+                    shape,
+                    match_constraint(&[("/a/", None)], deprecated_shape),
+                );
+                let new = inline_match_package(
+                    site,
+                    shape,
+                    match_constraint(&[("/b/", None)], deprecated_shape),
+                );
+                assert!(
+                    !diff_packages(&old, &new).changes.is_empty(),
+                    "{site}/{shape}: a changed pattern must be reported"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+#[allow(deprecated)]
+fn moved_inline_field_with_legacy_constraint_reports_only_reorder() {
+    for &deprecated_shape in DEPRECATED_PATTERN_SHAPES {
+        let old = inline_match_package(
+            "struct",
+            "scalar",
+            v2::Constraint {
+                pattern: Some("/a/".into()),
+                ..Default::default()
+            },
+        );
+        let mut new = inline_match_package(
+            "struct",
+            "scalar",
+            match_constraint(&[("/a/", None)], deprecated_shape),
+        );
+        let Some(v2::decl::Kind::StructDef(body)) = &mut new.decls[0].kind else {
+            unreachable!()
+        };
+        body.members.swap(0, 1);
+        for (index, member) in body.members.iter_mut().enumerate() {
+            let Some(v2::struct_member::Member::Field(field)) = &mut member.member else {
+                unreachable!()
+            };
+            field.ordinal = index as u32 + 1;
+        }
+        for (old, new) in [(&old, &new), (&new, &old)] {
+            let report = diff_packages(old, new);
+            assert_eq!(report.changes.len(), 2, "{report:?}");
+            assert!(
+                report
+                    .changes
+                    .iter()
+                    .all(|row| row.category == Category::MemberReordered),
+                "{report:?}"
+            );
+        }
     }
 }

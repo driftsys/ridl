@@ -849,8 +849,8 @@ fn constraint(constraint: Option<&v2::Constraint>) -> String {
     let Some(constraint) = constraint else {
         return String::new();
     };
-    // An open-ended range lowers with one bound absent (`[..100]`, `[0..]`);
-    // render the present side and leave the other empty (ADR-0004 §10).
+    let mut parts = Vec::new();
+    // An open-ended range keeps its absent side empty (ADR-0004 §10).
     if constraint.min.is_some() || constraint.max.is_some() {
         let min = constraint.min.as_deref().unwrap_or("");
         let max = constraint.max.as_deref().unwrap_or("");
@@ -859,20 +859,24 @@ fn constraint(constraint: Option<&v2::Constraint>) -> String {
             .as_deref()
             .map(|step| format!(" step {step}"))
             .unwrap_or_default();
-        return format!(" [{min}..{max}{step}]");
-    }
-    if constraint.len_min.is_some() || constraint.len_max.is_some() {
+        parts.push(format!("[{min}..{max}{step}]"));
+    } else if constraint.len_min.is_some() || constraint.len_max.is_some() {
         let min = constraint.len_min.unwrap_or(0);
         let max = constraint.len_max.unwrap_or(0);
-        return format!(" [{min}..{max}]");
+        parts.push(format!("[{min}..{max}]"));
     }
-    if let Some(pattern) = &constraint.pattern {
-        return format!(" match {pattern}");
+    for clause in ridl_ir::pattern::ir_match_clauses(constraint).clauses {
+        if let Some(name) = clause.pattern_const {
+            parts.push(format!("match {name}"));
+        } else if let Some(pattern) = clause.pattern {
+            parts.push(format!("match {pattern}"));
+        }
     }
-    if let Some(pattern_const) = &constraint.pattern_const {
-        return format!(" match {pattern_const}");
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!(" {}", parts.join(" "))
     }
-    String::new()
 }
 
 /// The init clause of a type (`= 0.0`): the declared init when present,
@@ -1683,5 +1687,25 @@ mod tests {
     fn render_doc_skips_a_see_entry() {
         let links = [link("Speed", 0, 0, "veh.Speed")];
         assert_eq!(render_doc("Text.", &links, |_| Some(location(0))), "Text.");
+    }
+
+    #[test]
+    fn match_clauses_render_after_the_length_in_order() {
+        let c = v2::Constraint {
+            len_min: Some(0),
+            len_max: Some(8),
+            matches: vec![
+                v2::Match {
+                    pattern: Some("/a/".into()),
+                    pattern_const: None,
+                },
+                v2::Match {
+                    pattern: Some("/b/".into()),
+                    pattern_const: Some("P".into()),
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(constraint(Some(&c)), " [0..8] match /a/ match P");
     }
 }

@@ -1816,6 +1816,7 @@ fn patch_type(ty: &mut v1::Type, hint: &str, projected: &flatbuffers::Projected)
 // Small conversions
 // ---------------------------------------------------------------------
 
+#[allow(deprecated)]
 fn constraint(source: &v2::Constraint) -> v1::Constraint {
     v1::Constraint {
         min: source.min.clone(),
@@ -1828,6 +1829,23 @@ fn constraint(source: &v2::Constraint) -> v1::Constraint {
             .as_deref()
             .map(|pattern| strip_regex_delimiters(pattern).to_string()),
         pattern_const: source.pattern_const.clone(),
+        matches: {
+            let clauses = crate::pattern::ir_match_clauses(source);
+            if clauses.legacy_search {
+                Vec::new()
+            } else {
+                clauses
+                    .clauses
+                    .into_iter()
+                    .map(|clause| v1::Match {
+                        pattern: clause
+                            .pattern
+                            .map(|pattern| strip_regex_delimiters(pattern).to_string()),
+                        pattern_const: clause.pattern_const.map(str::to_owned),
+                    })
+                    .collect()
+            }
+        },
     }
 }
 

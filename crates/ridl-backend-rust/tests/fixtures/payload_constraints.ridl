@@ -28,6 +28,7 @@ type Large : float
 struct FloatingKeys { entries : [float : Whole; 0..3] }
 struct ByteKeys { entries : [bytes : Whole; 0..3] }
 struct Pattern { text : string [3..3 match /ABC/] }
+struct Twice { text : string [2..2 match /[0-9]/ match /[A-Z]/] }
 
 type Corrected : float [-0.006828..1000000.0 step 0.00000000029452]
 type DenseOrigin : float [54221000.0..40000000000000000.0 step 3.0162]

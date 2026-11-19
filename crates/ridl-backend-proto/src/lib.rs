@@ -1375,10 +1375,12 @@ fn render_constraint(constraint: &v2::Constraint) -> String {
     }
     // A pattern given by a named regex constant renders by that name, the
     // way it was written (typl §5.3, §6.2).
-    if let Some(name) = &constraint.pattern_const {
-        parts.push(format!("match {name}"));
-    } else if let Some(pattern) = &constraint.pattern {
-        parts.push(format!("match {pattern}"));
+    for clause in ridl_ir::pattern::ir_match_clauses(constraint).clauses {
+        if let Some(name) = clause.pattern_const {
+            parts.push(format!("match {name}"));
+        } else if let Some(pattern) = clause.pattern {
+            parts.push(format!("match {pattern}"));
+        }
     }
     parts.join(" ")
 }

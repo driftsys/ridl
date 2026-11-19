@@ -2430,13 +2430,10 @@ impl<'a> Parser<'a> {
     }
 
     /// The three constraint shapes behind the brackets: a scalar range with
-    /// optional step, a length bound with optional match, and a bare match.
+    /// optional step, a length bound with match clauses, and bare match clauses.
     fn constraint_body(&mut self, stringish: bool) {
         match self.current() {
-            Some(SyntaxKind::MatchKw) => {
-                self.bump();
-                self.literal();
-            }
+            Some(SyntaxKind::MatchKw) => self.match_opt(),
             Some(SyntaxKind::DotDot) => {
                 // `[..max]` — an open lower bound is always the scalar shape.
                 self.bump();
@@ -2514,9 +2511,9 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// `('match' match_pattern:Literal)?`
+    /// `('match' match_pattern:Literal)*`
     fn match_opt(&mut self) {
-        if self.at(SyntaxKind::MatchKw) {
+        while self.at(SyntaxKind::MatchKw) {
             self.bump();
             self.literal();
         }

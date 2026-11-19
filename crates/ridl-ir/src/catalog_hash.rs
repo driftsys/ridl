@@ -337,7 +337,8 @@ fn collect_refs(decl: &Decl, context: usize, out: &mut Vec<Pending>) {
 /// and `InitValue.value` on `TypeDef`, `Field` and `SignalDef`), and range
 /// bounds, steps and timing bounds are canonical decimals. A change to the
 /// constant changes those strings, so they need no following.
-/// `Constraint.pattern_const` is a reference, visited by [`visit_refs`].
+/// Every `Match.pattern_const` and the compatibility `Constraint.pattern_const`
+/// are references, visited by [`visit_refs`].
 ///
 /// The `match` is exhaustive for the same reason as in [`visit_refs`].
 fn visit_exprs(decl: &Decl, f: &mut dyn FnMut(&str)) {
@@ -423,7 +424,8 @@ fn expr_names(source: &str, f: &mut dyn FnMut(&str)) {
 /// Calls `f` on every type reference inside `decl`. The IR references a type
 /// by name string in: `SignalDef.payload`, `EventDef.payload`,
 /// `FieldType::Named`, `UnionArm.type_ref`, `ConstDef.type_ref`,
-/// `EnumSetDef.backing_enum`, `Constraint.pattern_const`,
+/// `EnumSetDef.backing_enum`, every `Match.pattern_const`, the compatibility
+/// `Constraint.pattern_const`,
 /// `StreamType::Named` and `FallibleType.ok`/`err`. `Contract.signal_refs`
 /// and `Contract.param_refs` name interactions and parameters of the same
 /// interface, not types, so they are not visited. Names inside expression
@@ -493,14 +495,18 @@ fn visit_refs(decl: &mut Decl, f: &mut dyn FnMut(&mut String)) {
     }
 }
 
+#[allow(deprecated)]
 fn visit_type_def(def: &mut TypeDef, f: &mut dyn FnMut(&mut String)) {
     // `backing.unit` is a UCUM unit expression, not a type reference.
-    if let Some(constant) = def
-        .constraint
-        .as_mut()
-        .and_then(|c| c.pattern_const.as_mut())
-    {
-        f(constant);
+    if let Some(c) = &mut def.constraint {
+        for clause in &mut c.matches {
+            if let Some(constant) = &mut clause.pattern_const {
+                f(constant);
+            }
+        }
+        if let Some(constant) = &mut c.pattern_const {
+            f(constant);
+        }
     }
 }
 
@@ -1537,6 +1543,7 @@ mod tests {
         }
     }
 
+    #[allow(deprecated)]
     fn pattern_const_def(name: &str) -> TypeDef {
         TypeDef {
             constraint: Some(Constraint {
@@ -2384,5 +2391,132 @@ mod tests {
             hex(catalog_hash("u", &[&limit_fixture(None)])),
             "ad0663a0210793e7a415b391b15eb2a8e03b394e542deeefcee8ea64bedaaa8d"
         );
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn match_clauses_qualify_second_constant_and_legacy_reference() {
+        let mut def = TypeDef {
+            constraint: Some(Constraint {
+                matches: vec![
+                    crate::v2::Match {
+                        pattern: Some("/a/".into()),
+                        pattern_const: None,
+                    },
+                    crate::v2::Match {
+                        pattern: None,
+                        pattern_const: Some("SECOND".into()),
+                    },
+                ],
+                pattern_const: Some("FIRST".into()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        visit_type_def(&mut def, &mut |name| *name = format!("p.{name}"));
+        let c = def.constraint.unwrap();
+        assert_eq!(c.matches[1].pattern_const.as_deref(), Some("p.SECOND"));
+        assert_eq!(c.pattern_const.as_deref(), Some("p.FIRST"));
+    }
+    fn match_hash_fixture() -> Package {
+        let scalar = |name: &str, backing: crate::v2::PrimitiveType, constraint| Decl {
+            name: name.into(),
+            kind: Some(decl::Kind::TypeDef(TypeDef {
+                backing: Some(crate::v2::Backing {
+                    kind: Some(crate::v2::backing::Kind::Primitive(backing as i32)),
+                }),
+                constraint: Some(constraint),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let mut text = signal("text", "Text");
+        text.ordinal = 2;
+        Package {
+            name: "p".into(),
+            decls: vec![
+                scalar(
+                    "Count",
+                    crate::v2::PrimitiveType::Integer,
+                    Constraint {
+                        min: Some("0".into()),
+                        max: Some("10".into()),
+                        ..Default::default()
+                    },
+                ),
+                scalar(
+                    "Text",
+                    crate::v2::PrimitiveType::String,
+                    Constraint {
+                        len_min: Some(1),
+                        len_max: Some(8),
+                        ..Default::default()
+                    },
+                ),
+            ],
+            interfaces: vec![Interface {
+                name: "I".into(),
+                number: 1,
+                interactions: vec![signal("count", "Count"), text],
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn match_hash_adoption_affects_only_reached_match_clauses() {
+        let mut package = match_hash_fixture();
+        // Measured from origin/main at 0190f063b0cb236b85215b6bce911eabc702c496.
+        // The fixture reaches a numeric range and a string length bound.
+        assert_eq!(
+            hex(catalog_hash("p", &[&package])),
+            "06b463de93e8820d654e6d539482ea6354c62d569ee747bdea7ab2f4b7c4b9d0"
+        );
+        let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
+            unreachable!()
+        };
+        let constraint = text.constraint.as_mut().unwrap();
+        constraint.pattern = Some("/a/".into());
+        let legacy_hash = catalog_hash("p", &[&package]);
+        assert_eq!(
+            hex(legacy_hash),
+            "f42d48c998a72fca92e47d8d83b2121d05513a4a21e1613b9fb42c856284302a"
+        );
+        let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
+            unreachable!()
+        };
+        let constraint = text.constraint.as_mut().unwrap();
+        constraint.matches.push(crate::v2::Match {
+            pattern: constraint.pattern.clone(),
+            pattern_const: None,
+        });
+        assert_ne!(catalog_hash("p", &[&package]), legacy_hash);
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn match_clause_swap_alone_changes_catalog_hash() {
+        let mut package = match_hash_fixture();
+        let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
+            unreachable!()
+        };
+        let constraint = text.constraint.as_mut().unwrap();
+        constraint.pattern = Some(crate::pattern::deprecated_ir_literal("/a/"));
+        constraint.matches = ["/a/", "/b/"]
+            .into_iter()
+            .map(|pattern| crate::v2::Match {
+                pattern: Some(pattern.into()),
+                pattern_const: None,
+            })
+            .collect();
+        let before_swap = catalog_hash("p", &[&package]);
+        let Some(decl::Kind::TypeDef(text)) = &mut package.decls[1].kind else {
+            unreachable!()
+        };
+        let constraint = text.constraint.as_mut().unwrap();
+        constraint.matches.swap(0, 1);
+        assert_ne!(catalog_hash("p", &[&package]), before_swap);
     }
 }

@@ -30,8 +30,7 @@ fn program(main: &str) -> String {
                 step: Some(step.into()),
                 len_min: None,
                 len_max: None,
-                pattern: None,
-                pattern_const: None,
+                ..Default::default()
             });
         }
     }
@@ -488,6 +487,27 @@ fn main() {
     let source = program(main);
     rustc::run_program("inline_pattern_off", &source);
     rustc::run_program_with_pattern("inline_pattern_on", &source, true);
+}
+
+#[test]
+fn payload_checks_every_inline_match_clause() {
+    let source = program(
+        r#"
+use ridl_rt::encoding::FlatBuffers;
+use ridl_rt::payload::{Payload, Rule, VerifyError};
+fn main() {
+    let mut out = vec![0; <Twice as Payload<FlatBuffers>>::MAX_SIZE];
+    let bytes = Twice { text: "1A".into() }.encode(&mut out).unwrap();
+    assert!(<Twice as Payload<FlatBuffers>>::verify(bytes.bytes).is_ok());
+    for text in ["1a", "aA"] {
+        let bytes = Twice { text: text.into() }.encode(&mut out).unwrap();
+        assert!(matches!(<Twice as Payload<FlatBuffers>>::verify(bytes.bytes),
+            Err(VerifyError::Contract(v)) if v.rule == Rule::Pattern));
+    }
+}
+"#,
+    );
+    rustc::run_program_with_pattern("several_inline_matches", &source, true);
 }
 
 #[test]

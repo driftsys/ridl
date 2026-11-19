@@ -1980,8 +1980,7 @@ impl Checker<'_> {
                 step: None,
                 len_min: None,
                 len_max: None,
-                pattern: None,
-                pattern_const: None,
+                ..Default::default()
             }),
             width,
             min,
@@ -2121,8 +2120,7 @@ impl Checker<'_> {
                 step: step.as_ref().map(ExactValue::to_decimal_string),
                 len_min: None,
                 len_max: None,
-                pattern: None,
-                pattern_const: None,
+                ..Default::default()
             }),
             width,
             min,
@@ -2130,6 +2128,7 @@ impl Checker<'_> {
         }
     }
 
+    #[allow(deprecated)]
     fn lower_len_scalar(
         &mut self,
         noun: &str,
@@ -2185,33 +2184,33 @@ impl Checker<'_> {
             }
         };
 
-        let mut pattern = None;
-        let mut pattern_const = None;
-        if allow_pattern
-            && let Some(match_literal) =
-                constraint.as_ref().and_then(ast::Constraint::match_pattern)
-        {
-            match literal_kind(&match_literal) {
-                LitKind::Regex(text) => {
-                    // TYPL-106: an inline `match` regex is validated here; a
-                    // named regex constant is validated at its own declaration.
-                    self.validate_regex(&text, match_literal.syntax().text_range());
-                    pattern = Some(text);
-                }
-                LitKind::ConstRef(name) => match self.const_regex_value(&name) {
-                    Some((text, canonical)) => {
-                        pattern = Some(text);
-                        pattern_const = Some(canonical);
+        let mut matches = Vec::new();
+        if allow_pattern {
+            for match_literal in constraint.iter().flat_map(ast::Constraint::match_patterns) {
+                let (pattern, pattern_const) = match literal_kind(&match_literal) {
+                    LitKind::Regex(text) => {
+                        // TYPL-106: validate each inline regex here. Named regex
+                        // constants are validated at their own declarations.
+                        self.validate_regex(&text, match_literal.syntax().text_range());
+                        (Some(text), None)
                     }
-                    // An unresolved or non-regex pattern constant: carry the
-                    // name. Its regex validity (TYPL-106) is checked where the
-                    // constant is declared.
-                    None => pattern_const = Some(name),
-                },
-                _ => {}
+                    LitKind::ConstRef(name) => match self.const_regex_value(&name) {
+                        Some((text, canonical)) => (Some(text), Some(canonical)),
+                        // Keep the name of an unresolved or non-regex constant.
+                        None => (None, Some(name)),
+                    },
+                    _ => continue,
+                };
+                matches.push(v2::Match {
+                    pattern,
+                    pattern_const,
+                });
             }
         }
-
+        let (pattern, pattern_const) = matches
+            .first()
+            .map(|clause| (clause.pattern.clone(), clause.pattern_const.clone()))
+            .unwrap_or_default();
         ScalarParts {
             constraint: Some(v2::Constraint {
                 min: None,
@@ -2221,6 +2220,7 @@ impl Checker<'_> {
                 len_max: Some(len_max),
                 pattern,
                 pattern_const,
+                matches,
             }),
             width: None,
             min: None,
@@ -2413,15 +2413,18 @@ impl Checker<'_> {
                 format!("init string length {length} exceeds the declared maximum {max}"),
             );
         }
-        if let Some(pattern) = &constraint.pattern
-            && let Ok(regex) = regress::Regex::new(regex_body(pattern))
-            && regex.find(text).is_none()
-        {
-            self.error(
-                violation,
-                range,
-                format!("init string `{text}` does not match the type's `match` pattern"),
-            );
+        for clause in ridl_ir::pattern::ir_match_clauses(constraint).clauses {
+            if let Some(pattern) = clause.pattern
+                && let Ok(regex) = regress::Regex::new(regex_body(pattern))
+                && regex.find(text).is_none()
+            {
+                let clause_text = clause.pattern_const.unwrap_or(pattern);
+                self.error(
+                    violation,
+                    range,
+                    format!("init string `{text}` does not match the type's `match` pattern {clause_text}"),
+                );
+            }
         }
     }
 
@@ -2842,10 +2845,9 @@ impl Checker<'_> {
                     BackingClass::Str | BackingClass::Bytes => {
                         let (min, _) = self.string_len_bounds(package, constraint.as_ref());
                         min == 0
-                            && constraint
-                                .as_ref()
-                                .and_then(ast::Constraint::match_pattern)
-                                .is_none()
+                            && constraint.as_ref().is_none_or(|constraint| {
+                                constraint.match_patterns().next().is_none()
+                            })
                     }
                     _ => true,
                 }
@@ -2882,6 +2884,7 @@ impl Checker<'_> {
     /// The length bounds and `match` pattern of a named string/bytes `type`, as
     /// an IR constraint (read-only, no diagnostics), for init validation and
     /// derivation. `None` when the symbol is not a string/bytes type.
+    #[allow(deprecated)]
     fn named_string_constraint(&self, symbol: &Symbol) -> Option<v2::Constraint> {
         let Definition::Type(decl) = self.find_definition(symbol)? else {
             return None;
@@ -2893,7 +2896,18 @@ impl Checker<'_> {
         let package = self.package_handle(&symbol.package)?;
         let constraint = decl.constraint();
         let (len_min, len_max) = self.string_len_bounds(package, constraint.as_ref());
-        let (pattern, pattern_const) = self.string_pattern(package, constraint.as_ref());
+        let matches: Vec<_> = self
+            .string_pattern(package, constraint.as_ref())
+            .into_iter()
+            .map(|(pattern, pattern_const)| v2::Match {
+                pattern,
+                pattern_const,
+            })
+            .collect();
+        let (pattern, pattern_const) = matches
+            .first()
+            .map(|clause| (clause.pattern.clone(), clause.pattern_const.clone()))
+            .unwrap_or_default();
         Some(v2::Constraint {
             min: None,
             max: None,
@@ -2902,6 +2916,7 @@ impl Checker<'_> {
             len_max: Some(len_max),
             pattern,
             pattern_const,
+            matches,
         })
     }
 
@@ -2932,24 +2947,25 @@ impl Checker<'_> {
         }
     }
 
-    /// The `match` pattern of a string constraint, resolved to regex text (an
-    /// inline literal or a named regex constant), read-only.
+    /// Every `match` clause of a string constraint in source order, resolved
+    /// to regex text and its optional constant name, without diagnostics.
     fn string_pattern(
         &self,
         package: Package,
         constraint: Option<&ast::Constraint>,
-    ) -> (Option<String>, Option<String>) {
-        let Some(match_literal) = constraint.and_then(ast::Constraint::match_pattern) else {
-            return (None, None);
-        };
-        match literal_kind(&match_literal) {
-            LitKind::Regex(text) => (Some(text), None),
-            LitKind::ConstRef(name) => match self.const_regex_value_in(package, &name) {
-                Some((text, canonical)) => (Some(text), Some(canonical)),
-                None => (None, Some(name)),
-            },
-            _ => (None, None),
-        }
+    ) -> Vec<(Option<String>, Option<String>)> {
+        constraint
+            .into_iter()
+            .flat_map(ast::Constraint::match_patterns)
+            .filter_map(|match_literal| match literal_kind(&match_literal) {
+                LitKind::Regex(text) => Some((Some(text), None)),
+                LitKind::ConstRef(name) => Some(match self.const_regex_value_in(package, &name) {
+                    Some((text, canonical)) => (Some(text), Some(canonical)),
+                    None => (None, Some(name)),
+                }),
+                _ => None,
+            })
+            .collect()
     }
 
     /// Resolves a canonical IR reference (`Speed` same-package,
@@ -10256,11 +10272,11 @@ mod tests {
             .declarations
             .iter()
             .filter_map(|declaration| match declaration.kind.as_ref() {
-                Some(v1::declaration::Kind::Scalar(scalar)) => {
-                    scalar.constraint.as_ref()?.pattern.clone()
-                }
+                Some(v1::declaration::Kind::Scalar(scalar)) => scalar.constraint.as_ref(),
                 _ => None,
             })
+            .flat_map(|c| ridl_ir::pattern::model_match_clauses(c).clauses)
+            .filter_map(|clause| clause.pattern.map(str::to_owned))
             .collect()
     }
 
@@ -11365,7 +11381,145 @@ mod tests {
             "package app\ntype Code : string [1..8 match /^[A-Z]+$/] = \"abc\"\n",
         );
         assert_eq!(codes(&checked), vec!["TYPL-109"]);
-        assert!(checked.diagnostics[0].message.contains("pattern"));
+        assert_eq!(
+            messages(&checked),
+            ["init string `abc` does not match the type's `match` pattern /^[A-Z]+$/"]
+        );
+    }
+
+    #[test]
+    fn several_match_clauses_name_each_failed_init_clause() {
+        for clauses in ["match /[0-9]/ match /[A-Z]/", "match /[0-9]/ match CAPITAL"] {
+            let text = format!(
+                "package app\nconst CAPITAL = /[A-Z]/\ntype T : string [0..8 {clauses}] = \"abc\"\n",
+            );
+            let checked = check_source("app", &text);
+            assert_eq!(codes(&checked), ["TYPL-109", "TYPL-109"]);
+            assert_eq!(
+                messages(&checked),
+                if clauses.ends_with("CAPITAL") {
+                    [
+                        "init string `abc` does not match the type's `match` pattern /[0-9]/",
+                        "init string `abc` does not match the type's `match` pattern CAPITAL",
+                    ]
+                } else {
+                    [
+                        "init string `abc` does not match the type's `match` pattern /[0-9]/",
+                        "init string `abc` does not match the type's `match` pattern /[A-Z]/",
+                    ]
+                }
+            );
+            for diagnostic in checked
+                .diagnostics
+                .iter()
+                .filter(|d| d.code == DiagCode::TYPL_109)
+            {
+                assert_eq!(primary_text(&text, diagnostic), "\"abc\"");
+            }
+        }
+    }
+
+    #[test]
+    fn several_match_clauses_check_every_init_clause() {
+        for (value, expected) in [
+            ("1a", vec!["TYPL-109"]),
+            ("aA", vec!["TYPL-109"]),
+            ("1A", vec![]),
+        ] {
+            let checked = check_source(
+                "app",
+                &format!(
+                    "package app\ntype T : string [1..8 match /[0-9]/ match /[A-Z]/] = \"{value}\"\n",
+                ),
+            );
+            assert_eq!(
+                codes(&checked),
+                expected,
+                "value {value}: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn several_match_clauses_lower_in_order_and_keep_first_legacy_pattern() {
+        let checked = check_source(
+            "app",
+            "package app\ntype T : string [1..8 match /[0-9]/ match /[A-Z]/] = \"1A\"\n",
+        );
+        assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
+        let constraint = type_def(&checked, "T").constraint.as_ref().unwrap();
+        assert_eq!(
+            constraint
+                .matches
+                .iter()
+                .map(|clause| clause.pattern.as_deref())
+                .collect::<Vec<_>>(),
+            [Some("/[0-9]/"), Some("/[A-Z]/")]
+        );
+        assert_eq!(constraint.pattern.as_deref(), Some("/[0-9]/"));
+        assert_eq!(constraint.pattern_const, None);
+    }
+
+    #[test]
+    fn several_match_clauses_have_no_derivable_init() {
+        for clauses in ["match /[0-9]/", "match /[0-9]/ match /[A-Z]/"] {
+            let checked = check_source(
+                "app",
+                &format!("package app\ntype T : string [0..8 {clauses}]\n"),
+            );
+            assert_eq!(codes(&checked), ["TYPL-115"], "{clauses}");
+            assert_eq!(type_def(&checked, "T").init, Some(iv(false, None)));
+        }
+    }
+
+    #[test]
+    fn several_match_clauses_validate_the_second_inline_regex() {
+        let checked = check_source(
+            "app",
+            "package app\ntype T : string [1..8 match /a/ match /[/] = \"a\"\n",
+        );
+        assert_eq!(codes(&checked), ["TYPL-106"]);
+        let diagnostic = checked
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code == DiagCode::TYPL_106)
+            .unwrap();
+        assert_eq!(
+            primary_text(
+                "package app\ntype T : string [1..8 match /a/ match /[/] = \"a\"\n",
+                diagnostic
+            ),
+            "/[/"
+        );
+    }
+
+    #[test]
+    fn several_match_clauses_resolve_a_later_constant_for_named_field_init() {
+        for (value, expected) in [
+            ("1a", vec!["TYPL-115", "TYPL-109"]),
+            ("1A", vec!["TYPL-115"]),
+        ] {
+            let checked = check_source(
+                "app",
+                &format!(
+                    "package app\nconst CAPITAL = /[A-Z]/\ntype T : string [1..8 match /[0-9]/ match CAPITAL]\nstruct S {{ text : T = \"{value}\" }}\n",
+                ),
+            );
+            assert_eq!(
+                codes(&checked),
+                expected,
+                "value {value}: {:?}",
+                checked.diagnostics
+            );
+            let constraint = type_def(&checked, "T").constraint.as_ref().unwrap();
+            assert_eq!(constraint.matches.len(), 2);
+            assert_eq!(
+                constraint.matches[1].pattern_const.as_deref(),
+                Some("CAPITAL")
+            );
+        }
     }
 
     #[test]
@@ -12909,6 +13063,37 @@ mod tests {
             "got: {:?}",
             good.diagnostics
         );
+    }
+
+    #[test]
+    fn ridl_110_signal_init_names_each_failed_match_clause() {
+        for (clauses, expected) in [
+            (
+                "match CAPITAL",
+                vec!["init string `abc` does not match the type's `match` pattern CAPITAL"],
+            ),
+            (
+                "match /[0-9]/ match CAPITAL",
+                vec![
+                    "init string `abc` does not match the type's `match` pattern /[0-9]/",
+                    "init string `abc` does not match the type's `match` pattern CAPITAL",
+                ],
+            ),
+        ] {
+            let text = format!(
+                "package app\nconst CAPITAL = /[A-Z]/\ntype T : string [0..8 {clauses}] = \"1A\"\ninterface I {{\n  signal s : T = \"abc\" @10ms\n}}\n",
+            );
+            let checked = check_ridl("app", &text);
+            assert_eq!(codes(&checked), vec!["RIDL-110"; expected.len()]);
+            assert_eq!(messages(&checked), expected);
+            for diagnostic in checked
+                .diagnostics
+                .iter()
+                .filter(|d| d.code == DiagCode::RIDL_110)
+            {
+                assert_eq!(primary_text(&text, diagnostic), "\"abc\"");
+            }
+        }
     }
 
     #[test]
@@ -17504,5 +17689,38 @@ service Cabin { signal s : State @[100ms..1s] }
             &[("u.a", "package u.a\ninterface Foo {}\n")],
         );
         assert_eq!(unit.numbers("u.a"), [("a.Foo".to_string(), 1, false)]);
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn match_clauses_lower_literal_and_constant_without_changing_search_text() {
+        for (prefix, clause, constant) in [
+            ("", "/[A-Z]{17}/", None),
+            ("const VIN = /[A-Z]{17}/\n", "VIN", Some("VIN")),
+        ] {
+            let checked = check_source(
+                "test",
+                &format!("package test\n{prefix}type Vin : string [17 match {clause}]\n"),
+            );
+            let def = checked
+                .ir
+                .decls
+                .iter()
+                .find_map(|d| match &d.kind {
+                    Some(v2::decl::Kind::TypeDef(def)) => Some(def),
+                    _ => None,
+                })
+                .unwrap();
+            let constraint = def.constraint.as_ref().unwrap();
+            assert_eq!(constraint.pattern.as_deref(), Some("/[A-Z]{17}/"));
+            assert_eq!(constraint.pattern_const.as_deref(), constant);
+            assert_eq!(
+                constraint.matches,
+                vec![v2::Match {
+                    pattern: Some("/[A-Z]{17}/".into()),
+                    pattern_const: constant.map(str::to_owned)
+                }]
+            );
+        }
     }
 }

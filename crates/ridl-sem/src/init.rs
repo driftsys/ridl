@@ -169,7 +169,9 @@ pub fn float_in_finite_domain(value: &ExactValue) -> bool {
 /// admit length 0 and no `match` pattern is present, otherwise not derivable.
 pub fn string_init(constraint: Option<&v2::Constraint>) -> v2::InitValue {
     let has_pattern = constraint.is_some_and(|constraint| {
-        constraint.pattern.is_some() || constraint.pattern_const.is_some()
+        !ridl_ir::pattern::ir_match_clauses(constraint)
+            .clauses
+            .is_empty()
     });
     if has_pattern {
         // A `match`-typed value cannot be synthesised (typl §5.8).
@@ -292,8 +294,7 @@ mod tests {
                 step: None,
                 len_min: None,
                 len_max: None,
-                pattern: None,
-                pattern_const: None,
+                ..Default::default()
             }),
             declared_init: None,
             init: None,
@@ -301,6 +302,7 @@ mod tests {
         }
     }
 
+    #[allow(deprecated)]
     fn string(len_min: u64, len_max: u64, pattern: Option<&str>) -> v2::TypeDef {
         v2::TypeDef {
             backing: Some(v2::Backing {
@@ -315,7 +317,7 @@ mod tests {
                 len_min: Some(len_min),
                 len_max: Some(len_max),
                 pattern: pattern.map(str::to_string),
-                pattern_const: None,
+                ..Default::default()
             }),
             declared_init: None,
             init: None,
@@ -395,5 +397,16 @@ mod tests {
             derive_type_init(&numeric("0.5", "1.0")).value.as_deref(),
             Some("0.5")
         );
+    }
+    #[test]
+    fn match_clauses_without_legacy_fields_prevent_derived_init() {
+        let c = v2::Constraint {
+            matches: vec![v2::Match {
+                pattern: None,
+                pattern_const: Some("P".into()),
+            }],
+            ..Default::default()
+        };
+        assert!(!string_init(Some(&c)).derivable);
     }
 }

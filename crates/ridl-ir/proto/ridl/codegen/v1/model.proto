@@ -18,7 +18,7 @@ syntax = "proto3";
 // Encoding: canonical protobuf JSON, the dialect ADR-0014 decision 14 fixes
 // for the IR, through the same pbjson-generated impls and the same reader
 // guards (`ridl_ir::codegen::to_json_pretty`, `from_json`). The nesting bound
-// a reader must provision is 264 JSON levels and 261 message levels below the
+// a reader must provision is 266 JSON levels and 262 message levels below the
 // root (design note §6.2).
 //
 // Field numbering scheme, as `ir.proto` has it: envelope and data fields
@@ -220,10 +220,23 @@ message Constraint {
   optional string step = 3;
   optional uint64 len_min = 4;
   optional uint64 len_max = 5;
+  // Deprecated: the first clause of matches, still written and read
+  // (IR specification §6).
+  optional string pattern = 6 [deprecated = true];
+  // Deprecated: the first clause of matches, still written and read
+  // (IR specification §6).
+  optional string pattern_const = 7 [deprecated = true];
+  // Every match clause, in source order.
+  repeated Match matches = 8;
+}
+
+// One `match` clause (typl §5.3).
+message Match {
   // The regex body, `/…/` stripped.
-  optional string pattern = 6;
-  // The canonical reference to the regex constant.
-  optional string pattern_const = 7;
+  optional string pattern = 1;
+  // The canonical reference when the name resolves to a regex constant;
+  // otherwise the name as written.
+  optional string pattern_const = 2;
 }
 
 // A named compile-time constant, with its declared type resolved.
@@ -997,7 +1010,7 @@ message Rule {
     // The canonical UCUM unit.
     string unit = 12;
     Length length = 13;
-    // The regex source text of a string's `match` pattern.
+    // The regex source text of one string `match` clause; one rule per clause.
     string pattern = 14;
     CollectionBound collection_bound = 15;
     Timing timing = 16;

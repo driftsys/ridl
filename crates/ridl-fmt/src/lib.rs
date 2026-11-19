@@ -2547,6 +2547,15 @@ mod tests {
     }
 
     #[test]
+    fn several_match_clauses_are_spaced_and_idempotent() {
+        let input = "package p\ntype T:string[1..8 match /a/ match /b/]\n";
+        let expected = "package p\n\ntype T: string [1..8 match /a/ match /b/]\n";
+        let output = formatted(input);
+        assert_eq!(output, expected);
+        assert_eq!(formatted(&output), output);
+    }
+
+    #[test]
     fn broken_input_returns_parse_errors_untouched() {
         // A missing `package` is FORM-104; a broken file is never rewritten.
         let outcome = format("type 123 :: [\n", Profile::Typl, &FormatOptions::default());

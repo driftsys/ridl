@@ -2623,7 +2623,13 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "lenMin": "1",
             "lenMax": "128",
             "pattern": "^[\\x20-\\x7E]+$",
-            "patternConst": "ASCII_PATTERN"
+            "patternConst": "ASCII_PATTERN",
+            "matches": [
+              {
+                "pattern": "^[\\x20-\\x7E]+$",
+                "patternConst": "ASCII_PATTERN"
+              }
+            ]
           },
           "vacuous": false
         }
@@ -2685,7 +2691,13 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "lenMin": "1",
             "lenMax": "64",
             "pattern": "^[\\x20-\\x7E]+$",
-            "patternConst": "ASCII_PATTERN"
+            "patternConst": "ASCII_PATTERN",
+            "matches": [
+              {
+                "pattern": "^[\\x20-\\x7E]+$",
+                "patternConst": "ASCII_PATTERN"
+              }
+            ]
           },
           "vacuous": false
         }
@@ -2805,7 +2817,13 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
             "lenMin": "1",
             "lenMax": "256",
             "pattern": "^[\\x20-\\x7E]+$",
-            "patternConst": "ASCII_PATTERN"
+            "patternConst": "ASCII_PATTERN",
+            "matches": [
+              {
+                "pattern": "^[\\x20-\\x7E]+$",
+                "patternConst": "ASCII_PATTERN"
+              }
+            ]
           },
           "vacuous": false
         }

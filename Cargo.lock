@@ -2166,6 +2166,7 @@ dependencies = [
  "prost-build",
  "prost-reflect",
  "protox",
+ "regex",
  "serde",
  "serde_json",
  "sha2",

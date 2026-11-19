@@ -986,7 +986,9 @@ no unpaired surrogate; a JavaScript string may hold one, which is not a Unicode
 scalar value and which `TextEncoder` replaces with U+FFFD without an error, so a
 string with one breaks the `utf8` rule before any other. A string length counts
 Unicode code points, as the Rust `chars().count()` does, so `"😀"` has length 1,
-and a bytes length counts bytes. The pattern is a `RegExp` built once for the
+and a bytes length counts bytes. Each clause has one `RegExp`, named
+`__ridlPattern<Name>_<index>`; input that holds only the deprecated `pattern`
+field gives `__ridlPattern<Name>` with no index. Each is built once for the
 module, without the `u` flag, with the ECMA-262 semantics of the checker, so it
 can disagree with the Rust `regex` crate (driftsys/ridl#597). The pinned
 disagreements are `.` (an astral character is two matches in JavaScript and one

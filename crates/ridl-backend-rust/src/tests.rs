@@ -54,8 +54,7 @@ fn constraint(min: Option<&str>, max: Option<&str>, step: Option<&str>) -> v2::C
         step: step.map(str::to_string),
         len_min: None,
         len_max: None,
-        pattern: None,
-        pattern_const: None,
+        ..Default::default()
     }
 }
 
@@ -256,6 +255,7 @@ fn speed_decl() -> v2::Decl {
 /// `validate-pattern` while the length check is not. `len_min` and `len_max`
 /// are both 17 so the minimum branch is emitted (a `len_min` of 0 emits no
 /// branch at all).
+#[allow(deprecated)]
 fn vin_decl() -> v2::Decl {
     public_decl(
         "Vin",
@@ -293,6 +293,7 @@ fn vin_decl() -> v2::Decl {
 /// `regex::Regex::is_match` (which takes `&str`) does not type-check, so
 /// `constraint_checks` must emit no pattern branch while still emitting its
 /// length checks.
+#[allow(deprecated)]
 fn bytes_pattern_decl() -> v2::Decl {
     public_decl(
         "Sig",
@@ -319,6 +320,7 @@ fn bytes_pattern_decl() -> v2::Decl {
 /// can decide, with `len_min` and `len_max` both 3 so a matching and a
 /// non-matching value are the same length and the length checks cannot be
 /// what separates them. Used by the executed proof of the pattern check.
+#[allow(deprecated)]
 fn literal_pattern_decl() -> v2::Decl {
     public_decl(
         "Code",
@@ -1314,6 +1316,7 @@ fn a_range_without_a_step_names_nothing_unchecked() {
 /// check is emitted, adds no doc line saying so. The book's chapter on
 /// generated code records which rules the Rust backend checks.
 #[test]
+#[allow(deprecated)]
 fn an_unresolved_pattern_const_adds_no_enforcement_doc() {
     let with_pattern = |pattern_const: Option<&str>| {
         rust_for(vec![public_decl(
@@ -1353,6 +1356,7 @@ fn an_unresolved_pattern_const_adds_no_enforcement_doc() {
 /// type's doc does not say so (D-3): the check is emitted, the enforcement
 /// sentence is not.
 #[test]
+#[allow(deprecated)]
 fn a_literal_pattern_check_carries_no_enforcement_doc() {
     let source = rust_for(vec![public_decl(
         "Handle",
@@ -1388,6 +1392,7 @@ fn a_literal_pattern_check_carries_no_enforcement_doc() {
 /// (D-3). A malformed numeric step on a string in hand-built IR cannot emit a
 /// numeric check.
 #[test]
+#[allow(deprecated)]
 fn a_string_pattern_adds_no_enforcement_doc() {
     let source = rust_for(vec![public_decl(
         "Stepped",
@@ -8197,4 +8202,51 @@ fn the_proto3_codec_refuses_enum_values_outside_int32() {
             );
         }
     }
+}
+
+#[test]
+fn match_clauses_emit_two_regex_searches_in_order() {
+    use ridl_ir::codegen::v1;
+    let sc = v1::Scalar {
+        class: v1::ScalarClass::String as i32,
+        constraint: Some(v1::Constraint {
+            matches: vec![
+                v1::Match {
+                    pattern: Some("first".into()),
+                    pattern_const: None,
+                },
+                v1::Match {
+                    pattern: Some("second".into()),
+                    pattern_const: None,
+                },
+            ],
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let tokens = super::constraint_checks(&sc, "Code", quote::quote! { value }).to_string();
+    assert_eq!(tokens.matches("Regex :: new").count(), 2, "{tokens}");
+    assert!(tokens.find("\"first\"").unwrap() < tokens.find("\"second\"").unwrap());
+    assert!(!tokens.contains(r"\A"), "search semantics: {tokens}");
+}
+
+#[test]
+#[allow(deprecated)]
+fn match_clauses_legacy_model_emits_the_original_search() {
+    use ridl_ir::codegen::v1;
+    let sc = v1::Scalar {
+        class: v1::ScalarClass::String as i32,
+        constraint: Some(v1::Constraint {
+            pattern: Some("a.b".into()),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let tokens = super::constraint_checks(&sc, "Code", quote::quote! { value }).to_string();
+    assert_eq!(
+        tokens.matches("Regex :: new (\"a.b\")").count(),
+        1,
+        "{tokens}"
+    );
+    assert!(tokens.contains("PATTERN . is_match (value)"), "{tokens}");
 }

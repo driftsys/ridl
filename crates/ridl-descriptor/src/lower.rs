@@ -507,10 +507,12 @@ fn spell_constraint(constraint: &Constraint) -> String {
             constraint.len_max.unwrap_or(0),
         ));
     }
-    if let Some(name) = &constraint.pattern_const {
-        parts.push(format!("match {name}"));
-    } else if let Some(pattern) = &constraint.pattern {
-        parts.push(format!("match {pattern}"));
+    for clause in ridl_ir::pattern::ir_match_clauses(constraint).clauses {
+        if let Some(name) = clause.pattern_const {
+            parts.push(format!("match {name}"));
+        } else if let Some(pattern) = clause.pattern {
+            parts.push(format!("match {pattern}"));
+        }
     }
     if parts.is_empty() {
         String::new()
@@ -580,5 +582,31 @@ mod tests {
                 cause: UnboundedCause::Unspecified,
             })
         );
+    }
+}
+
+#[cfg(test)]
+mod match_clause_tests {
+    //! Checks that descriptor spelling includes every string constraint clause.
+    use super::*;
+
+    #[test]
+    fn match_clauses_render_every_clause_in_order() {
+        let c = Constraint {
+            len_min: Some(0),
+            len_max: Some(8),
+            matches: vec![
+                ridl_ir::v2::Match {
+                    pattern: Some("/a/".into()),
+                    pattern_const: None,
+                },
+                ridl_ir::v2::Match {
+                    pattern: Some("/b/".into()),
+                    pattern_const: Some("P".into()),
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(spell_constraint(&c), "[0..8 match /a/ match P]");
     }
 }

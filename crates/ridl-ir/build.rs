@@ -81,16 +81,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     // to `OUT_DIR` as `ridl.ir.v2.serde.rs` and included next to the types.
     // `emit_fields()` is decision 2's contract: a non-`optional` field holding
     // its default is emitted rather than skipped, a proto3 `optional` field is
-    // still gated on `is_some()`, and `null` never appears. It is the only
-    // option set: `retain_enum_prefix()` governs the assumed Rust variant
-    // naming (not the JSON) and breaks compilation against prost's
+    // still gated on `is_some()`, and `null` never appears. Constraint
+    // uses the empty-list exception below. `retain_enum_prefix()` governs
+    // the assumed Rust variant naming (not the JSON) and breaks compilation against prost's
     // prefix-stripped variants, and `ignore_unknown_fields()` must stay unset
     // so the generated deserializer keeps rejecting unknown fields — the
     // strictness ADR-0014 decision 11's conformance test relies on.
+    let constraints = [".ridl.ir.v2.Constraint", ".ridl.codegen.v1.Constraint"];
     pbjson_build::Builder::new()
         .register_descriptors(&descriptor_bytes)?
+        .exclude(constraints)
         .emit_fields()
         .build(&[".ridl.ir.v2", ".ridl.codegen.v1"])?;
+
+    // Constraint's other fields are optional. Generating it without
+    // emit_fields omits only an empty matches list, preserving pre-match JSON
+    // and baseline fingerprints (IR specification section 3).
+    let constraint_dir = std::path::Path::new(&out_dir).join("constraints");
+    std::fs::create_dir_all(&constraint_dir)?;
+    pbjson_build::Builder::new()
+        .register_descriptors(&descriptor_bytes)?
+        .out_dir(constraint_dir)
+        .build(&constraints)?;
 
     Ok(())
 }

@@ -134,7 +134,7 @@ through the same renderer, to `<base>.codegen-request.json`, so the wrapper
 itself is a file `ridlc` wrote too; it accepts options where the model emit
 refuses them, because `options` is a field of what it writes
 (driftsys/ridl#725). The reader keeps the IR's nesting ceiling of 1,000 JSON
-levels; the deepest request the front end admits nests to 265 (the model's 264
+levels; the deepest request the front end admits nests to 267 (the model's 266
 plus one for the field), and a plugin's parser must provision that much.
 `request_from_json` ignores an unknown key at every nesting level of the
 request, so a plugin built on `ridl-ir` keeps reading the requests of a later
