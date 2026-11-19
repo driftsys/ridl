@@ -4036,3 +4036,13 @@ bench-host:
 # the phone.
 bench-pixel:
     cargo xtask bench pixel
+
+# Needs the nightly pinned in fuzz/rust-toolchain.toml and cargo-fuzz
+# (fuzz/README.md). Not a member of `build`: the gate uses no nightly
+# toolchain, and a fuzz run has no fixed end result. The checked-in seeds are
+# fuzz/seeds/<target>; the corpus the run grows is fuzz/corpus/<target>, which
+# is not in git. The targets are proto3_verify, flatbuffers_verify,
+# podbuf_verify, descriptor_verify and frame_decode.
+# Run one cargo-fuzz target for a number of seconds
+fuzz target seconds="60":
+    cd fuzz && mkdir -p corpus/{{target}} && cargo fuzz run {{target}} corpus/{{target}} seeds/{{target}} -- -max_total_time={{seconds}}

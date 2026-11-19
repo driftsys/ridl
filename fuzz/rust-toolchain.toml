@@ -1,0 +1,6 @@
+# The nightly that cargo-fuzz needs, pinned for this directory only. The
+# repository root keeps its stable pin; rustup reads this file for a command
+# run inside fuzz/. Install it with: rustup toolchain install nightly-2026-10-08 --profile minimal
+[toolchain]
+channel = "nightly-2026-10-08"
+profile = "minimal"
