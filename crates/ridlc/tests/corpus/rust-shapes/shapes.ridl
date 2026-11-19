@@ -20,7 +20,7 @@ type Heat : Cel [-40.0..125.0 step 0.5]
 type Floor : float [0.0.. step 0.25]
 
 /// A string with a length and a pattern.
-type Tag : string [1..16 match /^[a-z][a-z0-9-]*$/] = "unit"
+type Tag : string [1..16 match /[a-z][a-z0-9-]*/] = "unit"
 
 /// A string with a length only.
 type Label : string [0..32]

@@ -141,11 +141,9 @@ protox = "0.9.1"
 # the parser is needed: the harness reads the event stream and never renders.
 pulldown-cmark = { version = "0.13.4", default-features = false }
 quote = "1.0.46"
-regress = "0.11.1"
-# The Rust backend emits a `match` pattern into `regex::Regex::new` in the
-# generated crate, which depends on `regex = "1.13"`. ridl-sem compiles every
-# pattern with this crate too (TYPL-220), so a pattern that passes the checker
-# is one the generated code can compile. Keep the major and minor version
+# ridl-sem compiles every accepted pattern with `regex` in the engine text
+# of the Rust output, so a pattern that crate refuses is TYPL-220.
+# The generated crate depends on `regex = "1.13"`. Keep the major and minor version
 # Cargo.lock resolves for this requirement equal to the generated crate's
 # requirement (`crates/ridlc/src/lib.rs`); the test
 # `regex_version_requirement_matches_the_checker` in

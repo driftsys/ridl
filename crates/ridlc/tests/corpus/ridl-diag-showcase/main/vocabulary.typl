@@ -11,7 +11,7 @@ type Ratio : %       [0.0..100.0 step 0.1]
 /// A named type with no derivable init (typl §5.8): the `match` pattern and the
 /// non-zero minimum length rule one out. A signal payloaded with it therefore
 /// needs an explicit `= value` override (ridl §4.4, RIDL-109).
-type Serial : string [4..8 match /^[A-Z]+$/]
+type Serial : string [4..8 match /[A-Z]+/]
 
 enum Gear {
   PARK  = 0

@@ -107,10 +107,10 @@ type Tenth: float [0.0..1.0 step 0.1]
 type Tag: string [2..4] = "ab"
 
 /// A code of capital letters.
-type Code: string [1..8 match /^[A-Z]+$/] = "A"
+type Code: string [1..8 match /[A-Z]+/] = "A"
 
 /// A text of one character other than a newline or carriage return.
-type Glyph: string [0..4 match /^.$/] = "a"
+type Glyph: string [0..4 match /./] = "a"
 
 /// A text that contains an ASCII digit.
 type Digited: string [0..16 match /.*[0-9].*/] = "1"

@@ -249,7 +249,7 @@ note[TYPL-115]: type `Handle` has no derivable init value and no declared `= val
    │
    = lint: `no-init-value` (set its level in `[lints]` in ridl.toml)
 
-error[TYPL-106]: invalid regular expression syntax
+error[TYPL-106]: invalid regular expression syntax: unclosed class
    ┌─ tests/corpus/diag-showcase/scalars.typl:42:19
    │
 42 │ const BAD_REGEX = /[/

@@ -268,5 +268,425 @@
     "normalised": "[a&b]",
     "value": "&",
     "accepted": true
+  },
+  {
+    "literal": "/\\(/",
+    "normalised": "\\(",
+    "value": "(",
+    "accepted": true
+  },
+  {
+    "literal": "/\\(/",
+    "normalised": "\\(",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\(]/",
+    "normalised": "[\\(]",
+    "value": "(",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\(]/",
+    "normalised": "[\\(]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\)/",
+    "normalised": "\\)",
+    "value": ")",
+    "accepted": true
+  },
+  {
+    "literal": "/\\)/",
+    "normalised": "\\)",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\)]/",
+    "normalised": "[\\)]",
+    "value": ")",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\)]/",
+    "normalised": "[\\)]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\*/",
+    "normalised": "\\*",
+    "value": "*",
+    "accepted": true
+  },
+  {
+    "literal": "/\\*/",
+    "normalised": "\\*",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\*]/",
+    "normalised": "[\\*]",
+    "value": "*",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\*]/",
+    "normalised": "[\\*]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\+/",
+    "normalised": "\\+",
+    "value": "+",
+    "accepted": true
+  },
+  {
+    "literal": "/\\+/",
+    "normalised": "\\+",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\+]/",
+    "normalised": "[\\+]",
+    "value": "+",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\+]/",
+    "normalised": "[\\+]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\?/",
+    "normalised": "\\?",
+    "value": "?",
+    "accepted": true
+  },
+  {
+    "literal": "/\\?/",
+    "normalised": "\\?",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\?]/",
+    "normalised": "[\\?]",
+    "value": "?",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\?]/",
+    "normalised": "[\\?]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\[/",
+    "normalised": "\\[",
+    "value": "[",
+    "accepted": true
+  },
+  {
+    "literal": "/\\[/",
+    "normalised": "\\[",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\[]/",
+    "normalised": "[\\[]",
+    "value": "[",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\[]/",
+    "normalised": "[\\[]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\]/",
+    "normalised": "\\]",
+    "value": "]",
+    "accepted": true
+  },
+  {
+    "literal": "/\\]/",
+    "normalised": "\\]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\]]/",
+    "normalised": "[\\]]",
+    "value": "]",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\]]/",
+    "normalised": "[\\]]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\{/",
+    "normalised": "\\{",
+    "value": "{",
+    "accepted": true
+  },
+  {
+    "literal": "/\\{/",
+    "normalised": "\\{",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\{]/",
+    "normalised": "[\\{]",
+    "value": "{",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\{]/",
+    "normalised": "[\\{]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\}/",
+    "normalised": "\\}",
+    "value": "}",
+    "accepted": true
+  },
+  {
+    "literal": "/\\}/",
+    "normalised": "\\}",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\}]/",
+    "normalised": "[\\}]",
+    "value": "}",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\}]/",
+    "normalised": "[\\}]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\|/",
+    "normalised": "\\|",
+    "value": "|",
+    "accepted": true
+  },
+  {
+    "literal": "/\\|/",
+    "normalised": "\\|",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\|]/",
+    "normalised": "[\\|]",
+    "value": "|",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\|]/",
+    "normalised": "[\\|]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\\\/",
+    "normalised": "\\\\",
+    "value": "\\",
+    "accepted": true
+  },
+  {
+    "literal": "/\\\\/",
+    "normalised": "\\\\",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\\\]/",
+    "normalised": "[\\\\]",
+    "value": "\\",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\\\]/",
+    "normalised": "[\\\\]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\n/",
+    "normalised": "\\n",
+    "value": "\n",
+    "accepted": true
+  },
+  {
+    "literal": "/\\n/",
+    "normalised": "\\n",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\n]/",
+    "normalised": "[\\n]",
+    "value": "\n",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\n]/",
+    "normalised": "[\\n]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\r/",
+    "normalised": "\\r",
+    "value": "\r",
+    "accepted": true
+  },
+  {
+    "literal": "/\\r/",
+    "normalised": "\\r",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\r]/",
+    "normalised": "[\\r]",
+    "value": "\r",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\r]/",
+    "normalised": "[\\r]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/\\t/",
+    "normalised": "\\t",
+    "value": "\t",
+    "accepted": true
+  },
+  {
+    "literal": "/\\t/",
+    "normalised": "\\t",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/[\\t]/",
+    "normalised": "[\\t]",
+    "value": "\t",
+    "accepted": true
+  },
+  {
+    "literal": "/[\\t]/",
+    "normalised": "[\\t]",
+    "value": "x",
+    "accepted": false
+  },
+  {
+    "literal": "/a{2,}/",
+    "normalised": "a{2,}",
+    "value": "aaa",
+    "accepted": true
+  },
+  {
+    "literal": "/a{2,}/",
+    "normalised": "a{2,}",
+    "value": "a",
+    "accepted": false
+  },
+  {
+    "literal": "/\u00e9/",
+    "normalised": "\u00e9",
+    "value": "\u00e9",
+    "accepted": true
+  },
+  {
+    "literal": "/\u00e9/",
+    "normalised": "\u00e9",
+    "value": "e",
+    "accepted": false
+  },
+  {
+    "literal": "/[a-z\u00e0-\u00ff]/",
+    "normalised": "[a-z\u00e0-\u00ff]",
+    "value": "\u00e9",
+    "accepted": true
+  },
+  {
+    "literal": "/[a-z\u00e0-\u00ff]/",
+    "normalised": "[a-z\u00e0-\u00ff]",
+    "value": "\u0100",
+    "accepted": false
+  },
+  {
+    "literal": "/\ud83d\ude00/",
+    "normalised": "\ud83d\ude00",
+    "value": "\ud83d\ude00",
+    "accepted": true
+  },
+  {
+    "literal": "/\ud83d\ude00/",
+    "normalised": "\ud83d\ude00",
+    "value": "\ud83d\ude01",
+    "accepted": false
+  },
+  {
+    "literal": "/[\ud83d\ude00]/",
+    "normalised": "[\ud83d\ude00]",
+    "value": "\ud83d\ude00",
+    "accepted": true
+  },
+  {
+    "literal": "/[\ud83d\ude00]/",
+    "normalised": "[\ud83d\ude00]",
+    "value": "\ud83d\ude01",
+    "accepted": false
+  },
+  {
+    "literal": "/[a~b]/",
+    "normalised": "[a~b]",
+    "value": "~",
+    "accepted": true
+  },
+  {
+    "literal": "/[a~b]/",
+    "normalised": "[a~b]",
+    "value": "&",
+    "accepted": false
+  },
+  {
+    "literal": "/[a&b]/",
+    "normalised": "[a&b]",
+    "value": "&",
+    "accepted": true
+  },
+  {
+    "literal": "/[a&b]/",
+    "normalised": "[a&b]",
+    "value": "~",
+    "accepted": false
   }
 ]

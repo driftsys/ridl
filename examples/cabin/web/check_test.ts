@@ -667,3 +667,21 @@ Deno.test("the RegExp engine text agrees with the table", () => {
     );
   }
 });
+
+Deno.test("every accepted recogniser fixture compiles with the Unicode flag", () => {
+  const patterns: { pattern: string; normalised: string }[] = JSON.parse(
+    Deno.readTextFileSync(
+      new URL(
+        "../../../crates/ridl-sem/tests/pattern_accepted.json",
+        import.meta.url,
+      ),
+    ),
+  );
+  assert.ok(patterns.length > 0);
+  for (const { pattern, normalised } of patterns) {
+    assert.doesNotThrow(
+      () => new RegExp("^(?:" + normalised + ")$", "u"),
+      pattern,
+    );
+  }
+});

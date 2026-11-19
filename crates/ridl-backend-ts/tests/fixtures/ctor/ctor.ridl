@@ -58,16 +58,16 @@ type Short : string [0..8]
 type Free : string
 
 /// A string whose pattern is anchored at both ends.
-type Capitals : string [1..8 match /^[A-Z]+$/]
+type Capitals : string [1..8 match /[A-Z]+/]
 
 /// A string that contains `ab`, with an explicit search pattern.
 type Contains : string [0..16 match /.*ab.*/]
 
 /// A string of exactly one Unicode character other than a newline or carriage return.
-type Dot : string [0..4 match /^.$/]
+type Dot : string [0..4 match /./]
 
 /// A string whose pattern holds an escape and a quote.
-type Quoted : string [0..16 match /^\d+'x$/]
+type Quoted : string [0..16 match /[0-9]+'x/]
 
 /// A byte string of two to four bytes.
 type Blob : bytes [2..4]
@@ -82,7 +82,7 @@ type ConstraintError : integer [0..100]
 type codePointLength : string [1..4]
 
 /// A name that the runtime package exports as a function.
-type isWellFormedString : string [0..8 match /^[a-z]*$/]
+type isWellFormedString : string [0..8 match /[a-z]*/]
 
 /// A name that the runtime package exports as a function.
 type offFloatPoints : float [0.0..1.0 step 0.25]

@@ -1,12 +1,12 @@
-// Regex patterns (typl §2.7, §6.2): TYPL-220. A pattern that is valid
-// ECMA-262 syntax but that the Rust `regex` crate cannot compile used to draw
-// no diagnostic, and the generated Rust code, built with its `validate-pattern`
-// feature (on by default), panicked on it at first use (issue #437).
+// Regex patterns (typl §2.7, §6.2): TYPL-106 for a construct outside the
+// language, including groups nested beyond 250 and reversed quantifier bounds
+// compared as exact integers; TYPL-220 for an accepted pattern over the
+// `regex` crate's size limit.
 
 package diag.ridl
 
-/// A lookahead in an inline `match` pattern.
-type LookaheadCode : string [1..8 match /^(?=A)[A-Z]+$/]
+/// Nested counted repetitions over the compiled-size limit.
+type NestedCode : string [1..8 match /(([a-z]{1,64}){1,64}){1,64}/]
 
 /// A backreference in a regex constant.
 const REPEATED_PATTERN = /^(a)\1$/

@@ -748,6 +748,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ),
     // The shared codes E2 added or folded into the ridl profile.
     ("TYPL-005", Showcase),
+    ("TYPL-106", Showcase),
     ("FORM-106", Showcase),
     ("FORM-107", Showcase),
     ("FORM-108", Showcase),
@@ -788,7 +789,7 @@ const SHOWCASE_INCIDENTAL_CODES: &[&str] = &[
     // their own message-level assertion — set equality over codes alone would
     // not notice one of them starting to accept.
     "FORM-101",
-    // `Serial` and `LookaheadCode` carry a `match` pattern, so neither has a
+    // `Serial` and `NestedCode` carry a `match` pattern, so neither has a
     // derivable init — the typl-level statement of the condition RIDL-109
     // escalates for a signal.
     "TYPL-115",
@@ -1589,6 +1590,7 @@ fn showcase_pins_every_severity() {
         ("RIDL-410", Severity::Error),
         ("RIDL-413", Severity::Error),
         ("TYPL-005", Severity::Error),
+        ("TYPL-106", Severity::Error),
         ("TYPL-115", Severity::Info),
         ("TYPL-215", Severity::Error),
         ("TYPL-216", Severity::Error),

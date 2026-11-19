@@ -29,7 +29,7 @@ export class RuleError extends RangeError {
 /** The name of the catalog unit this package belongs to. */
 export const CATALOG_NAME = "veh.common";
 /** The hash of the catalog unit, which the wasm module carries. */
-export const CATALOG_HASH: Uint8Array = Uint8Array.from([120, 44, 254, 15, 31, 54, 82, 105, 110, 103, 243, 145, 130, 90, 45, 253, 218, 53, 153, 61, 254, 246, 239, 167, 101, 91, 100, 144, 147, 89, 26, 224]);
+export const CATALOG_HASH: Uint8Array = Uint8Array.from([175, 163, 71, 5, 231, 5, 95, 5, 120, 86, 15, 145, 138, 146, 164, 196, 153, 86, 41, 92, 144, 104, 66, 254, 172, 25, 5, 190, 98, 46, 204, 175]);
 /** The qualified names of the payload types of this package, which name the wasm type ids. */
 export const PAYLOAD_TYPES = [
   "veh.common.BoundsSummary",
@@ -909,7 +909,7 @@ export class SensorsClient {
    *
    * @param name - Rules:
    * - length 1 ..= 128
-   * - pattern `/^[\x20-\x7E]+$/`
+   * - pattern `/[ -~]+/`
    * @param opts - The bound defaults to the declared maximum response time, 100 ms. `opts.signal` aborts the call.
    */
   async profile(name: ridl_std.Name, opts?: Partial<$rt.CallOptions>): Promise<t.DriverProfile> {

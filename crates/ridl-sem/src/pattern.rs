@@ -439,79 +439,6 @@ mod tests {
 
     use super::*;
 
-    const ACCEPTED: &[&str] = &[
-        "a",
-        "A",
-        "",
-        "ab|c",
-        "(a)",
-        "(a|)",
-        "a*",
-        "a+",
-        "a?",
-        "a{2}",
-        "a{2,}",
-        "a{2,3}",
-        ".",
-        "[a-z0-9_]",
-        "[^@]",
-        "[-a]",
-        "[a-]",
-        r"[\--z]",
-        r"[\]]",
-        "[$]",
-        r"\^",
-        r"\(",
-        r"\)",
-        r"\*",
-        r"\+",
-        r"\.",
-        r"\?",
-        r"\[",
-        r"\\",
-        r"\]",
-        r"\{",
-        r"\|",
-        r"\}",
-        r"\n",
-        r"\r",
-        r"\t",
-        r"[\-]",
-        "é+",
-        "[à-ÿ]",
-        "\u{1F600}",
-        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-        "[0-7][0-9A-HJKMNP-TV-Z]{25}",
-        r"[a-zA-Z][a-zA-Z0-9+\-.]*://.+",
-        "https?://.+",
-        r"[^@]+@[^@]+\.[^@]+",
-        r"([0-9]{1,3}\.){3}[0-9]{1,3}",
-        "[0-9a-f:]+",
-        "[ -~]+",
-        "[0-9]{4}-[0-9]{2}-[0-9]{2}",
-        "[0-9]{2}:[0-9]{2}:[0-9]{2}.*",
-        r"[0-9]+\.[0-9]+\.[0-9]+.*",
-        "[A-Z]{2}",
-        "[a-z]{2}(-[A-Z]{2})?",
-        "(([a-z]{1,64}){1,64}){1,64}",
-        "()",
-        "|",
-        "[-]",
-        "[^-]",
-        "[^^]",
-        "[&~]",
-        "&&~~--",
-        "[a&b~c]",
-        r"[a\-\-z]",
-        r"[\n-\r]",
-        "[😀-🙏]",
-        "\0\n\r\t",
-        "[{}().?*+|$]",
-        "a{18446744073709551616}",
-        "a{999999999999999999999999999,}",
-        "a{18446744073709551616,18446744073709551617}",
-    ];
-
     const REFUSED: &[(&str, &str)] = &[
         ("^a", "^"),
         ("a$", "$"),
@@ -798,8 +725,23 @@ mod tests {
 
     #[test]
     fn accepted_patterns_follow_the_grammar() {
-        for pattern in ACCEPTED {
-            assert_eq!(check(pattern), Ok(()), "{pattern:?}");
+        #[derive(serde::Deserialize)]
+        struct Accepted {
+            pattern: String,
+            normalised: String,
+        }
+        let patterns: Vec<Accepted> =
+            serde_json::from_str(include_str!("../tests/pattern_accepted.json")).unwrap();
+        assert!(!patterns.is_empty());
+        for accepted in patterns {
+            let pattern = accepted.pattern;
+            assert_eq!(check(&pattern), Ok(()), "{pattern:?}");
+            // The same engine input is compiled with the Unicode flag by Deno.
+            let literal = format!("/{}/", pattern.replace('/', r"\/"));
+            assert_eq!(
+                ridl_ir::pattern::normalised_pattern(&literal),
+                accepted.normalised
+            );
         }
     }
 

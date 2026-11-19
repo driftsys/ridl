@@ -423,9 +423,9 @@ const SPEED_LIMIT_EU: Speed = 130.0
 const MAX_GEAR: integer = 6
 
 // regex constants
-const MODEL_PATTERN = /^[A-Z][A-Z0-9]{2,5}$/
+const MODEL_PATTERN = /[A-Z][A-Z0-9]{2,5}/
 
-const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/
+const VIN_PATTERN = /[A-HJ-NPR-Z0-9]{17}/
 
 // reuse in a range bound
 type EngineSpeed: km/h [0.0..MAX_SPEED step 0.5]

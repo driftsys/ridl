@@ -396,7 +396,7 @@ Deno.test("the error names the length and pattern constraints", () => {
     message: "ctor.Word: abcde breaks the length rule [1..4]",
   });
   assert.throws(() => makeCapitals("abc"), {
-    message: "ctor.Capitals: abc breaks the pattern rule /^[A-Z]+$/",
+    message: "ctor.Capitals: abc breaks the pattern rule /[A-Z]+/",
   });
   assert.throws(() => makeBlob(new Uint8Array(5)), {
     message: "ctor.Blob: <5 bytes> breaks the length rule [2..4]",
