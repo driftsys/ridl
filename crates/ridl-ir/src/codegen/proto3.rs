@@ -1,6 +1,9 @@
 //! The proto3 message layout and refusals of the lowered model, using the
 //! shared scalar and field-number rules of [`crate::projection::proto3`].
-//! A message that needs a refused local message is refused transitively.
+//! The Rust codec and plugins read these facts from `Model.proto3`; the
+//! codec retains the derivations specific to Rust described in
+//! `docs/design/proto3-codec.md`. A message that needs a refused local
+//! message is refused transitively.
 
 use super::v1;
 use crate::projection::proto3 as pb;

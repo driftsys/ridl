@@ -419,12 +419,14 @@ the order of the heads and the meaning of each field.
 
 `Model.proto3` carries the proto3 messages and refusals of the package,
 including root boxes and induced tuples. Each message lists the field numbers,
-wire forms and sources; an array also states whether it is packed. A plugin can
-read the layout and refusal diagnostics directly. Each wire also carries
-`default_is_legal`; [the per-kind rules][proto3-projection] define when its
-proto3 default is legal.
+wire forms and sources; an array also states whether it is packed. The Rust
+codec and plugins read the layout and refusal diagnostics directly. Each wire
+also carries `default_is_legal`; [the per-kind rules][proto3-projection] define
+when its proto3 default is legal.
 [The codegen plugin record, "The proto3 projection"][proto3-projection] defines
 the order, names, sources, wires, refusals and relation to size states.
+[The proto3 codec record][proto3-codec] describes the derivations specific to
+Rust and the checks against the schema emitter.
 
 ## The catalog hash
 
@@ -479,9 +481,6 @@ time; the descriptor leaves out the sizing values that the section holds.
 
 ## What is not available yet
 
-- **The Rust proto3 codec reading `Model.proto3`.** It still computes its own
-  layout; [the proto3 codec record][proto3-codec] describes the comparison test
-  and what it checks.
 - **`podbuf` on a consumer link.** Every payload has a `podbuf` size state and
   the model carries the podbuf layout (see "The podbuf layout" above), but no
   consumer link carries `ENCODING_PODBUF`: no rsdl fact selects it.

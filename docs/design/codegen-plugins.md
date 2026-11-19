@@ -801,7 +801,7 @@ projection".
   order and then tuple order. The causes are `OPTIONAL_COLLECTION` (an optional
   array or map field), `OPTIONAL_ELEMENT` (an optional array element, map key or
   map value), `NESTED_COLLECTION` (an array of arrays or maps, or a map value
-  that is an array or map), `MAP_KEY` (a key refused by the Rust codec's rule,
+  that is an array or map), `MAP_KEY` (a key refused by the projection's rule,
   which admits integral, boolean, string, enum and enum-set keys), `ENUM_VALUE`
   (a live or retired enum value outside int32), `FIELD_NUMBER` (0, 19000..=19999
   or above 536870911), `REFUSED_DEPENDENCY`, and `OTHER` (an input the walk
@@ -824,8 +824,8 @@ projection".
   not imply that the Rust backend can emit a codec for it: that backend also
   requires a bounded size state.
 
-The Rust codec still computes its own layout. The comparison with this
-projection and its limits are described in
+The Rust codec reads this projection. Its derivations specific to Rust and the
+agreement checks with the schema emitter are described in
 [the proto3 codec record](proto3-codec.md#the-wire-mapping).
 
 ## 8. What a plugin author reads

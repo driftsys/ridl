@@ -1,16 +1,15 @@
 //! The proto3 projection facts, as ADR-0017 fixes them.
 //!
-//! The `.proto` emitter, the proto3 size bound [`crate::projection::size`]
-//! derives, the Rust proto3 codec and the model's proto3 walk in
-//! `codegen/proto3.rs` read this table: one function from a width, or from a
-//! backing without a width, to the proto3 scalar, and the largest encoding
-//! of one value of that scalar.
+//! The `.proto` emitter, the proto3 sizer and the model projection in
+//! `codegen/proto3.rs` read this scalar table: one function from a width, or
+//! from a backing without a width, to the proto3 scalar, and the largest
+//! encoding of one value of that scalar. The Rust codec uses [`Scalar`] and
+//! [`WireType`] as types; it reads layout facts from `Model.proto3`.
 //!
 //! Nothing here writes schema text; [`Scalar::as_str`] gives its spelling.
 //!
-//! The two field-number limits proto3 fixes live here for the same reason:
-//! the schema emitter, the Rust codec and the model walk check these limits,
-//! and the sizer answers no bound for a field outside them.
+//! The field-number limits live here too: the schema emitter, the sizer and
+//! the model projection check them.
 
 use crate::codegen::v1;
 use crate::v2;
