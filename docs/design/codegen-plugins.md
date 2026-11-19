@@ -812,11 +812,11 @@ projection".
   member, including when the enum is foreign. The walk records each refused
   member and each enum value outside int32; several such values can give several
   entries for one member. Within a source it preserves the refusal walk's order,
-  so the first direct refusal is the one the Rust backend reports for the same
-  input. For every cause except `REFUSED_DEPENDENCY`, `message` is the
-  diagnostic text the Rust backend reports for that refusal, unchanged. A
-  message that needs a refused local message is refused transitively with
-  `REFUSED_DEPENDENCY`, no `member`, and the text
+  and the Rust backend reports the first direct refusal whose source it emits.
+  For every cause except `REFUSED_DEPENDENCY`, `message` is the diagnostic text
+  the Rust backend reports for that refusal, unchanged. A message that needs a
+  refused local message is refused transitively with `REFUSED_DEPENDENCY`, no
+  `member`, and the text
   `` `<name>` needs the refused message `<other>`: <the message of other> ``.
 - **Sizes.** The projection and the size states are independent. A representable
   declaration without a finite bound is in `messages`; its `Declaration.proto3`

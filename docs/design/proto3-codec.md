@@ -151,16 +151,17 @@ so a field with a refused number is `RefusedMember` whatever its type. The
 projection refusals are checked before the size state is read, and reject an
 optional array or map field, a refused field number and an enum value outside
 int32 with a message that names the field or the value (the live enum value case
-requires hand-built IR; `an_enum_at_the_int32_maximum_has_a_proto3_codec` in
+requires hand-built IR; `enums_at_int32_boundaries_have_proto3_codecs` in
 `crates/ridl-backend-rust/tests/proto3_roundtrip.rs` pins the legal source
-boundary) — in a declaration, and in a tuple a declaration holds. A tuple only
-an interaction reaches is not walked when its root is not bounded, so such a
-member in it skips the interface with the sizer's `RefusedMember` and no field
-name. The model projection also refuses an optional array element and an
-optional map value, which the schema emits without presence (ADR-0019 review
-ruling 6), as the FlatBuffers codec does. An integer with no width, an enum with
-no value and a union with no arm are refused as malformed IR; the compiler
-produces none of them.
+boundary) — in a declaration, and in a tuple a declaration holds. The projection
+considers every named tuple; the codec does not emit a tuple reached only by an
+interaction whose root is not bounded, so such a member in it skips the
+interface with the sizer's `RefusedMember` and no field name. The model
+projection also refuses an optional array element and an optional map value,
+which the schema emits without presence (ADR-0019 review ruling 6), as the
+FlatBuffers codec does. An integer with no width, an enum with no value and a
+union with no arm are refused as malformed IR; the compiler produces none of
+them.
 
 **The ros2 corpus does not generate with proto3.** Every ros2 package that
 declares or reaches `RosString` is refused under `[Proto3]` with `NoBound`, and
@@ -213,9 +214,11 @@ projection's contract is defined in
 The codec still derives the Rust representation of each value: its Rust type,
 named-scalar constructor, typl constraints and collection count bounds. It joins
 projected fields to model members by `Proto3Field.source`, because the
-projection describes the wire rather than the Rust representation. It also
-checks size states with `bound_state`, because a representable message can lack
-a finite bound. `reachable_tuples` chooses which tuples to emit and their
+projection describes the wire rather than the Rust representation. For an enum,
+the projection supplies `enumeration` with no scalar, and the codec holds it as
+a varint in an `Int64`, which gives the same bytes for every int32 value. It
+also checks size states with `bound_state`, because a representable message can
+lack a finite bound. `reachable_tuples` chooses which tuples to emit and their
 discovery order, so an unused tuple adds no generated functions. It skips a
 tuple without a Rust name, because the codec functions of a tuple need that
 name; `tuple_message` also refuses such a tuple, as a check that discovery makes
@@ -237,34 +240,18 @@ only one is the `fixed` tuple above.
 
 The codec reads packing and `default_is_legal` from the projection, so the
 byte-equality tests against `prost` fail when those projected facts are wrong
-for a tested value. `the_codec_selects_no_proto3_scalar_itself` guards against
-reintroducing scalar selection, field-number limits, default legality or map-key
-admission into the codec. Separately,
-`every_clean_ridlc_corpus_package_has_a_proto3_layout` requires every clean
-ridlc corpus package to lay out, classifies every corpus directory, and requires
-skipped directories to retain their deliberate errors.
+for a tested value. `the_codec_selects_no_proto3_scalar_itself` catches the
+named helper calls and constants listed in that test. The
+`the_codec_follows_projected_*` tests tamper with one fact in `Model.proto3`
+after lowering and check that the generated code follows the changed packing,
+scalar, array, map and map-key default legality, field number or scalar type.
+The packing test checks that disabling `packed` removes the packed-run encode
+path. Separately, `every_clean_ridlc_corpus_package_has_a_proto3_layout`
+requires every clean ridlc corpus package to lay out, classifies every corpus
+directory, and requires skipped directories to retain their deliberate errors.
 
-**Why the projection is the single source.** The Rust codec reads the projection
-instead of keeping its own copy of the rules, so the codec and every plugin read
-the same facts and cannot differ on them. Two other forms were rejected: a
-projection kept equal to the codec only by a comparison test, which would be a
-fourth copy of the rules that agrees only on the inputs of the test corpus; and
-moving the codec, the `.proto` emitter and the sizer onto the projection in one
-change, which was too large to review. The emitter and the sizer remain
-(driftsys/ridl#690).
-
-The walk reads the lowered model and not the raw IR, because the Rust codec read
-the model and its refusal texts name model-level things. The cost is that the
-sizer runs on the raw IR while the model is being built, so it cannot call the
-walk. Moving it onto the projection needs a correction step after lowering,
-which sets the size states of a refused declaration, as the FlatBuffers
-projection does for its own. That step is not designed.
-
-`Proto3Wire.default_is_legal` is carried on the wire and not on the field,
-because the rule also applies to a map key and a map value. It was added because
-the model did not carry the fact: a plugin would have had to re-derive it for
-every kind, and `FbSlot.needs_null_default` is a different predicate, about the
-`.fbs` schema.
+The reasons for using the projection as the single source are recorded in
+[Alternatives considered](#alternatives-considered).
 
 The projection refuses field number 0, as the Rust codec always did. The
 `.proto` emitter does not refuse it; this is the one known difference between
@@ -641,8 +628,29 @@ regenerate byte for byte.
 
 ## Alternatives considered
 
-The design note weighed each of these and rejected it; the reason is the one it
-gave, checked against what was built.
+**Why the projection is the single source.** The Rust codec reads the projection
+instead of keeping its own copy of the rules, so the codec and every plugin read
+the same facts and cannot differ on them. Two other forms were rejected: a
+projection kept equal to the codec only by a comparison test, which would be a
+fourth copy of the rules that agrees only on the inputs of the test corpus; and
+moving the codec, the `.proto` emitter and the sizer onto the projection in one
+change, which would combine three independent consumer migrations. The emitter
+and the sizer remain (driftsys/ridl#690).
+
+The walk reads the lowered model and not the raw IR, because the Rust codec read
+the model and its refusal texts name model-level things. The cost is that the
+sizer runs on the raw IR while the model is being built, so it cannot call the
+walk. Moving it onto the projection needs a correction step after lowering,
+which sets the size states of a refused declaration, as the FlatBuffers
+projection does for its own. That step is not designed.
+
+`Proto3Wire.default_is_legal` is carried on the wire and not on the field,
+because the rule also applies to a map key and a map value. It was added because
+the model did not carry the fact: a plugin would have had to re-derive it for
+every kind, and `FbSlot.needs_null_default` is a different predicate, about the
+`.fbs` schema.
+
+The codec design note also considered and rejected the following alternatives.
 
 - **Delegating the codec to `prost` in the generated crate.** ADR-0018 decision
   4 generates the codec, `prost` needs `alloc` and its own message types beside

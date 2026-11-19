@@ -571,8 +571,10 @@ breaking, because this codec refuses the old buffer with `MissingRequired` (case
 9). A type the diff cannot resolve is reported as breaking; `ridl diff` resolves
 types against the new snapshot and the built-in `ridl.std`. The codec and the
 diff read one definition of "0 is legal", `ridl_ir::zero`: `zero_is_legal` in
-`lib.rs`, which both codecs call, calls `ridl_ir::zero::range_holds_zero`, and
-the lowering's enum zero member comes from `ridl_ir::zero::enum_zero_member`.
+`lib.rs`, which the FlatBuffers codec calls, wraps
+`ridl_ir::zero::range_holds_zero`. The proto3 model projection calls that
+predicate to set `Proto3Wire.default_is_legal`, which the proto3 codec reads.
+The lowering's enum zero member comes from `ridl_ir::zero::enum_zero_member`.
 Case 12 ties the two together over one fixture. The proto3 codec (built
 2026-10-20, [its record](proto3-codec.md)) applies the same reader rule in
 proto3 terms, where it is forced, and further: proto3 gives no non-optional

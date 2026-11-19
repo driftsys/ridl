@@ -1,25 +1,29 @@
 //! Whether the value 0 is a legal value of a typl type.
 //!
 //! 0 is the default a FlatBuffers reader gives an absent scalar or enum
-//! field. Three consumers ask the same question and must agree on the answer:
+//! field. These consumers ask the same question and must agree on the answer:
 //!
 //! - the FlatBuffers codec of `ridl-backend-rust`, which reads an absent
 //!   non-optional scalar or enum field as 0 when 0 is legal for its type, and
 //!   refuses it as a missing required field when it is not
 //!   (driftsys/ridl#472);
+//! - the proto3 model projection, which sets `Proto3Wire.default_is_legal`
+//!   for numeric scalars from the same range and step predicate; the proto3
+//!   codec reads that projected fact;
 //! - `ridl-diff`, which classifies appending such a field as compatible only
 //!   when a reader of the new version reads the field absent from an old
 //!   payload as 0 (driftsys/ridl#598), and under podbuf accepts an append
 //!   on the same condition (ADR-0031 decision 10);
-//! - the RIDL-155 check of `ridlc`, which reports a deprecated podbuf field
-//!   whose init value is neither declared nor derivable and whose type
-//!   excludes 0.
+//! - the podbuf design lints of `ridlc`, whose RIDL-155 check reports a
+//!   deprecated field whose init value is neither declared nor derivable
+//!   and whose type excludes 0.
 //!
-//! The codec reads the lowered codegen model and the others read IR v2, so
+//! The FlatBuffers codec and proto3 projection read the lowered codegen model,
+//! and the diff classifier and podbuf design lints read IR v2, so
 //! the call sites hold different message types. The definitions here take
 //! what both types carry: a constraint's exact decimal text, and an enum's
 //! declared values; [`field_type_holds_zero`] states the rule once over an
-//! IR v2 field type for the two readers of IR v2.
+//! IR v2 field type for those readers of IR v2.
 
 use crate::v2;
 

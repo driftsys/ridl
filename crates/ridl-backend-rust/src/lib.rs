@@ -798,11 +798,12 @@ pub(crate) fn check_flatbuffers_bound(ctx: &Ctx, index: u32) -> Result<(), Gener
 /// decided at generation time from the IR's exact decimal text
 /// (driftsys/ridl#472). No constraint at all holds 0.
 ///
-/// The rule is [`ridl_ir::zero::range_holds_zero`], the one definition the
-/// two codecs and `ridl diff` share: the FlatBuffers codec and the proto3
-/// codec read an absent non-optional scalar as 0 only when this answers
-/// `true` for its type, and `ridl diff` classifies appending such a field as
-/// compatible only then (driftsys/ridl#598).
+/// The FlatBuffers codec calls this wrapper over
+/// [`ridl_ir::zero::range_holds_zero`]. The proto3 model projection calls
+/// that predicate to set `Proto3Wire.default_is_legal`, which the proto3
+/// codec reads. Both codecs read an absent non-optional numeric scalar as 0
+/// only when it is legal for its type, and `ridl diff` classifies appending
+/// such a field as compatible only then (driftsys/ridl#598).
 pub(crate) fn zero_is_legal(constraint: Option<&v1::Constraint>) -> bool {
     constraint.is_none_or(|constraint| {
         ridl_ir::zero::range_holds_zero(

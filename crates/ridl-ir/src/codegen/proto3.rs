@@ -331,7 +331,7 @@ impl Walk<'_> {
                                     .r#type
                                     .as_ref()
                                     .ok_or_else(|| missing_type(owner, name, "names no type"))?;
-                                // The codec resolves an arm before checking its number.
+                                // An unresolved arm is refused before its number is checked.
                                 self.resolve(reference)
                                     .ok_or_else(|| unresolved(reference))?;
                                 let number = field_number(owner, name, arm.ordinal)?;
