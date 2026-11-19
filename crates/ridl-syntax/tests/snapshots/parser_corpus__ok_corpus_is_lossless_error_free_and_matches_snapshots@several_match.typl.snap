@@ -1,0 +1,70 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/several_match.typl
+---
+SourceFile@0..106
+  PackageDecl@0..24
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..24
+      Ident@8..15 "several"
+      Dot@15..16 "."
+      Ident@16..24 "matching"
+  Whitespace@24..26 "\n\n"
+  TypeDef@26..69
+    TypeKw@26..30 "type"
+    Whitespace@30..31 " "
+    Name@31..32
+      Ident@31..32 "A"
+    Whitespace@32..33 " "
+    Colon@33..34 ":"
+    Whitespace@34..35 " "
+    PrimitiveType@35..41
+      StringKw@35..41 "string"
+    Whitespace@41..42 " "
+    Constraint@42..69
+      LBracket@42..43 "["
+      Bound@43..48
+        Literal@43..44
+          IntNumber@43..44 "8"
+        DotDot@44..46 ".."
+        Literal@46..48
+          IntNumber@46..48 "64"
+      Whitespace@48..49 " "
+      MatchKw@49..54 "match"
+      Whitespace@54..55 " "
+      Literal@55..58
+        Regex@55..58 "/a/"
+      Whitespace@58..59 " "
+      MatchKw@59..64 "match"
+      Whitespace@64..65 " "
+      Literal@65..68
+        Regex@65..68 "/b/"
+      RBracket@68..69 "]"
+  Whitespace@69..70 "\n"
+  TypeDef@70..105
+    TypeKw@70..74 "type"
+    Whitespace@74..75 " "
+    Name@75..76
+      Ident@75..76 "B"
+    Whitespace@76..77 " "
+    Colon@77..78 ":"
+    Whitespace@78..79 " "
+    PrimitiveType@79..85
+      StringKw@79..85 "string"
+    Whitespace@85..86 " "
+    Constraint@86..105
+      LBracket@86..87 "["
+      MatchKw@87..92 "match"
+      Whitespace@92..93 " "
+      Literal@93..96
+        Regex@93..96 "/a/"
+      Whitespace@96..97 " "
+      MatchKw@97..102 "match"
+      Whitespace@102..103 " "
+      Literal@103..104
+        Ident@103..104 "P"
+      RBracket@104..105 "]"
+  Whitespace@105..106 "\n"
+errors: none

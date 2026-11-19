@@ -642,7 +642,17 @@ type Frame   : bytes   [8]
 | `string [N match PATTERN]`        | exactly N, validated  |
 | `string [min..max match PATTERN]` | range with validation |
 
-`match` references a named regex constant or an inline regex literal.
+A constraint takes `match` zero or more times after a length bound, and one or
+more times without a length bound. A value must match every clause; the order of
+the clauses has no meaning. Each clause references a named regex constant or an
+inline regex literal. `bytes` takes no `match` clause.
+
+```ridl
+type Token : string [8..64 match /[0-9]/ match /[A-Z]/]
+```
+
+A type with one or more clauses has no derivable init value (TYPL-115); declare
+an explicit `= value` that satisfies every clause (§5.8).
 
 ### 5.4 Bytes Constraint Syntax
 
@@ -2214,11 +2224,8 @@ constraint_spec
               = scalar ".." scalar ( "step" scalar )?
               | scalar ".."
               | ".." scalar
-              | int_lit
-              | int_lit ".." int_lit
-              | int_lit "match" pattern
-              | int_lit ".." int_lit "match" pattern
-              | "match" pattern
+              | int_lit ( ".." int_lit )? ( "match" pattern )*
+              | ( "match" pattern )+
               ;
 
 pattern       = regex_lit | SCREAMING_SNAKE_ID ;

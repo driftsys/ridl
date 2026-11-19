@@ -3,17 +3,21 @@ import { ConstraintError } from "@driftsys/ridl-runtime";
 import {
   makeBlob,
   makeCapitals,
+  makecodePointLength,
   makeConstraintError,
   makeContains,
   makeDot,
   makeFree,
-  makeFreeUnchecked,
   makeFreeInteger,
+  makeFreeUnchecked,
+  makeisWellFormedString,
   makeLower,
   makeLowerReal,
   makeMaximum,
   makeNarrowReal,
   makeNegative,
+  makeoffFloatPoints,
+  makeoffFloatStep,
   makePrecise,
   makeQuoted,
   makeRaw,
@@ -24,16 +28,13 @@ import {
   makeSmallUnchecked,
   makeTenth,
   makeTriple,
+  makeTwice,
   makeUnbounded,
   makeUpper,
   makeUpperReal,
   makeWide,
   makeWord,
   makeWordUnchecked,
-  makecodePointLength,
-  makeisWellFormedString,
-  makeoffFloatPoints,
-  makeoffFloatStep,
 } from "./ctor.ts";
 import {
   makeEndless,
@@ -428,4 +429,15 @@ Deno.test("a declaration may take a name that the runtime package exports", () =
   refuses("offFloatPoints", () => makeoffFloatPoints(0.3), "step");
   assert.equal(makeoffFloatStep(0.1), 0.1);
   refuses("offFloatStep", () => makeoffFloatStep(0.15), "step");
+});
+
+Deno.test("a string constructor checks every match clause", () => {
+  assert.equal(makeTwice("1A"), "1A");
+  assert.throws(() => makeTwice("1a"), (error: unknown) => {
+    assert(error instanceof ConstraintError);
+    assert.equal(error.rule, "pattern");
+    assert(error.message.includes("/[A-Z]/"));
+    return true;
+  });
+  refuses("Twice", () => makeTwice("aA"), "pattern");
 });
