@@ -158,7 +158,7 @@ fn links_of(line: &str) -> Vec<Link> {
         .collect()
 }
 
-/// For each `## ` section of a reference file: the checked links it holds.
+/// For each `## ` section of a skill file: the checked links it holds.
 fn section_links(text: &str) -> Vec<(String, Vec<Link>)> {
     let mut sections: Vec<(String, Vec<Link>)> = Vec::new();
     for line in text.lines() {
@@ -223,10 +223,9 @@ fn link_failures(file: &Path, text: &str) -> Vec<String> {
     failures
 }
 
-/// The failures of a reference file: a `## ` section that links no heading
+/// The failures of a skill file: a `## ` section that links no heading
 /// of the book, and every failing link. A file with no `## ` section has no
-/// section to check; the reference files are headings only until their
-/// content is written.
+/// section to check.
 fn section_failures(file: &Path, text: &str) -> Vec<String> {
     let mut failures = Vec::new();
     for (title, links) in section_links(text) {
@@ -288,7 +287,7 @@ fn a_page_whose_include_is_missing_has_no_source() {
 }
 
 #[test]
-fn every_reference_section_links_an_existing_heading() {
+fn every_skill_section_links_an_existing_book_heading() {
     let file = skill_dir().join("SKILL.md");
     let text = std::fs::read_to_string(&file).expect("read SKILL.md");
     let failures = section_failures(&file, &text);

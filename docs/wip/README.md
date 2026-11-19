@@ -389,9 +389,9 @@ and was not archived. The reason is stated once per file or group.
   ([ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md),
   [the design record](../design/authoring-skill.md)). The outline stays: it
   belongs to the same unit but is not the design or the plan, and whether to
-  archive it is the owner's decision, which is pending. The judge check and the
-  release record (task 12 of the archived plan) are not done and stay optional
-  under driftsys/ridl#1401.
+  archive it is the owner's decision, which is pending. The owner dropped the
+  judge check and the release record (task 12 of the archived plan) on
+  2026-11-19, and driftsys/ridl#1401 is closed.
 - **2026-10-07-generated-observation-design.md** and
   **2026-10-07-generated-observation-plan.md** — optional trace spans from the
   generated Rust face, driftsys/ridl#754. Open; the generated crate has no

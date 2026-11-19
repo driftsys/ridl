@@ -16,11 +16,13 @@ repeated here.
 - The per-language references (`typl.md`, `ridl.md`, `rsdl.md`) do not exist.
   They were written and removed, and ADR-0005 records the reason and what
   reopens them.
-- The judge check has not been run, so no file `evals/results/judge-check.md`
-  exists, and the judge is not known to agree with the maintainer.
+- The judge check has not been run, so neither `<dir>/judge-check/labels.toml`
+  (written by `cargo xtask eval sample --from <dir>`) nor the `agreement.md`
+  next to it (written by `cargo xtask eval agreement <labels.toml>`) exists, and
+  the judge is not known to agree with the maintainer. The owner dropped the
+  check on 2026-11-19.
 - No release record exists: `evals/results/` is absent, and the skill's effect
-  on an agent's result is not measured. driftsys/ridl#1401 tracks both as
-  optional work.
+  on an agent's result is not measured.
 - The model ids in `evals/runner.toml` are pinned but not confirmed for a
   release record.
 
@@ -48,14 +50,13 @@ for those files only.
 ## The gates
 
 Three tests keep the skill consistent with the compiler. Each runs in
-`just
-build`, through the test recipes.
+`just build`, through the test recipes.
 
-| Test                                                                                              | File                                 | What fails it                                                                                      |
-| ------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| `skill_examples_compile`                                                                          | `crates/ridl/tests/book_examples.rs` | a fence that draws a diagnostic its fence does not name, or names one it does not draw             |
-| `every_cited_code_is_in_the_catalogue`                                                            | `crates/ridl/tests/skill_gates.rs`   | a `TYPL-`, `RIDL-`, `RSDL-`, `FORM-` or `MANI-` code that `freeze/diagnostics.txt` lacks           |
-| `every_link_of_every_skill_file_resolves` and `every_reference_section_links_an_existing_heading` | `crates/ridl/tests/skill_gates.rs`   | a link whose page or anchor is missing in `docs/book/`, a relative link, or a section with no link |
+| Test                                                                                               | File                                 | What fails it                                                                                      |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `skill_examples_compile`                                                                           | `crates/ridl/tests/book_examples.rs` | a fence that draws a diagnostic its fence does not name, or names one it does not draw             |
+| `every_cited_code_is_in_the_catalogue`                                                             | `crates/ridl/tests/skill_gates.rs`   | a `TYPL-`, `RIDL-`, `RSDL-`, `FORM-` or `MANI-` code that `freeze/diagnostics.txt` lacks           |
+| `every_link_of_every_skill_file_resolves` and `every_skill_section_links_an_existing_book_heading` | `crates/ridl/tests/skill_gates.rs`   | a link whose page or anchor is missing in `docs/book/`, a relative link, or a section with no link |
 
 The skill's fences are verified as a workspace of their own, so a package name
 in the skill need not differ from one in the book. A retired diagnostic code is
