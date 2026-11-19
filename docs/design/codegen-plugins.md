@@ -735,6 +735,99 @@ payload root, and the bound a generated `Payload<Podbuf>` carries.
   member's limit bounds each one (ADR-0032 decision 14), so the model's
   reservation and the Rust backend's `RESERVATIONS` row agree.
 
+### The proto3 projection
+
+`Model.proto3` (field 12, `Proto3Projection`) carries the proto3 message layout
+and the refusals computed by `crates/ridl-ir/src/codegen/proto3.rs`. It is set
+for every package the toolchain lowers, whatever `encodings` the manifest
+selects. A plugin reads these facts rather than deriving proto3 rules. The
+schema is `crates/ridl-ir/proto/ridl/codegen/v1/model.proto`, under "The proto3
+projection".
+
+- **Order.** `messages` lists one message per representable struct, union, named
+  scalar, enum and enum set in `Model.declarations` order, then one per
+  representable named tuple in `Model.tuples` order. A constant has neither a
+  message nor a refusal. Every tuple with a name in this package is considered,
+  including one that no payload carries; the Rust codec lays out only the tuples
+  it reaches. A tuple lifted from a declaration of another package has no name
+  in this package and has neither a message nor a refusal here; the declaring
+  package's own projection lists it.
+- **Name and source.** `Proto3Message.name` is the message name without its
+  package: the declared name of a struct or union, `<Name>Box` for a named
+  scalar, enum or enum set, and the tuple's wire name (its Rust name if the wire
+  name is empty). `source` selects `struct_declaration`, `union_declaration` or
+  `root_box`, each an index into `Model.declarations`, or `tuple`, an index into
+  `Model.tuples`. A union's fields are the arms of `oneof value`.
+- **Fields.** `fields` is in field-number order. The numbers need not be dense:
+  reserved and retired slots have no field. A struct field and a union arm take
+  their ordinal; a tuple field takes its position plus 1; a root box has one
+  field, `value = 1`. `Proto3Field.source` identifies the struct field or union
+  arm by its source name, the tuple field by its zero-based position, or the box
+  value with `box_value`.
+- **Wires.** `Proto3Wire.kind` selects `scalar`, `text`, `bytes`, `enumeration`,
+  `message`, `array` or `map`. A scalar carries its proto3 type and wire type;
+  numeric and boolean values and an enum set's integer use that arm.
+  `Proto3WireType` enum values are not protobuf wire-type numbers: VARINT maps
+  to 0, I64 to 1, LEN to 2 and I32 to 5. Text and bytes use the length-delimited
+  wire type. An enum carries a `TypeRef` and is an int32 varint. A message
+  reference indexes `Proto3Projection.messages` for a local struct, union or
+  tuple, or `Model.foreign` for a struct or union of another package. An array
+  carries its element wire, with `packed` true exactly when that wire is
+  `scalar` or `enumeration`; text, bytes and messages are not packed. A map
+  carries its key and value wires. Its entry message is not listed in
+  `messages`: key is field 1 and value is field 2.
+- **Defaults.** `Proto3Wire.default_is_legal` (field 1) states whether the
+  proto3 default is a legal value of the type. Every wire carries it, including
+  a root box's value, an array's element, and a map's key and value. For a
+  numeric scalar or boolean, it is true when 0 is within the constraint's range
+  and on its step grid, or when there is no constraint. A named scalar uses its
+  own constraint. For text and bytes, it is true when that constraint's length
+  lower bound is absent or 0. For an enum, it is true when its zero member
+  indexes a declared value or the enum is open. For an enum set or a message, it
+  is always true. For an array or a map, it is true when the count lower bound
+  is 0; an element, key or value follows its own type's rule. When the flag is
+  true, an absent field with implicit presence, map key or map value is taken as
+  the proto3 default and then verified as a present value would be; when false,
+  an absent value is malformed. An empty string is still checked against its
+  pattern, and an absent message is verified as the empty message, which can
+  fail on a field of its own or on a union with no arm. A writer omits a value
+  at its default only when the flag is true. This field has existed since
+  `Model.proto3`, so every writer that writes a `Proto3Wire` sets it, and
+  `false` always means the default is not legal.
+- **Refusals.** A refused declaration or named tuple has no message; a tuple
+  with no name in this package has neither a message nor a refusal here, because
+  it comes from another package's declaration, whose projection lists it.
+  `refused` lists its source index and a `Proto3RefusalCause`, in declaration
+  order and then tuple order. The causes are `OPTIONAL_COLLECTION` (an optional
+  array or map field), `OPTIONAL_ELEMENT` (an optional array element, map key or
+  map value), `NESTED_COLLECTION` (an array of arrays or maps, or a map value
+  that is an array or map), `MAP_KEY` (a key refused by the Rust codec's rule,
+  which admits integral, boolean, string, enum and enum-set keys), `ENUM_VALUE`
+  (a live or retired enum value outside int32), `FIELD_NUMBER` (0, 19000..=19999
+  or above 536870911), `REFUSED_DEPENDENCY`, and `OTHER` (an input the walk
+  cannot represent, such as a missing type, an unresolved reference, an empty
+  union or an empty strict enum). `member`, when present, names the member as
+  `Owner.field`; an enum's own refusal names its value when that value has a
+  name. For a member using an enum with values outside int32, it names the using
+  member, including when the enum is foreign. The walk records each refused
+  member and each enum value outside int32; several such values can give several
+  entries for one member. Within a source it preserves the refusal walk's order,
+  so the first direct refusal is the one the Rust backend reports for the same
+  input. For every cause except `REFUSED_DEPENDENCY`, `message` is the
+  diagnostic text the Rust backend reports for that refusal, unchanged. A
+  message that needs a refused local message is refused transitively with
+  `REFUSED_DEPENDENCY`, no `member`, and the text
+  `` `<name>` needs the refused message `<other>`: <the message of other> ``.
+- **Sizes.** The projection and the size states are independent. A representable
+  declaration without a finite bound is in `messages`; its `Declaration.proto3`
+  size state still records why it has no bound. Having a message therefore does
+  not imply that the Rust backend can emit a codec for it: that backend also
+  requires a bounded size state.
+
+The Rust codec still computes its own layout. The comparison with this
+projection and its limits are described in
+[the proto3 codec record](proto3-codec.md#the-wire-mapping).
+
 ## 8. What a plugin author reads
 
 The book chapter [Writing a codegen plugin](../book/codegen-plugins.md) is the

@@ -13,7 +13,9 @@
 //! enum), a map as `map<K, V>`, a tuple as an induced message.
 //!
 //! A member whose shape the backend refuses makes the payload absent. The
-//! refusals reproduced here, each citing the backend function that holds it,
+//! model walk in `codegen/proto3.rs` also records proto3 refusals; the Rust
+//! codec still checks them in its own walk. The refusals reproduced here,
+//! each citing the schema backend function that holds it,
 //! include: a field with no type and a stream type (`resolve_field_type`), a
 //! name that does not resolve (`resolve_named`), a nested array or map and a
 //! map value that is an array or a map (`resolve_field_type`), a map key
@@ -37,9 +39,9 @@
 //! `<Interface>Ordinal` table (`SymbolScope::claim`). A payload in a package
 //! the backend refuses on a name collision still gets a proto3 bound here: the
 //! wire size does not depend on the names. Moving the other refusal rules
-//! reproduced here into [`crate::projection::proto3`], where the backend and
-//! this sizer would share them as they share `optional_repeated`, is tracked
-//! by driftsys/ridl#690.
+//! reproduced here into [`crate::projection::proto3`], for the schema backend,
+//! this sizer, the Rust codec and the model walk to share, is tracked by
+//! driftsys/ridl#690.
 //!
 //! proto3 has no unbounded state: typl bounds every collection, so a message
 //! is bounded or absent, and the cause of an absence says why. A member the
