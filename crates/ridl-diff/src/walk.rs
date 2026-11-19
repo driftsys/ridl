@@ -252,7 +252,7 @@ fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec
             Some(type_repr_str(b)),
         );
     }
-    if a.constraint != b.constraint {
+    if !crate::classify::constraints_equal(a.constraint.as_ref(), b.constraint.as_ref()) {
         emit(
             changes,
             path.to_string(),

@@ -890,6 +890,41 @@ fn match_constraint(clauses: &[(&str, Option<&str>)]) -> v2::Constraint {
     }
 }
 
+fn assert_match_constraints_unchanged(old: v2::Constraint, new: v2::Constraint, remote: bool) {
+    for received in [false, true] {
+        let (mut old, mut new) = constraint_case(old.clone(), new.clone());
+        if received {
+            old.interfaces[0].interactions = vec![signal("receive", 1, "S")];
+            new.interfaces[0].interactions = old.interfaces[0].interactions.clone();
+        }
+        for (old, new) in [(&old, &new), (&new, &old)] {
+            let report = if remote {
+                let mut holder = old.clone();
+                holder.name = "app".into();
+                holder.decls.clear();
+                holder.interfaces[0].interactions = if received {
+                    vec![signal("receive", 1, &format!("{}.S", old.name))]
+                } else {
+                    vec![command(
+                        "send",
+                        1,
+                        vec![param("value", named(&format!("{}.S", old.name)))],
+                        vec![],
+                    )]
+                };
+                crate::diff_refs_with_contexts(&[&holder], &[&holder], &[old], &[new], &[])
+                    .expect("both remote scalar definitions are present")
+            } else {
+                diff_packages(old, new)
+            };
+            assert!(
+                report.changes.is_empty(),
+                "received={received}, remote={remote}: {report:?}"
+            );
+        }
+    }
+}
+
 #[test]
 fn adding_a_second_match_clause_is_breaking() {
     let (old, new) = constraint_case(
@@ -910,11 +945,11 @@ fn removing_a_match_clause_is_compatible() {
 
 #[test]
 fn swapping_match_clauses_is_compatible() {
-    let (old, new) = constraint_case(
+    assert_match_constraints_unchanged(
         match_constraint(&[("/a/", None), ("/b/", None)]),
         match_constraint(&[("/b/", None), ("/a/", None)]),
+        false,
     );
-    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
 }
 
 #[test]
@@ -924,9 +959,9 @@ fn a_legacy_pattern_and_the_same_match_clause_are_compatible() {
         pattern: Some("/a/".into()),
         ..Default::default()
     };
-    let (old, new) = constraint_case(legacy, match_constraint(&[("/a/", None)]));
-    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
-    assert_row(&new, &old, Category::ConstraintChanged, Verdict::Compatible);
+    let mut current = match_constraint(&[("/a/", None)]);
+    current.pattern = legacy.pattern.clone();
+    assert_match_constraints_unchanged(legacy, current, false);
 }
 
 #[test]
@@ -940,20 +975,69 @@ fn rewriting_a_match_clause_is_breaking() {
 
 #[test]
 fn changing_a_match_clause_constant_is_breaking() {
-    let (old, new) = constraint_case(
-        match_constraint(&[("/a/", Some("A"))]),
-        match_constraint(&[("/a/", Some("B"))]),
-    );
-    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+    assert_match_constant_change(Some("A"), Some("B"), true, Verdict::Breaking);
+}
+
+#[test]
+fn adding_a_match_clause_constant_is_breaking() {
+    assert_match_constant_change(None, Some("A"), true, Verdict::Breaking);
+}
+
+#[test]
+fn removing_a_match_clause_constant_does_not_narrow() {
+    assert_match_constant_change(Some("A"), None, false, Verdict::Compatible);
+}
+
+fn assert_match_constant_change(
+    old_constant: Option<&str>,
+    new_constant: Option<&str>,
+    narrows: bool,
+    sent_verdict: Verdict,
+) {
+    let old = match_constraint(&[("/a/", old_constant)]);
+    let new = match_constraint(&[("/a/", new_constant)]);
+    assert_eq!(super::narrows(Some(&old), Some(&new)), narrows);
+    for (received, verdict) in [(false, sent_verdict), (true, Verdict::Breaking)] {
+        let (mut old, mut new) = constraint_case(old.clone(), new.clone());
+        if received {
+            old.interfaces[0].interactions = vec![signal("receive", 1, "S")];
+            new.interfaces[0].interactions = old.interfaces[0].interactions.clone();
+        }
+        assert_row(&old, &new, Category::ConstraintChanged, verdict);
+    }
 }
 
 #[test]
 fn duplicating_a_match_clause_is_compatible() {
-    let (old, new) = constraint_case(
+    assert_match_constraints_unchanged(
         match_constraint(&[("/a/", None)]),
         match_constraint(&[("/a/", None), ("/a/", None)]),
+        false,
     );
-    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+}
+
+#[test]
+#[allow(deprecated)]
+fn equivalent_remote_match_constraints_draw_no_rows() {
+    let legacy = v2::Constraint {
+        pattern: Some("/a/".into()),
+        ..Default::default()
+    };
+    let mut current = match_constraint(&[("/a/", None)]);
+    current.pattern = legacy.pattern.clone();
+    for (old, new) in [
+        (legacy, current),
+        (
+            match_constraint(&[("/a/", None), ("/b/", None)]),
+            match_constraint(&[("/b/", None), ("/a/", None)]),
+        ),
+        (
+            match_constraint(&[("/a/", None)]),
+            match_constraint(&[("/a/", None), ("/a/", None)]),
+        ),
+    ] {
+        assert_match_constraints_unchanged(old, new, true);
+    }
 }
 
 #[test]

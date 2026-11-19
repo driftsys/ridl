@@ -566,7 +566,10 @@ fn constraint_changes(
                                 },
                             );
                         }
-                        if a.constraint == b.constraint {
+                        if crate::classify::constraints_equal(
+                            a.constraint.as_ref(),
+                            b.constraint.as_ref(),
+                        ) {
                             continue;
                         }
                         let verdict = if crate::classify::narrows(
