@@ -231,8 +231,8 @@ codec still computes its own layout rather than reading that projection.
 the codec equal for field numbers, types and labels over the conformance fixture
 and the corpus. It compares every codec message and requires every projection
 message outside the codec layout to have a tuple source. It does not compare
-packing: the codec layout carries a number, a type and a label per field, and no
-packing.
+packing or `default_is_legal`: the codec layout carries only a number, a type
+and a label per field.
 
 ## The writer
 

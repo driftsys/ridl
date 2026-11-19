@@ -558,6 +558,7 @@ ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_UINT64 = 4
 ridl.codegen.v1.Proto3ScalarType.PROTO3_SCALAR_TYPE_UNSPECIFIED = 0
 ridl.codegen.v1.Proto3Wire.array = 15 singular ridl.codegen.v1.Proto3Array oneof=kind
 ridl.codegen.v1.Proto3Wire.bytes = 12 singular bool oneof=kind
+ridl.codegen.v1.Proto3Wire.default_is_legal = 1 singular bool
 ridl.codegen.v1.Proto3Wire.enumeration = 13 singular ridl.codegen.v1.Proto3Enum oneof=kind
 ridl.codegen.v1.Proto3Wire.map = 16 singular ridl.codegen.v1.Proto3Map oneof=kind
 ridl.codegen.v1.Proto3Wire.message = 14 singular ridl.codegen.v1.Proto3MessageRef oneof=kind

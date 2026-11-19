@@ -32,6 +32,159 @@ fn kind(field: &v1::Proto3Field) -> &v1::proto3_wire::Kind {
     field.wire.as_ref().unwrap().kind.as_ref().unwrap()
 }
 
+fn default_rule(p: &v1::Proto3Projection, owner: &str, position: usize) -> bool {
+    message(p, owner).fields[position]
+        .wire
+        .as_ref()
+        .expect("a wire")
+        .default_is_legal
+}
+
+#[test]
+fn a_ranged_scalar_default_is_legal_only_when_the_range_holds_zero() {
+    for (ty, expected) in [
+        ("integer [0..10]", true),
+        ("integer [1..10]", false),
+        ("float [-1.5..1.5 step 1.0]", false),
+        ("float [-1.0..1.0 step 0.5]", true),
+        ("integer", true),
+        ("float", true),
+        ("boolean", true),
+    ] {
+        let (_, p) = projection(&format!(
+            "package p.defaults\ntype Number : {ty}\nstruct Values {{\n inline : {ty}\n named : Number\n}}\n"
+        ));
+        assert_eq!(default_rule(&p, "NumberBox", 0), expected, "{ty} box");
+        assert_eq!(default_rule(&p, "Values", 0), expected, "{ty} inline");
+        assert_eq!(default_rule(&p, "Values", 1), expected, "{ty} named");
+    }
+}
+
+#[test]
+fn a_text_or_bytes_default_is_legal_only_without_a_length_floor() {
+    for ty in ["string", "bytes"] {
+        for (constraint, expected) in [("[0..8]", true), ("[1..8]", false), ("", true)] {
+            let inline = if constraint.is_empty() {
+                "Data".to_string()
+            } else {
+                format!("{ty} {constraint}")
+            };
+            let (_, p) = projection(&format!(
+                "package p.defaults\ntype Data : {ty} {constraint}\nstruct Values {{\n inline : {inline}\n named : Data\n}}\n"
+            ));
+            assert_eq!(
+                default_rule(&p, "DataBox", 0),
+                expected,
+                "{ty} box {constraint}"
+            );
+            assert_eq!(
+                default_rule(&p, "Values", 0),
+                expected,
+                "{ty} inline {constraint}"
+            );
+            assert_eq!(
+                default_rule(&p, "Values", 1),
+                expected,
+                "{ty} named {constraint}"
+            );
+        }
+    }
+}
+
+#[test]
+fn an_enum_default_is_legal_with_a_zero_member_or_when_open() {
+    for (openness, value, expected) in [
+        ("", 0, true),
+        ("", 1, false),
+        ("open ", 0, true),
+        ("open ", 1, true),
+    ] {
+        let (_, p) = projection(&format!(
+            "package p.defaults\n{openness}enum Mode {{\n VALUE = {value}\n}}\nstruct Values {{\n mode : Mode\n}}\n"
+        ));
+        assert_eq!(
+            default_rule(&p, "ModeBox", 0),
+            expected,
+            "{openness}{value} box"
+        );
+        assert_eq!(
+            default_rule(&p, "Values", 0),
+            expected,
+            "{openness}{value} field"
+        );
+    }
+}
+
+#[test]
+fn an_enum_set_and_a_message_default_are_always_legal() {
+    let (model, p) = projection(
+        "package p.defaults\n\
+         enumset Flags {\n BIT = 1\n}\n\
+         type Positive : integer [1..10]\n\
+         struct Item {\n required : Positive\n}\n\
+         union Choice {\n item : Item\n number : Positive\n}\n\
+         struct Values {\n flags : Flags\n item : Item\n choice : Choice\n pair : (required: Positive, flag: boolean)\n}\n",
+    );
+    assert!(default_rule(&p, "FlagsBox", 0));
+    for position in 0..4 {
+        assert!(default_rule(&p, "Values", position));
+    }
+    assert!(default_rule(&p, "Choice", 0));
+    assert!(!default_rule(&p, "Choice", 1));
+    let tuple = &model.tuples[0].name.as_ref().unwrap().wire;
+    assert!(!default_rule(&p, tuple, 0));
+    assert!(default_rule(&p, tuple, 1));
+    assert!(!default_rule(&p, "Item", 0));
+}
+
+#[test]
+fn a_collection_default_is_legal_only_without_a_count_floor() {
+    for (min, expected) in [(0, true), (1, false)] {
+        let (_, p) = projection(&format!(
+            "package p.defaults\nstruct Values {{\n numbers : [integer [1..10]; {min}..3]\n entries : [integer [0..10] : boolean; {min}..3]\n}}\n"
+        ));
+        assert_eq!(default_rule(&p, "Values", 0), expected, "array {min}");
+        assert_eq!(default_rule(&p, "Values", 1), expected, "map {min}");
+        let v1::proto3_wire::Kind::Array(array) = kind(&message(&p, "Values").fields[0]) else {
+            panic!("an array")
+        };
+        assert!(!array.element.as_ref().unwrap().default_is_legal);
+    }
+    let (_, p) =
+        projection("package p.defaults\nstruct Values {\n numbers : [integer [0..10]; 1..3]\n}\n");
+    let v1::proto3_wire::Kind::Array(array) = kind(&message(&p, "Values").fields[0]) else {
+        panic!("an array")
+    };
+    assert!(!default_rule(&p, "Values", 0));
+    assert!(array.element.as_ref().unwrap().default_is_legal);
+}
+
+#[test]
+fn a_map_key_and_value_carry_their_own_default_rule() {
+    let (_, p) = projection(
+        "package p.defaults\n\
+         type Key : string [1..8]\n\
+         struct Maps {\n strictKey : [Key : integer [0..10]; 0..3]\n\
+         strictValue : [integer [0..10] : bytes [1..8]; 0..3]\n}\n",
+    );
+    for (position, key, value) in [(0, false, true), (1, true, false)] {
+        let v1::proto3_wire::Kind::Map(map) = kind(&message(&p, "Maps").fields[position]) else {
+            panic!("a map")
+        };
+        assert_eq!(
+            map.key.as_ref().unwrap().default_is_legal,
+            key,
+            "key {position}"
+        );
+        assert_eq!(
+            map.value.as_ref().unwrap().default_is_legal,
+            value,
+            "value {position}"
+        );
+        assert!(default_rule(&p, "Maps", position));
+    }
+}
+
 #[test]
 fn a_struct_field_takes_its_ordinal_and_its_scalar() {
     let (_, p) = projection(

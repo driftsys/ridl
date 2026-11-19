@@ -282,6 +282,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_BOOL",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -576,6 +577,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_BOOL",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"

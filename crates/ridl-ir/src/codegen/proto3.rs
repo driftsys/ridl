@@ -404,14 +404,14 @@ impl Walk<'_> {
     fn wire(&self, ty: &v1::Type) -> WireResult {
         use v1::proto3_wire::Kind;
 
-        let kind = match ty.kind.as_ref() {
+        let (kind, default_is_legal) = match ty.kind.as_ref() {
             Some(v1::r#type::Kind::Primitive(primitive)) => {
                 match v1::PrimitiveType::try_from(*primitive).ok() {
                     Some(
                         v1::PrimitiveType::Boolean
                         | v1::PrimitiveType::Integer
                         | v1::PrimitiveType::Float,
-                    ) => return Ok(scalar_wire(pb::primitive(*primitive))),
+                    ) => return Ok(scalar_wire(pb::primitive(*primitive), true)),
                     _ => {
                         return Err(Failure::other(
                             "a proto3 codec cannot carry an unbounded primitive",
@@ -422,17 +422,20 @@ impl Walk<'_> {
             }
             Some(v1::r#type::Kind::Inline(scalar)) => return project_scalar(scalar),
             Some(v1::r#type::Kind::Named(reference)) => return self.declaration_wire(reference),
-            Some(v1::r#type::Kind::Tuple(reference)) => Kind::Message(v1::Proto3MessageRef {
-                target: Some(v1::proto3_message_ref::Target::Message(
-                    self.tuples
-                        .get(reference.index as usize)
-                        .copied()
-                        .flatten()
-                        .ok_or_else(|| {
-                            Failure::other("the lowered model names a tuple it does not carry")
-                        })?,
-                )),
-            }),
+            Some(v1::r#type::Kind::Tuple(reference)) => (
+                Kind::Message(v1::Proto3MessageRef {
+                    target: Some(v1::proto3_message_ref::Target::Message(
+                        self.tuples
+                            .get(reference.index as usize)
+                            .copied()
+                            .flatten()
+                            .ok_or_else(|| {
+                                Failure::other("the lowered model names a tuple it does not carry")
+                            })?,
+                    )),
+                }),
+                true,
+            ),
             Some(v1::r#type::Kind::Array(array)) => {
                 let element = array
                     .element
@@ -449,12 +452,15 @@ impl Walk<'_> {
                     .into());
                 }
                 let packed = matches!(element.kind, Some(Kind::Scalar(_) | Kind::Enumeration(_)));
-                Kind::Array(
-                    v1::Proto3Array {
-                        element: Some(element.into()),
-                        packed,
-                    }
-                    .into(),
+                (
+                    Kind::Array(
+                        v1::Proto3Array {
+                            element: Some(element.into()),
+                            packed,
+                        }
+                        .into(),
+                    ),
+                    array.min == 0,
                 )
             }
             Some(v1::r#type::Kind::Map(map)) => {
@@ -493,12 +499,15 @@ impl Walk<'_> {
                     )
                     .into());
                 }
-                Kind::Map(
-                    v1::Proto3Map {
-                        key: Some(key_wire.into()),
-                        value: Some(value.into()),
-                    }
-                    .into(),
+                (
+                    Kind::Map(
+                        v1::Proto3Map {
+                            key: Some(key_wire.into()),
+                            value: Some(value.into()),
+                        }
+                        .into(),
+                    ),
+                    map.min == 0,
                 )
             }
             _ => {
@@ -507,7 +516,10 @@ impl Walk<'_> {
                 );
             }
         };
-        Ok(v1::Proto3Wire { kind: Some(kind) })
+        Ok(v1::Proto3Wire {
+            default_is_legal,
+            kind: Some(kind),
+        })
     }
 
     fn resolve(&self, reference: &v1::TypeRef) -> Option<(&v1::Declaration, String)> {
@@ -541,7 +553,7 @@ impl Walk<'_> {
             .resolve(reference)
             .ok_or_else(|| unresolved(reference))?;
         let name = declared(declaration.name.as_ref());
-        let kind = match declaration.kind.as_ref() {
+        let (kind, default_is_legal) = match declaration.kind.as_ref() {
             Some(v1::declaration::Kind::Scalar(scalar)) => return project_scalar(scalar),
             Some(v1::declaration::Kind::Enum(def)) => {
                 if !def.open && def.values.is_empty() {
@@ -590,16 +602,24 @@ impl Walk<'_> {
                 if !failures.is_empty() {
                     return Err(Failures(failures));
                 }
-                Kind::Enumeration(v1::Proto3Enum {
-                    r#type: Some(reference.clone()),
-                })
+                let default_is_legal = def.open
+                    || def
+                        .zero_member
+                        .and_then(|index| def.values.get(index as usize))
+                        .is_some();
+                (
+                    Kind::Enumeration(v1::Proto3Enum {
+                        r#type: Some(reference.clone()),
+                    }),
+                    default_is_legal,
+                )
             }
             Some(v1::declaration::Kind::EnumSet(def)) => {
                 let scalar = v1::IntWidth::try_from(def.width)
                     .ok()
                     .and_then(pb::int_width_scalar)
                     .ok_or_else(|| Failure::other(format!("`{name}` carries no integer width")))?;
-                return Ok(scalar_wire(scalar));
+                return Ok(scalar_wire(scalar, true));
             }
             Some(v1::declaration::Kind::Struct(_) | v1::declaration::Kind::Union(_)) => {
                 let target = if self
@@ -615,9 +635,12 @@ impl Walk<'_> {
                 } else {
                     v1::proto3_message_ref::Target::Foreign(reference.index)
                 };
-                Kind::Message(v1::Proto3MessageRef {
-                    target: Some(target),
-                })
+                (
+                    Kind::Message(v1::Proto3MessageRef {
+                        target: Some(target),
+                    }),
+                    true,
+                )
             }
             _ => {
                 return Err(Failure::other(format!(
@@ -627,7 +650,10 @@ impl Walk<'_> {
                 .into());
             }
         };
-        Ok(v1::Proto3Wire { kind: Some(kind) })
+        Ok(v1::Proto3Wire {
+            default_is_legal,
+            kind: Some(kind),
+        })
     }
 
     fn map_key_scalar(&self, ty: &v1::Type) -> Option<pb::Scalar> {
@@ -762,20 +788,40 @@ fn scalar_type(scalar: &v1::Scalar) -> Result<pb::Scalar, Failure> {
 }
 
 fn project_scalar(scalar: &v1::Scalar) -> WireResult {
-    scalar_type(scalar).map(scalar_wire).map_err(Into::into)
+    let ty = scalar_type(scalar)?;
+    let default_is_legal = match ty {
+        pb::Scalar::String | pb::Scalar::Bytes => {
+            scalar
+                .constraint
+                .as_ref()
+                .and_then(|c| c.len_min)
+                .unwrap_or(0)
+                == 0
+        }
+        _ => scalar.constraint.as_ref().is_none_or(|constraint| {
+            crate::zero::range_holds_zero(
+                constraint.min.as_deref(),
+                constraint.max.as_deref(),
+                constraint.step.as_deref(),
+            )
+        }),
+    };
+    Ok(scalar_wire(ty, default_is_legal))
 }
 
-fn scalar_wire(scalar: pb::Scalar) -> v1::Proto3Wire {
+fn scalar_wire(scalar: pb::Scalar, default_is_legal: bool) -> v1::Proto3Wire {
     use v1::proto3_wire::Kind;
 
     let ty = match scalar {
         pb::Scalar::String => {
             return v1::Proto3Wire {
+                default_is_legal,
                 kind: Some(Kind::Text(true)),
             };
         }
         pb::Scalar::Bytes => {
             return v1::Proto3Wire {
+                default_is_legal,
                 kind: Some(Kind::Bytes(true)),
             };
         }
@@ -795,6 +841,7 @@ fn scalar_wire(scalar: pb::Scalar) -> v1::Proto3Wire {
         pb::WireType::I32 => v1::Proto3WireType::I32,
     };
     v1::Proto3Wire {
+        default_is_legal,
         kind: Some(Kind::Scalar(v1::Proto3Scalar {
             r#type: ty as i32,
             wire_type: wire_type as i32,

@@ -409,7 +409,9 @@ the order of the heads and the meaning of each field.
 `Model.proto3` carries the proto3 messages and refusals of the package,
 including root boxes and induced tuples. Each message lists the field numbers,
 wire forms and sources; an array also states whether it is packed. A plugin can
-read the layout and refusal diagnostics directly.
+read the layout and refusal diagnostics directly. Each wire also carries
+`default_is_legal`; [the per-kind rules][proto3-projection] define when its
+proto3 default is legal.
 [The codegen plugin record, "The proto3 projection"][proto3-projection] defines
 the order, names, sources, wires, refusals and relation to size states.
 

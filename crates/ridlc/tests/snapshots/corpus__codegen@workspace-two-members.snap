@@ -285,6 +285,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_FLOAT",
                 "wireType": "PROTO3_WIRE_TYPE_I32"
@@ -301,6 +302,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_FLOAT",
                 "wireType": "PROTO3_WIRE_TYPE_I32"
@@ -580,6 +582,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_FLOAT",
                 "wireType": "PROTO3_WIRE_TYPE_I32"

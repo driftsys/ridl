@@ -771,6 +771,16 @@ projection".
   when that wire is `scalar` or `enumeration`; text, bytes and messages are not
   packed. A map carries its key and value wires. Its entry message is not listed
   in `messages`: key is field 1 and value is field 2.
+- **Defaults.** `Proto3Wire.default_is_legal` (field 1) states whether the
+  proto3 default is a legal value of the type. Every wire carries it, including
+  a root box's value, an array's element, and a map's key and value. For a
+  numeric scalar or boolean, it is true when 0 is within the constraint's range
+  and on its step grid, or when there is no constraint. A named scalar uses its
+  own constraint. For text and bytes, it is true when that constraint's length
+  lower bound is absent or 0. For an enum, it is true when its zero member
+  indexes a declared value or the enum is open. For an enum set or a message, it
+  is always true. For an array or a map, it is true when the count lower bound
+  is 0; an element, key or value follows its own type's rule.
 - **Refusals.** A refused declaration or tuple has no message. `refused` lists
   its source index and a `Proto3RefusalCause`, in declaration order and then
   tuple order. The causes are `OPTIONAL_COLLECTION` (an optional array or map

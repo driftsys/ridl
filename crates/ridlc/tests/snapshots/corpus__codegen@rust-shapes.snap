@@ -9586,6 +9586,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9602,6 +9603,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9618,6 +9620,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_FLOAT",
                 "wireType": "PROTO3_WIRE_TYPE_I32"
@@ -9634,6 +9637,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_DOUBLE",
                 "wireType": "PROTO3_WIRE_TYPE_I64"
@@ -9650,6 +9654,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": false,
               "text": true
             },
             "boxValue": true
@@ -9663,6 +9668,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "text": true
             },
             "boxValue": true
@@ -9676,6 +9682,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": false,
               "bytes": true
             },
             "boxValue": true
@@ -9689,6 +9696,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "bytes": true
             },
             "boxValue": true
@@ -9702,6 +9710,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "Mode",
@@ -9724,6 +9733,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9740,6 +9750,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "Failure",
@@ -9762,6 +9773,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "Lamp",
@@ -9784,6 +9796,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9800,6 +9813,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT64",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9816,6 +9830,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9826,6 +9841,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "text": true
             },
             "field": "label"
@@ -9839,6 +9855,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9849,6 +9866,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "text": true
             },
             "field": "message"
@@ -9862,6 +9880,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9872,6 +9891,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9882,6 +9902,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 3,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_FLOAT",
                 "wireType": "PROTO3_WIRE_TYPE_I32"
@@ -9892,6 +9913,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 4,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_DOUBLE",
                 "wireType": "PROTO3_WIRE_TYPE_I64"
@@ -9902,6 +9924,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 5,
             "wire": {
+              "defaultIsLegal": false,
               "text": true
             },
             "field": "tag"
@@ -9909,6 +9932,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 6,
             "wire": {
+              "defaultIsLegal": true,
               "text": true
             },
             "field": "note"
@@ -9916,6 +9940,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 7,
             "wire": {
+              "defaultIsLegal": false,
               "bytes": true
             },
             "field": "frame"
@@ -9923,6 +9948,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 8,
             "wire": {
+              "defaultIsLegal": true,
               "bytes": true
             },
             "field": "blob"
@@ -9930,6 +9956,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 9,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_BOOL",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9940,6 +9967,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 10,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "Mode",
@@ -9956,6 +9984,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 11,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9966,6 +9995,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 12,
             "wire": {
+              "defaultIsLegal": true,
               "message": {
                 "message": 14
               }
@@ -9975,6 +10005,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 13,
             "wire": {
+              "defaultIsLegal": true,
               "message": {
                 "message": 21
               }
@@ -9984,8 +10015,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 14,
             "wire": {
+              "defaultIsLegal": false,
               "array": {
                 "element": {
+                  "defaultIsLegal": true,
                   "scalar": {
                     "type": "PROTO3_SCALAR_TYPE_UINT32",
                     "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -9999,8 +10032,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 15,
             "wire": {
+              "defaultIsLegal": true,
               "array": {
                 "element": {
+                  "defaultIsLegal": true,
                   "scalar": {
                     "type": "PROTO3_SCALAR_TYPE_SINT32",
                     "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10014,8 +10049,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 16,
             "wire": {
+              "defaultIsLegal": true,
               "array": {
                 "element": {
+                  "defaultIsLegal": true,
                   "text": true
                 },
                 "packed": false
@@ -10026,11 +10063,14 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 17,
             "wire": {
+              "defaultIsLegal": true,
               "map": {
                 "key": {
+                  "defaultIsLegal": false,
                   "text": true
                 },
                 "value": {
+                  "defaultIsLegal": true,
                   "scalar": {
                     "type": "PROTO3_SCALAR_TYPE_UINT32",
                     "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10043,8 +10083,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 18,
             "wire": {
+              "defaultIsLegal": true,
               "array": {
                 "element": {
+                  "defaultIsLegal": true,
                   "message": {
                     "message": 14
                   }
@@ -10057,6 +10099,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 19,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10073,6 +10116,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "Lamp",
@@ -10089,6 +10133,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10099,8 +10144,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 3,
             "wire": {
+              "defaultIsLegal": true,
               "array": {
                 "element": {
+                  "defaultIsLegal": true,
                   "enumeration": {
                     "type": {
                       "reference": "Lamp",
@@ -10120,8 +10167,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 4,
             "wire": {
+              "defaultIsLegal": true,
               "array": {
                 "element": {
+                  "defaultIsLegal": true,
                   "scalar": {
                     "type": "PROTO3_SCALAR_TYPE_UINT32",
                     "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10135,6 +10184,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 5,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT64",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10151,6 +10201,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10161,6 +10212,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "text": true
             },
             "arm": "text"
@@ -10168,6 +10220,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 3,
             "wire": {
+              "defaultIsLegal": true,
               "message": {
                 "message": 16
               }
@@ -10183,6 +10236,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "message": {
                 "message": 14
               }
@@ -10192,6 +10246,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "message": {
                 "message": 15
               }
@@ -10207,6 +10262,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10217,6 +10273,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": false,
               "bytes": true
             },
             "field": "frame"
@@ -10230,6 +10287,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10240,6 +10298,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10256,6 +10315,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10266,6 +10326,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10297,6 +10358,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10307,6 +10369,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10353,6 +10416,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -10363,6 +10427,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_SINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"

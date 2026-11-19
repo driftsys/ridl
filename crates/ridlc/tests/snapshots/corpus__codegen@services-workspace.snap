@@ -1688,6 +1688,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -1704,6 +1705,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_FLOAT",
                 "wireType": "PROTO3_WIRE_TYPE_I32"
@@ -1720,6 +1722,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -1736,6 +1739,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "LockState",
@@ -1758,6 +1762,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "scalar": {
                 "type": "PROTO3_SCALAR_TYPE_UINT32",
                 "wireType": "PROTO3_WIRE_TYPE_VARINT"
@@ -1768,6 +1773,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           {
             "number": 2,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "LockState",
@@ -1790,6 +1796,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "DoorFault",
@@ -2004,6 +2011,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           {
             "number": 1,
             "wire": {
+              "defaultIsLegal": true,
               "enumeration": {
                 "type": {
                   "reference": "DoorFault",
