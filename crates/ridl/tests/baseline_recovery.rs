@@ -853,6 +853,7 @@ fn pre_match_json(package: &ridl_ir::v2::Package) -> String {
 }
 
 #[test]
+#[allow(deprecated)]
 fn pre_match_baseline_with_a_clause_is_readable_and_reset_restarts_history() {
     use ridl_core::catalog_history::{self, CatalogHistory};
     use ridlc::baseline_context::{BaselineContext, write_context};
@@ -882,7 +883,13 @@ fn pre_match_baseline_with_a_clause_is_readable_and_reset_restarts_history() {
             let Some(ridl_ir::v2::decl::Kind::TypeDef(code)) = &mut historical.decls[0].kind else {
                 unreachable!()
             };
-            code.constraint.as_mut().unwrap().matches.clear();
+            let constraint = code.constraint.as_mut().unwrap();
+            // Release 0.20 wrote the source literal in the legacy search field.
+            if let Some(clause) = constraint.matches.first() {
+                constraint.pattern = clause.pattern.clone();
+                constraint.pattern_const = clause.pattern_const.clone();
+            }
+            constraint.matches.clear();
             let json = pre_match_json(&historical);
             assert!(!json.contains("\"matches\""));
             std::fs::write(baseline.join("app.ir.json"), &json).unwrap();
@@ -903,6 +910,10 @@ fn pre_match_baseline_with_a_clause_is_readable_and_reset_restarts_history() {
                 if let Some(ridl_ir::v2::decl::Kind::TypeDef(def)) = &mut decl.kind
                     && let Some(constraint) = &mut def.constraint
                 {
+                    if let Some(clause) = constraint.matches.first() {
+                        constraint.pattern = clause.pattern.clone();
+                        constraint.pattern_const = clause.pattern_const.clone();
+                    }
                     constraint.matches.clear();
                 }
             }
@@ -917,12 +928,14 @@ fn pre_match_baseline_with_a_clause_is_readable_and_reset_restarts_history() {
             )
             .unwrap();
             let prior = inventory(&baseline);
-            command(
+            let (status, stdout, stderr) = ridl(
                 dir.path(),
                 home.path(),
                 &["diff", baseline.to_str().unwrap(), "."],
-                0,
             );
+            assert_eq!(status, 0, "{stdout}\n{stderr}");
+            // Diff compares pattern text, even when matching semantics changed.
+            assert_eq!(stdout.trim(), "identical");
             match mode {
                 "plain" => {
                     command(dir.path(), home.path(), &["baseline"], 0);

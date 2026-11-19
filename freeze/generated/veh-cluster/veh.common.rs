@@ -1285,7 +1285,7 @@ pub struct DriverProfile {
     /// # Rules
     ///
     /// - length 1 ..= 128
-    /// - pattern `/^[\x20-\x7E]+$/`
+    /// - pattern `/[ -~]+/`
     pub name: crate::ridl::std::Name,
     /// # Rules
     ///
@@ -1363,7 +1363,7 @@ pub struct SensorFault {
     /// # Rules
     ///
     /// - length 1 ..= 256
-    /// - pattern `/^[\x20-\x7E]+$/`
+    /// - pattern `/[ -~]+/`
     pub message: crate::ridl::std::Message,
 }
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

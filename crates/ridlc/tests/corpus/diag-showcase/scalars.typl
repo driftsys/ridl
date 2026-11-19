@@ -35,7 +35,7 @@ type Overshoot : km/h [0.0..250.0 step 0.5] = 300.0
 
 // TYPL-115: a `match`-typed string has no derivable init and no declared
 // value (info).
-const HANDLE_PATTERN = /^[a-z]{3,8}$/
+const HANDLE_PATTERN = /[a-z]{3,8}/
 type Handle : string [3..8 match HANDLE_PATTERN]
 
 // TYPL-106: an invalid regex constant.

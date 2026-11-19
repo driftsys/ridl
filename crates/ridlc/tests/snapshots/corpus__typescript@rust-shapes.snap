@@ -165,11 +165,11 @@ export function initFloor(): Floor {
  * @remarks
  * Rules:
  * - length 1 ..= 16
- * - pattern `/^[a-z][a-z0-9-]*$/`
+ * - pattern `/[a-z][a-z0-9-]*\/`
  */
 export type Tag = string & { readonly __ridl: 'lint.shapes.Tag' };
 
-const __ridlPatternTag_0 = new globalThis.RegExp('^[a-z][a-z0-9-]*$');
+const __ridlPatternTag_0 = new globalThis.RegExp('^(?:[a-z][a-z0-9-]*)$', 'u');
 
 /** Builds a `Tag`. Throws a `ConstraintError` when a checked constraint is broken. */
 export function makeTag(value: string): Tag {
@@ -183,7 +183,7 @@ export function makeTag(value: string): Tag {
     throw new $rt.ConstraintError('length', 'lint.shapes.Tag', value, '[1..16]');
   }
   if (!__ridlPatternTag_0.test(value)) {
-    throw new $rt.ConstraintError('pattern', 'lint.shapes.Tag', value, '/^[a-z][a-z0-9-]*$/');
+    throw new $rt.ConstraintError('pattern', 'lint.shapes.Tag', value, '/[a-z][a-z0-9-]*/');
   }
   return value as Tag;
 }
@@ -514,7 +514,7 @@ export interface Panel {
    * @remarks
    * Rules:
    * - length 1 ..= 16
-   * - pattern `/^[a-z][a-z0-9-]*$/`
+   * - pattern `/[a-z][a-z0-9-]*\/`
    */
   tag: Tag;
   /**

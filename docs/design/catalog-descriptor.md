@@ -446,11 +446,11 @@ and `Text` have none. A payload `T?` is sized as `T`.
 
 **Strings.** A `string [min..max]` bound counts Unicode scalar values, and its
 byte capacity is four bytes per scalar value (`string_max_bytes`), in both
-columns. A `match` pattern does not narrow it: the checker and the generated
-Rust code do not yet agree on what a pattern matches, so an ASCII-only verdict
-is not safe for a size bound (driftsys/ridl#665). A `string` or `bytes` with no
-`len_max` has no bound in either column, as in `max_size`. A compiled package
-always carries `len_max`.
+columns. A `match` pattern does not narrow it. The checker and the generated
+Rust code now agree on I-Regexp whole-value matching (driftsys/ridl#597);
+deriving a smaller byte capacity from an ASCII-only pattern remains open
+(driftsys/ridl#665). A `string` or `bytes` with no `len_max` has no bound in
+either column, as in `max_size`. A compiled package always carries `len_max`.
 
 The Rust backend's `Payload<FlatBuffers>::MAX_SIZE` is the codegen model's
 `Payload.flatbuffers_max_size`, the same `max_size` value. Its
@@ -666,7 +666,7 @@ For these, the archived design note is the record of the agreed direction.
 
 | Item                                                                                                                                                                                                                                          | Issue              |
 | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| Narrow a string's byte capacity from an ASCII-only match pattern, after #597                                                                                                                                                                  | driftsys/ridl#665  |
+| Narrow a string's byte capacity from an ASCII-only match pattern; #597 is implemented, #665 remains open                                                                                                                                      | driftsys/ridl#665  |
 | Streams (ridl §12): [D-30](ridl-transport-ws.md) records the WebSocket server's upload support; [D-23](ridl-transport-ws-ts.md) records the TypeScript methods and their limits. The Rust face omits calls with two or more stream parameters | driftsys/ridl#1224 |
 | debt(ridl-descriptor): Windows schema paths and an unpinned guard in the schema tooling                                                                                                                                                       | driftsys/ridl#670  |
 | debt(ridl-ir): catalog hash follow-ups deferred from the review of #676                                                                                                                                                                       | driftsys/ridl#679  |

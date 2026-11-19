@@ -252,65 +252,95 @@ UTF-8 in double quotes. Escapes follow
 
 ### 2.7 Regex Literals
 
-Enclosed in forward slashes; syntax follows
-[ECMA-262](https://tc39.es/ecma262/#sec-regexp-regular-expression-objects),
-restricted to the patterns that the Rust [`regex`](https://docs.rs/regex/1)
-crate also compiles. Forward slashes inside the pattern are escaped `\/`.
+A regex literal is enclosed in forward slashes. Its pattern is an I-Regexp
+([RFC 9485 §3](https://www.rfc-editor.org/rfc/rfc9485#section-3)), with the
+refusals below, and matches the whole value, from its first character to its
+last. `.*ABC.*` accepts a value that contains `ABC` and holds no line break;
+`(.|\n|\r)*ABC(.|\n|\r)*` accepts any value that contains `ABC`. Forward slashes
+inside the literal are escaped `\/`, including inside a class. The delimiter
+escape is removed before checking the pattern; other escape pairs are kept
+unchanged.
 
 ```ridl
-/^[A-HJ-NPR-Z0-9]{17}$/
+/[A-HJ-NPR-Z0-9]{17}/
 ```
 
-A pattern that is not ECMA-262 syntax is TYPL-106. A pattern that is ECMA-262
-syntax but that the `regex` crate cannot compile is TYPL-220. The Rust backend
-emits one `regex::Regex::new` call per `match` clause on a `string`-backed type
-in the generated code, under the generated crate's `validate-pattern` feature
-(on by default), and a pattern that call refuses would fail at run time instead
-of at build time. A regex constant is emitted as text and is not compiled, but a
-`match` that names the constant is, so the constant is checked at its
-declaration (§6.2).
+The language accepts:
 
-The ECMA-262 constructs that the `regex` crate refuses, and that a typl pattern
-therefore cannot use, include:
+- literal Unicode characters, classes with ranges and negation (`[a-z0-9_]`,
+  `[^@]`), alternation (`a|b`) and plain groups (`(ab)`);
+- `.`, which matches one Unicode scalar value except `\n` and `\r`;
+- the escapes `\(`, `\)`, `\*`, `\+`, `\.`, `\?`, `\[`, `\\`, `\]`, `\^`, `\n`,
+  `\r`, `\t`, `\{`, `\|`, `\}`, and `\-` inside a class only;
+- the quantifiers `*`, `+`, `?`, `{n}`, `{n,}` and `{n,m}`, with non-negative
+  decimal integers. Bounds are compared exactly, without saturation, even when
+  they exceed a machine integer. A maximum below the minimum is refused.
 
-- lookaround: `(?=…)`, `(?!…)`, `(?<=…)`, `(?<!…)`
-- a backreference, numbered (`\1`) or named (`\k<name>`)
-- the control escape `\cX`, the NUL escape `\0`, and an identity escape of a
-  letter the `regex` crate gives no meaning, such as `\e`, `\Q` or `\k`. An
-  identity escape of a letter the crate does give a meaning, such as `\a`, `\A`,
-  `\z` or `\pL`, compiles in both engines, with the different meanings the table
-  below records
-- the empty class `[]`, the negated empty class `[^]`, and an unescaped `[`
-  inside a class, as in `[[]`
-- the backspace escape inside a class, `[\b]`
-- a class escape as a range bound, as in `[\d-z]` or `[\w-.]`
-- a quantifier with no lower bound, such as `{,3}`, and a `{` that opens no
-  complete quantifier, as in `{` alone or `a{`
-- a pattern whose compiled form exceeds the `regex` crate's size limit. `\w` and
-  `\p{..}` are large Unicode classes in that crate, so an ordinary pattern such
-  as `^\w{1,256}$` exceeds the limit, while `^[A-Za-z0-9_]{1,256}$` does not. An
-  artificial pattern such as `(a{1000}){1000}` exceeds it too.
+Groups may nest at most 250 levels deep. A class range whose end is before its
+start, an empty class (`[]` or `[^]`), an incomplete escape, an unmatched
+delimiter, or a quantifier with nothing to repeat is refused. Reduce excessive
+nesting, write the smaller bound first, and complete the pattern's syntax.
 
-This list is not complete. The rule is that the compiler compiles the pattern
-with both engines: a construct not listed here that the `regex` crate refuses is
-TYPL-220 too.
+The following constructs are outside the accepted language. Replacements use
+explicit sets: they do not preserve the Unicode sets of every former engine.
 
-TYPL-220 guarantees only that the Rust output can compile the pattern. It does
-not guarantee that the checker, the Rust output and the output of another
-backend match the same strings. The checker tests a declared init value against
-a pattern (TYPL-109) with ECMA-262 semantics, and some patterns that both
-engines compile have a different meaning in each (driftsys/ridl#597):
+| Refused construct                                                             | Replacement                                                                                                                 |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `^…$`, `\A…\z`, `\A…\Z`                                                       | Remove the anchors: the match covers the whole value.                                                                       |
+| `^…` with no end anchor                                                       | `….*` for a prefix followed by text that holds no line break.                                                               |
+| `…$` with no start anchor                                                     | `.*…` for a suffix preceded by text that holds no line break.                                                               |
+| `\d`, `\D`                                                                    | `[0-9]`, `[^0-9]`.                                                                                                          |
+| `\w`, `\W`                                                                    | `[0-9A-Za-z_]`, `[^0-9A-Za-z_]`.                                                                                            |
+| `\s`, `\S`                                                                    | `[ \t\n\r]`, `[^ \t\n\r]`.                                                                                                  |
+| `\b`, `\B`                                                                    | No word-boundary operator; write the boundary characters explicitly.                                                        |
+| `\uXXXX`, `\xXX`, identity or control escapes such as `\a`, `\cX`, `\0`, `\<` | Write the character itself; `[\x20-\x7E]` becomes `[ -~]`.                                                                  |
+| Lookahead or lookbehind                                                       | Write each condition as its own `match` clause, such as `match /.*X.*/ match /.*Y.*/` for a value that holds no line break. |
+| Backreferences (`\1` to `\9`, `\k`)                                           | Write the alternatives out.                                                                                                 |
+| Non-capturing or named groups (`(?:…)`, `(?<name>…)`, `(?P<…)`)               | Write a plain group `(…)`.                                                                                                  |
+| Lazy or possessive quantifiers (`*?`, `++`)                                   | Use a plain quantifier.                                                                                                     |
+| A quantifier after a quantifier (`a**`, `a{2}{3}`)                            | Use one quantifier, or group the repeated expression: `(a{2}){3}`.                                                          |
+| A hyphen after a class range (`[a-b-c]`)                                      | Write a hyphen first, last, or as `\-`: `[-a-bc]`, `[a-bc-]`, `[a-b\-c]`.                                                   |
+| Inline flags (`(?i)ab`)                                                       | Write each case in a class: `[Aa][Bb]`.                                                                                     |
+| POSIX classes (`[:alpha:]`)                                                   | Write an explicit range, such as `[a-z]`.                                                                                   |
+| Nested classes                                                                | Flatten the class; a literal `[` is `\[`.                                                                                   |
+| `{,n}`                                                                        | Supply a minimum: `{0,n}`.                                                                                                  |
 
-| In a pattern | ECMA-262, no `u` flag (the checker)               | The Rust `regex` crate                  |
-| ------------ | ------------------------------------------------- | --------------------------------------- |
-| `\d`, `\w`   | ASCII digits, ASCII word characters               | Unicode digits, Unicode word characters |
-| `.`          | one UTF-16 unit, not `\n`, `\r`, U+2028 or U+2029 | one scalar value, not `\n`              |
-| `\p{L}`      | the text `p{L}`                                   | a Unicode letter                        |
-| `\A`, `\z`   | the letters `A` and `z`                           | the start and the end of the text       |
-| `\a`         | the letter `a`                                    | the bell character, U+0007              |
-| `\<`         | the character `<`                                 | a start-of-word boundary                |
-| `[a&&b]`     | one of `a`, `&`, `b`                              | the intersection of `a` and `b`, empty  |
-| `[[a]]`      | one of `[`, `a`, followed by `]`                  | the nested class `[a]`                  |
+Six spellings allowed by RFC 9485 are also refused because engine meanings would
+differ:
+
+| Refused spelling                                               | Replacement                                                                 |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `^` or `$` outside a class                                     | `\^` or `[$]` for a literal character.                                      |
+| `&&` inside a class                                            | One `&`.                                                                    |
+| `~~` inside a class                                            | One `~`.                                                                    |
+| Two consecutive unescaped `-` characters inside a class (`--`) | One `-`. The range `[\--z]` is accepted.                                    |
+| `\-` outside a class                                           | A bare `-`.                                                                 |
+| `\p{…}`, `\P{…}`                                               | Explicit ranges, such as `[a-zà-ÿ]`; engine Unicode category tables differ. |
+
+A pattern outside this language is TYPL-106, inline or in a regex constant. The
+recogniser in `ridl-sem` decides that diagnostic before compilation. An accepted
+pattern that the Rust [`regex`](https://docs.rs/regex/1) crate cannot compile is
+TYPL-220, for example when nested counted repetitions exceed its compiled-size
+limit. A regex constant is checked at its declaration (§6.2), even though its
+generated constant is text.
+
+An unanchored pattern still compiles, but matches the whole value: `/ABC/`
+accepts only `"ABC"`. Write `/.*ABC.*/` for a value that contains `ABC` and
+holds no line break. For a prefix followed by any character including `\n` or
+`\r`, write `prefix(.|\n|\r)*` instead of `prefix.*`.
+
+The normalised pattern `P` removes the literal's delimiters and delimiter
+escapes, and rewrites each unescaped `.` outside a class as `[^\n\r]`. The
+checker tests an init value against every clause (TYPL-109, RIDL-110) using the
+same text and engine as the Rust output. The
+[generated pattern engine texts](../book/generated-code.md#pattern-engine-texts)
+define how each output wraps `P` for whole-value matching.
+
+These consumers give the same verdict for an accepted pattern and a Unicode
+scalar value string. A dot accepts U+2028 and U+2029, and a character outside
+the Basic Multilingual Plane counts as one character. Rust checks patterns under
+the generated crate's `validate-pattern` feature, on by default; TypeScript
+always checks them. Several clauses are conjunctive (§5.3).
 
 ### 2.8 Tokens recognised but not used by typl
 
@@ -647,10 +677,11 @@ more times without a length bound. A value must match every clause. Clause order
 does not change which values match, and `ridl diff` ignores it. The IR keeps
 source order, and changing the order changes the catalog hash when the unit
 reaches the type. Each clause references a named regex constant or an inline
-regex literal.
+regex literal. The example below requires a value that holds no line break (see
+[§2.7](#27-regex-literals)).
 
 ```ridl
-type Token : string [8..64 match /[0-9]/ match /[A-Z]/]
+type Token : string [8..64 match /.*[0-9].*/ match /.*[A-Z].*/]
 ```
 
 See [§5.8](#58-init-values) for declared and derived init values.
@@ -841,13 +872,13 @@ declaration, not at each `match` that names it. The Rust backend emits the
 constant itself as text, not as a compiled pattern:
 
 ```ridl
-const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
-const ASCII_PATTERN = /^[\x20-\x7E]+$/
+const VIN_PATTERN   = /[A-HJ-NPR-Z0-9]{17}/
+const ASCII_PATTERN = /[ -~]+/
 ```
 
 ```ridl
 type Vin   : string [17 match VIN_PATTERN]
-type Email : string [1..254 match /^[^@]+@[^@]+\.[^@]+$/]
+type Email : string [1..254 match /[^@]+@[^@]+\.[^@]+/]
 ```
 
 ---
@@ -1491,7 +1522,7 @@ scope is checked under, is in ridl §16.4.
 | TYPL-103 | `string`/`bytes` without explicit bounds — default `[0..256]` applied                                                                                                                                                                             | warning; error if active profile requires          |
 | TYPL-104 | range `min > max`                                                                                                                                                                                                                                 | error                                              |
 | TYPL-105 | `step` type mismatch, non-positive, or larger than the range                                                                                                                                                                                      | error                                              |
-| TYPL-106 | invalid regex syntax in `match` or a regex `const` — a valid pattern the Rust `regex` crate refuses is TYPL-220                                                                                                                                   | error                                              |
+| TYPL-106 | invalid regex syntax in `match` or a regex `const` — not an I-Regexp, or a refused construct (§2.7); an accepted pattern the Rust `regex` crate refuses is TYPL-220                                                                               | error                                              |
 | TYPL-107 | regex contradicts declared character bound                                                                                                                                                                                                        | warning                                            |
 | TYPL-108 | `const` value violates its declared type constraints                                                                                                                                                                                              | error                                              |
 | TYPL-109 | init `= value` incompatible with the type or field constraints                                                                                                                                                                                    | error                                              |
@@ -1524,7 +1555,7 @@ scope is checked under, is in ridl §16.4.
 | TYPL-217 | union arm name declared twice in one union                                                                                                                                     | error    |
 | TYPL-218 | enumset bit name declared twice in one enumset                                                                                                                                 | error    |
 | TYPL-219 | enumset bit position is not a number with an integer value                                                                                                                     | error    |
-| TYPL-220 | regex pattern the Rust `regex` crate cannot compile (§2.7) — numbered in this range, but not a composite                                                                       | error    |
+| TYPL-220 | regex pattern the Rust `regex` crate cannot compile — an accepted I-Regexp, including one over its compiled-size limit (§2.7); numbered in this range, but not a composite     | error    |
 | TYPL-222 | one field name used with different units                                                                                                                                       | info     |
 | TYPL-224 | duplicate declaration shape                                                                                                                                                    | info     |
 | TYPL-225 | enum value outside the `int32` range (declared live values only)                                                                                                               | error    |
@@ -1880,21 +1911,21 @@ package ridl.std
 // ---------- Regex Constants ----------
 
 /// Pattern of a UUID: five groups of 8, 4, 4, 4 and 12 lowercase hexadecimal digits
-const UUID_PATTERN  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const UUID_PATTERN  = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
 /// Pattern of a ULID: 26 Crockford base32 characters, the first one 0 to 7
-const ULID_PATTERN  = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+const ULID_PATTERN  = /[0-7][0-9A-HJKMNP-TV-Z]{25}/
 /// Pattern of a URI: a scheme, `://`, then at least one character
-const URI_PATTERN   = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/.+$/
+const URI_PATTERN   = /[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/.+/
 /// Pattern of a URL: `http://` or `https://`, then at least one character
-const URL_PATTERN   = /^https?:\/\/.+$/
+const URL_PATTERN   = /https?:\/\/.+/
 /// Pattern of an email address: a local part, `@`, and a domain that contains a dot
-const EMAIL_PATTERN = /^[^@]+@[^@]+\.[^@]+$/
+const EMAIL_PATTERN = /[^@]+@[^@]+\.[^@]+/
 /// Pattern of an IPv4 address: four groups of 1 to 3 digits, separated by dots
-const IPV4_PATTERN  = /^(\d{1,3}\.){3}\d{1,3}$/
+const IPV4_PATTERN  = /([0-9]{1,3}\.){3}[0-9]{1,3}/
 /// Pattern of an IPv6 address: lowercase hexadecimal digits and colons
-const IPV6_PATTERN  = /^[0-9a-f:]+$/
+const IPV6_PATTERN  = /[0-9a-f:]+/
 /// Pattern of a string of printable ASCII characters
-const ASCII_PATTERN = /^[\x20-\x7E]+$/
+const ASCII_PATTERN = /[ -~]+/
 
 // ---------- Identity Types ----------
 
@@ -1944,23 +1975,23 @@ type Timestamp : integer [0..9223372036854775807]
 type Duration  : ms [0.0..9223372036854775807]
 
 /// Calendar date — ISO 8601 YYYY-MM-DD
-type Date : string [10 match /^\d{4}-\d{2}-\d{2}$/]
+type Date : string [10 match /[0-9]{4}-[0-9]{2}-[0-9]{2}/]
 
 /// Time of day — ISO 8601 HH:MM:SS
-type TimeOfDay : string [8..15 match /^\d{2}:\d{2}:\d{2}/]
+type TimeOfDay : string [8..15 match /[0-9]{2}:[0-9]{2}:[0-9]{2}.*/]
 
 // ---------- Version ----------
 
 /// Semantic version — SemVer 2.0.0
-type Version : string [5..32 match /^\d+\.\d+\.\d+/]
+type Version : string [5..32 match /[0-9]+\.[0-9]+\.[0-9]+.*/]
 
 // ---------- Locale ----------
 
 /// ISO 3166-1 alpha-2 country code
-type CountryCode : string [2 match /^[A-Z]{2}$/]
+type CountryCode : string [2 match /[A-Z]{2}/]
 
 /// ISO 639-1 language code with optional region — e.g. "en", "en-US"
-type LanguageCode : string [2..5 match /^[a-z]{2}(-[A-Z]{2})?$/]
+type LanguageCode : string [2..5 match /[a-z]{2}(-[A-Z]{2})?/]
 
 // ---------- Crypto / Security ----------
 
@@ -2077,21 +2108,21 @@ internal struct RawWheelFrame {
 
 ## Appendix C — Standards References
 
-| Standard                                                                                                                                                         | Used for                                                                                     |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| [Unicode 15.0](https://www.unicode.org/versions/Unicode15.0.0/)                                                                                                  | source encoding                                                                              |
-| [RFC 3629](https://www.rfc-editor.org/rfc/rfc3629)                                                                                                               | UTF-8                                                                                        |
-| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259)                                                                                                               | string escapes                                                                               |
-| [ECMA-262](https://tc39.es/ecma262/)                                                                                                                             | regex literal syntax, restricted to the patterns the Rust `regex` crate also compiles (§2.7) |
-| [CommonMark](https://commonmark.org)                                                                                                                             | doc comment markdown                                                                         |
-| [IEEE 754-2019](https://ieeexplore.ieee.org/document/8766229)                                                                                                    | floating point                                                                               |
-| [ISO/IEC 9899:2018 (C17)](https://www.iso.org/standard/74528.html)                                                                                               | integer/float literal conventions                                                            |
-| [UCUM](https://ucum.org/ucum)                                                                                                                                    | physical unit expressions                                                                    |
-| [ISO 8601](https://www.iso.org/standard/70907.html) / [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)                                                         | time types                                                                                   |
-| [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986), [RFC 4122](https://www.rfc-editor.org/rfc/rfc4122)                                                           | Uri, Uuid                                                                                    |
-| [SemVer 2.0.0](https://semver.org/)                                                                                                                              | Version                                                                                      |
-| [ISO 3779](https://www.iso.org/standard/52200.html), [ISO 3166-1](https://www.iso.org/standard/72482.html), [ISO 639-1](https://www.iso.org/standard/22109.html) | Vin, CountryCode, LanguageCode                                                               |
-| [JSON Schema 2020-12](https://json-schema.org/specification)                                                                                                     | coverage benchmark (Appendix G)                                                              |
+| Standard                                                                                                                                                         | Used for                                             |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [Unicode 15.0](https://www.unicode.org/versions/Unicode15.0.0/)                                                                                                  | source encoding                                      |
+| [RFC 3629](https://www.rfc-editor.org/rfc/rfc3629)                                                                                                               | UTF-8                                                |
+| [RFC 8259](https://www.rfc-editor.org/rfc/rfc8259)                                                                                                               | string escapes                                       |
+| [RFC 9485](https://www.rfc-editor.org/rfc/rfc9485)                                                                                                               | I-Regexp pattern language, with the refusals of §2.7 |
+| [CommonMark](https://commonmark.org)                                                                                                                             | doc comment markdown                                 |
+| [IEEE 754-2019](https://ieeexplore.ieee.org/document/8766229)                                                                                                    | floating point                                       |
+| [ISO/IEC 9899:2018 (C17)](https://www.iso.org/standard/74528.html)                                                                                               | integer/float literal conventions                    |
+| [UCUM](https://ucum.org/ucum)                                                                                                                                    | physical unit expressions                            |
+| [ISO 8601](https://www.iso.org/standard/70907.html) / [RFC 3339](https://www.rfc-editor.org/rfc/rfc3339)                                                         | time types                                           |
+| [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986), [RFC 4122](https://www.rfc-editor.org/rfc/rfc4122)                                                           | Uri, Uuid                                            |
+| [SemVer 2.0.0](https://semver.org/)                                                                                                                              | Version                                              |
+| [ISO 3779](https://www.iso.org/standard/52200.html), [ISO 3166-1](https://www.iso.org/standard/72482.html), [ISO 639-1](https://www.iso.org/standard/22109.html) | Vin, CountryCode, LanguageCode                       |
+| [JSON Schema 2020-12](https://json-schema.org/specification)                                                                                                     | coverage benchmark (Appendix G)                      |
 
 ---
 
@@ -2181,11 +2212,13 @@ per-deployment choice (an rsdl concern, not a type property).
 
 **Schema targets.** Because typl is a schema language, schema languages are
 themselves backends: **JSON Schema 2020-12** (each named type → `$defs` entry;
-ranges → `minimum`/`maximum`, step → `multipleOf`, match → `pattern`, structs →
-closed objects with `additionalProperties: false`), **OpenAPI/AsyncAPI component
-schemas**, **ARXML** (`<AR-PACKAGE>` chain, CompuMethods from unit types),
-**DBC** (scaling/offset derived from range and step). The JSON Schema emitter is
-the round-trip check on Appendix G.
+ranges → `minimum`/`maximum`, step → `multipleOf`, a `match` →
+`pattern: "^(?:P)$"` with `P` the normalised pattern (§2.7), several clauses →
+`allOf` with one such pattern per clause, structs → closed objects with
+`additionalProperties: false`), **OpenAPI/AsyncAPI component schemas**,
+**ARXML** (`<AR-PACKAGE>` chain, CompuMethods from unit types), **DBC**
+(scaling/offset derived from range and step). The JSON Schema emitter is the
+round-trip check on Appendix G.
 
 ---
 
@@ -2375,7 +2408,7 @@ stricter), ✗ not expressible (deliberate or open).
 | `exclusiveMinimum` / `exclusiveMaximum`                       | —                                                                                      | ✗ deliberate — not supported and not planned (§5.5)                                                                                                                           |
 | `multipleOf`                                                  | `step` (quantization anchored at range min)                                            | ✓                                                                                                                                                                             |
 | `minLength` / `maxLength`                                     | `string [min..max]`                                                                    | ✓                                                                                                                                                                             |
-| `pattern`                                                     | `match /re/` or named regex `const`                                                    | ✓ + reusable named patterns                                                                                                                                                   |
+| `pattern`                                                     | `match /re/` or named regex `const`                                                    | ✓ whole-value `pattern: "^(?:P)$"` over the normalised pattern (§2.7); several clauses map to `allOf`, one pattern per clause                                                 |
 | `format` (uuid, email, uri, ipv4, date, …)                    | `ridl.std` named types (`Uuid`, `Email`, `Uri`, `IpV4`, `Date`, …)                     | ✓ and normative (JSON Schema `format` is annotation-only by default)                                                                                                          |
 | `contentEncoding` / `contentMediaType`                        | `bytes` + doc comment                                                                  | ≈ partial                                                                                                                                                                     |
 | `minItems` / `maxItems`                                       | `[T; min..max]`                                                                        | ✓ mandatory                                                                                                                                                                   |
@@ -2456,7 +2489,8 @@ planned for v0.2: string enums (§17.1) and `uniqueItems` as an array constraint
 | **range**                          | closed (inclusive) `[min..max]` bounds; the semantic truth from which wire width is inferred                                                                                                                                                                        |
 | **step**                           | quantization: valid values are `min + n·step`; drives float width inference and the scaled-integer wire form                                                                                                                                                        |
 | **quantized float**                | a float with range + step — losslessly representable as a scaled integer (`raw = (value − min)/step`), the CAN/AUTOSAR wire form                                                                                                                                    |
-| **`match`**                        | the constraint keyword binding a string type to a regex pattern (named `const` or inline literal)                                                                                                                                                                   |
+| **`match`**                        | the constraint keyword requiring a string to match an I-Regexp pattern over the whole value (named `const` or inline literal); every clause must match (§2.7, §5.3)                                                                                                 |
+| **pattern**                        | an I-Regexp with the refusals of §2.7, matched against the whole Unicode scalar value string                                                                                                                                                                        |
 | **width inference**                | the compiler deriving the narrowest safe wire type from a declared range/step — computed once, passed to all backends                                                                                                                                               |
 | **language layer**                 | the value domain and its generated representation: declared live enum values have the `int32` domain (Rust strict enums retain `#[repr(i64)]`, open enums retain `From<i64>`); integers and enum sets use `int64`; floats use `float64`                             |
 | **transport layer**                | the on-wire representation: narrowest width the range provably fits                                                                                                                                                                                                 |

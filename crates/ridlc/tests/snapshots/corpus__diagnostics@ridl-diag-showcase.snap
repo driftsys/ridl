@@ -388,25 +388,37 @@ error[RIDL-413]: `value` is already declared in this parameter list — a name i
    │                   │               
    │                   `value` is declared here
 
-note[TYPL-115]: type `LookaheadCode` has no derivable init value and no declared `= value`
+note[TYPL-115]: type `NestedCode` has no derivable init value and no declared `= value`
   ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:9:6
   │
-9 │ type LookaheadCode : string [1..8 match /^(?=A)[A-Z]+$/]
-  │      ^^^^^^^^^^^^^
+9 │ type NestedCode : string [1..8 match /(([a-z]{1,64}){1,64}){1,64}/]
+  │      ^^^^^^^^^^
   │
   = lint: `no-init-value` (set its level in `[lints]` in ridl.toml)
 
-error[TYPL-220]: the Rust `regex` crate cannot compile this pattern: look-around, including look-ahead and look-behind, is not supported — a typl pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)
-  ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:9:41
+error[TYPL-220]: the Rust `regex` crate cannot compile this pattern: the compiled pattern exceeds the crate's size limit of 10485760 bytes; a counted repetition inside another counted repetition is the usual cause (typl §2.7)
+  ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:9:38
   │
-9 │ type LookaheadCode : string [1..8 match /^(?=A)[A-Z]+$/]
-  │                                         ^^^^^^^^^^^^^^^
+9 │ type NestedCode : string [1..8 match /(([a-z]{1,64}){1,64}){1,64}/]
+  │                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-error[TYPL-220]: the Rust `regex` crate cannot compile this pattern: backreferences are not supported — a typl pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)
+error[TYPL-106]: `^` is not accepted: a pattern matches the whole value, so remove the anchor; a literal `^` is `\^`
    ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:12:26
    │
 12 │ const REPEATED_PATTERN = /^(a)\1$/
    │                          ^^^^^^^^^
+
+error[TYPL-106]: groups are nested deeper than 250; reduce the nesting
+   ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:15:22
+   │
+15 │ const DEEP_PATTERN = /(((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((((a)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))/
+   │                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[TYPL-106]: the quantifier `{3,2}` has a maximum below its minimum; write the smaller number first
+   ┌─ tests/corpus/ridl-diag-showcase/main/regex_patterns.typl:18:26
+   │
+18 │ const REVERSED_PATTERN = /a{3,2}/
+   │                          ^^^^^^^^
 
 error[RIDL-142]: `diag.showcase.legacy` is not a service name: a service is declared with one CamelCase name, and its global name is its package followed by that name — write `service ShowcaseLegacy` (global name `diag.ridl.ShowcaseLegacy`) (ridl §14.5)
    ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:12:9
@@ -529,7 +541,7 @@ warning[RIDL-112]: command without a declared response bound — the maximum `1s
 note[TYPL-115]: type `Serial` has no derivable init value and no declared `= value`
    ┌─ tests/corpus/ridl-diag-showcase/main/vocabulary.typl:14:6
    │
-14 │ type Serial : string [4..8 match /^[A-Z]+$/]
+14 │ type Serial : string [4..8 match /[A-Z]+/]
    │      ^^^^^^
    │
    = lint: `no-init-value` (set its level in `[lints]` in ridl.toml)

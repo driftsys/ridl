@@ -1643,7 +1643,8 @@ impl Checker<'_> {
             );
         }
 
-        // TYPL-106: a regex constant's pattern must be a valid ECMA-262 regex.
+        // TYPL-106: constants use I-Regexp too, with at most 250 nested groups
+        // and quantifier bounds compared as exact integers.
         if let Some(LitKind::Regex(text)) = &value_kind {
             self.validate_regex(text, value_range);
         }
@@ -1827,44 +1828,21 @@ impl Checker<'_> {
         }
     }
 
-    /// Validates a regex literal's pattern with the `regress` ECMA-262 engine
-    /// (typl §2.7; ADR-0007 decision 10), emitting TYPL-106 on invalid syntax.
-    /// A pattern `regress` accepts is then compiled with the Rust `regex`
-    /// crate, and one that crate refuses is TYPL-220: the Rust backend emits a
-    /// `match` on a `String`-backed type as a `regex::Regex::new(..).expect(..)`
-    /// call under the generated crate's `validate-pattern` feature, which
-    /// panics if the pattern fails (issue #437). A regex constant is emitted as
-    /// a `&str` and not compiled, but a `match` naming it is. TYPL-220 does
-    /// not make the two engines match the same strings with a pattern that
-    /// both compile (typl §2.7, issue #597). A typl regex literal carries its
-    /// `/…/` delimiters; both engines parse the body between them, which is
-    /// also the text the codegen lowering hands the backend.
-    ///
-    /// Every pattern that reaches a backend passes through here: an inline
-    /// `match` pattern at its type or field, and a regex constant at its
-    /// declaration, which is the text a `match` naming that constant carries.
+    /// Validate a typl I-Regexp, then compile the Rust output's engine text.
+    /// TYPL-106 reports syntax and portability refusals, nesting beyond 250
+    /// groups, and reversed quantifier bounds compared as exact integers.
+    /// TYPL-220 reports an accepted pattern the Rust compiler refuses.
+    /// Inline clauses are checked at their literal; constants at their declaration.
     fn validate_regex(&mut self, raw: &str, range: TextRange) {
-        // The `regex` configuration in `regex_crate_verdict` must equal the
-        // one the Rust backend emits in `constraint_checks`
-        // (`ridl-backend-rust`): `Regex::new` with the builder defaults,
-        // Unicode mode on, and the crate's default features. A different
-        // configuration here accepts or refuses other patterns than the
-        // generated code compiles.
-        let body = regex_body(raw);
-        if regress::Regex::new(body).is_err() {
-            self.error(
-                DiagCode::TYPL_106,
-                range,
-                "invalid regular expression syntax".to_string(),
-            );
-        } else if let Some(reason) = regex_crate_verdict(body) {
+        if let Err(refusal) = crate::pattern::check(&ridl_ir::pattern::pattern_text(raw)) {
+            self.error(DiagCode::TYPL_106, range, refusal.message);
+        } else if let Some(reason) = regex_crate_verdict(&ridl_ir::pattern::rust_engine_text(
+            &ridl_ir::pattern::normalised_pattern(raw),
+        )) {
             self.error(
                 DiagCode::TYPL_220,
                 range,
-                format!(
-                    "the Rust `regex` crate cannot compile this pattern: {reason} — a typl \
-                     pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)"
-                ),
+                format!("the Rust `regex` crate cannot compile this pattern: {reason} (typl §2.7)"),
             );
         }
     }
@@ -2209,7 +2187,15 @@ impl Checker<'_> {
         }
         let (pattern, pattern_const) = matches
             .first()
-            .map(|clause| (clause.pattern.clone(), clause.pattern_const.clone()))
+            .map(|clause| {
+                (
+                    clause
+                        .pattern
+                        .as_deref()
+                        .map(ridl_ir::pattern::deprecated_ir_literal),
+                    clause.pattern_const.clone(),
+                )
+            })
             .unwrap_or_default();
         ScalarParts {
             constraint: Some(v2::Constraint {
@@ -2372,9 +2358,9 @@ impl Checker<'_> {
     /// §5.8). String length counts Unicode scalar values; bytes length counts
     /// UTF-8 bytes. Escape processing is not applied (the raw inner text is
     /// measured).
-    /// Pattern conformance uses ECMA-262 `test` semantics — a match anywhere in
-    /// the string; typl patterns are anchored with `^`…`$`. An invalid pattern
-    /// is skipped here (TYPL-106 reports it at the pattern's own site). Reached
+    /// Every clause must match the whole value, using the normalised pattern
+    /// and the Rust output's engine text. A pattern the Rust compiler refuses
+    /// is skipped here; validation reports it at its own site. Reached
     /// with a populated `constraint` for a named `type` and, for a
     /// struct field too: the length bound and `match` pattern flow into the
     /// field's `ScalarParts` whether the field is an inline string/bytes scalar
@@ -2415,8 +2401,10 @@ impl Checker<'_> {
         }
         for clause in ridl_ir::pattern::ir_match_clauses(constraint).clauses {
             if let Some(pattern) = clause.pattern
-                && let Ok(regex) = regress::Regex::new(regex_body(pattern))
-                && regex.find(text).is_none()
+                && let Ok(regex) = regex::Regex::new(&ridl_ir::pattern::rust_engine_text(
+                    &ridl_ir::pattern::normalised_pattern(pattern),
+                ))
+                && !regex.is_match(text)
             {
                 let clause_text = clause.pattern_const.unwrap_or(pattern);
                 self.error(
@@ -2906,7 +2894,15 @@ impl Checker<'_> {
             .collect();
         let (pattern, pattern_const) = matches
             .first()
-            .map(|clause| (clause.pattern.clone(), clause.pattern_const.clone()))
+            .map(|clause| {
+                (
+                    clause
+                        .pattern
+                        .as_deref()
+                        .map(ridl_ir::pattern::deprecated_ir_literal),
+                    clause.pattern_const.clone(),
+                )
+            })
             .unwrap_or_default();
         Some(v2::Constraint {
             min: None,
@@ -6253,14 +6249,6 @@ impl Checker<'_> {
 
 // --- free helpers ---------------------------------------------------------
 
-/// The ECMA-262 body of a typl regex literal — its text without the enclosing
-/// `/…/` delimiters (typl §2.7).
-fn regex_body(raw: &str) -> &str {
-    raw.strip_prefix('/')
-        .and_then(|rest| rest.strip_suffix('/'))
-        .unwrap_or(raw)
-}
-
 /// The `regex` crate's verdict on every pattern body compiled so far, keyed
 /// on the pattern text: `None` when the crate compiles the pattern, the
 /// [`regex_crate_refusal`] reason when it does not (TYPL-220). A full
@@ -6328,15 +6316,9 @@ fn recorded_verdict(
 /// line, and an `error: ` line — and only the last is the reason.
 fn regex_crate_refusal(error: &regex::Error) -> String {
     match error {
-        // The usual cause is a large Unicode class under a counted
-        // repetition. Measured with regex 1.13.1: `^\w{1,n}$` is over the
-        // limit from n = 210 and `^\p{L}{1,n}$` from n = 245, `^\d{1,n}$`
-        // only from n = 2031, and `\s`, `.` and `[A-Za-z0-9_]` not up to
-        // n = 5000.
         regex::Error::CompiledTooBig(limit) => format!(
-            "the compiled pattern exceeds the crate's size limit of {limit} bytes; in the Rust \
-             output `\\w` and `\\p{{..}}` are large Unicode classes, so a counted repetition \
-             of one is the usual cause, and an ASCII class such as `[A-Za-z0-9_]` is smaller"
+            "the compiled pattern exceeds the crate's size limit of {limit} bytes; a counted \
+             repetition inside another counted repetition is the usual cause"
         ),
         other => {
             let rendered = other.to_string();
@@ -10025,7 +10007,7 @@ mod tests {
              const BOOL     : boolean = FLAG\n\
              const GREETING : string  = \"hello\"\n\
              const TEXT     : string  = GREETING\n\
-             const VIN_PATTERN = /^[A-Z0-9]{17}$/\n\
+             const VIN_PATTERN = /[A-Z0-9]{17}/\n\
              const ALIAS       = VIN_PATTERN\n\
              const HOP      : integer = INT\n",
         );
@@ -10052,7 +10034,7 @@ mod tests {
         // `/…/` delimiters the direct form carries.
         assert_eq!(
             const_def(&checked, "ALIAS").regex.as_deref(),
-            Some("/^[A-Z0-9]{17}$/"),
+            Some("/[A-Z0-9]{17}/"),
         );
         assert_eq!(const_def(&checked, "ALIAS").value, "");
     }
@@ -10163,12 +10145,162 @@ mod tests {
         );
     }
 
-    // --- TYPL-106: regex validation (regress) -----------------------------
+    #[test]
+    fn typl_106_portability_refusals_name_the_construct_and_replacement() {
+        for (raw, message) in [
+            (
+                r"/^a/",
+                r"`^` is not accepted: a pattern matches the whole value, so remove the anchor; a literal `^` is `\^`",
+            ),
+            (
+                r"/a$/",
+                "`$` is not accepted: a pattern matches the whole value, so remove the anchor; a literal `$` is `[$]`",
+            ),
+            (
+                r"/[a&&b]/",
+                "`&&` is not accepted in a class: write one `&`",
+            ),
+            (
+                r"/[a~~b]/",
+                "`~~` is not accepted in a class: write one `~`",
+            ),
+            (r"/[--]/", "`--` is not accepted in a class: write one `-`"),
+            (
+                r"/a\-b/",
+                r"`\-` is accepted inside a class only: write a bare `-`",
+            ),
+            (
+                r"/\p{L}/",
+                r"`\p{L}` is not accepted: write explicit ranges, such as `[a-zà-ÿ]`",
+            ),
+        ] {
+            for source in [
+                format!("package app\nconst P = {raw}\n"),
+                format!("package app\ntype T : string [match {raw}]\n"),
+            ] {
+                let checked = check_source("app", &source);
+                let errors: Vec<_> = checked
+                    .diagnostics
+                    .iter()
+                    .filter(|d| d.severity == Severity::Error)
+                    .collect();
+                assert_eq!(errors.len(), 1, "{raw}: {:?}", checked.diagnostics);
+                assert_eq!(errors[0].code, DiagCode::TYPL_106, "{raw}");
+                assert_eq!(errors[0].message, message, "{raw}");
+                let start = source.find(raw).unwrap();
+                assert_eq!(usize::from(errors[0].primary.range.start()), start);
+                assert_eq!(
+                    usize::from(errors[0].primary.range.end()),
+                    start + raw.len()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn date_init_matches_the_whole_ascii_value() {
+        for (value, violations) in [("x2026-11-18", 2), ("٢٠٢٦-١١-١٨", 1), ("2026-11-18", 0)]
+        {
+            let checked = check_source(
+                "app",
+                &format!("package app\nstruct Dates {{ d : ridl.std.Date = \"{value}\" }}\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-109"; violations],
+                "{value:?}: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn init_pattern_refuses_a_prefix_within_the_length_bound() {
+        let checked = check_source(
+            "app",
+            "package app\ntype D : string [0..32 match /[0-9]{4}-[0-9]{2}-[0-9]{2}/] = \"x2026-11-18\"\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-109"]);
+    }
+
+    #[test]
+    fn init_checks_the_second_match_clause_and_names_it() {
+        let checked = check_source(
+            "app",
+            "package app\ntype T : string [0..32 match /[A-Z]+/ match /A+/] = \"AB\"\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-109"]);
+        assert_eq!(
+            checked.diagnostics[0].message,
+            "init string `AB` does not match the type's `match` pattern /A+/"
+        );
+    }
+
+    fn string_init_diagnostics(literal: &str, text: &str) -> Vec<Diagnostic> {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = package(&db, "app", "package app\n");
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let mut checker = Checker {
+            db: &db,
+            ws,
+            std,
+            pkg,
+            package_name: "app".into(),
+            resolution: resolve_package(&db, ws, pkg, std),
+            file_ids: vec![FileId::DETACHED],
+            current_file: 0,
+            diagnostics: vec![],
+            default_timing: timing::builtin_default_timing(),
+            default_command_timing: timing::builtin_command_timing(),
+            default_query_timing: timing::builtin_query_timing(),
+            interface_signals: vec![],
+            interface_name: String::new(),
+            interface_internal: false,
+            contract_vocabulary: None,
+        };
+        let mut parts = ScalarParts::empty();
+        parts.constraint = Some(v2::Constraint {
+            matches: vec![v2::Match {
+                pattern: Some(literal.into()),
+                pattern_const: None,
+            }],
+            ..Default::default()
+        });
+        checker.check_string_init(
+            text,
+            &parts,
+            false,
+            TextRange::new(0.into(), 1.into()),
+            DiagCode::TYPL_109,
+        );
+        checker.diagnostics
+    }
+
+    #[test]
+    fn dot_init_refuses_carriage_return() {
+        let diagnostics = string_init_diagnostics("/./", "\r");
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert_eq!(diagnostics[0].code, DiagCode::TYPL_109);
+    }
+
+    #[test]
+    fn date_init_refuses_a_final_line_feed() {
+        let diagnostics = string_init_diagnostics("/[0-9]{4}-[0-9]{2}-[0-9]{2}/", "2026-11-18\n");
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert_eq!(diagnostics[0].code, DiagCode::TYPL_109);
+    }
+
+    // --- TYPL-106: I-Regexp validation -----------------------------
 
     #[test]
     fn typl_106_invalid_regex_constant() {
         let checked = check_source("app", "package app\nconst BAD = /[/\n");
         assert_eq!(codes(&checked), vec!["TYPL-106"]);
+        assert_eq!(
+            checked.diagnostics[0].message,
+            "invalid regular expression syntax: unclosed class"
+        );
     }
 
     #[test]
@@ -10177,6 +10309,10 @@ mod tests {
         // The invalid inline regex is TYPL-106; the `match`-typed `Bad` also has
         // no derivable init and no declared `= value`, so it is TYPL-115 (info).
         assert_eq!(codes(&checked), vec!["TYPL-106", "TYPL-115"]);
+        assert_eq!(
+            checked.diagnostics[0].message,
+            "invalid regular expression syntax: unclosed class"
+        );
     }
 
     /// A valid regex constant reused in a `match` bound raises no TYPL-106 — the
@@ -10187,7 +10323,7 @@ mod tests {
     fn valid_regex_constant_and_match_are_info_only() {
         let checked = check_source(
             "app",
-            "package app\nconst VIN = /^[A-HJ-NPR-Z0-9]{17}$/\ntype Vin : string [17 match VIN]\n",
+            "package app\nconst VIN = /[A-HJ-NPR-Z0-9]{17}/\ntype Vin : string [17 match VIN]\n",
         );
         assert_eq!(codes(&checked), vec!["TYPL-115"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Info);
@@ -10202,47 +10338,86 @@ mod tests {
 
     // --- TYPL-220: a pattern the Rust `regex` crate cannot compile --------
 
-    /// Patterns that `regress` (ECMA-262, TYPL-106) accepts and the Rust
-    /// `regex` crate refuses, one per construct measured on driftsys/ridl#437.
-    /// The Rust backend emits a `match` pattern into
-    /// `regex::Regex::new(..).expect(..)`, so each of these drew no diagnostic
-    /// and panicked in the consumer's process on first use.
-    const REFUSED_BY_THE_REGEX_CRATE: &[&str] = &[
-        // Lookahead, negative lookahead, lookbehind, negative lookbehind.
-        r"/^(?=a)a$/",
-        r"/^(?!a)b$/",
+    /// Accepted syntax that exceeds the Rust compiler's size limit.
+    const REFUSED_BY_THE_REGEX_CRATE: &[&str] =
+        &[r"/(a{1000}){1000}/", r"/(([a-z]{1,64}){1,64}){1,64}/"];
+
+    /// Constructs outside I-Regexp, refused before the Rust compiler runs.
+    const REFUSED_BY_THE_RECOGNISER: &[&str] = &[
+        r"/(?=a)a/",
+        r"/(?!a)b/",
         r"/(?<=a)b/",
         r"/(?<!a)b/",
-        // A numbered and a named backreference.
-        r"/^(a)\1$/",
-        r"/^(?<w>a)\k<w>$/",
-        // A control escape and the NUL escape.
-        r"/^\cJ$/",
-        r"/^\0$/",
-        // The empty class and the negated empty class.
-        r"/^a[]$/",
-        r"/^[^]$/",
-        // A quantifier with no lower bound.
-        r"/^a{,3}$/",
-        // Patterns over the `regex` crate's compiled-size limit: an ordinary
-        // one, because `\w` is a Unicode class in that crate, and an
-        // artificial one.
-        r"/^\w{1,256}$/",
-        r"/^(a{1000}){1000}$/",
-        // A backspace escape in a class, and a class escape as a range bound.
-        r"/^[\b]$/",
-        r"/^[\d-z]$/",
-        r"/^[\w-.]$/",
-        // An unescaped `[` inside a class.
-        r"/^[[]$/",
-        // A lone `{`, and a `{` that opens no complete quantifier.
-        r"/^{$/",
-        r"/^a{$/",
-        // An identity escape of a letter.
-        r"/^\e$/",
-        r"/^\Q$/",
-        r"/^\k$/",
+        r"/(a)\1/",
+        r"/(?<w>a)\k<w>/",
+        r"/\cJ/",
+        r"/\0/",
+        r"/a[]/",
+        r"/[^]/",
+        r"/a{,3}/",
+        r"/\w{1,256}/",
+        r"/[\b]/",
+        r"/[\d-z]/",
+        r"/[\w-.]/",
+        r"/[[]/",
+        r"/{/",
+        r"/a{/",
+        r"/\e/",
+        r"/\Q/",
+        r"/\k/",
     ];
+
+    #[test]
+    fn typl_106_refuses_non_iregexp_inline_and_constant_patterns() {
+        for raw in REFUSED_BY_THE_RECOGNISER {
+            for source in [
+                format!("package app\nconst P = {raw}\n"),
+                format!("package app\ntype T : string [1..10 match {raw}]\n"),
+            ] {
+                let checked = check_source("app", &source);
+                let errors: Vec<_> = checked
+                    .diagnostics
+                    .iter()
+                    .filter(|d| d.severity == Severity::Error)
+                    .collect();
+                assert_eq!(errors.len(), 1, "{raw}: {:?}", checked.diagnostics);
+                assert_eq!(errors[0].code, DiagCode::TYPL_106, "{raw}");
+                let start = source.find(raw).unwrap();
+                assert_eq!(usize::from(errors[0].primary.range.start()), start);
+                assert_eq!(
+                    usize::from(errors[0].primary.range.end()),
+                    start + raw.len()
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn delimiter_escapes_are_decoded_before_recognition_and_kept_in_legacy_ir() {
+        for (prefix, clause) in [("", r"/a\/b/"), ("const P = /a\\/b/\n", "P")] {
+            let checked = check_source(
+                "app",
+                &format!("package app\n{prefix}type T : string [0..8 match {clause}]\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["TYPL-115"],
+                "{:?}",
+                checked.diagnostics
+            );
+            let Some(v2::decl::Kind::TypeDef(td)) = &checked.ir.decls.last().unwrap().kind else {
+                panic!("string type")
+            };
+            let literal = td.constraint.as_ref().unwrap().pattern.as_deref().unwrap();
+            assert_eq!(literal, r"/^(?:a\/b)$/");
+            let parsed = ridl_syntax::parse(
+                &format!("package app\nconst LEGACY = {literal}\n"),
+                Profile::Typl,
+            );
+            assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+        }
+    }
 
     /// Patterns both engines accept: an ordinary one, and every `match` pattern
     /// in `ridl.std`, which must keep drawing nothing.
@@ -10259,7 +10434,7 @@ mod tests {
             std_patterns.len() >= 5,
             "ridl.std's `match` patterns were not found: {std_patterns:?}"
         );
-        std::iter::once(r"/^[A-Z]{2}$/".to_string())
+        std::iter::once(r"/[A-Z]{2}/".to_string())
             .chain(std_patterns)
             .collect()
     }
@@ -10280,19 +10455,44 @@ mod tests {
             .collect()
     }
 
-    /// The probes are what they claim to be: ECMA-262 syntax that `regress`
-    /// accepts, so TYPL-106 stays silent, and that the `regex` crate refuses.
-    /// If a later `regex` release starts to accept one, this test names it.
+    /// The probes pass recognition but their engine texts exceed Rust's limits.
     #[test]
-    fn typl_220_probes_are_ecma_262_the_regex_crate_refuses() {
+    fn typl_220_probes_pass_the_recogniser_but_not_the_regex_crate() {
         for raw in REFUSED_BY_THE_REGEX_CRATE {
-            let body = regex_body(raw);
-            assert!(
-                regress::Regex::new(body).is_ok(),
-                "{raw}: regress refuses it"
+            assert_eq!(
+                crate::pattern::check(&ridl_ir::pattern::pattern_text(raw)),
+                Ok(())
             );
-            assert!(regex::Regex::new(body).is_err(), "{raw}: regex accepts it");
+            let engine =
+                ridl_ir::pattern::rust_engine_text(&ridl_ir::pattern::normalised_pattern(raw));
+            assert!(
+                regex::Regex::new(&engine).is_err(),
+                "{raw}: regex accepts it"
+            );
         }
+    }
+
+    /// Normalising a dot can exceed Rust's size limit even when the raw dot fits.
+    #[test]
+    fn typl_220_compiles_the_normalised_engine_text() {
+        let literal = "/.{10300}/";
+        let normalised =
+            ridl_ir::pattern::rust_engine_text(&ridl_ir::pattern::normalised_pattern(literal));
+        let raw = ridl_ir::pattern::rust_engine_text(&ridl_ir::pattern::pattern_text(literal));
+        assert!(
+            regex::Regex::new(&raw).is_ok(),
+            "raw dot fits the size limit"
+        );
+        assert!(matches!(
+            regex::Regex::new(&normalised),
+            Err(regex::Error::CompiledTooBig(_))
+        ));
+        let checked = check_source(
+            "app",
+            &format!("package app\ntype T : string [1..11000 match {literal}]\n"),
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-220", "TYPL-115"]);
+        assert!(checked.diagnostics[0].message.contains("size limit"));
     }
 
     /// An inline `match` pattern the `regex` crate cannot compile is TYPL-220,
@@ -10323,30 +10523,19 @@ mod tests {
         }
     }
 
-    /// The size-limit refusal names the likely cause. An ordinary pattern such
-    /// as `^\w{1,256}$` exceeds the limit because `\w` is a large Unicode
-    /// class in the `regex` crate, so the message names `\w` and `\p{..}` and
-    /// the ASCII class that fits. The whole message is pinned, so the size-limit arm of
-    /// `regex_crate_refusal` cannot be removed without failing here.
+    /// A nested counted repetition reports the compiled-size limit and cause.
     #[test]
-    fn typl_220_size_limit_message_names_the_large_unicode_classes() {
+    fn typl_220_size_limit_message_names_nested_counted_repetitions() {
         let checked = check_source(
             "app",
-            "package app\ntype Word : string [1..256 match /^\\w{1,256}$/]\n",
+            "package app\ntype Word : string [1..256 match /(([a-z]{1,64}){1,64}){1,64}/]\n",
         );
-        assert_eq!(
-            codes(&checked),
-            vec!["TYPL-220", "TYPL-115"],
-            "got: {:?}",
-            checked.diagnostics
-        );
+        assert_eq!(codes(&checked), vec!["TYPL-220", "TYPL-115"]);
         assert_eq!(
             checked.diagnostics[0].message,
             "the Rust `regex` crate cannot compile this pattern: the compiled pattern exceeds \
-             the crate's size limit of 10485760 bytes; in the Rust output `\\w` and \
-             `\\p{..}` are large Unicode classes, so a counted repetition of one is the usual \
-             cause, and an ASCII class such as `[A-Za-z0-9_]` is smaller \
-             — a typl pattern is ECMA-262 syntax that the `regex` crate also accepts (typl §2.7)",
+             the crate's size limit of 10485760 bytes; a counted repetition inside another \
+             counted repetition is the usual cause (typl §2.7)"
         );
     }
 
@@ -10361,7 +10550,7 @@ mod tests {
     fn typl_220_keeps_the_regex_crate_verdict_across_checks() {
         // A pattern no other test compiles, recorded with a verdict the crate
         // would not give: the check reports the recorded verdict.
-        let seeded = "^seeded-for-issue-603$";
+        let seeded = &ridl_ir::pattern::rust_engine_text("seeded-for-issue-603");
         REGEX_CRATE_VERDICTS
             .lock()
             .unwrap()
@@ -10372,7 +10561,7 @@ mod tests {
         );
         let checked = check_source(
             "app",
-            &format!("package app\ntype T : string [1..32 match /{seeded}/]\n"),
+            "package app\ntype T : string [1..32 match /seeded-for-issue-603/]\n",
         );
         assert_eq!(
             codes(&checked),
@@ -10491,12 +10680,12 @@ mod tests {
     /// The checker compiles a pattern with the same `regex` configuration the
     /// Rust backend emits: `regex::Regex::new`, whose default builder options
     /// are Unicode mode on. Under `RegexBuilder::unicode(false)` in the checker
-    /// alone, `\p{L}` and a `.` that may match a non-ASCII character do not
+    /// alone, a non-ASCII range and a `.` that may match a non-ASCII character do not
     /// compile, so these would draw TYPL-220 while the generated code compiles
     /// them.
     #[test]
     fn typl_220_uses_the_regex_configuration_the_rust_backend_emits() {
-        for raw in [r"/^\p{L}+$/", r"/^.+$/"] {
+        for raw in [r"/[à-ÿ]+/", r"/.+/"] {
             let checked = check_source(
                 "app",
                 &format!("package app\ntype T : string [1..32 match {raw}]\n"),
@@ -10530,8 +10719,8 @@ mod tests {
         }
     }
 
-    /// A pattern that is not ECMA-262 is TYPL-106 alone: TYPL-220 is for a
-    /// pattern the reference's own syntax accepts, so the two never stack.
+    /// A pattern outside I-Regexp is TYPL-106 alone; TYPL-220 is only for
+    /// accepted syntax, so the two never stack.
     #[test]
     fn typl_220_is_not_added_to_typl_106() {
         let checked = check_source("app", "package app\nconst BAD = /(/\n");
@@ -10593,7 +10782,7 @@ mod tests {
                 assert_eq!(patterns.len(), 1, "{source}: {patterns:?}");
                 for pattern in patterns {
                     assert!(
-                        regex::Regex::new(&pattern).is_ok(),
+                        regex::Regex::new(&ridl_ir::pattern::rust_engine_text(&pattern)).is_ok(),
                         "{source}: the checker passed `{pattern}`, which `regex` cannot compile"
                     );
                     compiled += 1;
@@ -11378,12 +11567,12 @@ mod tests {
     fn typl_109_string_init_does_not_match_pattern() {
         let checked = check_source(
             "app",
-            "package app\ntype Code : string [1..8 match /^[A-Z]+$/] = \"abc\"\n",
+            "package app\ntype Code : string [1..8 match /[A-Z]+/] = \"abc\"\n",
         );
         assert_eq!(codes(&checked), vec!["TYPL-109"]);
         assert_eq!(
             messages(&checked),
-            ["init string `abc` does not match the type's `match` pattern /^[A-Z]+$/"]
+            ["init string `abc` does not match the type's `match` pattern /[A-Z]+/"]
         );
     }
 
@@ -11420,6 +11609,25 @@ mod tests {
     }
 
     #[test]
+    fn several_match_clauses_name_only_the_second_failed_init_clause() {
+        for (second, expected) in [("/[A-Z]/", "/[A-Z]/"), ("CAPITAL", "CAPITAL")] {
+            let text = format!(
+                "package app\n/// A capital character.\nconst CAPITAL = /[A-Z]/\n/// A constrained string.\ntype T : string [0..8 match /.*[0-9].*/ match {second}] = \"1a\"\n",
+            );
+            let checked = check_source("app", &text);
+            assert_eq!(codes(&checked), ["TYPL-109"]);
+            assert_eq!(
+                messages(&checked),
+                [format!(
+                    "init string `1a` does not match the type's `match` pattern {expected}"
+                )]
+            );
+            assert_eq!(checked.diagnostics.len(), 1);
+            assert_eq!(primary_text(&text, &checked.diagnostics[0]), "\"1a\"");
+        }
+    }
+
+    #[test]
     fn several_match_clauses_check_every_init_clause() {
         for (value, expected) in [
             ("1a", vec!["TYPL-109"]),
@@ -11429,7 +11637,7 @@ mod tests {
             let checked = check_source(
                 "app",
                 &format!(
-                    "package app\ntype T : string [1..8 match /[0-9]/ match /[A-Z]/] = \"{value}\"\n",
+                    "package app\ntype T : string [1..8 match /.*[0-9].*/ match /.*[A-Z].*/] = \"{value}\"\n",
                 ),
             );
             assert_eq!(
@@ -11446,7 +11654,7 @@ mod tests {
     fn several_match_clauses_lower_in_order_and_keep_first_legacy_pattern() {
         let checked = check_source(
             "app",
-            "package app\ntype T : string [1..8 match /[0-9]/ match /[A-Z]/] = \"1A\"\n",
+            "package app\ntype T : string [1..8 match /.*[0-9].*/ match /.*[A-Z].*/] = \"1A\"\n",
         );
         assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
         let constraint = type_def(&checked, "T").constraint.as_ref().unwrap();
@@ -11456,9 +11664,12 @@ mod tests {
                 .iter()
                 .map(|clause| clause.pattern.as_deref())
                 .collect::<Vec<_>>(),
-            [Some("/[0-9]/"), Some("/[A-Z]/")]
+            [Some("/.*[0-9].*/"), Some("/.*[A-Z].*/")]
         );
-        assert_eq!(constraint.pattern.as_deref(), Some("/[0-9]/"));
+        assert_eq!(
+            constraint.pattern.as_deref(),
+            Some(r"/^(?:[^\n\r]*[0-9][^\n\r]*)$/")
+        );
         assert_eq!(constraint.pattern_const, None);
     }
 
@@ -11504,7 +11715,7 @@ mod tests {
             let checked = check_source(
                 "app",
                 &format!(
-                    "package app\nconst CAPITAL = /[A-Z]/\ntype T : string [1..8 match /[0-9]/ match CAPITAL]\nstruct S {{ text : T = \"{value}\" }}\n",
+                    "package app\nconst CAPITAL = /.*[A-Z].*/\ntype T : string [1..8 match /.*[0-9].*/ match CAPITAL]\nstruct S {{ text : T = \"{value}\" }}\n",
                 ),
             );
             assert_eq!(
@@ -11528,7 +11739,7 @@ mod tests {
         assert!(codes(&ok_len).is_empty(), "got: {:?}", ok_len.diagnostics);
         let ok_pattern = check_source(
             "app",
-            "package app\ntype Code : string [1..8 match /^[A-Z]+$/] = \"ABC\"\n",
+            "package app\ntype Code : string [1..8 match /[A-Z]+/] = \"ABC\"\n",
         );
         assert!(
             codes(&ok_pattern).is_empty(),
@@ -11609,7 +11820,7 @@ mod tests {
     fn match_typed_type_is_non_derivable_typl_115() {
         let checked = check_source(
             "app",
-            "package app\ntype Code : string [1..8 match /^[A-Z]+$/]\n",
+            "package app\ntype Code : string [1..8 match /[A-Z]+/]\n",
         );
         assert_eq!(codes(&checked), vec!["TYPL-115"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Info);
@@ -11689,7 +11900,7 @@ mod tests {
         let non_derivable = check_source(
             "app",
             "package app\n\
-             type Code   : string [1..8 match /^[A-Z]+$/]\n\
+             type Code   : string [1..8 match /[A-Z]+/]\n\
              type Counter: integer [0..255]\n\
              union V { code : Code, count : Counter }\n\
              struct S { v : V }\n",
@@ -11854,7 +12065,7 @@ mod tests {
             "value : [Label : Good; 1..2]",
             "value : [integer : Label; 1..2]",
             "value : string [1]",
-            "value : string [0..8 match /^a+$/]",
+            "value : string [0..8 match /a+/]",
             "value : bytes [1]",
         ] {
             let checked = check_ridl(
@@ -12061,7 +12272,7 @@ mod tests {
     fn typl_109_string_field_init_violates_named_pattern() {
         let checked = check_source(
             "app",
-            "package app\ntype Code : string [1..8 match /^[A-Z]+$/]\nstruct S { code : Code = \"abc\" }\n",
+            "package app\ntype Code : string [1..8 match /[A-Z]+/]\nstruct S { code : Code = \"abc\" }\n",
         );
         assert!(
             codes(&checked).contains(&"TYPL-109"),
@@ -12571,7 +12782,7 @@ mod tests {
     fn imported_string_init_constraints_use_the_defining_package() {
         for (constraint, init, local) in [
             ("[N]", "abc", "const N = 3"),
-            ("[0..8 match PATTERN]", "bbb", "const PATTERN = /^b+$/"),
+            ("[0..8 match PATTERN]", "bbb", "const PATTERN = /b+/"),
         ] {
             let mut db = RidlDatabase::default();
             let std = std_package(&mut db);
@@ -12579,7 +12790,7 @@ mod tests {
                 &db,
                 "common",
                 &format!(
-                    "package common\nconst N = 2\nconst PATTERN = /^a+$/\ntype Label : string {constraint}\n"
+                    "package common\nconst N = 2\nconst PATTERN = /a+/\ntype Label : string {constraint}\n"
                 ),
             );
             let app = ridl_package(
@@ -13073,15 +13284,15 @@ mod tests {
                 vec!["init string `abc` does not match the type's `match` pattern CAPITAL"],
             ),
             (
-                "match /[0-9]/ match CAPITAL",
+                "match /.*[0-9].*/ match CAPITAL",
                 vec![
-                    "init string `abc` does not match the type's `match` pattern /[0-9]/",
+                    "init string `abc` does not match the type's `match` pattern /.*[0-9].*/",
                     "init string `abc` does not match the type's `match` pattern CAPITAL",
                 ],
             ),
         ] {
             let text = format!(
-                "package app\nconst CAPITAL = /[A-Z]/\ntype T : string [0..8 {clauses}] = \"1A\"\ninterface I {{\n  signal s : T = \"abc\" @10ms\n}}\n",
+                "package app\nconst CAPITAL = /.*[A-Z].*/\ntype T : string [0..8 {clauses}] = \"1A\"\ninterface I {{\n  signal s : T = \"abc\" @10ms\n}}\n",
             );
             let checked = check_ridl("app", &text);
             assert_eq!(codes(&checked), vec!["RIDL-110"; expected.len()]);
@@ -17693,7 +17904,7 @@ service Cabin { signal s : State @[100ms..1s] }
 
     #[test]
     #[allow(deprecated)]
-    fn match_clauses_lower_literal_and_constant_without_changing_search_text() {
+    fn match_clauses_lower_literal_and_constant_with_compatible_search_text() {
         for (prefix, clause, constant) in [
             ("", "/[A-Z]{17}/", None),
             ("const VIN = /[A-Z]{17}/\n", "VIN", Some("VIN")),
@@ -17712,7 +17923,7 @@ service Cabin { signal s : State @[100ms..1s] }
                 })
                 .unwrap();
             let constraint = def.constraint.as_ref().unwrap();
-            assert_eq!(constraint.pattern.as_deref(), Some("/[A-Z]{17}/"));
+            assert_eq!(constraint.pattern.as_deref(), Some("/^(?:[A-Z]{17})$/"));
             assert_eq!(constraint.pattern_const.as_deref(), constant);
             assert_eq!(
                 constraint.matches,

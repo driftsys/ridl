@@ -204,15 +204,58 @@ To migrate a workspace:
 The `diagnostics`, `accepted-sources`, `wire` and `generated-crate` freeze rows
 are removed until the follow-up restores them.
 
+## Match pattern migration
+
+An unanchored pattern with no refused construct still compiles and now matches
+the whole value. `/ABC/` accepts only `"ABC"`; write `/.*ABC.*/` for a value
+that contains `ABC` and holds no line break (see
+[typl §2.7](../specification/typl-language-reference.md#27-regex-literals)).
+This change draws no diagnostic. `ridl diff` compares pattern text, so it does
+not report a pattern whose text did not change, although its accepted values
+did.
+
+Refused constructs draw TYPL-106:
+
+- Anchors, shorthand character classes and word boundaries.
+- Unicode, hexadecimal, identity, control and Unicode category escapes.
+- Lookahead, lookbehind, backreferences, non-capturing groups, named groups and
+  inline flags.
+- Lazy, possessive, repeated, incomplete, reversed or operand-free quantifiers.
+- POSIX, nested, empty or incomplete classes; class set operators; misplaced
+  hyphens; reversed ranges; and hyphen escapes outside a class.
+- Incomplete escapes, unmatched groups and excessive group nesting.
+
+See [typl §2.7](../specification/typl-language-reference.md#27-regex-literals)
+for replacements and the complete language. An accepted pattern that exceeds the
+Rust `regex` compiler's limits still draws TYPL-220.
+
+In `ridl.std`, `Date`, `IpV4` and the ASCII types (`Label`, `Name`, `Message`)
+use explicit classes: `[0-9]` for digits and `[ -~]` for printable ASCII.
+`TimeOfDay` and `Version` accept any suffix that holds no line break (`\n` or
+`\r`), within their declared length bounds. Their trailing `.*` accepts U+2028
+and U+2029.
+
+In TypeScript output, a dot now accepts U+2028 and U+2029, and a character
+outside the Basic Multilingual Plane counts as one character. In Rust output, a
+dot no longer accepts a carriage return, and `[0-9]` replaces the Unicode digits
+that `\d` accepted. The replacements for `\s` and `\w` are also explicit ASCII
+sets. The checker and both outputs agree on the new pattern language.
+
+`ridl diff` against a baseline of 0.20 reports every rewritten pattern as
+changed and classifies it as breaking. For a pattern that was `^…$` with none of
+the refused constructs inside, the accepted values did not change apart from the
+dot and Unicode changes above. Publish a new baseline with `ridl baseline` after
+migration.
+
 ## Match clause catalog hashes
 
-The addition of `Constraint.matches` changes the catalog hash of each unit whose
-interfaces reach a type with a `match` clause, including a type declared in
-another unit. The ordered clauses now enter the protobuf binary of the reduced
-unit. A unit that reaches no `match` clause keeps its hash: an empty `matches`
-list adds no byte, including on numeric constraints and string length bounds.
-Reordering clauses also changes the hash, although `ridl diff` ignores clause
-order.
+The addition of `Constraint.matches` and the rewritten `ridl.std` patterns
+change the catalog hash of each unit whose interfaces reach a type with a
+`match` clause, including a type declared in another unit. The ordered clauses
+enter the protobuf binary of the reduced unit. A unit that reaches no `match`
+clause keeps its hash: an empty `matches` list adds no byte, including on
+numeric constraints and string length bounds. Reordering clauses also changes
+the hash, although `ridl diff` ignores clause order.
 
 Pre-addition baseline snapshots remain readable, including snapshots with only
 numeric ranges, string length bounds, or the deprecated `pattern` field. Empty

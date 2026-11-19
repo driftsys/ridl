@@ -1047,8 +1047,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 {
-                  "text": "pattern `/^[\\x20-\\x7E]+$/`",
-                  "pattern": "/^[\\x20-\\x7E]+$/"
+                  "text": "pattern `/[ -~]+/`",
+                  "pattern": "/[ -~]+/"
                 }
               ]
             }
@@ -1781,8 +1781,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 {
-                  "text": "pattern `/^[\\x20-\\x7E]+$/`",
-                  "pattern": "/^[\\x20-\\x7E]+$/"
+                  "text": "pattern `/[ -~]+/`",
+                  "pattern": "/[ -~]+/"
                 }
               ]
             }
@@ -2608,8 +2608,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           },
           {
-            "text": "pattern `/^[\\x20-\\x7E]+$/`",
-            "pattern": "/^[\\x20-\\x7E]+$/"
+            "text": "pattern `/[ -~]+/`",
+            "pattern": "/[ -~]+/"
           }
         ],
         "proto3": {
@@ -2623,11 +2623,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "128",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:[ -~]+)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
-                "pattern": "^[\\x20-\\x7E]+$",
+                "pattern": "[ -~]+",
                 "patternConst": "ASCII_PATTERN"
               }
             ]
@@ -2676,8 +2676,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           },
           {
-            "text": "pattern `/^[\\x20-\\x7E]+$/`",
-            "pattern": "/^[\\x20-\\x7E]+$/"
+            "text": "pattern `/[ -~]+/`",
+            "pattern": "/[ -~]+/"
           }
         ],
         "proto3": {
@@ -2691,11 +2691,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "64",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:[ -~]+)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
-                "pattern": "^[\\x20-\\x7E]+$",
+                "pattern": "[ -~]+",
                 "patternConst": "ASCII_PATTERN"
               }
             ]
@@ -2802,8 +2802,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           },
           {
-            "text": "pattern `/^[\\x20-\\x7E]+$/`",
-            "pattern": "/^[\\x20-\\x7E]+$/"
+            "text": "pattern `/[ -~]+/`",
+            "pattern": "/[ -~]+/"
           }
         ],
         "proto3": {
@@ -2817,11 +2817,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "256",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:[ -~]+)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
-                "pattern": "^[\\x20-\\x7E]+$",
+                "pattern": "[ -~]+",
                 "patternConst": "ASCII_PATTERN"
               }
             ]
@@ -4429,8 +4429,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 {
-                  "text": "pattern `/^[\\x20-\\x7E]+$/`",
-                  "pattern": "/^[\\x20-\\x7E]+$/"
+                  "text": "pattern `/[ -~]+/`",
+                  "pattern": "/[ -~]+/"
                 }
               ]
             }
@@ -4561,8 +4561,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 },
                 {
-                  "text": "pattern `/^[\\x20-\\x7E]+$/`",
-                  "pattern": "/^[\\x20-\\x7E]+$/"
+                  "text": "pattern `/[ -~]+/`",
+                  "pattern": "/[ -~]+/"
                 }
               ]
             }
@@ -11112,7 +11112,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   ],
   "catalog": {
     "package": "veh.cluster",
-    "hash": "3nY8ApZtNFSVHxxkSuVcHThKxs+tCYafTsw6sKiifyM=",
+    "hash": "kkMlD1cNY+4Vg7SgFZjU1Ne1GPw3hrGqYgmhmytxLDg=",
     "retired": [],
     "compatible": []
   },
@@ -11805,8 +11805,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           },
           {
-            "text": "pattern `/^[\\x20-\\x7E]+$/`",
-            "pattern": "/^[\\x20-\\x7E]+$/"
+            "text": "pattern `/[ -~]+/`",
+            "pattern": "/[ -~]+/"
           }
         ],
         "proto3": {
@@ -11820,11 +11820,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "64",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:[ -~]+)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
-                "pattern": "^[\\x20-\\x7E]+$",
+                "pattern": "[ -~]+",
                 "patternConst": "ASCII_PATTERN"
               }
             ]
@@ -11873,8 +11873,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           },
           {
-            "text": "pattern `/^[\\x20-\\x7E]+$/`",
-            "pattern": "/^[\\x20-\\x7E]+$/"
+            "text": "pattern `/[ -~]+/`",
+            "pattern": "/[ -~]+/"
           }
         ],
         "proto3": {
@@ -11888,11 +11888,11 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "1",
             "lenMax": "256",
-            "pattern": "^[\\x20-\\x7E]+$",
+            "pattern": "^(?:[ -~]+)$",
             "patternConst": "ASCII_PATTERN",
             "matches": [
               {
-                "pattern": "^[\\x20-\\x7E]+$",
+                "pattern": "[ -~]+",
                 "patternConst": "ASCII_PATTERN"
               }
             ]
@@ -12529,8 +12529,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           },
           {
-            "text": "pattern `/^\\d+\\.\\d+\\.\\d+/`",
-            "pattern": "/^\\d+\\.\\d+\\.\\d+/"
+            "text": "pattern `/[0-9]+\\.[0-9]+\\.[0-9]+.*/`",
+            "pattern": "/[0-9]+\\.[0-9]+\\.[0-9]+.*/"
           }
         ],
         "proto3": {
@@ -12544,10 +12544,10 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "constraint": {
             "lenMin": "5",
             "lenMax": "32",
-            "pattern": "^\\d+\\.\\d+\\.\\d+",
+            "pattern": "^(?:[0-9]+\\.[0-9]+\\.[0-9]+[^\\n\\r]*)$",
             "matches": [
               {
-                "pattern": "^\\d+\\.\\d+\\.\\d+"
+                "pattern": "[0-9]+\\.[0-9]+\\.[0-9]+[^\\n\\r]*"
               }
             ]
           },

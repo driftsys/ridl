@@ -80,14 +80,16 @@ review caught and no single-clause fixture could have. Keep both clauses.
   RIDL-149 also draws there).
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).
 - MANI: 009.
-- TYPL: 005 (the visibility rule, reaching the interaction layer), 215 (a
+- TYPL: 005 (the visibility rule, reaching the interaction layer), 106 (a
+  leading anchor, groups nested beyond 250, and reversed quantifier bounds,
+  from `main/regex_patterns.typl`), 215 (a
   struct field name declared twice, exactly, from `main/projection.ridl`),
   216 (an enum value name declared twice, exactly, from the same file), 217
   (a union arm name declared twice, exactly, from the same file), 218 (an
   enumset bit name declared twice, exactly, from the same file), 219 (an
   enumset bit position that is not a number with an integer value, from
-  `main/enumset_positions.typl`), 220 (a lookahead in an inline `match`
-  pattern and a backreference in a regex constant, from
+  `main/enumset_positions.typl`), 220 (nested counted repetitions over the
+  compiled-size limit in an inline `match` pattern, from
   `main/regex_patterns.typl`), 301, 303, 304 (the profile boundary, folded
   in from the E1 debt list).
 

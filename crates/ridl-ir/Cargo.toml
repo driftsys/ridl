@@ -28,6 +28,11 @@ serde_json = { workspace = true, features = ["unbounded_depth"] }
 sha2.workspace = true
 
 [dev-dependencies]
+# Compile the agreement table through the real checker before model lowering.
+# Path only, with no version, so `cargo publish` removes them and they set no
+# order in the publish list.
+ridl-core = { path = "../ridl-core" }
+ridl-sem = { path = "../ridl-sem" }
 regex.workspace = true
 tempfile = "3.15.0"
 

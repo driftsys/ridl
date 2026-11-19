@@ -26,7 +26,7 @@ pub struct DiagFilter {
     /// # Rules
     ///
     /// - length 1 ..= 64
-    /// - pattern `/^[\x20-\x7E]+$/`
+    /// - pattern `/[ -~]+/`
     pub category: ::core::option::Option<crate::ridl::std::Label>,
 }
 #[allow(clippy::derivable_impls)]
@@ -47,7 +47,7 @@ pub struct FaultEvent {
     /// # Rules
     ///
     /// - length 1 ..= 256
-    /// - pattern `/^[\x20-\x7E]+$/`
+    /// - pattern `/[ -~]+/`
     pub message: crate::ridl::std::Message,
     /// # Rules
     ///
@@ -12404,8 +12404,8 @@ impl ::ridl_rt::contract::Interface for WheelHistory {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            222, 118, 60, 2, 150, 109, 52, 84, 149, 31, 28, 100, 74, 229, 92, 29, 56, 74,
-            198, 207, 173, 9, 134, 159, 78, 204, 58, 176, 168, 162, 127, 35,
+            146, 67, 37, 15, 87, 13, 99, 238, 21, 131, 180, 160, 21, 152, 212, 212, 215,
+            181, 24, 252, 55, 134, 177, 170, 98, 9, 161, 155, 43, 113, 44, 56,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(4);
@@ -13099,8 +13099,8 @@ impl ::ridl_rt::contract::Interface for WheelSummary {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            222, 118, 60, 2, 150, 109, 52, 84, 149, 31, 28, 100, 74, 229, 92, 29, 56, 74,
-            198, 207, 173, 9, 134, 159, 78, 204, 58, 176, 168, 162, 127, 35,
+            146, 67, 37, 15, 87, 13, 99, 238, 21, 131, 180, 160, 21, 152, 212, 212, 215,
+            181, 24, 252, 55, 134, 177, 170, 98, 9, 161, 155, 43, 113, 44, 56,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(5);
@@ -13446,8 +13446,8 @@ impl ::ridl_rt::contract::Interface for FaultLog {
     const CATALOG: &'static ::ridl_rt::contract::CatalogRef = &::ridl_rt::contract::CatalogRef {
         name: "veh.cluster",
         hash: ::ridl_rt::contract::CatalogHash([
-            222, 118, 60, 2, 150, 109, 52, 84, 149, 31, 28, 100, 74, 229, 92, 29, 56, 74,
-            198, 207, 173, 9, 134, 159, 78, 204, 58, 176, 168, 162, 127, 35,
+            146, 67, 37, 15, 87, 13, 99, 238, 21, 131, 180, 160, 21, 152, 212, 212, 215,
+            181, 24, 252, 55, 134, 177, 170, 98, 9, 161, 155, 43, 113, 44, 56,
         ]),
     };
     const NUMBER: ::ridl_rt::contract::InterfaceNo = ::ridl_rt::contract::InterfaceNo(1);

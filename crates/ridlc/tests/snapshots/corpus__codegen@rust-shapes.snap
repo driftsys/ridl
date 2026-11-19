@@ -293,8 +293,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
           }
         },
         {
-          "text": "pattern `/^[a-z][a-z0-9-]*$/`",
-          "pattern": "/^[a-z][a-z0-9-]*$/"
+          "text": "pattern `/[a-z][a-z0-9-]*/`",
+          "pattern": "/[a-z][a-z0-9-]*/"
         }
       ],
       "proto3": {
@@ -308,10 +308,10 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
         "constraint": {
           "lenMin": "1",
           "lenMax": "16",
-          "pattern": "^[a-z][a-z0-9-]*$",
+          "pattern": "^(?:[a-z][a-z0-9-]*)$",
           "matches": [
             {
-              "pattern": "^[a-z][a-z0-9-]*$"
+              "pattern": "[a-z][a-z0-9-]*"
             }
           ]
         },
@@ -1568,8 +1568,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                   }
                 },
                 {
-                  "text": "pattern `/^[a-z][a-z0-9-]*$/`",
-                  "pattern": "/^[a-z][a-z0-9-]*$/"
+                  "text": "pattern `/[a-z][a-z0-9-]*/`",
+                  "pattern": "/[a-z][a-z0-9-]*/"
                 }
               ]
             }
@@ -4198,8 +4198,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                       }
                     },
                     {
-                      "text": "pattern `/^[a-z][a-z0-9-]*$/`",
-                      "pattern": "/^[a-z][a-z0-9-]*$/"
+                      "text": "pattern `/[a-z][a-z0-9-]*/`",
+                      "pattern": "/[a-z][a-z0-9-]*/"
                     }
                   ]
                 }
@@ -5523,8 +5523,8 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
                       }
                     },
                     {
-                      "text": "pattern `/^[a-z][a-z0-9-]*$/`",
-                      "pattern": "/^[a-z][a-z0-9-]*$/"
+                      "text": "pattern `/[a-z][a-z0-9-]*/`",
+                      "pattern": "/[a-z][a-z0-9-]*/"
                     }
                   ]
                 }
@@ -6286,7 +6286,7 @@ input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
   "services": [],
   "catalog": {
     "package": "lint.shapes",
-    "hash": "2C39a8V2f5+TOV27a5Y2AXHyPU/shnOCpq5Gz+dz/jI=",
+    "hash": "TvwcNzV49ItdNJrf+VMWgkSzk1SFY9idxilnN/klLgs=",
     "retired": [],
     "compatible": []
   },

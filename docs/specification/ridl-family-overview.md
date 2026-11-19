@@ -40,7 +40,7 @@ their instances on machines — rsdl never stands alone.
 | ADR-0026 — doc comments                                               | accepted  | normative            | doc comment carriers, doc links and their resolution, the four doc tags, the doc lints (typl §14, §16.5)                                                                                                                                                                        |
 | ADR-0028 — docs in generated code                                     | accepted  | normative            | what the codegen `Model` carries of an item's documentation, and how each backend renders it in generated code                                                                                                                                                                  |
 | **Family General Form**                                               | 0.3.0     | normative            | the surface rules every language shares: the three declaration shapes, the nine invariants (R1 to R9), the attribute model and its diagnostics (FORM-106 to FORM-108), the formatting rules, the readability hardenings                                                         |
-| **typl Language Reference**                                           | 0.1       | normative            | vocabulary layer + family lexicon, keyword registry (§1.4), evolution model (§7.4)                                                                                                                                                                                              |
+| **typl Language Reference**                                           | 0.1       | normative            | vocabulary layer + family lexicon, keyword registry (§1.4), I-Regexp whole-value patterns (§2.7), evolution model (§7.4)                                                                                                                                                        |
 | **ridl Language Reference**                                           | 0.2       | normative            | interaction layer + interact-core semantics: envelope, timing, init/invalid channels, errors, streams                                                                                                                                                                           |
 | **rxdl Language Reference**                                           | 0.1 draft | draft — E7.1 only    | the unrestricted profile and the domain spellings; adds no semantics (ADR-0012). in scope: types, interfaces and wiring in one file (roadmap E7.1, not built). The model layer, the spellings and their bindings wait for rmdl                                                  |
 | **rmdl Language Reference**                                           | 0.1 draft | normative            | behaviour layer: functions, models, steps/timeline semantics, flow stdlib                                                                                                                                                                                                       |
@@ -206,7 +206,16 @@ catalog, one `interfaces.lock` and one interface-number space. A source package
 belongs to one unit, and a manifest inside a unit's tree is an error (ADR-0002
 §1 and §4, MANI-013 and MANI-014; ridl §11).
 
+**2026-11-18 pattern decision:** typl §2.7 defines the I-Regexp subset and
+whole-value matching; §5.3 requires every `match` clause to match. ADR-0007
+decision 10 and ADR-0013 decision 8 record the checker and output amendments
+(driftsys/ridl#597).
+
 ## 6. Open Questions — Consolidated Index
+
+Pattern dialect and output agreement are resolved by typl §2.7
+(driftsys/ridl#597). Deriving byte capacity from an ASCII-only pattern remains
+open (driftsys/ridl#665).
 
 By home; see each reference for full statements.
 
@@ -286,6 +295,10 @@ By home; see each reference for full statements.
   ([concept note](../technotes/ridl-family-concept.md))
 
 ## 7. Shared Diagnostic Namespaces — `FORM-` and `MANI-`
+
+Pattern diagnostics remain in typl §16.2 and §16.3: TYPL-106 for an I-Regexp
+recogniser refusal, TYPL-220 for an accepted pattern the Rust `regex` compiler
+refuses. No shared surface or manifest diagnostic is added.
 
 Diagnostic codes are namespaced and grouped by hundreds, never renumbered and
 never reused (typl §16). **One namespace per profile**, tabulated in that

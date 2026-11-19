@@ -1097,7 +1097,7 @@ fn duplicate_shape_qualifies_inline_scalar_pattern_constants_in_checked_ir() {
     use ridl_ir::v2::{decl, field_type, struct_member};
     // Inline string scalars are forbidden in source fields. Copy valid named
     // string type data into the existing IR variant to exercise its reference.
-    let a = "package a\nconst PATTERN = /^x+$/\ntype Text: string [1..8 match PATTERN]\nstruct First { data: Text, index: integer }\n";
+    let a = "package a\nconst PATTERN = /x+/\ntype Text: string [1..8 match PATTERN]\nstruct First { data: Text, index: integer }\n";
     let b = "package b\nimport a.PATTERN as TEXT_PATTERN\ntype Text: string [1..8 match TEXT_PATTERN]\nstruct Second { index: integer, data: Text }\n";
     let (diagnostics, _) = design_source_set_with(&[("a", a), ("b", b)], |checked| {
         for package in checked {
@@ -1345,7 +1345,7 @@ fn match_clauses_duplicate_shape_qualifies_the_second_constant() {
     use ridl_ir::v2::{decl, field_type, struct_member};
     // Copy a named string type into an inline field so the duplicate-shape lint
     // must qualify the constant reference in its second match clause.
-    let a = "package a\nconst PATTERN = /^x+$/\ntype Text: string [1..8 match PATTERN]\nstruct First { data: Text, index: integer }\n";
+    let a = "package a\nconst PATTERN = /x+/\ntype Text: string [1..8 match PATTERN]\nstruct First { data: Text, index: integer }\n";
     let b = "package b\nimport a.PATTERN as TEXT_PATTERN\ntype Text: string [1..8 match TEXT_PATTERN]\nstruct Second { index: integer, data: Text }\n";
     let (diagnostics, _) = design_source_set_with(&[("a", a), ("b", b)], |checked| {
         for package in checked {
@@ -1370,7 +1370,7 @@ fn match_clauses_duplicate_shape_qualifies_the_second_constant() {
                         pattern_const: None,
                     },
                     ridl_ir::v2::Match {
-                        pattern: Some("/^x+$/".into()),
+                        pattern: Some("/x+/".into()),
                         pattern_const: Some(
                             if package.ir.name == "a" {
                                 "PATTERN"

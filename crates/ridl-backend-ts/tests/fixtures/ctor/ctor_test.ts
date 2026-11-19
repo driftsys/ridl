@@ -338,32 +338,39 @@ Deno.test("bytes length counts bytes and is inclusive", () => {
   refuses("Raw", () => makeRaw(new Uint8Array(9)), "length");
 });
 
-Deno.test("a pattern with anchors matches the whole value", () => {
+Deno.test("a pattern without anchors matches the whole value", () => {
   assert.equal(makeCapitals("ABC"), "ABC");
   refuses("Capitals", () => makeCapitals("ABc"), "pattern");
   refuses("Capitals", () => makeCapitals("1ABC"), "pattern");
   refuses("Capitals", () => makeCapitals("ABC1"), "pattern");
 });
 
-Deno.test("an anchored pattern refuses a trailing newline", () => {
-  // `$` without the multiline flag matches only at the end of the input.
+Deno.test("a pattern that matches the whole value refuses a trailing newline", () => {
+  // Whole-value matching refuses a newline outside the declared character class.
   refuses("Capitals", () => makeCapitals("ABC\n"), "pattern");
   refuses("Capitals", () => makeCapitals("AB\nC"), "pattern");
 });
 
-Deno.test("an unanchored pattern accepts a match anywhere", () => {
+Deno.test("an explicit search pattern accepts a match anywhere", () => {
   assert.equal(makeContains("xxabxx"), "xxabxx");
   assert.equal(makeContains("ab"), "ab");
   refuses("Contains", () => makeContains("ba"), "pattern");
   refuses("Contains", () => makeContains(""), "pattern");
 });
 
-Deno.test("a pattern runs without the unicode flag", () => {
-  // The dot matches one UTF-16 unit, the semantics of the checker. With the
-  // `u` flag it would match the whole astral character.
+Deno.test("an explicit search pattern refuses a line break around the match", () => {
+  for (const value of ["\nab", "ab\n", "\rab", "ab\r"]) {
+    refuses("Contains", () => makeContains(value), "pattern");
+  }
+});
+
+Deno.test("a pattern matches Unicode characters and normalised line terminators", () => {
   assert.equal(makeDot("a"), "a");
   assert.equal(makeDot("é"), "é");
-  refuses("Dot", () => makeDot("😀"), "pattern");
+  assert.equal(makeDot("😀"), "😀");
+  assert.equal(makeDot("\u2028"), "\u2028");
+  assert.equal(makeDot("\u2029"), "\u2029");
+  refuses("Dot", () => makeDot("\r"), "pattern");
   // The dot does not match a line break.
   refuses("Dot", () => makeDot("\n"), "pattern");
 });
@@ -395,7 +402,7 @@ Deno.test("the error names the length and pattern constraints", () => {
     message: "ctor.Word: abcde breaks the length rule [1..4]",
   });
   assert.throws(() => makeCapitals("abc"), {
-    message: "ctor.Capitals: abc breaks the pattern rule /^[A-Z]+$/",
+    message: "ctor.Capitals: abc breaks the pattern rule /[A-Z]+/",
   });
   assert.throws(() => makeBlob(new Uint8Array(5)), {
     message: "ctor.Blob: <5 bytes> breaks the length rule [2..4]",
@@ -436,7 +443,7 @@ Deno.test("a string constructor checks every match clause", () => {
   assert.throws(() => makeTwice("1a"), (error: unknown) => {
     assert(error instanceof ConstraintError);
     assert.equal(error.rule, "pattern");
-    assert(error.message.includes("/[A-Z]/"));
+    assert(error.message.includes("/.*[A-Z].*/"));
     return true;
   });
   refuses("Twice", () => makeTwice("aA"), "pattern");

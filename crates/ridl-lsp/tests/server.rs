@@ -1434,7 +1434,7 @@ fn completion_inside_match_offers_regex_consts() {
 
     // `type Code: string [1..8 match ]` on line 2: `match ` ends at column 30,
     // so a cursor there sits just past the keyword and its space.
-    let text = "package demo\nconst CODE_PATTERN = /^[A-Z]+$/\ntype Code: string [1..8 match ]\n";
+    let text = "package demo\nconst CODE_PATTERN = /[A-Z]+/\ntype Code: string [1..8 match ]\n";
     did_open(&client, &uri, text);
     let items = complete_at(&client, 10, uri.clone(), pos(2, 30));
     let offered = labels(&items);

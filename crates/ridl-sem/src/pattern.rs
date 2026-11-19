@@ -119,7 +119,10 @@ impl<'a> Parser<'a> {
                     return Err(self.special_group(start));
                 }
                 if self.group_depth == 250 {
-                    return Err(refusal("(", "groups are nested deeper than 250"));
+                    return Err(refusal(
+                        "(",
+                        "groups are nested deeper than 250; reduce the nesting",
+                    ));
                 }
                 self.group_depth += 1;
                 let result = self.expression(Some(start));
@@ -302,7 +305,9 @@ impl<'a> Parser<'a> {
             let construct = &self.source[start..self.pos];
             return Err(refusal(
                 construct,
-                format!("the quantifier `{construct}` has a maximum below its minimum"),
+                format!(
+                    "the quantifier `{construct}` has a maximum below its minimum; write the smaller number first"
+                ),
             ));
         }
         Ok(())
@@ -439,79 +444,6 @@ mod tests {
 
     use super::*;
 
-    const ACCEPTED: &[&str] = &[
-        "a",
-        "A",
-        "",
-        "ab|c",
-        "(a)",
-        "(a|)",
-        "a*",
-        "a+",
-        "a?",
-        "a{2}",
-        "a{2,}",
-        "a{2,3}",
-        ".",
-        "[a-z0-9_]",
-        "[^@]",
-        "[-a]",
-        "[a-]",
-        r"[\--z]",
-        r"[\]]",
-        "[$]",
-        r"\^",
-        r"\(",
-        r"\)",
-        r"\*",
-        r"\+",
-        r"\.",
-        r"\?",
-        r"\[",
-        r"\\",
-        r"\]",
-        r"\{",
-        r"\|",
-        r"\}",
-        r"\n",
-        r"\r",
-        r"\t",
-        r"[\-]",
-        "é+",
-        "[à-ÿ]",
-        "\u{1F600}",
-        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
-        "[0-7][0-9A-HJKMNP-TV-Z]{25}",
-        r"[a-zA-Z][a-zA-Z0-9+\-.]*://.+",
-        "https?://.+",
-        r"[^@]+@[^@]+\.[^@]+",
-        r"([0-9]{1,3}\.){3}[0-9]{1,3}",
-        "[0-9a-f:]+",
-        "[ -~]+",
-        "[0-9]{4}-[0-9]{2}-[0-9]{2}",
-        "[0-9]{2}:[0-9]{2}:[0-9]{2}.*",
-        r"[0-9]+\.[0-9]+\.[0-9]+.*",
-        "[A-Z]{2}",
-        "[a-z]{2}(-[A-Z]{2})?",
-        "(([a-z]{1,64}){1,64}){1,64}",
-        "()",
-        "|",
-        "[-]",
-        "[^-]",
-        "[^^]",
-        "[&~]",
-        "&&~~--",
-        "[a&b~c]",
-        r"[a\-\-z]",
-        r"[\n-\r]",
-        "[😀-🙏]",
-        "\0\n\r\t",
-        "[{}().?*+|$]",
-        "a{18446744073709551616}",
-        "a{999999999999999999999999999,}",
-        "a{18446744073709551616,18446744073709551617}",
-    ];
-
     const REFUSED: &[(&str, &str)] = &[
         ("^a", "^"),
         ("a$", "$"),
@@ -589,11 +521,14 @@ mod tests {
     fn group_nesting_is_limited_to_250() {
         let nested = |count| format!("{}a{}", "(".repeat(count), ")".repeat(count));
         assert_eq!(check(&nested(250)), Ok(()));
-        let expected = refusal("(", "groups are nested deeper than 250");
+        let expected = refusal("(", "groups are nested deeper than 250; reduce the nesting");
         assert_eq!(check(&nested(251)), Err(expected));
         assert_eq!(
             check(&"(".repeat(100_000)),
-            Err(refusal("(", "groups are nested deeper than 250"))
+            Err(refusal(
+                "(",
+                "groups are nested deeper than 250; reduce the nesting"
+            ))
         );
         assert_eq!(check(&"(a)".repeat(251)), Ok(()));
     }
@@ -604,12 +539,12 @@ mod tests {
             (
                 "a{18446744073709551617,18446744073709551616}",
                 "{18446744073709551617,18446744073709551616}",
-                "the quantifier `{18446744073709551617,18446744073709551616}` has a maximum below its minimum",
+                "the quantifier `{18446744073709551617,18446744073709551616}` has a maximum below its minimum; write the smaller number first",
             ),
             (
                 "a{007,6}",
                 "{007,6}",
-                "the quantifier `{007,6}` has a maximum below its minimum",
+                "the quantifier `{007,6}` has a maximum below its minimum; write the smaller number first",
             ),
         ] {
             assert_eq!(
@@ -798,8 +733,23 @@ mod tests {
 
     #[test]
     fn accepted_patterns_follow_the_grammar() {
-        for pattern in ACCEPTED {
-            assert_eq!(check(pattern), Ok(()), "{pattern:?}");
+        #[derive(serde::Deserialize)]
+        struct Accepted {
+            pattern: String,
+            normalised: String,
+        }
+        let patterns: Vec<Accepted> =
+            serde_json::from_str(include_str!("../tests/pattern_accepted.json")).unwrap();
+        assert!(!patterns.is_empty());
+        for accepted in patterns {
+            let pattern = accepted.pattern;
+            assert_eq!(check(&pattern), Ok(()), "{pattern:?}");
+            // The same engine input is compiled with the Unicode flag by Deno.
+            let literal = format!("/{}/", pattern.replace('/', r"\/"));
+            assert_eq!(
+                ridl_ir::pattern::normalised_pattern(&literal),
+                accepted.normalised
+            );
         }
     }
 
@@ -858,7 +808,7 @@ mod tests {
             (
                 r"a{3,2}",
                 r"{3,2}",
-                r"the quantifier `{3,2}` has a maximum below its minimum",
+                r"the quantifier `{3,2}` has a maximum below its minimum; write the smaller number first",
             ),
             (r"[z-a]", r"[z-a]", r"the range `z-a` ends before it starts"),
             (

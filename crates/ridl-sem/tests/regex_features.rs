@@ -1,14 +1,7 @@
-//! The checker compiles every `match` pattern with the `regex` crate and its
-//! default features (TYPL-220): the `unicode` feature, on by default, is what
-//! makes `\w`, `\d` and `\p{L}` compile, and the generated crate's
-//! `regex = "1.13"` dependency has it on too. A unit test on `\p{L}` cannot
-//! catch `ridl-sem` turning the default features off, because cargo unifies
-//! features across the workspace and other members (lalrpop, proptest,
-//! logos-codegen) turn `unicode` back on, while an isolated build of
-//! `ridl-sem` with the same manifest fails on `\p{L}` and `\w`
-//! (driftsys/ridl#605). So this test reads the dependency spec itself:
-//! `ridl-sem`'s `regex` entry and, when that entry is inherited, the
-//! workspace's.
+//! The checker and generated Rust code require the default `regex` features.
+//! In particular, Unicode ranges and normalised dots need `unicode`. Workspace
+//! feature unification can hide a dependency disabling defaults, so this test
+//! reads the inherited manifest entries as well (driftsys/ridl#605).
 
 /// Whether a dependency entry, in either manifest, writes
 /// `default-features = false`.
@@ -31,7 +24,7 @@ fn regex_dependency_keeps_its_default_features() {
     assert!(
         !turns_default_features_off(entry),
         "crates/ridl-sem/Cargo.toml turns the `regex` crate's default features off; the \
-         checker needs them (TYPL-220 compiles `\\w` and `\\p{{..}}` only with `unicode`)"
+         checker needs them (TYPL-220 compiles patterns with non-ASCII characters only with `unicode`)"
     );
     if entry.get("workspace").and_then(toml::Value::as_bool) == Some(true) {
         let root = read_manifest(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.toml"));
@@ -45,8 +38,7 @@ fn regex_dependency_keeps_its_default_features() {
         assert!(
             !turns_default_features_off(inherited),
             "the workspace root Cargo.toml turns the `regex` crate's default features off, and \
-             ridl-sem inherits that entry; the checker needs them (TYPL-220 compiles `\\w` and \
-             `\\p{{..}}` only with `unicode`)"
+             ridl-sem inherits that entry; the checker needs them (TYPL-220 compiles patterns with non-ASCII characters only with `unicode`)"
         );
     }
 }

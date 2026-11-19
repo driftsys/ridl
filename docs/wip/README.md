@@ -394,14 +394,6 @@ and was not archived. The reason is stated once per file or group.
   graduated into an amendment of ADR-0015. It was taken on 2026-10-26 as E2.14
   (driftsys/ridl#1084).
 
-The design note for driftsys/ridl#597
-(`2026-11-18-i-regexp-match-patterns-design.md`) was added on 2026-11-18: a
-`match` pattern is an I-Regexp (RFC 9485) that matches the whole value, and a
-string type may carry several `match` clauses. The owner accepted the proposal
-on 2026-11-18 and nothing is implemented. It replaces the approach A note, which
-is in [`../archive/`](../archive/). The note stays in `docs/wip/` until the fix
-lands.
-
 The streams stage 5b plan (`2026-11-04-streams-stage-5b-plan.md`) was archived
 on 2026-11-04, once the work landed (driftsys/ridl#1241);
 [`../design/ridl-transport-ws.md`](../design/ridl-transport-ws.md),

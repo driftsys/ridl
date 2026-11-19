@@ -231,9 +231,10 @@ Refs #597
 The grammar is the ABNF of RFC 9485 §3 (a copy is at
 `/private/tmp/claude-501/-Users-sebastientasson-Workspace-driftsys-ridl/1eaa2570-abc6-421e-bf5e-56c3e6528f14/scratchpad/rfc/rfc9485.txt`,
 lines 135-200), parsed by recursive descent with no backtracking, plus the
-refusals of the Global Constraints. Quantifier numbers are read as `u64` with
-saturation; a large number is not refused here (the `regex` crate decides it,
-TYPL-220). The first refusal found from the left is returned.
+refusals of the Global Constraints. Quantifier bounds are compared exactly as
+decimal integers, without saturation; a large number alone is not refused here
+(the `regex` crate decides whether it can compile the pattern, TYPL-220). The
+first refusal found from the left is returned.
 
 Messages (exact; the help names the replacement of the note §3.2 or §3.3):
 

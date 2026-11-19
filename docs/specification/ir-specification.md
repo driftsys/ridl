@@ -250,8 +250,14 @@ the limit its row states.
 | retiring a field's meaning                            | additive only as `[deprecated = true]` with the field kept, still written and still read; the field itself leaves in the next major package (§7)                                                                                                                                                                                              |
 
 One exception is recorded. `Constraint.matches` holds every `match` clause of a
-string type, and the deprecated `Constraint.pattern` and `pattern_const` hold
-the first. A reader that reads only the deprecated fields checks the first
+string type. The deprecated `Constraint.pattern_const` names the first clause's
+constant, when present. The deprecated `Constraint.pattern` holds search text
+that gives the first clause's whole-value verdict with the `regex` crate or a
+JavaScript `RegExp` with the `u` flag: `/^(?:B)$/` in `ridl.ir.v2`, where `B` is
+the source body with every unescaped dot outside a class written `[^\n\r]` and
+every `\/` delimiter escape kept; `^(?:P)$` in `ridl.codegen.v1`, where `P` is
+the normalised pattern with delimiter escapes removed. The IR form stays a
+lexable literal. A reader that reads only the deprecated fields checks the first
 clause of a type with several clauses and ignores the others. The owner accepted
 this for this one source feature (driftsys/ridl#597).
 

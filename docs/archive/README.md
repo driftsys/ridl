@@ -1022,6 +1022,18 @@ provenance. Nothing here is normative — the current references live in
   driftsys/ridl#597 (approach A: ECMA-262 with the `u` flag, and a rewrite of
   each pattern to a portable form). It was never implemented. The owner replaced
   it on 2026-11-18 with the I-Regexp design,
-  [`docs/wip/2026-11-18-i-regexp-match-patterns-design.md`](../wip/2026-11-18-i-regexp-match-patterns-design.md).
+  [`2026-11-18-i-regexp-match-patterns-design.md`](2026-11-18-i-regexp-match-patterns-design.md).
   Archived verbatim on 2026-11-18. Its measurements of `regress` against the
   `regex` crate are still valid for release 0.20.
+
+- **2026-11-18-i-regexp-match-patterns-design.md** and
+  **2026-11-18-i-regexp-match-patterns-plan.md** — I-Regexp `match` patterns
+  (driftsys/ridl#597): whole-value matching, several clauses per string type, a
+  shared normalisation function and one checker verdict across outputs. Archived
+  verbatim on 2026-11-19, after implementation. The durable records are
+  [the typl reference](../specification/typl-language-reference.md) §2.7, §5.3
+  and §16, [the IR specification](../specification/ir-specification.md) §3 and
+  §6, the amendments of [ADR-0007](../decisions/ADR-0007-e1-execution.md) and
+  [ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md),
+  [the stability chapter](../book/stability.md) and
+  [the generated code chapter](../book/generated-code.md).

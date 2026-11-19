@@ -220,8 +220,8 @@ message Constraint {
   optional string step = 3;
   optional uint64 len_min = 4;
   optional uint64 len_max = 5;
-  // Deprecated: the first clause of matches, still written and read
-  // (IR specification §6).
+  // Deprecated: ^(?:P)$, a search text equal to the whole-value match of
+  // the first clause. Still written and read (IR specification §6).
   optional string pattern = 6 [deprecated = true];
   // Deprecated: the first clause of matches, still written and read
   // (IR specification §6).
@@ -232,7 +232,7 @@ message Constraint {
 
 // One `match` clause (typl §5.3).
 message Match {
-  // The regex body, `/…/` stripped.
+  // The normalised pattern (ridl_ir::pattern), matched against the whole value.
   optional string pattern = 1;
   // The canonical reference when the name resolves to a regex constant;
   // otherwise the name as written.
