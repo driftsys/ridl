@@ -27,6 +27,27 @@ that it improves the result. The reference prose, the "common-mistakes table"
 and the "three to four complete `.rxdl` worked examples" of §2 are not part of
 the skill until then; `SKILL.md` holds three short compiled samples instead.
 
+Amended 2026-11-19 by [ADR-0035](ADR-0035-authoring-skill-and-evals.md), which
+records the decisions taken when the skill and its evals were built:
+
+- §2's provenance discipline and the consequence "a hand-forked skill is
+  explicitly disallowed" no longer hold. The skill is written by hand, and three
+  tests keep it consistent with the compiler: its fences compile, every code it
+  cites is in the catalogue, and every link resolves to a heading of the
+  published book. No `ridl doc` command exists to generate it from.
+- §5's evals do not run "in the same CI plane". CI checks the task format and
+  never calls a model; `cargo xtask eval` compares an agent with and without the
+  skill on demand, and its results are committed as a record.
+- §7's `.rxdl` bullet is replaced: the unit an agent writes, and an eval runs
+  on, is a workspace, a `ridl.toml` with its `.typl`, `.ridl` and `.rsdl` files.
+  `.rxdl` has no implementation.
+- §8's table is not rewritten. ADR-0012 retired `uxdl`, so the "Phase 4-5" row
+  applies to `rsdl` alone.
+
+The status of this record stays Proposed. The maintainer ruled before the design
+of 2026-10-11 that it moves to Accepted; that change is not made here, because
+`AGENTS.md` still names the record as proposed.
+
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept
 note's §8–§9 conclusions (compiler-as-library, stable IR, coded diagnostics, the
@@ -263,6 +284,10 @@ Agent enablement is not a separate program; it rides the existing phases:
 - **Skill generation pipeline.** Is the skill emitted by `ridl doc` (one more IR
   consumer), or a curated document with generated tables spliced in? Decide once
   `ridl doc`'s emitter model is real (Phase 1 tail).
+
+  _Resolved (2026-11-19)._ Neither. The skill is a curated document with no
+  generated parts, kept consistent by three tests
+  ([ADR-0035](ADR-0035-authoring-skill-and-evals.md) decision 5).
 - **MCP transport and host coverage.** Which agent hosts are first-class (stdio
   MCP for Claude Code/Cowork/Cursor), and does the same binary back a CLI
   `ridl agent`-style entry? The interactively-authenticated-MCP caveat
@@ -300,8 +325,18 @@ Agent enablement is not a separate program; it rides the existing phases:
 - **Eval scoring beyond "compiles."** Compilation is necessary, not sufficient —
   idiomaticity (signal-vs-event choice, right error composition) needs a rubric
   or an LLM-judge with a golden set. Scope for Phase 2.
+
+  _Resolved (2026-11-19)._ A run is scored mechanically, and a run that passes
+  is marked against a rubric by a judge model of the other vendor
+  ([ADR-0035](ADR-0035-authoring-skill-and-evals.md) decision 10). The judge is
+  checked once against the maintainer's labels; that check has not been run.
 - **Rules-file portability.** One canonical rules text, N host formats — define
   the generator (or hand-maintain until a second host actually demands it).
+
+  _Resolved (2026-11-19)._ Hand-maintained. `rules.md` is one file; the VS Code
+  extension contributes it as a `chatInstructions` entry, and the release
+  archive carries it for the other hosts
+  ([ADR-0035](ADR-0035-authoring-skill-and-evals.md) decision 6).
 - **Behaviour (rmdl) eval oracle.** The reference-oracle (execute-and-diff) is a
   far stronger signal than "type-checks" for generated behaviour; how it plugs
   into the eval corpus is a Phase 3 question.

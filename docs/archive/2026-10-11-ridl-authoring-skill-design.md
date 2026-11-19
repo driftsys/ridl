@@ -3,7 +3,7 @@
 **Status:** draft for review. Lane S of release 0.10
 ([release design](../archive/2026-10-11-release-0.10-design.md) section 5.7,
 R-6); piece 1c of the
-[devex and agent tracks brief](2026-10-03-devex-and-agent-tracks-brief.md).
+[devex and agent tracks brief](../wip/2026-10-03-devex-and-agent-tracks-brief.md).
 
 **Satisfies:** driftsys/ridl#73 (rules file), #74 (typl skill), #75 (ridl
 skill), #87 (rsdl skill profile); ADR-0005 §2 (Layer A) and §5 (evals).
@@ -12,7 +12,7 @@ skill), #87 (rsdl skill profile); ADR-0005 §2 (Layer A) and §5 (evals).
 [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md),
 [ADR-0027](../decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md),
 [ADR-0029](../decisions/ADR-0029-stability-policy.md),
-[the skill outline](skill-ridl-authoring-outline.md), `evals/`.
+[the skill outline](../wip/skill-ridl-authoring-outline.md), `evals/`.
 
 ## 1. Goal
 

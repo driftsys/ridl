@@ -103,7 +103,9 @@ pasted-source form.
    its explanation text. The mapping from each namespace to its explaining
    document is recorded in
    [the authoring skill outline](../wip/skill-ridl-authoring-outline.md) §7, for
-   the authoring skill of piece 1c, which does not exist yet. A skill is prose
+   the authoring skill of piece 1c. The skill that shipped,
+   `skills/ridl-authoring/`, links the published book for the rule behind a code
+   instead ([ADR-0035](ADR-0035-authoring-skill-and-evals.md)). A skill is prose
    that changes together with the documents, and a URL in a tool result is a
    contract that a moved chapter breaks. The long-form error index (E4.2) is not
    written here; when it lands it is added as an `explanation` field.

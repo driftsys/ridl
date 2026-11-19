@@ -264,8 +264,8 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   on 2026-11-18, as a technote with a status banner; it is background, and
   nothing binds to it.
 - **skill-ridl-authoring-outline.md** — outline for the agent-authoring skill
-  (see ADR-0005). Forward-looking: the skill it outlines is roadmap story E8.2,
-  which has not been built.
+  (see ADR-0005). The skill shipped as `SKILL.md` and `rules.md`; see the entry
+  under "Files that stay" below.
 - Four 2026-08-03 design notes (ir-protobuf-encodings, rpc-response-bound,
   multi-interface-services, schema-projection) are archived, gardened into
   ADR-0014, ADR-0015 and ADR-0016 — see
@@ -383,14 +383,15 @@ are their durable records.
 Each file below was read against the code and the issue tracker on 2026-10-13
 and was not archived. The reason is stated once per file or group.
 
-- **2026-10-11-ridl-authoring-skill-design.md**,
-  **2026-10-11-ridl-authoring-skill-plan.md** and
-  **skill-ridl-authoring-outline.md** — the skill's gates, eval harness and
-  distribution landed (#893). `skills/ridl-authoring/` holds `SKILL.md` and
-  `rules.md` only, by design: ADR-0005, amended on 2026-11-11, records that the
-  per-language references were removed. What is left is the gardening of these
-  three files and, optionally, the judge check; driftsys/ridl#1401 tracks both.
-  The files stay until the gardening is done.
+- **skill-ridl-authoring-outline.md** — the outline of the authoring skill,
+  which ADR-0005, ADR-0025 and archived records cite by this path. The design
+  and the plan of the skill were gardened and archived on 2026-11-19
+  ([ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md),
+  [the design record](../design/authoring-skill.md)). The outline stays: it
+  belongs to the same unit but is not the design or the plan, and whether to
+  archive it is the owner's decision, which is pending. The judge check and the
+  release record (task 12 of the archived plan) are not done and stay optional
+  under driftsys/ridl#1401.
 - **2026-10-07-generated-observation-design.md** and
   **2026-10-07-generated-observation-plan.md** — optional trace spans from the
   generated Rust face, driftsys/ridl#754. Open; the generated crate has no

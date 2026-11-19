@@ -1048,3 +1048,28 @@ provenance. Nothing here is normative — the current references live in
   decision and its rejected alternatives), the 2026-11-19 amendments of
   [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
   decision 9 and [the codegen plugins chapter](../book/codegen-plugins.md).
+- **2026-10-11-ridl-authoring-skill-design.md** — the design of the
+  `ridl-authoring` skill, its gates, its distribution and its evals (decisions
+  R-S-1 to R-S-4 and D-1 to D-9). Archived verbatim on 2026-11-19, with two
+  links to sibling working files pointed at `../wip/`. Built: the skill, its
+  three gates, the editor and release distribution, the twelve eval tasks and
+  `cargo xtask eval` (driftsys/ridl#893). Not built: the per-language references
+  of its section 3 (written and removed; ADR-0005 records why), the judge check
+  of section 6.3 and the release record of section 6.5 (driftsys/ridl#1401,
+  optional). As built, the gate of section 4 item 3 checks the links of
+  `SKILL.md` against the published book, not a reference file's links, and the
+  Copilot CLI is an opt-in eval host, which section 8 left out of scope. The
+  durable records are
+  [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md),
+  [the authoring skill design record](../design/authoring-skill.md), and the
+  amended [ADR-0005](../decisions/ADR-0005-agent-enablement.md) and
+  [ADR-0027](../decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md).
+- **2026-10-11-ridl-authoring-skill-plan.md** — the thirteen-task plan that
+  implemented the design above. Archived verbatim on 2026-11-19. Tasks 1 to 9
+  were built (#893). Tasks 10 and 11, which add the typl, ridl and rsdl
+  references, are withdrawn by the decision of 2026-10-14. Task 12, the judge
+  check and the release record, is not done and is optional
+  (driftsys/ridl#1401); it needs the maintainer to confirm the model ids in
+  `evals/runner.toml` and to approve the spend. Task 13 is this gardening. The
+  plan's code listings are not a description of the as-built code, which is
+  described in [the design record](../design/authoring-skill.md).
