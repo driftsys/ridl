@@ -16,6 +16,7 @@ struct Row {
 #[allow(deprecated)]
 fn engine_texts_and_lowering_agree_with_the_shared_table() {
     let rows: Vec<Row> = serde_json::from_str(include_str!("pattern_agreement.json")).unwrap();
+    let mut javascript_rows = Vec::new();
     for row in rows {
         let n = pattern::normalised_pattern(&row.literal);
         assert_eq!(n, row.normalised, "{}", row.literal);
@@ -52,6 +53,18 @@ fn engine_texts_and_lowering_agree_with_the_shared_table() {
             panic!("string type")
         };
         let deprecated_ir = td.constraint.as_ref().unwrap().pattern.as_deref().unwrap();
+        let legacy_file = ridl_core::InputFile::new(
+            &db,
+            "legacy.typl".into(),
+            format!("package test\nconst LEGACY = {deprecated_ir}\n"),
+        );
+        let parsed = ridl_core::parse_file(&db, legacy_file);
+        assert!(
+            parsed.errors().is_empty(),
+            "{} emitted {deprecated_ir}: {:?}",
+            row.literal,
+            parsed.errors()
+        );
         let model = codegen::lower(&pkg, &[]);
         let Some(codegen::v1::declaration::Kind::Scalar(sc)) = &model.declarations[0].kind else {
             panic!("string scalar")
@@ -74,5 +87,37 @@ fn engine_texts_and_lowering_agree_with_the_shared_table() {
             );
         }
         assert_eq!(lowered, row.normalised, "{}", row.literal);
+        javascript_rows.push(serde_json::json!({
+            "literal": row.literal,
+            "value": row.value,
+            "accepted": row.accepted,
+            "patterns": [pattern::pattern_text(deprecated_ir), c.pattern.as_ref().unwrap()],
+        }));
+    }
+    // Check both emitted compatibility fields with a Unicode JavaScript reader
+    // when Deno is installed, as it is for the TypeScript gate.
+    let output = std::process::Command::new("deno")
+        .args([
+            "eval",
+            r#"for (const row of JSON.parse(Deno.args[0])) {
+                for (const text of row.patterns) {
+                    if (new RegExp(text, "u").test(row.value) !== row.accepted) {
+                        throw new Error(`${row.literal} with ${JSON.stringify(row.value)} using ${text}`);
+                    }
+                }
+            }"#,
+            &serde_json::to_string(&javascript_rows).unwrap(),
+        ])
+        .output();
+    match output {
+        Ok(output) => assert!(
+            output.status.success(),
+            "JavaScript compatibility reader: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            eprintln!("Deno is not installed; skipping the JavaScript compatibility reader");
+        }
+        Err(error) => panic!("could not run Deno: {error}"),
     }
 }

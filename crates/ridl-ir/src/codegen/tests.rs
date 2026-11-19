@@ -5911,7 +5911,7 @@ fn match_clauses_lower_all_bodies_and_preserve_legacy_search_input() {
                 } else {
                     vec![
                         v2::Match {
-                            pattern: Some("/a.b/".into()),
+                            pattern: Some(r"/a\/.b/".into()),
                             pattern_const: Some("P".into()),
                         },
                         v2::Match {
@@ -5931,7 +5931,7 @@ fn match_clauses_lower_all_bodies_and_preserve_legacy_search_input() {
         let c = sc.constraint.as_ref().unwrap();
         assert_eq!(
             c.pattern.as_deref(),
-            Some(if legacy { "a.b" } else { r"^(?:a[^\n\r]b)$" })
+            Some(if legacy { "a.b" } else { r"^(?:a/[^\n\r]b)$" })
         );
         assert_eq!(c.pattern_const.as_deref(), Some("P"));
         if legacy {
@@ -5941,7 +5941,7 @@ fn match_clauses_lower_all_bodies_and_preserve_legacy_search_input() {
                 c.matches,
                 vec![
                     v1::Match {
-                        pattern: Some(r"a[^\n\r]b".into()),
+                        pattern: Some(r"a/[^\n\r]b".into()),
                         pattern_const: Some("P".into())
                     },
                     v1::Match {

@@ -225,6 +225,8 @@ message Constraint {
   optional uint64 len_max = 5;
   // Deprecated: /^(?:B)$/, where B is the first clause's source body with
   // unescaped dots outside classes written [^\n\r] and delimiter escapes kept.
+  // After decoding the literal, this gives the first clause's whole-value
+  // verdict with the regex crate or a JavaScript RegExp with the u flag.
   // Still written and read (IR specification §6).
   optional string pattern = 6 [deprecated = true];
   // Deprecated: the first clause of matches, still written and read

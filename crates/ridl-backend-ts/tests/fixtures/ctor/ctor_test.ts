@@ -358,6 +358,12 @@ Deno.test("an explicit search pattern accepts a match anywhere", () => {
   refuses("Contains", () => makeContains(""), "pattern");
 });
 
+Deno.test("an explicit search pattern refuses a line break around the match", () => {
+  for (const value of ["\nab", "ab\n", "\rab", "ab\r"]) {
+    refuses("Contains", () => makeContains(value), "pattern");
+  }
+});
+
 Deno.test("a pattern matches Unicode characters and normalised line terminators", () => {
   assert.equal(makeDot("a"), "a");
   assert.equal(makeDot("é"), "é");

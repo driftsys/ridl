@@ -659,6 +659,8 @@ Deno.test("reference wrappers and the generated Glyph constructor agree with the
       import.meta.url,
     ),
   ));
+  const glyphRows = rows.filter(({ literal }) => literal === "/./");
+  assert.equal(glyphRows.length, 9, "the table must keep all nine Glyph cases");
   for (const { literal, normalised, value, accepted } of rows) {
     assert.equal(
       new RegExp("^(?:" + normalised + ")$", "u").test(value),

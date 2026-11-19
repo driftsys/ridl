@@ -562,7 +562,7 @@ the checker and the Rust `regex` crate used by the wasm codec
 ([Generated code](../book/generated-code.md)). The test
 `examples/cabin/web/check_test.ts` compares `make<Name>` with the wasm codec's
 `verify` over the constrained values of `examples/cabin/cabin.ridl` and checks
-the generated `makeGlyph` against the dot rows of a table shared with the Rust
+the generated `makeGlyph` against the `/./` rows of a table shared with the Rust
 tests. It independently builds reference `RegExp` wrappers for every table row;
 those wrappers check the engine contract and do not exercise the generator.
 
