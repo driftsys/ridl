@@ -130,6 +130,13 @@ at epic close) and cites these decisions by number.
     output and another backend's output match the same strings with it (issue
     #597).
 
+    _Amended (2026-11-18)._ `regress` is removed. A pattern is an I-Regexp with
+    the refusals of typl §2.7, decided by the recogniser in `ridl-sem`, and
+    matches the whole value. TYPL-106 reports a recogniser refusal; TYPL-220
+    remains for accepted patterns that exceed the Rust `regex` compiler's
+    limits, including its compiled-size limit. The checker and generated outputs
+    use the normalised pattern and whole-value matching (driftsys/ridl#597).
+
 11. **The general form's attribute promotion is E2 scope.** E1 parses the typl
     profile per typl reference Appendix E, with `@labels` and `@deprecated` as
     doc-comment tags per typl §14. The general form §4 attribute block (single

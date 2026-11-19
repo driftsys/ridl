@@ -291,7 +291,12 @@ language layer at `int64`/`float64`.
    `make<Name>`, which checks the well-formedness of a string (rule `utf8`),
    then the range, step, length and pattern, and throws a `ConstraintError`, and
    `make<Name>Unchecked`, which does not. An `internal` scalar has neither. The
-   pattern check is always on, with the ECMA-262 semantics of the checker.
+   pattern check is always on.
+
+   _Amended (2026-11-18)._ Each TypeScript clause uses
+   `new RegExp("^(?:P)$", "u")` over the normalised I-Regexp pattern `P` (typl
+   §2.7). The checker and Rust output use `\A(?:P)\z` with `regex`. These checks
+   match the whole value and give the same verdict (driftsys/ridl#597).
 
    **As built — the shape of the emitted Rust type.** The inner field of a named
    scalar is private in every case, so adding a constraint to a declaration
@@ -370,10 +375,9 @@ language layer at `int64`/`float64`.
   gRPC needs work this ADR places outside the backend.
 - **Negative — decision 3 is work on shipped code.** Both existing backends gain
   an emit and the snapshot tests that cover them.
-- **Negative — decision 8 is work on a shipped backend.** The TypeScript
-  `make<Name>` pattern check follows the checker's ECMA-262 semantics, not the
-  Rust `regex` crate's, so the two can disagree for a pattern construct that the
-  two engines read differently (driftsys/ridl#597).
+- **Decision 8 amendment (2026-11-18).** The TypeScript `make<Name>` pattern
+  check uses a normalised I-Regexp with whole-value matching and the `u` flag.
+  It agrees with the checker and the Rust output (typl §2.7).
 - **Neutral — how far the ceiling describes the language backends is settled.**
   Open item 1: ADR-0018 decision 15 for the interaction face, decision 8 for the
   constraint-checking constructor.

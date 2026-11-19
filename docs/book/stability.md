@@ -204,15 +204,68 @@ To migrate a workspace:
 The `diagnostics`, `accepted-sources`, `wire` and `generated-crate` freeze rows
 are removed until the follow-up restores them.
 
+## Match pattern migration
+
+A pattern with no anchor and no refused construct still compiles, and now
+matches the whole value. `/ABC/` accepts only `"ABC"`; write `/.*ABC.*/` for a
+value that contains `ABC`. This change draws no diagnostic.
+
+Refused constructs draw TYPL-106. Use these replacements; the explicit classes
+do not reproduce every former engine's Unicode sets:
+
+| Refused construct                                           | Replacement                                                                                          |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Start and end anchors (`^…$`, `\A…\z`, `\A…\Z`)             | Remove them. For a prefix use `….*`; for a suffix use `.*…`. Literal `^` and `$` are `\^` and `[$]`. |
+| `\d`, `\D`, `\w`, `\W`                                      | `[0-9]`, `[^0-9]`, `[0-9A-Za-z_]`, `[^0-9A-Za-z_]`.                                                  |
+| `\s`, `\S`                                                  | `[ \t\n\r]`, `[^ \t\n\r]`.                                                                           |
+| `\b`, `\B`                                                  | Write boundary characters explicitly; there is no word-boundary operator.                            |
+| `\uXXXX`, `\xXX`, identity and control escapes              | Write the character itself; `[\x20-\x7E]` becomes `[ -~]`.                                           |
+| `\p{…}`, `\P{…}`                                            | Write explicit ranges, such as `[a-zà-ÿ]`.                                                           |
+| Lookahead or lookbehind                                     | Write each condition as its own `match` clause, for example `match /.*X.*/ match /.*Y.*/`.           |
+| Backreferences                                              | Write the alternatives out.                                                                          |
+| Non-capturing or named groups                               | Write plain groups `(…)`.                                                                            |
+| Lazy or possessive quantifiers                              | Use plain quantifiers.                                                                               |
+| Inline flags                                                | Write each case explicitly: `(?i)ab` becomes `[Aa][Bb]`.                                             |
+| POSIX or nested classes                                     | Write explicit ranges or flatten the class; a literal `[` is `\[`.                                   |
+| `&&`, `~~`, consecutive unescaped `--` inside a class       | Write one `&`, `~` or `-`.                                                                           |
+| `\-` outside a class                                        | Write a bare `-`.                                                                                    |
+| Empty or incomplete classes, groups, escapes or quantifiers | Complete the syntax and give a class at least one character.                                         |
+| `{,n}` or a quantifier with nothing to repeat               | Write `{0,n}` or supply the atom to repeat.                                                          |
+| A reversed class range or quantifier bound                  | Write the smaller value first. Quantifier bounds are compared exactly.                               |
+| More than 250 nested groups                                 | Reduce the nesting.                                                                                  |
+
+The complete language is in
+[typl §2.7](../specification/typl-language-reference.md#27-regex-literals). An
+accepted pattern that exceeds the Rust `regex` compiler's limits still draws
+TYPL-220.
+
+In `ridl.std`, `Date`, `IpV4` and the ASCII types (`Label`, `Name`, `Message`)
+use explicit classes: `[0-9]` for digits and `[ -~]` for printable ASCII.
+`TimeOfDay` and `Version` accept any suffix that holds no line break (`\n` or
+`\r`), within their declared length bounds. Their trailing `.*` accepts U+2028
+and U+2029.
+
+In TypeScript output, a dot now accepts U+2028 and U+2029, and a character
+outside the Basic Multilingual Plane counts as one character. In Rust output, a
+dot no longer accepts a carriage return, and `[0-9]` replaces the Unicode digits
+that `\d` accepted. The replacements for `\s` and `\w` are also explicit ASCII
+sets. The checker and both outputs agree on the new pattern language.
+
+`ridl diff` against a baseline of 0.20 reports every rewritten pattern as
+changed and classifies it as breaking. For a pattern that was `^…$` with none of
+the refused constructs inside, the accepted values did not change apart from the
+dot and Unicode changes above. Publish a new baseline with `ridl baseline` after
+migration.
+
 ## Match clause catalog hashes
 
-The addition of `Constraint.matches` changes the catalog hash of each unit whose
-interfaces reach a type with a `match` clause, including a type declared in
-another unit. The ordered clauses now enter the protobuf binary of the reduced
-unit. A unit that reaches no `match` clause keeps its hash: an empty `matches`
-list adds no byte, including on numeric constraints and string length bounds.
-Reordering clauses also changes the hash, although `ridl diff` ignores clause
-order.
+The addition of `Constraint.matches` and the rewritten `ridl.std` patterns
+change the catalog hash of each unit whose interfaces reach a type with a
+`match` clause, including a type declared in another unit. The ordered clauses
+enter the protobuf binary of the reduced unit. A unit that reaches no `match`
+clause keeps its hash: an empty `matches` list adds no byte, including on
+numeric constraints and string length bounds. Reordering clauses also changes
+the hash, although `ridl diff` ignores clause order.
 
 Regenerate and redeploy communicating peers together for each affected unit.
 Each compatibility chain of such a unit restarts once; publish a new baseline

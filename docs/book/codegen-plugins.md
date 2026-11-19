@@ -217,7 +217,18 @@ it: `Declaration`, `Field`, `EnumValue`, `Arm`, `Interface`, `Interaction`,
   `range`, `step`, `unit`, `length`, `pattern`, `collection_bound`, `timing`,
   `response_bound`, `errors` or `contract` (a `require` or an `ensure` clause).
   `rules` is filled on a `Declaration`, an `Interaction`, a `Field` and a
-  `Param`, and is empty on the other carriers.
+  `Param`, and is empty on the other carriers. Each `match` clause contributes
+  one `Rule.pattern` with the author's literal, including its delimiters.
+
+`Constraint.matches` holds one entry per clause, in source order. Its `pattern`
+is the normalised pattern: no delimiters or delimiter escapes, and each dot
+outside a class written `[^\n\r]`. A backend wraps it for whole-value matching
+as specified in
+[typl §2.7](../specification/typl-language-reference.md#27-regex-literals). The
+deprecated `Constraint.pattern` holds `^(?:P)$` for the first clause only, with
+`P` the normalised pattern; the deprecated `pattern_const` also describes only
+the first clause. When reading a request from 0.20 with an empty `matches` list,
+a present deprecated pattern is one clause with its old search meaning.
 
 `DocLink.target` is a qualified name, `pkg.Name` with an optional `.member`, not
 a spelling in any target language. A plugin maps it to its own path with its own

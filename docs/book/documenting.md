@@ -403,12 +403,14 @@ it shows what `ridl check` reads:
 - **Hover** on a declaration, a member, a parameter, an rsdl declaration or body
   line, or a use of any of them shows the signature, the doc, a **Contract**
   list, and the `@since` versions, the labels and the deprecation reason. The
-  Contract list is read from the IR: the range, step, unit, length, pattern and
+  Contract list is read from the IR: the range, step, unit, length, patterns and
   collection bound of the type, the timing of a `signal` or `event`, the
   response bound of a `command` or `query`, the error type of a fallible
   `query`, and each `require` and `ensure` clause. A link in the doc is shown as
   a link to the target's file and line. Hover on a member used in a contract
-  clause shows that member.
+  clause shows that member. Each `match` clause contributes one `Rule.pattern`,
+  holding the author's literal with its delimiters, so hover and generated docs
+  retain the source spelling.
 - **Completion** items carry the doc of the item they insert, except the member
   items offered after `.` in a doc link. Inside a doc comment, `[` and `.`
   complete link targets, and `@` at the start of a line completes the four tags.

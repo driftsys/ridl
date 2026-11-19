@@ -555,12 +555,13 @@ take any of those names. `make<Name>Unchecked` exists only for a scalar whose
 `make<Name>` checks something, which is every string scalar, and the decoder
 keeps a type assertion for the others. An `internal` scalar has neither
 constructor, because nothing in the module calls it and the codec module cannot
-import it. The pattern check uses the checker's ECMA-262 semantics without the
-`u` flag, so it can disagree with the Rust `regex` crate that the wasm codec
-uses (driftsys/ridl#597). The test `examples/cabin/web/check_test.ts` compares
-`make<Name>` with the wasm codec's `verify` over the values of the constrained
-types of `examples/cabin/cabin.ridl`, and pins each known disagreement of the
-pattern rule, which [Generated code](../book/generated-code.md) lists.
+import it. Each pattern clause has one `new RegExp("^(?:P)$", "u")` over the
+normalised I-Regexp pattern `P`, tested against the whole value. Every clause
+must match. These checks agree with the checker and the Rust `regex` crate used
+by the wasm codec ([Generated code](../book/generated-code.md)). The test
+`examples/cabin/web/check_test.ts` compares `make<Name>` with the wasm codec's
+`verify` over the constrained values of `examples/cabin/cabin.ridl` and checks
+TypeScript verdicts against a table shared with the Rust tests.
 
 ## Foreign declarations (D-14)
 
