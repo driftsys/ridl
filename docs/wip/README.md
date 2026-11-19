@@ -377,11 +377,11 @@ and was not archived. The reason is stated once per file or group.
 - **2026-10-11-ridl-authoring-skill-design.md**,
   **2026-10-11-ridl-authoring-skill-plan.md** and
   **skill-ridl-authoring-outline.md** — the skill's gates, eval harness and
-  distribution landed (#893), but `skills/ridl-authoring/` holds `SKILL.md` and
-  `rules.md` only, not the reference content. The plan's tasks 10 to 13 (the
-  content, the judge check, the release record, the gardening and the ADR-0005
-  amendments) are tracked by driftsys/ridl#1401. The files stay until that work
-  lands.
+  distribution landed (#893). `skills/ridl-authoring/` holds `SKILL.md` and
+  `rules.md` only, by design: ADR-0005, amended on 2026-11-11, records that the
+  per-language references were removed. What is left is the gardening of these
+  three files and, optionally, the judge check; driftsys/ridl#1401 tracks both.
+  The files stay until the gardening is done.
 - **2026-10-07-generated-observation-design.md** and
   **2026-10-07-generated-observation-plan.md** — optional trace spans from the
   generated Rust face, driftsys/ridl#754. Open; the generated crate has no
