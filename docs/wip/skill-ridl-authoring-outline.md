@@ -1,5 +1,14 @@
 # Skill outline — _Authoring RIDL_ (agent knowledge layer)
 
+> **Status, 2026-11-19.** This outline is background and not the as-built
+> record. The skill that shipped is `skills/ridl-authoring/SKILL.md` plus
+> `rules.md`, written by hand, with no per-language reference files
+> ([ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md) decision 1,
+> [ADR-0005](../decisions/ADR-0005-agent-enablement.md) amended 2026-11-11). The
+> statements below that the skill is generated from the reference docs, and its
+> target length, describe the first plan and no longer hold. The owner decides
+> whether to archive this file; see driftsys/ridl#1401.
+
 Stub / table of contents for the agent-facing skill described in ADR-0005 Layer
 A. This is the **shape**, distilled from the typl and ridl references — not the
 finished skill. Sections marked _(seed filled)_ already contain the real
