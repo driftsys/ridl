@@ -14,6 +14,13 @@ Amended 2026-11-11: decision 10 now states what the eval scorer checks for
 of design lints that `ridl check` reports on the whole task workspace with
 `expect.lints`, and the two sets must be equal.
 
+Amended 2026-11-19 by [ADR-0035](ADR-0035-authoring-skill-and-evals.md): a task
+may hold a `start/` workspace, which a design task may omit and a review or
+evolve task names instead of a `corpus` workspace, and `cargo xtask eval` runs a
+task on Claude Code, Codex and, when selected, the Copilot CLI, with and without
+the `ridl-authoring` skill. The seed grows from ten tasks to twelve: two rsdl
+tasks, `design-0004` and `evolve-0003`, start from `examples/cabin`.
+
 Written from piece 1b of the devex and agent tracks brief, "design lints and
 metrics", implemented in four pull requests: the design and plan
 (driftsys/ridl#694), the corpus and the eval seed (#707), the checks and the

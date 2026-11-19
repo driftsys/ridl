@@ -30,7 +30,9 @@ other entry below is Accepted.
   the minimum tool table names workspace paths and adds `ridl_references` and
   `ridl_dependencies`, and §7 adds the MCP tool surface as a fourth contract
   surface. Amended 2026-11-11: the skill is `SKILL.md` and `rules.md` only,
-  because a pilot eval did not show that per-language references help.
+  because a pilot eval did not show that per-language references help. Amended
+  2026-11-19 by ADR-0035: the skill is written by hand, the unit an agent writes
+  is a workspace, and the evals run on demand, not in CI.
 - **ADR-0006 — Walking-skeleton execution.** E0-scoped execution decisions
   (workspace layout, protox, deferred crates.io reservation).
 - **ADR-0007 — Epic E1 execution.** E1-scoped execution decisions (ungrammar
@@ -728,6 +730,15 @@ other entry below is Accepted.
   `service:` lock key, the implicit component name and every name derived from
   an inline shape follow the global name. Amends ADR-0015 decisions 12, 14, 15
   and 16, and adds dated notes to ADR-0008, ADR-0016, ADR-0022 and ADR-0002.
+
+- **ADR-0035 — The authoring skill, its gates, its distribution and its evals.**
+  _Accepted._ The `ridl-authoring` skill is `SKILL.md` and `rules.md`, written
+  by hand; three tests keep it consistent with the compiler; the editor release
+  and the VS Code extension (which needs VS Code 1.109) distribute it; and
+  `cargo xtask eval` compares an agent with and without it, scored mechanically
+  and then against a rubric by a judge of the other vendor. The judge check and
+  the release record are decided but not run (driftsys/ridl#1401). Amends
+  ADR-0005 §2, §5 and §7 and adds a note to ADR-0027 decision 10.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

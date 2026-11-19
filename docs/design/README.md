@@ -147,3 +147,9 @@ choices, see [`../decisions/`](../decisions/).
   every declaration are in the `ridl-fmt` crate documentation. The decisions
   behind its choices are D-1 to D-13 of the record itself, with the rejected
   alternatives in the archived design note.
+- **authoring-skill.md** — the `ridl-authoring` skill as built: its two files,
+  the three tests that keep it consistent with the compiler, how it reaches
+  Claude Code, Codex and Copilot, the `cargo xtask eval` runner and its scoring,
+  and what is not built (the per-language references, the judge check and the
+  release record). The decisions behind its choices are
+  [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md).
