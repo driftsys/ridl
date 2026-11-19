@@ -23,9 +23,8 @@ skill, and to `cargo xtask eval`. The shipped shape is described in
 [the authoring skill design record](../design/authoring-skill.md).
 
 Amends [ADR-0005](ADR-0005-agent-enablement.md) §2 (the provenance discipline),
-§5 (the plane the evals run in) and §7 (the unit an agent writes), and adds one
-bullet to decision 10 of
-[ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md).
+§5 (the plane the evals run in) and §7 (the unit an agent writes), and adds a
+dated amendment to [ADR-0027](ADR-0027-design-lints-calibrated-on-a-corpus.md).
 
 ## Context
 
