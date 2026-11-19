@@ -1232,6 +1232,9 @@ impl<'a> Codec<'a> {
             _ => return Ok(None),
         };
         let projected = self.projected_message(source)?;
+        // This check compares only the number of projected fields with the number
+        // of model fields. It does not compare which field each projected entry
+        // names, and it covers structs only, not unions or tuples.
         if let Some(v1::declaration::Kind::Struct(def)) = decl.kind.as_ref() {
             let members = def
                 .slots

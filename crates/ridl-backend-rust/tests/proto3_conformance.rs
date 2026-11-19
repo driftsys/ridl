@@ -3564,6 +3564,49 @@ fn the_codec_follows_projected_field_numbers() {
 }
 
 #[test]
+fn the_codec_follows_projected_tuple_field_numbers() {
+    let mut model =
+        projection_model("struct Sample { pair : (lo: integer [0..255], hi: integer [0..255]) }");
+    let original = projected_code(&model);
+    let tuple = model
+        .proto3
+        .as_mut()
+        .unwrap()
+        .messages
+        .iter_mut()
+        .find(|message| matches!(message.source, Some(v1::proto3_message::Source::Tuple(_))))
+        .expect("a tuple message");
+    assert_eq!(tuple.fields[0].number, 1);
+    assert_eq!(tuple.fields[1].number, 2);
+    tuple.fields[0].number = 17;
+    tuple.fields[1].number = 18;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("writer.tag(1u32,"));
+    assert!(original.contains("writer.tag(2u32,"));
+    assert!(changed.contains("writer.tag(17u32,"));
+    assert!(changed.contains("writer.tag(18u32,"));
+    assert!(changed.contains("17u32 =>"));
+    assert!(changed.contains("18u32 =>"));
+}
+
+#[test]
+fn the_codec_follows_projected_scalar_wire_types() {
+    let mut model = projection_model("struct Sample { value : integer [0..255] }");
+    let original = projected_code(&model);
+    let Some(v1::proto3_wire::Kind::Scalar(scalar)) = sample_wire(&mut model).kind.as_mut() else {
+        panic!("a scalar wire");
+    };
+    assert_eq!(scalar.wire_type, v1::Proto3WireType::Varint as i32);
+    scalar.wire_type = v1::Proto3WireType::I32 as i32;
+    let changed = projected_code(&model);
+    assert_ne!(original, changed);
+    assert!(original.contains("writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint)"));
+    assert!(!changed.contains("writer.tag(1u32, ::ridl_rt::proto3::WireType::Varint)"));
+    assert!(changed.contains("writer.tag(1u32, ::ridl_rt::proto3::WireType::I32)"));
+}
+
+#[test]
 fn the_codec_follows_projected_scalar_types() {
     let mut model = projection_model("struct Sample { value : integer [0..255] }");
     let original = projected_code(&model);
@@ -3602,6 +3645,9 @@ fn main() {{
     );
 }
 
+const FIELD_COUNT_MESSAGE: &str =
+    "a struct's projected field count differs from its model field count";
+
 #[test]
 fn a_projected_struct_with_too_few_fields_is_refused() {
     let mut model = projection_model("struct Sample { value : boolean }");
@@ -3609,7 +3655,7 @@ fn a_projected_struct_with_too_few_fields_is_refused() {
         .fields
         .pop()
         .unwrap();
-    assert_invalid_struct_projection(&model);
+    assert_invalid_struct_projection(&model, FIELD_COUNT_MESSAGE);
 }
 
 #[test]
@@ -3619,17 +3665,16 @@ fn a_projected_struct_with_too_many_fields_is_refused() {
     let mut extra = fields[0].clone();
     extra.number = 2;
     fields.push(extra);
-    assert_invalid_struct_projection(&model);
+    assert_invalid_struct_projection(&model, FIELD_COUNT_MESSAGE);
 }
 
-fn assert_invalid_struct_projection(model: &v1::Model) {
+fn assert_invalid_struct_projection(model: &v1::Model, message: &str) {
     let response = projected_response(model);
     assert!(response.files.is_empty(), "a refused model emits no files");
     assert_eq!(response.diagnostics.len(), 1);
-    assert!(
-        response.diagnostics[0]
-            .message
-            .starts_with("invalid proto3 projection:")
+    assert_eq!(
+        response.diagnostics[0].message,
+        format!("invalid proto3 projection: {message}")
     );
     assert_eq!(
         response.diagnostics[0].severity,
