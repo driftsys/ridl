@@ -60,6 +60,9 @@ message Model {
   // toolchain lowers a package; a head that cannot be laid out is listed in
   // `PodbufProjection.refused`, not left out silently.
   PodbufProjection podbuf = 11;
+  // The proto3 layout of the package. Set whenever the toolchain lowers a
+  // package; a declaration with no message is listed in
+  // `Proto3Projection.refused`, not left out silently.
   Proto3Projection proto3 = 12;
 }
 
