@@ -3606,11 +3606,81 @@ fn the_model_projection_matches_the_codec_layout() {
     let mut fixture = vec![main];
     fixture.extend(others);
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let entries = std::iter::once(("fixture", fixture)).chain(
-        CORPUS
-            .iter()
-            .map(|(entry, _)| (*entry, proto3::compile_workspace(&root.join(entry)))),
-    );
+    // Every directory must be compared or have a deliberate-error reason.
+    const COMPARED: &[&str] = &[
+        "instance-numbers",
+        "rsdl-appendix-a",
+        "rust-shapes",
+        "services-workspace",
+        "veh-cluster",
+        "veh-common",
+        "workspace-two-members",
+    ];
+    const SKIPPED: &[(&str, &str)] = &[
+        (
+            "diag-showcase",
+            "deliberate typl errors for diagnostic rendering",
+        ),
+        (
+            "ridl-diag-showcase",
+            "deliberate ridl errors for diagnostic rendering",
+        ),
+        (
+            "rsdl-diag-showcase",
+            "deliberate rsdl errors for diagnostic rendering",
+        ),
+    ];
+    let corpus = root.join("crates/ridlc/tests/corpus");
+    let mut directories: Vec<_> = std::fs::read_dir(&corpus)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.is_dir())
+        .collect();
+    directories.sort();
+    let mut entries = vec![("fixture".to_string(), fixture)];
+    entries.extend(CORPUS.iter().map(|(entry, _)| {
+        (
+            (*entry).to_string(),
+            proto3::compile_workspace(&root.join(entry)),
+        )
+    }));
+    for directory in &directories {
+        let name = directory.file_name().unwrap().to_str().unwrap();
+        if let Some((_, reason)) = SKIPPED.iter().find(|(skipped, _)| *skipped == name) {
+            let output =
+                ridlc::compile_workspace(&mut ridl_core::RidlDatabase::default(), directory)
+                    .unwrap();
+            assert!(
+                output
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.severity == ridl_core::diag::Severity::Error),
+                "{name}: skipped entry must still have errors"
+            );
+            println!("{name}: skipped: {reason}");
+        } else {
+            assert!(
+                COMPARED.contains(&name),
+                "{name}: neither compared nor explicitly skipped"
+            );
+            let entry = format!("crates/ridlc/tests/corpus/{name}");
+            if !entries.iter().any(|(existing, _)| *existing == entry) {
+                entries.push((entry, proto3::compile_workspace(directory)));
+            }
+        }
+    }
+    for name in COMPARED
+        .iter()
+        .copied()
+        .chain(SKIPPED.iter().map(|(name, _)| *name))
+    {
+        assert!(
+            directories
+                .iter()
+                .any(|path| path.file_name().unwrap() == name),
+            "{name}: listed directory must exist"
+        );
+    }
     let std_ir = ridlc::std_ir();
     let mut shapes = [0usize; 5];
     let mut packages_with_every_shape = 0usize;
@@ -3634,6 +3704,13 @@ fn the_model_projection_matches_the_codec_layout() {
                 ridl_backend_rust::proto3_layout(package, &others).unwrap_or_else(|error| {
                     panic!("{entry}: {} layout failed: {}", package.name, error.message)
                 });
+            println!(
+                "{entry}: {}: {} codec messages, {} projected messages, {} refusals",
+                package.name,
+                layout.len(),
+                projection.messages.len(),
+                projection.refused.len()
+            );
             let projected: BTreeMap<_, _> = projection
                 .messages
                 .iter()

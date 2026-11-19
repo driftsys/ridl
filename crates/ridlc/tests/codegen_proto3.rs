@@ -1289,7 +1289,7 @@ fn every_corpus_index_points_inside_its_list() {
             }
         }
     }
-    // The corpus has no foreign proto3 index. Keep its bound checks above,
+    // The ridlc corpus has no foreign proto3 index. Keep its bound checks above,
     // but require coverage only for the index kinds the corpus contains.
     for (list, count) in ["declaration source", "tuple", "message", "enum reference"]
         .into_iter()
@@ -1300,4 +1300,435 @@ fn every_corpus_index_points_inside_its_list() {
     println!(
         "indices checked (declaration source, tuple, message, enum reference, foreign): {checked:?}"
     );
+}
+
+fn two_packages(a: &str, b: &str) -> Vec<v2::Package> {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("ridl.toml"),
+        "[workspace]\nmembers = [\"a\", \"b\"]\n",
+    )
+    .unwrap();
+    for (name, source) in [("a", a), ("b", b)] {
+        let dir = root.path().join(name);
+        std::fs::create_dir(&dir).unwrap();
+        std::fs::write(
+            dir.join("ridl.toml"),
+            format!("[package]\nname = \"p.{name}\"\nversion = \"1.0.0\"\n"),
+        )
+        .unwrap();
+        std::fs::write(dir.join("types.typl"), source).unwrap();
+    }
+    let output = ridlc::compile_workspace(&mut RidlDatabase::default(), root.path()).unwrap();
+    assert!(
+        !output
+            .diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error),
+        "{:?}",
+        output.diagnostics
+    );
+    output.checked.into_iter().map(|c| c.ir).collect()
+}
+
+#[test]
+fn foreign_tuples_are_listed_only_in_the_declaring_package() {
+    let packages = two_packages(
+        "package p.a\nstruct A {\n pair : (value: boolean, nested: (flag: boolean, count: integer))\n}\n",
+        "package p.b\nimport p.a.A\nstruct B {\n value : A\n}\n",
+    );
+    let others: Vec<_> = packages.iter().collect();
+    for package in &packages {
+        let model = codegen::lower(package, &others);
+        let p = model.proto3.as_ref().unwrap();
+        assert_eq!(model.tuples.len(), 2);
+        assert!(p.refused.is_empty());
+        if package.name == "p.b" {
+            assert_eq!(
+                p.messages
+                    .iter()
+                    .map(|m| m.name.as_str())
+                    .collect::<Vec<_>>(),
+                ["B"]
+            );
+            for tuple in &model.tuples {
+                let name = tuple.name.as_ref().unwrap();
+                assert!(name.rust.is_empty() && name.wire.is_empty());
+            }
+            assert!(
+                matches!(kind(&message(p, "B").fields[0]), v1::proto3_wire::Kind::Message(r) if matches!(r.target, Some(v1::proto3_message_ref::Target::Foreign(_))))
+            );
+        } else {
+            assert_eq!(package.name, "p.a");
+            message(p, "A");
+            for (index, tuple) in model.tuples.iter().enumerate() {
+                let name = tuple.name.as_ref().unwrap();
+                assert!(!name.rust.is_empty() && !name.wire.is_empty());
+                assert_eq!(
+                    message(p, &name.wire).source,
+                    Some(v1::proto3_message::Source::Tuple(index as u32))
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn collection_message_references_are_remapped_after_a_refusal() {
+    let (_, p) = projection(
+        "package p.remap\nstruct Bad {\n values : [integer; 0..2]?\n}\nstruct Item {\n x : boolean\n}\nstruct Holder {\n items : [Item; 0..2]\n byKey : [integer [0..9] : Item; 0..2]\n}\n",
+    );
+    assert_eq!(
+        p.messages
+            .iter()
+            .map(|m| m.name.as_str())
+            .collect::<Vec<_>>(),
+        ["Item", "Holder"]
+    );
+    let holder = message(&p, "Holder");
+    let v1::proto3_wire::Kind::Array(array) = kind(&holder.fields[0]) else {
+        panic!("an array")
+    };
+    let v1::proto3_wire::Kind::Map(map) = kind(&holder.fields[1]) else {
+        panic!("a map")
+    };
+    for wire in [
+        array.element.as_deref().unwrap(),
+        map.value.as_deref().unwrap(),
+    ] {
+        assert!(
+            matches!(wire.kind.as_ref(), Some(v1::proto3_wire::Kind::Message(r)) if r.target == Some(v1::proto3_message_ref::Target::Message(0)))
+        );
+    }
+}
+
+fn union_arm(package: &mut v2::Package, declaration: usize) -> &mut v2::UnionArm {
+    let Some(v2::decl::Kind::UnionDef(def)) = package.decls[declaration].kind.as_mut() else {
+        panic!("a union")
+    };
+    &mut def.arms[0]
+}
+
+fn union_package() -> v2::Package {
+    package("package p.refusal\nunion Bad {\n value : Item\n}\nstruct Item {\n flag : boolean\n}\n")
+}
+
+#[test]
+fn union_arm_field_numbers_are_checked_after_resolution() {
+    for number in [0, 19000, 536870912] {
+        let mut p = union_package();
+        union_arm(&mut p, 0).ordinal = number;
+        check_refusal(
+            &p,
+            "Bad",
+            v1::Proto3RefusalCause::FieldNumber,
+            Some("Bad.value"),
+        );
+    }
+    let mut p = union_package();
+    let arm = union_arm(&mut p, 0);
+    arm.ordinal = 0;
+    arm.type_ref = "Missing".into();
+    check_refusal(&p, "Bad", v1::Proto3RefusalCause::Other, None);
+}
+
+#[test]
+fn field_numbers_beside_the_reserved_range_and_at_the_limit_are_accepted() {
+    for number in [18999, 20000, 536870911] {
+        let p = bad_number(number);
+        let model = codegen::lower(&p, &[]);
+        let projected = model.proto3.as_ref().unwrap();
+        assert!(projected.refused.is_empty(), "{number}");
+        assert_eq!(message(projected, "Bad").fields[0].number, number);
+        ridl_backend_rust::generate_pipeline(&p, &[WireEncoding::Proto3], false, &[]).unwrap();
+    }
+}
+
+#[test]
+fn an_empty_union_is_refused() {
+    let mut p = union_package();
+    let Some(v2::decl::Kind::UnionDef(def)) = p.decls[0].kind.as_mut() else {
+        panic!("a union")
+    };
+    def.arms.clear();
+    check_refusal(&p, "Bad", v1::Proto3RefusalCause::Other, None);
+}
+
+#[test]
+fn an_empty_open_enum_and_its_user_keep_their_messages() {
+    let mut p =
+        package("package p.open\nopen enum Mode {\n ON = 1\n}\nstruct User {\n mode : Mode\n}\n");
+    let Some(v2::decl::Kind::EnumDef(def)) = p.decls[0].kind.as_mut() else {
+        panic!("an enum")
+    };
+    def.values.clear();
+    let model = codegen::lower(&p, &[]);
+    let projected = model.proto3.as_ref().unwrap();
+    assert!(projected.refused.is_empty());
+    for name in ["ModeBox", "User"] {
+        assert!(default_rule(projected, name, 0));
+    }
+    ridl_backend_rust::generate_pipeline(&p, &[WireEncoding::Proto3], false, &[]).unwrap();
+}
+
+#[test]
+fn malformed_field_types_report_the_codecs_refusal() {
+    for case in [
+        "field",
+        "array",
+        "key",
+        "value",
+        "unresolved",
+        "primitive",
+        "width",
+        "int_width",
+        "float_width",
+    ] {
+        let ty = match case {
+            "array" => "[integer; 0..2]",
+            "key" | "value" => "[integer : boolean; 0..2]",
+            "width" | "int_width" => "integer [0..255]",
+            "float_width" => "float [0.0..1.0]",
+            _ => "boolean",
+        };
+        let mut p = package(&format!(
+            "package p.refusal\nstruct Bad {{\n value : {ty}\n}}\n"
+        ));
+        let f = field(&mut p, 0, 0);
+        match case {
+            "field" => f.r#type = None,
+            "array" => {
+                let Some(v2::field_type::Kind::Array(a)) = f.r#type.as_mut().unwrap().kind.as_mut()
+                else {
+                    panic!("an array")
+                };
+                a.element = None;
+            }
+            "key" | "value" => {
+                let Some(v2::field_type::Kind::Map(m)) = f.r#type.as_mut().unwrap().kind.as_mut()
+                else {
+                    panic!("a map")
+                };
+                if case == "key" {
+                    m.key = None;
+                } else {
+                    m.value = None;
+                }
+            }
+            "unresolved" => {
+                f.r#type.as_mut().unwrap().kind =
+                    Some(v2::field_type::Kind::Named("Missing".into()))
+            }
+            "primitive" => {
+                f.r#type.as_mut().unwrap().kind = Some(v2::field_type::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                ))
+            }
+            _ => {
+                let Some(v2::field_type::Kind::InlineScalar(s)) =
+                    f.r#type.as_mut().unwrap().kind.as_mut()
+                else {
+                    panic!("a scalar")
+                };
+                s.width = match case {
+                    "int_width" => Some(v2::type_def::Width::IntWidth(0)),
+                    "float_width" => Some(v2::type_def::Width::FloatWidth(0)),
+                    _ => None,
+                };
+            }
+        }
+        println!("malformed case: {case}");
+        check_refusal(
+            &p,
+            "Bad",
+            v1::Proto3RefusalCause::Other,
+            if case == "field" {
+                Some("Bad.value")
+            } else {
+                None
+            },
+        );
+    }
+}
+
+#[test]
+fn a_union_enum_refusal_names_the_using_arm() {
+    let mut p =
+        package("package p.refusal\nunion Bad {\n value : Mode\n}\nenum Mode {\n OFF = 0\n}\n");
+    let Some(v2::decl::Kind::EnumDef(def)) = p.decls[1].kind.as_mut() else {
+        panic!("an enum")
+    };
+    def.values[0].value = i64::from(i32::MAX) + 1;
+    check_refusal(
+        &p,
+        "Bad",
+        v1::Proto3RefusalCause::EnumValue,
+        Some("Bad.value"),
+    );
+}
+
+#[test]
+fn a_refused_dependency_uses_the_first_field_and_first_failure() {
+    let (_, p) = projection(
+        "package p.first\nstruct User {\n first : Bad\n second : Worse\n}\nstruct Bad {\n first : [integer; 0..2]?\n second : [boolean; 0..2]?\n}\nstruct Worse {\n values : [integer; 0..2]?\n}\n",
+    );
+    let user = &p.refused[0];
+    assert_eq!(user.cause, v1::Proto3RefusalCause::RefusedDependency as i32);
+    assert_eq!(user.member, None);
+    assert_eq!(p.refused[1].member.as_deref(), Some("Bad.first"));
+    assert_eq!(
+        user.message,
+        format!(
+            "`User` needs the refused message `Bad`: {}",
+            p.refused[1].message
+        )
+    );
+}
+
+#[test]
+fn a_foreign_enum_default_follows_its_zero_member_and_openness() {
+    for (open, value, expected) in [("", 1, false), ("", 0, true), ("open ", 1, true)] {
+        let remote = package(&format!(
+            "package p.remote\n{open}enum Mode {{\n VALUE = {value}\n}}\n"
+        ));
+        let mut local = package("package p.local\nstruct User {\n mode : boolean\n}\n");
+        field(&mut local, 0, 0).r#type.as_mut().unwrap().kind =
+            Some(v2::field_type::Kind::Named("p.remote.Mode".into()));
+        let model = codegen::lower(&local, &[&remote]);
+        let p = model.proto3.as_ref().unwrap();
+        assert_eq!(default_rule(p, "User", 0), expected);
+        assert!(
+            matches!(kind(&message(p, "User").fields[0]), v1::proto3_wire::Kind::Enumeration(e) if e.r#type.as_ref().unwrap().foreign)
+        );
+    }
+}
+
+#[test]
+fn a_foreign_struct_is_kept_even_when_its_own_projection_refuses_it() {
+    let packages = two_packages(
+        "package p.a\nstruct Remote {\n values : [integer; 0..2]?\n}\n",
+        "package p.b\nimport p.a.Remote\nstruct Bad {\n values : [integer; 0..2]?\n}\nstruct User {\n remote : Remote\n}\n",
+    );
+    let others: Vec<_> = packages.iter().collect();
+    for package in &packages {
+        let model = codegen::lower(package, &others);
+        let p = model.proto3.as_ref().unwrap();
+        if package.name == "p.a" {
+            assert_eq!(
+                refusal(p, &model, "Remote").cause,
+                v1::Proto3RefusalCause::OptionalCollection as i32
+            );
+            assert!(p.messages.is_empty());
+        } else {
+            assert_eq!(
+                p.messages
+                    .iter()
+                    .map(|m| m.name.as_str())
+                    .collect::<Vec<_>>(),
+                ["User"]
+            );
+            let v1::proto3_wire::Kind::Message(r) = kind(&message(p, "User").fields[0]) else {
+                panic!("a message")
+            };
+            assert_eq!(r.target, Some(v1::proto3_message_ref::Target::Foreign(0)));
+            assert_eq!(
+                model.foreign[0]
+                    .declaration
+                    .as_ref()
+                    .unwrap()
+                    .name
+                    .as_ref()
+                    .unwrap()
+                    .declared,
+                "Remote"
+            );
+            assert_eq!(p.refused.len(), 1);
+            assert_eq!(
+                refusal(p, &model, "Bad").cause,
+                v1::Proto3RefusalCause::OptionalCollection as i32
+            );
+        }
+    }
+}
+
+#[test]
+fn foreign_scalars_enums_and_enum_sets_work_as_elements_and_keys() {
+    let remote = package(
+        "package p.remote\ntype Count : integer [0..255]\nenum Mode {\n OFF = 0\n ON = 1\n}\nenumset Flags {\n ONE = 0\n}\n",
+    );
+    let mut local = package(
+        "package p.local\nstruct User {\n counts : [boolean; 0..2]\n modes : [boolean; 0..2]\n flags : [boolean; 0..2]\n byCount : [integer : boolean; 0..2]\n byMode : [integer : boolean; 0..2]\n byFlags : [integer : boolean; 0..2]\n byBool : [boolean : boolean; 0..2]\n}\n",
+    );
+    for (position, name) in ["Count", "Mode", "Flags"].into_iter().enumerate() {
+        let reference = v2::field_type::Kind::Named(format!("p.remote.{name}"));
+        let Some(v2::field_type::Kind::Array(a)) = field(&mut local, 0, position)
+            .r#type
+            .as_mut()
+            .unwrap()
+            .kind
+            .as_mut()
+        else {
+            panic!("an array")
+        };
+        a.element.as_mut().unwrap().kind = Some(reference.clone());
+        let Some(v2::field_type::Kind::Map(m)) = field(&mut local, 0, position + 3)
+            .r#type
+            .as_mut()
+            .unwrap()
+            .kind
+            .as_mut()
+        else {
+            panic!("a map")
+        };
+        m.key.as_mut().unwrap().kind = Some(reference);
+    }
+    let model = codegen::lower(&local, &[&remote]);
+    let p = model.proto3.as_ref().unwrap();
+    assert!(p.refused.is_empty(), "{:?}", p.refused);
+    let user = message(p, "User");
+    for position in 0..3 {
+        let v1::proto3_wire::Kind::Array(a) = kind(&user.fields[position]) else {
+            panic!("an array")
+        };
+        let v1::proto3_wire::Kind::Map(m) = kind(&user.fields[position + 3]) else {
+            panic!("a map")
+        };
+        assert!(a.packed);
+        assert_eq!(a.element, m.key);
+        match a.element.as_ref().unwrap().kind.as_ref().unwrap() {
+            v1::proto3_wire::Kind::Scalar(s) => {
+                assert_eq!(s.r#type, v1::Proto3ScalarType::Uint32 as i32)
+            }
+            v1::proto3_wire::Kind::Enumeration(e) => assert!(e.r#type.as_ref().unwrap().foreign),
+            other => panic!("unexpected wire: {other:?}"),
+        }
+    }
+    let v1::proto3_wire::Kind::Map(m) = kind(&user.fields[6]) else {
+        panic!("a map")
+    };
+    assert!(
+        matches!(m.key.as_ref().unwrap().kind.as_ref(), Some(v1::proto3_wire::Kind::Scalar(s)) if s.r#type == v1::Proto3ScalarType::Bool as i32)
+    );
+    ridl_backend_rust::proto3_layout(&local, &[&remote]).unwrap();
+}
+
+#[test]
+fn a_missing_union_arm_type_has_the_same_text_at_the_backend_model_entry() {
+    use codegen::Backend;
+    let mut model = codegen::lower(&union_package(), &[]);
+    let Some(v1::declaration::Kind::Union(def)) = model.declarations[0].kind.as_mut() else {
+        panic!("a union")
+    };
+    def.arms[0].r#type = None;
+    let response = ridl_backend_rust::Backend.generate(&v1::CodegenRequest {
+        model: Some(model),
+        options: vec![v1::BackendOption {
+            key: "encodings".into(),
+            value: "proto3".into(),
+        }],
+        ..Default::default()
+    });
+    assert!(response.files.is_empty());
+    assert_eq!(response.diagnostics.len(), 1);
+    assert_eq!(response.diagnostics[0].message, "`Bad.value` names no type");
 }

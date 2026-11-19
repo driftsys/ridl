@@ -6,7 +6,7 @@ use super::v1;
 use crate::projection::proto3 as pb;
 use v1::Proto3RefusalCause as Cause;
 
-/// Every representable declaration and tuple, and every refusal, in model order.
+/// Every representable declaration and named tuple, and every refusal, in model order.
 pub(crate) fn project(model: &v1::Model) -> v1::Proto3Projection {
     use v1::proto3_message::Source;
 
@@ -251,10 +251,10 @@ impl Walk<'_> {
                     .as_ref()
                     .map(|name| name.rust.as_str())
                     .unwrap_or_default();
-                // The Rust name is a backend naming requirement, not a proto3 refusal.
-                // A tuple with neither a wire name nor a Rust name, and messages
-                // that use it, are omitted from `messages` with no entry in `refused`.
-                // Lowering always names tuples; only hand-built IR reaches this case.
+                // A tuple lifted from a declaration of another package has no
+                // name in this package and has neither a message nor a refusal
+                // here. The declaring package's projection lists that tuple.
+                // Local users refer to the declaration through `Model.foreign`.
                 if owner.is_empty() {
                     return (None, failures);
                 }
@@ -886,5 +886,42 @@ mod tests {
             Some(v1::proto3_message::Source::Tuple(0))
         );
         assert!(p.refused.is_empty());
+    }
+
+    #[test]
+    fn a_union_arm_without_a_type_is_refused_at_that_arm() {
+        // Raw IR always lowers an arm to Some(TypeRef), even if unresolved.
+        let model = v1::Model {
+            declarations: vec![v1::Declaration {
+                name: Some(v1::Spellings {
+                    declared: "Bad".into(),
+                    ..Default::default()
+                }),
+                kind: Some(v1::declaration::Kind::Union(v1::Union {
+                    arms: vec![v1::Arm {
+                        name: Some(v1::Spellings {
+                            declared: "value".into(),
+                            ..Default::default()
+                        }),
+                        ordinal: 1,
+                        r#type: None,
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let p = project(&model);
+        assert!(p.messages.is_empty());
+        assert_eq!(p.refused.len(), 1);
+        assert_eq!(
+            p.refused[0].source,
+            Some(v1::proto3_refused::Source::Declaration(0))
+        );
+        assert_eq!(p.refused[0].cause, Cause::Other as i32);
+        assert_eq!(p.refused[0].member.as_deref(), Some("Bad.value"));
+        assert_eq!(p.refused[0].message, "`Bad.value` names no type");
     }
 }
