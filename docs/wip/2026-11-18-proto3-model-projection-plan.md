@@ -331,6 +331,56 @@ skip the last arm of a union. The corpus test must fail on each.
 - [ ] **Step 3: Commit** —
       `docs(docs): describe the proto3 projection of the codegen model`
 
+### Task 4b: whether a default is legal
+
+Added on 2026-11-19; see the spec, "Whether a default is legal".
+
+**Files:**
+
+- Modify: `crates/ridl-ir/proto/ridl/codegen/v1/model.proto`
+  (`bool default_is_legal = 1;` on `Proto3Wire`, with the spec's comment)
+- Modify: `crates/ridl-ir/src/codegen/proto3.rs`
+- Modify: `freeze/codegen-protocol.txt` (through `cargo xtask freeze update`)
+- Modify: `docs/design/codegen-plugins.md`, `docs/book/codegen-plugins.md` (the
+  proto3 sections), `docs/design/proto3-codec.md` (what the comparison test does
+  not cover)
+- Test: `crates/ridlc/tests/codegen_proto3.rs`
+
+**Interfaces:**
+
+- Produces: `Proto3Wire.default_is_legal`, set on every wire the walk builds: a
+  field's wire, an array's element, a map's key and value.
+- The value per kind equals what `crates/ridl-backend-rust/src/codec_proto3.rs`
+  computes today (`Wire::default_is_legal`, `zero_legal`,
+  `crate::zero_is_legal`): a numeric scalar or a boolean,
+  `ridl_ir::zero::range_holds_zero` over the constraint, true with no
+  constraint; text and bytes, length lower bound 0; an enum, a zero member or
+  open; an enum set, true; an array or a map, count lower bound 0; a message,
+  true.
+
+- [ ] **Step 1: Write the failing tests**, one per kind, each with a legal and
+      an illegal case where the kind has one:
+      `a_ranged_scalar_default_is_legal_only_when_the_range_holds_zero` (ranges
+      `[0..10]`, `[1..10]`, and a step grid that excludes 0),
+      `a_text_or_bytes_default_is_legal_only_without_a_length_floor`,
+      `an_enum_default_is_legal_with_a_zero_member_or_when_open`,
+      `an_enum_set_and_a_message_default_are_always_legal`,
+      `a_collection_default_is_legal_only_without_a_count_floor`,
+      `a_map_key_and_value_carry_their_own_default_rule`.
+- [ ] **Step 2: Run** `cargo test -p ridlc --test codegen_proto3 --locked` and
+      see them fail.
+- [ ] **Step 3: Add the field and fill it.**
+- [ ] **Step 4: Run** the same command,
+      `cargo test -p ridl-ir -p ridlc -p ridlc-gen-model --locked` (model
+      snapshots gain the key; read the change before accepting it),
+      `cargo xtask freeze update`, `just freeze-check` (one added line), and the
+      documentation checks of task 4 step 2.
+- [ ] **Step 5: Commit** —
+      `feat(ridl-ir): carry whether a proto3 default is legal in the codegen model`
+
+**Mutation the reviewer tries:** return true for every scalar; read the value's
+rule for a map key. Each must fail a test.
+
 Then: `just verify`, push, open pull request 1 (`Refs #1413`, not `Closes`),
 `/review` passes 1 and 2, and garden only the plan state; the design note and
 this plan stay in `docs/wip/` until pull request 2.
@@ -359,7 +409,9 @@ this plan stay in `docs/wip/` until pull request 2.
   reference from the `Proto3Message` of the declaration or tuple, found by its
   `source` index. It joins each `Proto3Field` to the model member by
   `Proto3Field.source` to build what stays in the codec: `Repr`, `NamedScalar`,
-  the constraint, `zero_legal`, the count bounds.
+  the constraint, the count bounds. `zero_legal` and `Wire::default_is_legal`
+  are removed: the codec reads `Proto3Wire.default_is_legal`, and no longer
+  calls `zero_is_legal` from this file.
 - The codec stops on the first entry of `refused` whose cause is not
   `REFUSED_DEPENDENCY` and whose source is a declaration, or a tuple in
   `reachable_tuples`, and returns its `message` as the `GenerateError`.

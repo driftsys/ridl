@@ -46,9 +46,7 @@ facts, so they cannot differ on them.
   `Reservation.proto3`) or a new value in `AbsentCause`. A new value in an
   existing enum is a break outside a minor release (`freeze/README.md`).
 - Facts a plugin already has from the model: presence (a `?` field), typl
-  constraints, count bounds of collections beyond what the wire form needs, and
-  whether a type's zero value is legal. The Kotlin plugin already reads these
-  for its FlatBuffers codec.
+  constraints, and the count bounds of collections.
 - The TypeScript backend.
 
 ## Anti-goals
@@ -171,6 +169,14 @@ message Proto3Field {
 }
 
 message Proto3Wire {
+  // Whether the proto3 default of this wire is a legal value of its type:
+  // 0 inside the range and on the step grid of a numeric scalar, a length
+  // lower bound of 0 for text and bytes, a zero member or an open enum, a
+  // count lower bound of 0 for an array or a map, always for an enum set and
+  // for a message. An absent field with implicit presence, map key or map
+  // value reads as the default when this is true and is malformed when it is
+  // false; a writer omits a value at its default only when this is true.
+  bool default_is_legal = 1;
   oneof kind {
     Proto3Scalar scalar = 10;     // numeric, boolean, or an enum set's integer
     bool text = 11;               // `string`, wire type LEN
@@ -287,16 +293,32 @@ The two are independent, as they are for podbuf:
   and its size state says `unbounded` or `absent`, as today. A backend still
   refuses to emit a codec for it from the size state.
 
+### Whether a default is legal
+
+Added on 2026-11-19, after a check of the Kotlin plugin. The first draft left
+this fact out, on the claim that a plugin already has it. The claim was wrong:
+the model does not carry it (`FbSlot.needs_null_default` is a different
+predicate, about the `.fbs` schema), the Rust backend computes it per kind
+(`zero_is_legal`, `Wire::default_is_legal`), and the Kotlin plugin holds a hand
+port of the rule for scalars and enums only. A proto3 codec needs it for every
+kind, so `Proto3Wire.default_is_legal` carries it. The walk fills it with
+`ridl_ir::zero::range_holds_zero` for a numeric scalar and with the reads the
+comment of the field lists for the other kinds. It sits on the wire and not on
+the field because the rule also applies to the key and the value of a map entry.
+The comparison test of pull request 1 cannot check it, as it cannot check
+packing; pull request 2 makes the Rust codec read it.
+
 ### What stays in the Rust codec
 
 These are facts of the Rust output or of the size states, not proto3 layout
 rules, and pull request 2 leaves them in `codec_proto3.rs`:
 
 - The Rust representation of each field: `Repr`, `NamedScalar` and its
-  constructor, the typl constraint, `zero_legal`, and the count bounds of an
-  array or a map. The codec gets them by walking the model type of each field
-  beside the projection field, joined on `Proto3Field.source` (the field name,
-  the arm name, the tuple position).
+  constructor, the typl constraint, and the count bounds of an array or a map.
+  Whether a default is legal is not in this list: the codec reads
+  `Proto3Wire.default_is_legal`. The codec gets them by walking the model type
+  of each field beside the projection field, joined on `Proto3Field.source` (the
+  field name, the arm name, the tuple position).
 - `bound_state`, which refuses a declaration whose size state is not bounded.
 - Which tuples are emitted and in which order (`reachable_tuples`). The codec
   looks up the projection message of each tuple it emits by index; it does not
