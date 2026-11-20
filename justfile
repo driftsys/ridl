@@ -3769,6 +3769,10 @@ release-sync:
     # include crates that are not in git, so they are generated first.
     cargo run --locked --package xtask -- bench gen
     (cd bench/encodings && cargo update --workspace --offline)
+    # The fuzz lockfile names the workspace crates by version. The command
+    # runs from the root with --manifest-path, so it uses the stable toolchain
+    # and not the nightly that fuzz/rust-toolchain.toml pins.
+    cargo update --workspace --offline --manifest-path fuzz/Cargo.toml
     cargo run --locked --package xtask -- freeze update
     # The identity fixture embeds the compiler version. The procedure is the
     # one in crates/ridl-rt-conformance/fixtures/identity/README.md.
