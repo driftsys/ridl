@@ -1,5 +1,123 @@
 # Changelog
 
+## [0.21.0] (2026-11-20)
+
+### Bug Fixes
+
+- **repo:** update the fuzz lockfile in release-sync ([#1427]) ([30390a1])
+
+### Features
+
+- **typl:** accept a match pattern only when it is an I-Regexp ([#1422])
+  ([c85407c]), refs [#597], [#597], [#597], [#597], [#597], [#597], [#597],
+  [#597], [#597], [#597], [#597], [#597], [#597], [#597], [#597], [#597],
+  [#597], [#597], [#597], [#597], [#597], [#597], [#597], [#597], [#597],
+  [#597], [#597]
+- **typl:** several match clauses and the IR clause list for I-Regexp patterns
+  ([#1419]) ([692bd79]), refs [#597], [#597], [#597], [#597], [#597], [#597],
+  [#597], [#597], [#597], [#597], [#597], [#597], [#597], [#597], [#597], [#597]
+- **ridl-ir:** carry the proto3 projection in the codegen model ([#1420])
+  ([fca5d5a]), refs [#1413], [#1413], [#1413], [#1413], [#1413], [#1413],
+  [#1413], [#1413], [#1413], [#1413], [#1413], [#1413]
+- **ridl-sem:** name a service with one CamelCase identifier ([#1405])
+  ([ac64fc2]), refs [#1390], [#1390], [#1390], [#1390], [#1390], [#1390],
+  [#1390], [#1390], [#1390], [#1390], [#1390], [#1390], [#1390], [#1390],
+  [#1390], [#1390], [#1390], [#1390], [#1390], [#1390], [#1390], [#1390],
+  [#1390], [#1390], [#1390], [#1390]
+
+### Refactoring
+
+- **ridl-backend-rust:** read the proto3 layout from the codegen model ([#1423])
+  ([cc24753]), refs [#1413], [#1413], [#1413], [#1413], [#1413], [#1413],
+  [#1413], [#1413]
+
+### Documentation
+
+- **docs:** fix the post-merge findings on the authoring skill records ([#1426])
+  ([017eacb])
+- **docs:** garden the ridl-authoring skill design and plan ([#1424])
+  ([e4a79f2]), refs [#1401], [#1401]
+- **docs:** correct the wip ledger entry of the authoring skill ([#1421])
+  ([d77174b])
+- **docs:** record the decision and the findings on three open items of the
+  codegen model ([#1415]) ([0190f06])
+- **docs:** design match patterns as I-Regexp and archive approach A ([#1412])
+  ([67796a2]), refs [#597], [#597], [#597], [#597], [#597], [#597]
+- **ridl-backend-ts:** remove the stale links to a missing interact module
+  ([#1408]) ([0b20482])
+- **docs:** state the scope of the Rust snapshots against a build ([#1409])
+  ([e012019]), closes [#1384]
+- **docs:** move the concept note to technotes and update the wip ledger
+  ([#1402]) ([1340a9b])
+- **docs:** archive the rsdl rewrite cluster and repoint its citations ([#1404])
+  ([026bf94])
+- **docs:** garden the ridl fmt layout note into a design record ([#1403])
+  ([486be98])
+
+### BREAKING CHANGES
+
+- a match pattern with no anchor now accepts only a
+value that the pattern matches from its first character to its last.
+A pattern that used a dot no longer accepts a carriage return in that
+position in the Rust output.
+- a match pattern must be an I-Regexp. The anchors ^ and
+$, the escapes \d \w \s \b, \p{..}, lookaround, backreferences, flags
+and POSIX classes are refused with TYPL-106. A pattern matches the
+whole value: write `.*ABC.*` for a value that contains ABC. In
+ridl.std, TimeOfDay and Version accept any suffix that holds no line
+break.
+- `service veh.body.doors : I` is refused (RIDL-142). Declare
+`service Doors : I` in package `veh.body`; its global name is
+`veh.body.Doors` and a member is `veh.body.Doors.member`. Rewrite each rsdl
+`offers` line, each lone service in a system, distribution or machine body,
+each `requires` line naming an inline-shape service and each doc link to the
+new name (bare, imported or qualified). Then, for each inline shape, run
+`ridl lock <unit directory> --rename service:<old name>=service:<package>.<Name>`,
+once per unit; and for each lone service listed in a system, run
+`ridl lock <workspace root> --rename <old name>=<package>.<Name>`. `ridl diff`
+against a baseline published before the migration reports every renamed
+service as removed and added, which is breaking; publish a new baseline with
+`ridl baseline` after migrating.
+
+[0.21.0]: https://github.com/driftsys/ridl/compare/v0.20.0...v0.21.0
+[30390a1]: https://github.com/driftsys/ridl/commit/30390a1
+[#1427]: https://github.com/driftsys/ridl/issues/1427
+[c85407c]: https://github.com/driftsys/ridl/commit/c85407c
+[#1422]: https://github.com/driftsys/ridl/issues/1422
+[#597]: https://github.com/driftsys/ridl/issues/597
+[692bd79]: https://github.com/driftsys/ridl/commit/692bd79
+[#1419]: https://github.com/driftsys/ridl/issues/1419
+[fca5d5a]: https://github.com/driftsys/ridl/commit/fca5d5a
+[#1420]: https://github.com/driftsys/ridl/issues/1420
+[#1413]: https://github.com/driftsys/ridl/issues/1413
+[ac64fc2]: https://github.com/driftsys/ridl/commit/ac64fc2
+[#1405]: https://github.com/driftsys/ridl/issues/1405
+[#1390]: https://github.com/driftsys/ridl/issues/1390
+[cc24753]: https://github.com/driftsys/ridl/commit/cc24753
+[#1423]: https://github.com/driftsys/ridl/issues/1423
+[017eacb]: https://github.com/driftsys/ridl/commit/017eacb
+[#1426]: https://github.com/driftsys/ridl/issues/1426
+[e4a79f2]: https://github.com/driftsys/ridl/commit/e4a79f2
+[#1424]: https://github.com/driftsys/ridl/issues/1424
+[#1401]: https://github.com/driftsys/ridl/issues/1401
+[d77174b]: https://github.com/driftsys/ridl/commit/d77174b
+[#1421]: https://github.com/driftsys/ridl/issues/1421
+[0190f06]: https://github.com/driftsys/ridl/commit/0190f06
+[#1415]: https://github.com/driftsys/ridl/issues/1415
+[67796a2]: https://github.com/driftsys/ridl/commit/67796a2
+[#1412]: https://github.com/driftsys/ridl/issues/1412
+[0b20482]: https://github.com/driftsys/ridl/commit/0b20482
+[#1408]: https://github.com/driftsys/ridl/issues/1408
+[e012019]: https://github.com/driftsys/ridl/commit/e012019
+[#1409]: https://github.com/driftsys/ridl/issues/1409
+[#1384]: https://github.com/driftsys/ridl/issues/1384
+[1340a9b]: https://github.com/driftsys/ridl/commit/1340a9b
+[#1402]: https://github.com/driftsys/ridl/issues/1402
+[026bf94]: https://github.com/driftsys/ridl/commit/026bf94
+[#1404]: https://github.com/driftsys/ridl/issues/1404
+[486be98]: https://github.com/driftsys/ridl/commit/486be98
+[#1403]: https://github.com/driftsys/ridl/issues/1403
+
 ## [0.20.0] (2026-11-15)
 
 ### Documentation
