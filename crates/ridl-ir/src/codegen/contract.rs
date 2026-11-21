@@ -288,7 +288,9 @@ pub fn request_to_json(request: &v1::CodegenRequest) -> Result<String, super::Se
 /// Reads a request from canonical protobuf JSON — what a plugin does with
 /// its standard input — under the guards [`super::from_json`] states. The
 /// request nests the model one level deeper, so the bound a reader must
-/// provision is 267 JSON levels (266 model levels plus one for the request).
+/// provision is 268 JSON levels: the model nests 267 when its deepest shape
+/// is a declaration of another package, copied inside a `ForeignDeclaration`,
+/// and the request adds one.
 ///
 /// A key the reader does not know is ignored, at every nesting level of the
 /// request: the top level, inside `model` and `deployment`, and inside the
