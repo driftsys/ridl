@@ -874,8 +874,11 @@ guide for a plugin author, and its "Reading order" section is the reading list.
    with a foreign first arm, gives no `Default` and no `init`) are conservative:
    correct, and lifting them changes what the generated crate contains.
    Constants resolve across packages. **Open:** driftsys/ridl#1382. A contract
-   clause on a parameter of a foreign scalar type is a defect and not a
-   conservative rule: driftsys/ridl#1414.
+   clause on a parameter or a reply of a foreign scalar type is translated by
+   the Rust backend, and the interface keeps its face, when the caller hands the
+   backend the package that declares the scalar (`generate_pipeline` with
+   `others`, as `ridl build` does); otherwise the clause is refused with a note
+   that names that cause (driftsys/ridl#1414).
 7. **The model's unbounded-member facts are computed over the scope the codec is
    handed.** Resolved: a cross-package aggregate that exceeds the FlatBuffers
    ceiling is an error, as the same shape in one package is, and the attribution

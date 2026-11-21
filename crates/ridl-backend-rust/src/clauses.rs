@@ -11,7 +11,8 @@
 //!   The subject's type must be a named scalar over an integer or a float.
 //!
 //! It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op>
-//! <literal>` for `result`, with the literal in the subject's Rust numeric
+//! <literal>` for `result` (`args.get()` and `reply.get()` for a subject
+//! whose scalar is declared in another package), with the literal in the subject's Rust numeric
 //! type. For float subjects, literals whose exact magnitude exceeds `f64::MAX`
 //! are refused. Within that range, float bounds preserve expr-core's exact
 //! rational comparisons: `<=` and `>` use the largest binary64 value at or
@@ -22,11 +23,12 @@
 //! sign, which every comparison treats like `-0.0`). Inexact `==` and `!=`,
 //! unreadable decimals, and exponents that cannot be read or have magnitude
 //! above 10000 are refused.
-//! The newtype's field is private, and the read is still legal: the subject is a
-//! named scalar, and the clause is emitted inside a descriptor
-//! `impl` block at package module scope, the same module that declares the
-//! type, where a private field is visible. Several clauses of one kind are
-//! conjoined with `&&`. Any other clause form is refused with a
+//! The newtype's field is private. For a scalar of this package the read is
+//! still legal: the clause is emitted inside a descriptor `impl` block at
+//! package module scope, the same module that declares the type, where a
+//! private field is visible. A scalar of another package is read through its
+//! public `get` accessor instead. Several clauses of one kind are conjoined
+//! with `&&`. Any other clause form is refused with a
 //! [`GenerateError`] rather than dropped: a dropped clause would generate a
 //! provider that accepts arguments its own contract forbids.
 //!
@@ -35,8 +37,10 @@
 //! accepted comparison or the reason the clause was refused, verbatim, and
 //! what is left here is the rendering, including float-bound rounding and
 //! refusal. A subject whose scalar is declared in another package is read from
-//! the model's foreign declarations. The model keeps the contract's exact
-//! literal text.
+//! the model's foreign declarations, which hold it only when the caller handed
+//! the backend that package (`generate_pipeline` with `others`, as `ridl build`
+//! does); otherwise the lowering refuses the clause and names that cause. The
+//! model keeps the contract's exact literal text.
 
 use crate::{Ctx, GenerateError, ScalarBacking, class_backing, numeric_tokens};
 use num_bigint::BigInt;
@@ -557,6 +561,57 @@ mod tests {
         assert_eq!(
             dense(&body.expr),
             "ifreply.get()<100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+        );
+    }
+
+    /// An `ensure` clause on a reply whose float scalar is declared in another
+    /// package reads the value through the public accessor with the float
+    /// literal. The parameter names a second foreign scalar, an integer, that
+    /// the lowering lists first, so a lookup at the wrong foreign index reads
+    /// the wrong class.
+    #[test]
+    fn a_result_clause_on_a_foreign_float_scalar_is_accepted() {
+        let mut foreign = call_package(Vec::new(), Vec::new(), None);
+        foreign.name = "q".to_string();
+        foreign.interfaces.clear();
+        let package = call_package(
+            vec![param("level", "q.Level")],
+            vec![clause(v2::ContractKind::Ensure, "result <= 0.5")],
+            Some("q.Rate"),
+        );
+        let model = ridl_ir::codegen::lower(&package, &[&foreign]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
+
+        let body = translate(&ctx, clauses, ClauseKind::Ensure, params, reply)
+            .expect("a foreign float reply scalar is accepted");
+        assert_eq!(
+            dense(&body.expr),
+            "ifreply.get()<=0.5{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+        );
+    }
+
+    /// A clause on a scalar of a package the backend was not given is refused
+    /// with that cause, not as a subject that is not a numeric scalar.
+    #[test]
+    fn a_clause_on_a_scalar_of_a_package_not_given_names_the_cause() {
+        let package = call_package(
+            vec![param("level", "q.Level")],
+            vec![clause(v2::ContractKind::Require, "level < 100")],
+            None,
+        );
+        let model = ridl_ir::codegen::lower(&package, &[]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
+
+        let error = translate(&ctx, clauses, ClauseKind::Require, params, reply)
+            .expect_err("the clause is refused");
+        assert!(
+            error
+                .message
+                .ends_with("declared in another package that was not given to the backend"),
+            "{}",
+            error.message
         );
     }
 
