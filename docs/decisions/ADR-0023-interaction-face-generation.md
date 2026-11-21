@@ -215,15 +215,17 @@ never stated.
    `<subject>` is the interaction's single non-stream parameter (or `result` on
    a query's `ensure`) and `<comparison>` is one of `< <= > >= == !=`, over an
    integer- or float-backed named scalar. It emits `args.0 <op> <literal>` or
-   `reply.0 <op> <literal>`, conjoining several clauses of one kind with `&&`. A
-   clause outside this form is refused with a `GenerateError`, because dropping
-   it would generate a provider that accepts arguments its own contract forbids
-   — a worse failure than refusing to generate at all. `generate_face` is
-   already total over errors, so the refusal costs no new mechanism. This is
-   deliberately the smallest thing that makes the design's two clause-driven
-   settlement rows (`PreconditionFailed`, `ContractBroken`) real; it is not a
-   first instalment of E5, and E5.1 replaces it with a translator driven by the
-   structured expression tree the IR does not carry yet.
+   `reply.0 <op> <literal>` (`args.get()` and `reply.get()` for a subject whose
+   scalar is declared in another package), conjoining several clauses of one
+   kind with `&&`. A clause outside this form is refused with a `GenerateError`,
+   because dropping it would generate a provider that accepts arguments its own
+   contract forbids — a worse failure than refusing to generate at all.
+   `generate_face` is already total over errors, so the refusal costs no new
+   mechanism. This is deliberately the smallest thing that makes the design's
+   two clause-driven settlement rows (`PreconditionFailed`, `ContractBroken`)
+   real; it is not a first instalment of E5, and E5.1 replaces it with a
+   translator driven by the structured expression tree the IR does not carry
+   yet.
 
    A float literal that has such a bound is emitted as the binary64 bound that
    keeps the comparison exact, and the translator refuses the others; the book's

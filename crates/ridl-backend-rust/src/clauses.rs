@@ -11,7 +11,8 @@
 //!   The subject's type must be a named scalar over an integer or a float.
 //!
 //! It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op>
-//! <literal>` for `result`, with the literal in the subject's Rust numeric
+//! <literal>` for `result` (`args.get()` and `reply.get()` for a subject
+//! whose scalar is declared in another package), with the literal in the subject's Rust numeric
 //! type. For float subjects, literals whose exact magnitude exceeds `f64::MAX`
 //! are refused. Within that range, float bounds preserve expr-core's exact
 //! rational comparisons: `<=` and `>` use the largest binary64 value at or
@@ -28,9 +29,9 @@
 //! visible. A subject whose scalar is declared in another package is read as
 //! `args.get()` or `reply.get()`, through the public accessor of the other
 //! package's newtype, because its field is not visible here. Several
-//! clauses of one kind are conjoined with `&&`. Any other clause form is refused with a
-//! [`GenerateError`] rather than dropped: a dropped clause would generate a
-//! provider that accepts arguments its own contract forbids.
+//! clauses of one kind are conjoined with `&&`. Any other clause form is
+//! refused with a [`GenerateError`] rather than dropped: a dropped clause
+//! would generate a provider that accepts arguments its own contract forbids.
 //!
 //! The parser and the subject resolution are the lowering's
 //! (`ridl_ir::codegen`, design note D-9): the model carries either the
@@ -39,7 +40,8 @@
 //! refusal. A subject whose scalar is declared in another package is
 //! translated only when the caller handed the backend that package
 //! (`generate_pipeline` with `others`, as `ridl build` does); otherwise the
-//! lowering refuses it and names that cause. The model keeps the contract's exact literal text.
+//! lowering refuses it and names that cause. The model keeps the contract's
+//! exact literal text.
 
 use crate::{Ctx, GenerateError, ScalarBacking, class_backing, numeric_tokens};
 use num_bigint::BigInt;

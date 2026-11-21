@@ -13,7 +13,7 @@
 //! with the emission removed.
 
 use super::facts::scalar_class;
-use super::resolve::{Scope, is_foreign};
+use super::resolve::Scope;
 use super::v1;
 use crate::v2;
 
@@ -157,8 +157,6 @@ fn literal_matches(value: &str, class: v1::ScalarClass) -> bool {
     }
 }
 
-/// The class of a named scalar the subject resolves to, restricted to the two
-/// the accepted form allows.
 /// The class of the named scalar `reference`, or the refusal: `not_scalar`
 /// for a subject that is not a named integer or float scalar, and a reason of
 /// its own for a reference to a package the scope does not hold, so the note
@@ -170,10 +168,10 @@ fn numeric_class(
     not_scalar: &str,
 ) -> Result<v1::ScalarClass, String> {
     let Some((decl, _)) = scope.resolve(home, reference) else {
-        let held = reference
+        let unheld = reference
             .rsplit_once('.')
-            .is_some_and(|(package, _)| scope.packages().any(|p| p.name == package));
-        return Err(if is_foreign(reference) && !held {
+            .is_some_and(|(package, _)| !scope.packages().any(|p| p.name == package));
+        return Err(if unheld {
             "the subject's scalar is declared in another package that was not given to the backend"
                 .to_string()
         } else {
@@ -193,5 +191,42 @@ fn param_named_type(param: &v2::Param) -> Option<&str> {
     match param.r#type.as_ref()?.kind.as_ref()? {
         v2::field_type::Kind::Named(name) => Some(name),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn package(name: &str) -> v2::Package {
+        v2::Package {
+            name: name.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// A missing member of a package the scope holds is a subject that is not
+    /// a numeric scalar; only a package the scope does not hold is named as
+    /// the cause.
+    #[test]
+    fn only_a_package_outside_the_scope_is_named_as_the_cause() {
+        let home = package("pb");
+        let held = package("pa");
+        let others = [&held];
+        let scope = Scope {
+            package: &home,
+            others: &others,
+        };
+        let refusal = |reference| numeric_class(scope, &home, reference, "not scalar");
+        assert_eq!(refusal("pa.Missing"), Err("not scalar".to_string()));
+        assert_eq!(refusal("Missing"), Err("not scalar".to_string()));
+        assert_eq!(
+            refusal("pz.Level"),
+            Err(
+                "the subject's scalar is declared in another package that was not given \
+                 to the backend"
+                    .to_string()
+            )
+        );
     }
 }
