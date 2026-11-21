@@ -677,8 +677,9 @@ more times without a length bound. A value must match every clause. Clause order
 does not change which values match, and `ridl diff` ignores it. The IR keeps
 source order, and changing the order changes the catalog hash when the unit
 reaches the type. Each clause references a named regex constant or an inline
-regex literal. The example below requires a value that holds no line break (see
-[§2.7](#27-regex-literals)).
+regex literal; a clause that names no constant, or a constant that is not a
+regex, is TYPL-226. The example below requires a value that holds no line break
+(see [§2.7](#27-regex-literals)).
 
 ```ridl
 type Token : string [8..64 match /.*[0-9].*/ match /.*[A-Z].*/]
@@ -693,7 +694,7 @@ See [§5.8](#58-init-values) for declared and derived init values.
 | `bytes [N]`        | exactly N bytes  |
 | `bytes [min..max]` | min to max bytes |
 
-No `match` — bytes are opaque.
+No `match` — bytes are opaque. A `match` clause on `bytes` is TYPL-226.
 
 ### 5.5 Range Bounds
 
@@ -1559,6 +1560,7 @@ scope is checked under, is in ridl §16.4.
 | TYPL-222 | one field name used with different units                                                                                                                                       | info     |
 | TYPL-224 | duplicate declaration shape                                                                                                                                                    | info     |
 | TYPL-225 | enum value outside the `int32` range (declared live values only)                                                                                                               | error    |
+| TYPL-226 | `match` clause that cannot apply — a `match` on `bytes` (§5.4), or a `match` that names no constant or a constant that is not a regex                                          | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 

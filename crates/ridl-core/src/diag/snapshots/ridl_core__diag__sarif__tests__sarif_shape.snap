@@ -545,6 +545,15 @@ expression: log
               }
             },
             {
+              "id": "TYPL-226",
+              "shortDescription": {
+                "text": "`match` clause that cannot apply"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
               "id": "TYPL-301",
               "shortDescription": {
                 "text": "stream type `<T>` outside interaction position"
@@ -1849,7 +1858,7 @@ expression: log
       "results": [
         {
           "ruleId": "RIDL-100",
-          "ruleIndex": 73,
+          "ruleIndex": 74,
           "level": "warning",
           "message": {
             "text": "signal without a timing annotation"
@@ -1914,7 +1923,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 188,
+          "ruleIndex": 189,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"
