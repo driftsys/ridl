@@ -391,12 +391,12 @@ Two details in that listing:
   real arrives. It is derived automatically for most types: `false` for
   booleans, `0` for a number whose range contains it and the range minimum
   otherwise, and the empty value when a `string` or `bytes` bound allows length
-  0. It cannot be derived for a `string` **or** `bytes` type carrying a `match`
-  pattern or a non-zero minimum length, so those declare one — which is why
-  `ModelCode`, `Notes` and `Vin` above do. Without a declared init such a type
-  draws a `TYPL-115` note. That note stays informational, always; what turns a
-  missing init into an error is _using_ the type as a signal payload, and the
-  error is `RIDL-109`, raised at the signal.
+  0. It cannot be derived for a `string` type carrying a `match` pattern, or for
+  a `string` or `bytes` type with a non-zero minimum length, so those declare
+  one — which is why `ModelCode`, `Notes` and `Vin` above do. Without a declared
+  init such a type draws a `TYPL-115` note. That note stays informational,
+  always; what turns a missing init into an error is _using_ the type as a
+  signal payload, and the error is `RIDL-109`, raised at the signal.
 
 Standard library types are always available without an import: `Uuid`, `Ulid`,
 `Uri`, `Url`, `Email`, `Label`, `Name`, `Message`, `Timestamp`, `Duration`,
