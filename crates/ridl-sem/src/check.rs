@@ -2184,16 +2184,22 @@ impl Checker<'_> {
                     LitKind::ConstRef(name) => match self.const_regex_value(&name) {
                         Some((text, canonical)) => (Some(text), Some(canonical)),
                         // Keep the name of an unresolved or non-regex constant,
-                        // and report it: no pattern would be checked.
+                        // and report it: no pattern would be checked. A name
+                        // that ends the constraint with no closing `]` (as in
+                        // `match lib.R`, where the parser stops at `.`) already
+                        // drew a parse error, so it is not reported again.
                         None => {
-                            self.error(
-                                DiagCode::TYPL_226,
-                                match_literal.syntax().text_range(),
-                                format!(
-                                    "`match {name}` does not name a regex constant; \
-                                     no pattern would be checked"
-                                ),
-                            );
+                            let unclosed = match_literal.syntax().next_sibling_or_token().is_none();
+                            if !unclosed {
+                                self.error(
+                                    DiagCode::TYPL_226,
+                                    match_literal.syntax().text_range(),
+                                    format!(
+                                        "`match {name}` does not name a regex constant; \
+                                         no pattern would be checked"
+                                    ),
+                                );
+                            }
                             (None, Some(name))
                         }
                     },
@@ -10551,6 +10557,8 @@ mod tests {
             ("type T : bytes [4 match /a/]", "/a/"),
             ("const N : int = 3\ntype T : string [8 match N]", "N"),
             ("type T : string [8 match MISSING]", "MISSING"),
+            ("struct S { s : string [8 match MISSING] }", "MISSING"),
+            ("struct S { b : bytes [4 match /a/] }", "/a/"),
         ] {
             let source = format!("package app\n{decl}\n");
             let checked = check_source("app", &source);
@@ -10574,6 +10582,7 @@ mod tests {
             "type T : string [8 match /a/]",
             "const R = /a/\ntype T : string [8 match R]",
             "const R = /a/\nconst Q = R\ntype T : string [8 match Q]",
+            "const R = /a/\nstruct S { s : string [8 match R] }",
         ] {
             let source = format!("package app\n{decl}\n");
             let checked = check_source("app", &source);
@@ -10586,6 +10595,42 @@ mod tests {
                 checked.diagnostics
             );
         }
+    }
+
+    /// A qualified name in `match` draws its parse error only, not TYPL-226.
+    #[test]
+    fn typl_226_is_not_reported_after_a_qualified_match_name() {
+        let checked = check_source(
+            "app",
+            "package app\nconst R = /a/\ntype T : string [8 match lib.R]\n",
+        );
+        // `check_source` reports checker diagnostics only; FORM-101 comes
+        // from the parser.
+        let codes = codes(&checked);
+        assert!(!codes.contains(&"TYPL-226"), "got: {codes:?}");
+    }
+
+    /// A regex constant imported from another package applies in `match`.
+    #[test]
+    fn typl_226_accepts_an_imported_regex_constant() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(&db, "common", "package common\nconst R = /a/\n");
+        let app = package(
+            &db,
+            "app",
+            "package app\nimport common.R\ntype T : string [8 match R]\n",
+        );
+        let workspace = Workspace::new(&db, vec![common, app], BTreeMap::new());
+        let checked = check_package(&db, workspace, app, std);
+        assert!(
+            !checked
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == Severity::Error),
+            "got: {:?}",
+            checked.diagnostics
+        );
     }
 
     /// A nested counted repetition reports the compiled-size limit and cause.
