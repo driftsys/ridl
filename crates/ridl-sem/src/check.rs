@@ -1137,11 +1137,10 @@ impl Checker<'_> {
             return None;
         }
         let canonical = self.canonical_ref(&symbol);
-        let Definition::Const(decl) = self.find_definition(&symbol)? else {
-            return None;
-        };
-        match literal_kind(&decl.value()?) {
-            LitKind::Regex(text) => Some((text, canonical)),
+        // Follow `const Q = R` chains, so that a chained regex constant
+        // resolves like its target.
+        match self.const_value_in(package, name)? {
+            ConstValue::Regex(text) => Some((text, canonical)),
             _ => None,
         }
     }
@@ -10574,6 +10573,7 @@ mod tests {
         for decl in [
             "type T : string [8 match /a/]",
             "const R = /a/\ntype T : string [8 match R]",
+            "const R = /a/\nconst Q = R\ntype T : string [8 match Q]",
         ] {
             let source = format!("package app\n{decl}\n");
             let checked = check_source("app", &source);
