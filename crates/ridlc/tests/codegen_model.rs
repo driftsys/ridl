@@ -201,8 +201,10 @@ fn lowering_is_deterministic_and_the_canonical_encoding_round_trips() {
 /// is drawn at 128, so 127 is the deepest type nesting that compiles.
 const DEEPEST_ADMITTED: usize = 127;
 
-/// The bound a reader of `ridl.codegen.v1` must provision, asserted rather
-/// than described (design note §6.2).
+/// The nesting of the deepest shape declared in the lowered package itself,
+/// asserted rather than described (design note §6.2). A shape imported from
+/// another package nests one level deeper; the test after the next one pins
+/// that bound, which is the one a reader of `ridl.codegen.v1` must provision.
 ///
 /// Per shape: the message levels below the `Model` root that the lowered
 /// deepest admissible source nests, and the JSON levels its canonical
