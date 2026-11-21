@@ -12,11 +12,12 @@
 //!
 //! It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op>
 //! <literal>` for `result` (`args.get()` and `reply.get()` for a subject
-//! whose scalar is declared in another package), with the literal in the subject's Rust numeric
-//! type. For float subjects, literals whose exact magnitude exceeds `f64::MAX`
-//! are refused. Within that range, float bounds preserve expr-core's exact
-//! rational comparisons: `<=` and `>` use the largest binary64 value at or
-//! below the exact literal; `>=` and `<` use the smallest at or above it.
+//! whose scalar is declared in another package), with the literal in the
+//! subject's Rust numeric type. For float subjects, literals whose exact
+//! magnitude exceeds `f64::MAX` are refused. Within that range, float bounds
+//! preserve expr-core's exact rational comparisons: `<=` and `>` use the
+//! largest binary64 value at or below the exact literal; `>=` and `<` use the
+//! smallest at or above it.
 //! Exactly representable literals are printed in the shortest form that reads
 //! back as the same binary64, so the output is always a Rust literal (`+0.5`
 //! becomes `0.5`, `100` becomes `100.0`; an exact zero prints as `0.0` with no
