@@ -134,19 +134,22 @@ through the same renderer, to `<base>.codegen-request.json`, so the wrapper
 itself is a file `ridlc` wrote too; it accepts options where the model emit
 refuses them, because `options` is a field of what it writes
 (driftsys/ridl#725). The reader keeps the IR's nesting ceiling of 1,000 JSON
-levels; the deepest request the front end admits nests to 267 (the model's 266
-plus one for the field), and a plugin's parser must provision that much.
-`request_from_json` ignores an unknown key at every nesting level of the
-request, so a plugin built on `ridl-ir` keeps reading the requests of a later
-`ridl` that adds a field. It still rejects an unknown enum name, because that
-changes the meaning of a known field: a later `ridl` that adds an enum value is
-a change an older plugin reports as an error, and that plugin must be rebuilt
-against the `ridl-ir` that adds the value. A plugin built against a `ridl-ir`
-release from before this rule must be rebuilt once. The response reader stays
-strict: it rejects an unknown key, so a plugin that answers with a field this
-schema does not have is reported as malformed rather than silently accepted. A
-plugin that does not use `ridl-ir` reads the request leniently, per the IR
-specification §8.
+levels; the deepest request the front end admits nests to 268 (the model's 267
+plus one for the field), and a plugin's parser must provision that much. The
+model's 267 is reached when the deepest shape is declared in another package and
+the lowered package imports it, because `Model.foreign` wraps that declaration
+in a `ForeignDeclaration`; the same shape declared in the lowered package itself
+nests to 266. `request_from_json` ignores an unknown key at every nesting level
+of the request, so a plugin built on `ridl-ir` keeps reading the requests of a
+later `ridl` that adds a field. It still rejects an unknown enum name, because
+that changes the meaning of a known field: a later `ridl` that adds an enum
+value is a change an older plugin reports as an error, and that plugin must be
+rebuilt against the `ridl-ir` that adds the value. A plugin built against a
+`ridl-ir` release from before this rule must be rebuilt once. The response
+reader stays strict: it rejects an unknown key, so a plugin that answers with a
+field this schema does not have is reported as malformed rather than silently
+accepted. A plugin that does not use `ridl-ir` reads the request leniently, per
+the IR specification §8.
 
 **Sizes and reservations.** The model states the maximum encoded size of every
 payload, of every command and query request, and of every query reply, once per
