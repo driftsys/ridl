@@ -131,8 +131,8 @@ pub fn attribute(packages: fb::Packages<'_>, decl: &v2::Decl) -> v1::FbUnbounded
     }
 }
 
-/// The members of `decl` this attribution cannot judge — a cross-package
-/// reference, a same-package cycle, a stream, or an unspecified primitive.
+/// The members of `decl` this attribution cannot judge — a reference the scope does not hold,
+/// a cycle, a stream, or an unspecified primitive.
 /// What a withheld codec's note lists.
 pub(crate) fn unjudgeable_members(packages: fb::Packages<'_>, decl: &v2::Decl) -> Vec<String> {
     let package = packages.package;
