@@ -872,16 +872,18 @@ guide for a plugin author, and its "Reading order" section is the reading list.
    resolves.** Derives (a struct that uses a foreign type derives no `Copy`,
    `Eq` or `Hash`) and defaults and inits (a foreign field default, or a union
    with a foreign first arm, gives no `Default` and no `init`) are conservative:
-   correct, and lifting them changes what the generated crate contains. The Rust
-   backend emits a constant typed by a named scalar of another package, with
-   that scalar's type path and constructor, when the caller hands it the package
-   that declares the scalar; the TypeScript backend still skips such a constant.
-   **Open:** driftsys/ridl#1382. A contract clause on a parameter or a reply of
-   a foreign scalar type is translated by the Rust backend, and the interface
-   keeps its face, when the caller hands the backend the package that declares
-   the scalar (`generate_pipeline` with `others`, as `ridl build` does);
-   otherwise the clause is refused with a note that names that cause
-   (driftsys/ridl#1414).
+   correct, and lifting them changes what the generated crate contains
+   (**Open:** driftsys/ridl#1382). The Rust backend emits a constant typed by a
+   named scalar of another package when the caller hands it the package that
+   declares the scalar: an integer, float or boolean constant as a value of that
+   scalar's type, through its constructor, a string-backed constant as a `&str`
+   literal, and a bytes-backed constant not at all. The TypeScript backend still
+   skips such a constant (**Open:** driftsys/ridl#1438). A contract clause on a
+   parameter or a reply of a foreign scalar type is translated by the Rust
+   backend, and the interface keeps its face, when the caller hands the backend
+   the package that declares the scalar (`generate_pipeline` with `others`, as
+   `ridl build` does); otherwise the clause is refused with a note that names
+   that cause (driftsys/ridl#1414).
 7. **The model's unbounded-member facts are computed over the scope the codec is
    handed.** Resolved: a cross-package aggregate that exceeds the FlatBuffers
    ceiling is an error, as the same shape in one package is, and the attribution

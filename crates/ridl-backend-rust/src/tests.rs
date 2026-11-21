@@ -8341,3 +8341,27 @@ fn a_constant_typed_by_a_scalar_of_another_package_is_emitted() {
         "got:\n{source}"
     );
 }
+
+/// Without the package that declares the scalar, the same constant is not
+/// emitted: the lowering cannot resolve its type, so it is `Unresolved`. A doc
+/// link to it stays a code span rather than a path to a missing item.
+#[test]
+fn a_constant_typed_by_a_scalar_of_a_package_not_given_is_not_emitted() {
+    let doc = "See [LIMIT].";
+    let local = package(
+        "veh.common",
+        vec![
+            const_decl("LIMIT", "other.pkg.Speed", "50.5"),
+            v2::Decl {
+                doc: doc.to_string(),
+                links: vec![doc_link(doc, "[LIMIT]", "veh.common.LIMIT")],
+                ..struct_with_field("Holder", "level", "u8")
+            },
+        ],
+    );
+    let source = generate_pipeline(&local, &[], false, &[])
+        .expect("the package generates")
+        .rust_source;
+    assert!(!source.contains("const LIMIT"), "got:\n{source}");
+    assert!(source.contains("See `veh.common.LIMIT`."), "got:\n{source}");
+}

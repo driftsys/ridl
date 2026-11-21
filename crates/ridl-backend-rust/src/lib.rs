@@ -168,8 +168,10 @@ pub fn generate_face_with(
 /// what lets [`generate_pipeline`] size and encode one: without it a type
 /// reaching another package carries no `Payload<FlatBuffers>` implementation
 /// and a note saying so (driftsys/ridl#467); with it, such a type is emitted
-/// like any other. This entry point emits the domain types only, so the
-/// difference shows in the pipeline's output rather than here.
+/// like any other. This entry point emits the domain types only, so for a
+/// type the difference shows in the pipeline's output. A constant typed by a
+/// named scalar of another package is emitted here only when `others` holds
+/// the package that declares the scalar.
 pub fn generate_with(
     package: &v2::Package,
     others: &[&v2::Package],
@@ -1775,7 +1777,7 @@ fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> Token
 /// Whether the generated module of the package that declares `decl` holds an
 /// item for it, by the rule [`emit_const`] applies: every kind but a constant
 /// is emitted, and a constant is emitted when it is a regex, a primitive
-/// other than `bytes`, or of a resolved named scalar of any package that is
+/// other than `bytes`, or of a named scalar of any package that is
 /// not backed by `bytes`. The type references of a foreign declaration index
 /// the same model as those of a local one.
 pub(crate) fn declaration_emitted(model: &v1::Model, decl: &v1::Declaration) -> bool {
@@ -1789,9 +1791,8 @@ pub(crate) fn declaration_emitted(model: &v1::Model, decl: &v1::Declaration) -> 
             Ok(v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified) | Err(_)
         ),
         Some(v1::constant::Typed::Named(named)) => {
-            if !named.resolved {
-                return false;
-            }
+            // The lowering builds `Named` only for a resolved reference, and
+            // `Unresolved` for every other one.
             let target = if named.foreign {
                 model
                     .foreign
@@ -1835,13 +1836,10 @@ fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStre
         // one of another package from the model's foreign declarations, the
         // same resolution the codec and the contract clauses use. The type
         // path is the dotted reference, which `type_path` renders as a path
-        // into the other package's module. A reference that does not resolve
-        // is skipped rather than mis-typed.
+        // into the other package's module. A reference with no declaration
+        // at its index is skipped rather than mis-typed.
         Some(v1::constant::Typed::Named(reference)) => {
             let target = if reference.foreign {
-                if !reference.resolved {
-                    return quote! {};
-                }
                 ctx.model
                     .foreign
                     .get(reference.index as usize)

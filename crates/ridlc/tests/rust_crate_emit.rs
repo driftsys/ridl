@@ -1968,9 +1968,8 @@ fn packages_named_self_and_self_underscore_both_reach_the_crate_tree() {
 /// shape of X-18, `docs/technotes/rust-backend-name-collisions.md`
 /// (driftsys/ridl#416). Package `veh.common` names the type `veh.common`
 /// two ways: as a struct field, and as an interface's signal payload, so the
-/// codec, the descriptors and the face name it too. A constant of that type
-/// is not used: `emit_const` emits no constant whose type is another
-/// package's named type, so it would name the type nowhere.
+/// codec, the descriptors and the face name it too. The fixture declares no
+/// constant of that type.
 fn write_type_named_like_child_package(dir: &Path) -> PathBuf {
     let root = dir.join("veh");
     std::fs::create_dir_all(root.join("common")).expect("the common directory is created");
@@ -2422,10 +2421,6 @@ fn a_parent_package_with_no_public_item_compiles_denying_warnings() {
     compile_crate_root_denying_warnings(out.path());
 }
 
-/// A contract clause on a parameter and on a reply whose named scalar is
-/// declared in another package compiles in the emitted crate: the other
-/// package's newtype field is private to its module, so the clause must read
-/// it through the newtype's public accessor (driftsys/ridl#1414).
 /// A constant of package `pb` typed by a named scalar of package `pa` is
 /// emitted in `pb.rs` and compiles. `pa` declares four scalars, an integer, a
 /// float, a boolean and a string, so a lookup that always takes the first
@@ -2482,6 +2477,10 @@ fn a_constant_typed_by_a_scalar_of_another_package_compiles_in_the_emitted_crate
     compile_crate_root(out.path());
 }
 
+/// A contract clause on a parameter and on a reply whose named scalar is
+/// declared in another package compiles in the emitted crate: the other
+/// package's newtype field is private to its module, so the clause must read
+/// it through the newtype's public accessor (driftsys/ridl#1414).
 #[test]
 fn a_clause_on_a_scalar_of_another_package_compiles_in_the_emitted_crate() {
     let dir = tempfile::tempdir().expect("temp dir");
