@@ -43,8 +43,12 @@ fn translate_accepted(
 
     if subject == "result" {
         let named = reply_named.ok_or("`result` is only a subject on a query's `ensure` clause")?;
-        let class = numeric_class(scope, home, named)
-            .ok_or("`result` is not a named integer or float scalar")?;
+        let class = numeric_class(
+            scope,
+            home,
+            named,
+            "`result` is not a named integer or float scalar",
+        )?;
         if !literal_matches(&literal, class) {
             return Err("the literal does not match the reply's numeric type".to_string());
         }
@@ -69,8 +73,12 @@ fn translate_accepted(
         return Err("the subject is not the interaction's declared parameter".to_string());
     }
     let named = param_named_type(param).ok_or("the parameter is not a named type")?;
-    let class = numeric_class(scope, home, named)
-        .ok_or("the parameter is not a named integer or float scalar")?;
+    let class = numeric_class(
+        scope,
+        home,
+        named,
+        "the parameter is not a named integer or float scalar",
+    )?;
     if !literal_matches(&literal, class) {
         return Err("the literal does not match the parameter's numeric type".to_string());
     }
@@ -149,16 +157,33 @@ fn literal_matches(value: &str, class: v1::ScalarClass) -> bool {
     }
 }
 
-/// The class of a named scalar the subject resolves to, restricted to the two
-/// the accepted form allows.
-fn numeric_class(scope: Scope<'_>, home: &v2::Package, reference: &str) -> Option<v1::ScalarClass> {
-    let (decl, _) = scope.resolve(home, reference)?;
-    let v2::decl::Kind::TypeDef(td) = decl.kind.as_ref()? else {
-        return None;
+/// The class of the named scalar `reference`, or the refusal: `not_scalar`
+/// for a subject that is not a named integer or float scalar, and a reason of
+/// its own for a reference to a package the scope does not hold, so the note
+/// states the real cause (driftsys/ridl#1414).
+fn numeric_class(
+    scope: Scope<'_>,
+    home: &v2::Package,
+    reference: &str,
+    not_scalar: &str,
+) -> Result<v1::ScalarClass, String> {
+    let Some((decl, _)) = scope.resolve(home, reference) else {
+        let unheld = reference
+            .rsplit_once('.')
+            .is_some_and(|(package, _)| !scope.packages().any(|p| p.name == package));
+        return Err(if unheld {
+            "the subject's scalar is declared in another package that was not given to the backend"
+                .to_string()
+        } else {
+            not_scalar.to_string()
+        });
+    };
+    let Some(v2::decl::Kind::TypeDef(td)) = decl.kind.as_ref() else {
+        return Err(not_scalar.to_string());
     };
     match scalar_class(td) {
-        class @ (v1::ScalarClass::Integer | v1::ScalarClass::Float) => Some(class),
-        _ => None,
+        class @ (v1::ScalarClass::Integer | v1::ScalarClass::Float) => Ok(class),
+        _ => Err(not_scalar.to_string()),
     }
 }
 
@@ -166,5 +191,42 @@ fn param_named_type(param: &v2::Param) -> Option<&str> {
     match param.r#type.as_ref()?.kind.as_ref()? {
         v2::field_type::Kind::Named(name) => Some(name),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn package(name: &str) -> v2::Package {
+        v2::Package {
+            name: name.to_string(),
+            ..Default::default()
+        }
+    }
+
+    /// A missing member of a package the scope holds is a subject that is not
+    /// a numeric scalar; only a package the scope does not hold is named as
+    /// the cause.
+    #[test]
+    fn only_a_package_outside_the_scope_is_named_as_the_cause() {
+        let home = package("pb");
+        let held = package("pa");
+        let others = [&held];
+        let scope = Scope {
+            package: &home,
+            others: &others,
+        };
+        let refusal = |reference| numeric_class(scope, &home, reference, "not scalar");
+        assert_eq!(refusal("pa.Missing"), Err("not scalar".to_string()));
+        assert_eq!(refusal("Missing"), Err("not scalar".to_string()));
+        assert_eq!(
+            refusal("pz.Level"),
+            Err(
+                "the subject's scalar is declared in another package that was not given \
+                 to the backend"
+                    .to_string()
+            )
+        );
     }
 }

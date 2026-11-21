@@ -88,10 +88,10 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-backend-rust/src/clauses.rs",
-        lines: 3,
+        lines: 4,
         why: "test fixtures: one reads the one interface its package declares, \
               which declares no service, so the named store is the complete \
-              set; two empty the interface store of a foreign package that \
+              set; three empty the interface store of a foreign package that \
               only supplies a scalar",
     },
     Allowed {

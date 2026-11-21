@@ -2421,3 +2421,56 @@ fn a_parent_package_with_no_public_item_compiles_denying_warnings() {
     );
     compile_crate_root_denying_warnings(out.path());
 }
+
+/// A contract clause on a parameter and on a reply whose named scalar is
+/// declared in another package compiles in the emitted crate: the other
+/// package's newtype field is private to its module, so the clause must read
+/// it through the newtype's public accessor (driftsys/ridl#1414).
+#[test]
+fn a_clause_on_a_scalar_of_another_package_compiles_in_the_emitted_crate() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path().join("workspace");
+    for (member, package, source) in [
+        (
+            "member-pa",
+            "pa",
+            "package pa\n\ntype Level: integer [0..100] = 7\n\ntype Ratio: float [0.0..1.0] = 0.0\n",
+        ),
+        (
+            "member-pb",
+            "pb",
+            "package pb\n\nimport pa.Level\nimport pa.Ratio\n\ninterface Svc {\n  \
+             command set(level: Level) @[..50ms] [ require level < 100 ]\n  \
+             command scale(ratio: Ratio) @[..50ms] [ require ratio <= 0.5 ]\n  \
+             query peek(): Level @[..50ms] [ ensure result < 80 ]\n}\n",
+        ),
+    ] {
+        std::fs::create_dir_all(root.join(member)).expect("the member directory");
+        std::fs::write(
+            root.join(member).join("ridl.toml"),
+            format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        )
+        .expect("the member manifest is written");
+        std::fs::write(root.join(member).join(format!("{package}.ridl")), source)
+            .expect("the member source is written");
+    }
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[workspace]\nmembers = [\"member-pa\", \"member-pb\"]\n\n\
+         [backend.rust]\nencodings = [\"podbuf\"]\n",
+    )
+    .expect("the workspace manifest is written");
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(&root, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    let pb = std::fs::read_to_string(out.path().join("pb.rs")).expect("the build writes pb.rs");
+    assert!(
+        pb.contains("fn require") && !pb.contains("__RIDL_NO_FACE_Svc"),
+        "the face of Svc must be emitted, or this proof compiles nothing:\n{pb}"
+    );
+    compile_crate_root(out.path());
+}
