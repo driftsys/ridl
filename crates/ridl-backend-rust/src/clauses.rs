@@ -22,11 +22,13 @@
 //! sign, which every comparison treats like `-0.0`). Inexact `==` and `!=`,
 //! unreadable decimals, and exponents that cannot be read or have magnitude
 //! above 10000 are refused.
-//! The newtype's field is private, and the read is still legal: the subject is a
-//! same-package named scalar, and the clause is emitted inside a descriptor
-//! `impl` block at package module scope, the same module that declares the
-//! type, where a private field is visible. Several clauses of one kind are
-//! conjoined with `&&`. Any other clause form is refused with a
+//! A same-package newtype's field is private, and the read is still legal:
+//! the clause is emitted inside a descriptor `impl` block at package module
+//! scope, the same module that declares the type, where a private field is
+//! visible. A subject whose scalar is declared in another package is read as
+//! `args.get()` or `reply.get()`, through the public accessor of the other
+//! package's newtype, because its field is not visible here. Several
+//! clauses of one kind are conjoined with `&&`. Any other clause form is refused with a
 //! [`GenerateError`] rather than dropped: a dropped clause would generate a
 //! provider that accepts arguments its own contract forbids.
 //!
@@ -34,9 +36,10 @@
 //! (`ridl_ir::codegen`, design note D-9): the model carries either the
 //! accepted comparison or the reason the clause was refused, verbatim, and
 //! what is left here is the rendering, including float-bound rounding and
-//! refusal. A subject whose scalar the scope resolved in another package is
-//! refused here because this backend resolves nothing across packages (design
-//! note §3.5). The model keeps the contract's exact literal text.
+//! refusal. A subject whose scalar is declared in another package is
+//! translated only when the caller handed the backend that package
+//! (`generate_pipeline` with `others`, as `ridl build` does); otherwise the
+//! lowering refuses it and names that cause. The model keeps the contract's exact literal text.
 
 use crate::{Ctx, GenerateError, ScalarBacking, class_backing, numeric_tokens};
 use num_bigint::BigInt;
@@ -163,19 +166,20 @@ fn render_one(
 
     match comparison.subject.as_ref() {
         Some(v1::comparison::Subject::Result(_)) => {
-            let backing = reply
+            let (backing, foreign) = reply
                 .and_then(|reference| scalar_backing(ctx, reference))
                 .ok_or_else(|| refuse(source, "`result` is not a named integer or float scalar"))?;
             let value = literal_tokens(&comparison.literal, backing, comparison.op)
                 .map_err(|reason| refuse(source, reason))?;
             let op = operator(comparison.op);
+            let read = subject_read(quote! { reply }, foreign);
             Ok(Rendered {
-                expr: quote! { reply.0 #op #value },
+                expr: quote! { #read #op #value },
                 subject: Subject::Reply,
             })
         }
         Some(v1::comparison::Subject::Param(index)) => {
-            let backing = params
+            let (backing, foreign) = params
                 .get(*index as usize)
                 .and_then(param_named_type)
                 .and_then(|reference| scalar_backing(ctx, reference))
@@ -188,8 +192,9 @@ fn render_one(
             let value = literal_tokens(&comparison.literal, backing, comparison.op)
                 .map_err(|reason| refuse(source, reason))?;
             let op = operator(comparison.op);
+            let read = subject_read(quote! { args }, foreign);
             Ok(Rendered {
-                expr: quote! { args.0 #op #value },
+                expr: quote! { #read #op #value },
                 subject: Subject::Arg,
             })
         }
@@ -268,16 +273,33 @@ fn literal_tokens(
 }
 
 /// The backing of a named scalar, restricted to the integer and float classes
-/// the accepted form allows. The scalar may be declared in this package or in
-/// another package of the build (driftsys/ridl#1414); a foreign scalar the
-/// caller did not hand the backend has no backing, and the clause is refused.
-fn scalar_backing(ctx: &Ctx, reference: &v1::TypeRef) -> Option<ScalarBacking> {
+/// the accepted form allows, and whether the scalar is declared in another
+/// package. A foreign scalar resolves only when the caller handed the backend
+/// the package that declares it (`generate_pipeline` with `others`, as
+/// `ridl build` does); otherwise the lowering has already refused the clause
+/// and says why (driftsys/ridl#1414).
+fn scalar_backing(ctx: &Ctx, reference: &v1::TypeRef) -> Option<(ScalarBacking, bool)> {
     let Some(v1::declaration::Kind::Scalar(sc)) = ctx.resolved(reference)?.kind.as_ref() else {
         return None;
     };
     match class_backing(sc.class) {
-        backing @ (ScalarBacking::Integer | ScalarBacking::Float) => Some(backing),
+        backing @ (ScalarBacking::Integer | ScalarBacking::Float) => {
+            Some((backing, reference.foreign))
+        }
         _ => None,
+    }
+}
+
+/// The read of a clause subject. A same-package newtype's field is private
+/// but visible from the descriptor `impl` at package module scope, so the
+/// subject reads it directly. A foreign newtype's field is private to the
+/// other package's module, so the subject reads it through the public
+/// `get` accessor every numeric scalar newtype carries.
+fn subject_read(field: TokenStream, foreign: bool) -> TokenStream {
+    if foreign {
+        quote! { #field.get() }
+    } else {
+        quote! { #field.0 }
     }
 }
 

@@ -1,26 +1,32 @@
 //! A contract clause on a parameter or a reply whose named scalar is declared
-//! in another package is translated, and the interface keeps its face
-//! (driftsys/ridl#1414).
+//! in another package is translated when the backend is handed that package,
+//! and the interface keeps its face (driftsys/ridl#1414).
 
 use ridl_backend_rust::{WireEncoding, generate_pipeline};
+use ridl_ir::v2;
 
-const PA: &str = "package pa\n\ntype Level: integer [0..100] = 7\n";
+// `Pad` is declared first and is never referenced, and `Ratio` is a float, so
+// that a foreign lookup at the wrong index or in the wrong table changes the
+// rendered backing.
+const PA: &str = "package pa\n\ntype Pad: integer [0..5] = 1\n\n\
+type Level: integer [0..100] = 7\n\ntype Ratio: float [0.0..1.0] = 0.0\n";
 
 const PB: &str = r#"package pb
 
 import pa.Level
+import pa.Ratio
 
-type Local: integer [0..100] = 7
+type Local: float [0.0..100.0] = 7.0
 
 interface Svc {
   command set(level: Level) @[..50ms] [ require level < 100 ]
+  command scale(ratio: Ratio) @[..50ms] [ require ratio <= 0.5 ]
   command own(level: Local) @[..50ms] [ require level < 90 ]
   query peek(): Level @[..50ms] [ ensure result < 80 ]
 }
 "#;
 
-#[test]
-fn a_clause_on_a_foreign_named_scalar_keeps_the_face() {
+fn packages() -> Vec<v2::Package> {
     let dir = tempfile::tempdir().expect("a temp dir is created");
     std::fs::write(
         dir.path().join("ridl.toml"),
@@ -46,7 +52,16 @@ fn a_clause_on_a_foreign_named_scalar_keeps_the_face() {
         .map(|d| format!("{} {}", d.code.0, d.message))
         .collect();
     assert!(errors.is_empty(), "the workspace draws errors: {errors:?}");
-    let packages: Vec<_> = output.checked.into_iter().map(|c| c.ir).collect();
+    output.checked.into_iter().map(|c| c.ir).collect()
+}
+
+fn compact(source: &str) -> String {
+    source.chars().filter(|c| !c.is_whitespace()).collect()
+}
+
+#[test]
+fn a_clause_on_a_foreign_named_scalar_keeps_the_face() {
+    let packages = packages();
     let pb = packages
         .iter()
         .find(|p| p.name == "pb")
@@ -59,10 +74,30 @@ fn a_clause_on_a_foreign_named_scalar_keeps_the_face() {
         !source.contains("__RIDL_NO_FACE_Svc"),
         "the face of Svc must be emitted:\n{source}"
     );
+    let text = compact(&source);
+    for expected in [
+        "ifargs.get()<100{",
+        "ifargs.get()<=0.5{",
+        "ifargs.0<90.0{",
+        "ifreply.get()<80{",
+    ] {
+        assert!(text.contains(expected), "missing `{expected}`:\n{source}");
+    }
+}
+
+#[test]
+fn a_clause_on_a_foreign_scalar_not_given_to_the_backend_names_the_cause() {
+    let packages = packages();
+    let pb = packages
+        .iter()
+        .find(|p| p.name == "pb")
+        .expect("pb compiles");
+    let source = generate_pipeline(pb, &[WireEncoding::FlatBuffers], false, &[])
+        .expect("pb generates")
+        .rust_source;
+    assert!(source.contains("__RIDL_NO_FACE_Svc"), "{source}");
     assert!(
-        source.contains("args.0 < 100"),
-        "foreign require:\n{source}"
+        source.contains("declared in another package that was not given to the backend"),
+        "the note must state the cause:\n{source}"
     );
-    assert!(source.contains("args.0 < 90"), "local require:\n{source}");
-    assert!(source.contains("< 80"), "foreign ensure:\n{source}");
 }

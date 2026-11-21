@@ -184,11 +184,14 @@ The provider does not repeat those checks.
 
 The Rust backend translates `<subject> <comparison> <numeric literal>` when
 `subject` is the call's single non-stream parameter, or `result` in a query's
-`ensure`, and its named type is an integer- or float-backed scalar declared in
-the same package as the interface. The comparisons are `<`, `<=`, `>`, `>=`,
-`==` and `!=`. Several clauses of one kind are joined with `&&`. Other forms are
-refused; the interface and its descriptors are left out with a note explaining
-the refusal.
+`ensure`, and its named type is an integer- or float-backed scalar. The scalar
+may be declared in another package only when the backend is given that package,
+as `ridl build` does; the clause then reads the value through the newtype's
+public `get` accessor. Without that package the interface is left out with a
+note that names the cause. The comparisons are `<`, `<=`, `>`, `>=`, `==` and
+`!=`. Several clauses of one kind are joined with `&&`. Other forms are refused;
+the interface and its descriptors are left out with a note explaining the
+refusal.
 
 Float comparisons follow the exact rational semantics of
 [expr-core section 7](reference/expr-core.md#7-evaluation-domains). For literals
