@@ -729,8 +729,8 @@ fn tuple_collision(collision: &v1::TupleCollision) -> GenerateError {
 /// that one type simply carries no codec.
 ///
 /// The attribution is the lowering's (`FbRoot.bound`), computed over the
-/// package alone as this backend computed it for itself before the lowering took it over; the
-/// message is this backend's own. It names the member wherever the
+/// scope the lowering was handed, so a member from another package of the
+/// build can be the member it names; the message is this backend's own. It names the member wherever the
 /// attribution names one, and says which of the other three causes it found
 /// otherwise.
 pub(crate) fn check_flatbuffers_bound(ctx: &Ctx, index: u32) -> Result<(), GenerateError> {

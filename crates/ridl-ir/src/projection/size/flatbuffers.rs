@@ -39,7 +39,7 @@ pub(crate) fn state<'a>(home: &'a Package, type_name: &str, ctx: &Ctx<'a>) -> Si
                 u32::try_from(bytes).expect("max_size refuses a bound above MAX_ENCODABLE"),
             )
         }
-        None => SizeState::Unbounded(cause_of(fb_unbounded(declaring, decl).cause)),
+        None => SizeState::Unbounded(cause_of(fb_unbounded(packages, decl).cause)),
     }
 }
 
@@ -247,9 +247,8 @@ mod tests {
         // `Untyped`, a field with no type in the IR; `Layout`, two fields on
         // one ordinal, which `struct_table` refuses; `Aggregate`, two
         // `bytes [0..2^31]` fields each under `MAX_ENCODABLE` alone and over
-        // it together; `Exempt`, a cross-package reference the attribution
-        // (over the package alone) cannot judge, to a type the projection
-        // (over the scope) finds unbounded.
+        // it together; `Member`, a cross-package reference to a type the
+        // scope holds and finds unbounded, which the attribution names.
         let (root, imported) = two_package_fixture();
         let mut root = root;
         root.decls
@@ -288,7 +287,7 @@ mod tests {
         );
         assert_eq!(
             state(&root, "Far", &ctx),
-            SizeState::Unbounded(UnboundedCause::Exempt)
+            SizeState::Unbounded(UnboundedCause::Member)
         );
     }
 }

@@ -750,8 +750,8 @@ impl Filler<'_, '_> {
 /// one per named tuple that crosses the wire on its own, in the order
 /// `Model.tuples` holds it. The bound is `max_size` over the whole scope —
 /// the number the codec emits as `MAX_SIZE` — and a missing bound is
-/// attributed over the package alone, which is what the Rust backend does
-/// today (design note §9 item 7).
+/// attributed over the same scope, so a member from another package can be
+/// named as the cause.
 ///
 /// An induced root carries its tuple's index in `tuple`, and its
 /// `declaration` is written as 0 and must be ignored, which is the contract
@@ -776,7 +776,7 @@ fn roots(scope: Scope<'_>, named: &[NamedTuple<'_>]) -> Vec<v1::FbRoot> {
             };
             let bound = match fb::max_size(packages, decl) {
                 Some(size) => v1::fb_root::Bound::MaxSize(u32::try_from(size).unwrap_or(u32::MAX)),
-                None => v1::fb_root::Bound::Unbounded(unbounded::attribute(package, decl)),
+                None => v1::fb_root::Bound::Unbounded(unbounded::attribute(packages, decl)),
             };
             Some(v1::FbRoot {
                 declaration: index as u32,
@@ -793,7 +793,7 @@ fn roots(scope: Scope<'_>, named: &[NamedTuple<'_>]) -> Vec<v1::FbRoot> {
         let bound = match fb::tuple_max_size(packages, tuple.source) {
             Some(size) => v1::fb_root::Bound::MaxSize(u32::try_from(size).unwrap_or(u32::MAX)),
             None => v1::fb_root::Bound::Unbounded(unbounded::attribute(
-                package,
+                packages,
                 &tuple_stand_in(tuple.wire, tuple.source),
             )),
         };
