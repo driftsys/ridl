@@ -1,10 +1,11 @@
 //! The attribution of a missing FlatBuffers bound (design note §3.7).
 //!
 //! `ridl-backend-rust`'s `unbounded_member` and `unjudgeable_members`, moved
-//! here as model facts. It is computed **over the package alone**, as
-//! `check_flatbuffers_bound` computes it today (`others: &[]`) even when the
-//! pipeline handed the codec a scope — which is what byte identity requires,
-//! and which design note §9 item 7 records as less precise than it could be.
+//! here as model facts. It is computed over the scope the caller hands it: a
+//! reference into another package of that scope is judged like a reference
+//! into the same package, and a member from another package can be named as
+//! the cause. A reference the scope does not hold, a cycle, a stream and an
+//! unspecified primitive stay members the attribution cannot judge.
 
 use std::collections::HashSet;
 
@@ -14,11 +15,12 @@ use crate::v2;
 
 /// Why `decl`'s own `max_size` answered `None`. The caller has asked
 /// `max_size` first and got `None`; this function does not ask again, so on
-/// a declaration that has a bound it still names a cause. It judges over
-/// `package` alone (the module doc): a reference into another package is a
+/// a declaration that has a bound it still names a cause. `packages.package`
+/// is the package that declares `decl`, and a reference resolves through
+/// `packages` (the module doc): a reference the scope does not hold is a
 /// member it cannot judge, and a declaration whose other members are all
 /// bounded is attributed `Exempt`, not to that member.
-pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
+pub fn attribute(packages: fb::Packages<'_>, decl: &v2::Decl) -> v1::FbUnbounded {
     let mut any_exempt = false;
     match &decl.kind {
         Some(v2::decl::Kind::StructDef(def)) => {
@@ -39,7 +41,7 @@ pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
                         None,
                     );
                 };
-                match judge(package, ty) {
+                match judge(packages, ty) {
                     Verdict::Unbounded => {
                         return cause(v1::FbUnboundedCause::Member, Some(field.name.clone()), None);
                     }
@@ -51,7 +53,7 @@ pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
         Some(v2::decl::Kind::UnionDef(def)) => {
             for arm in &def.arms {
                 let ty = named(&arm.type_ref);
-                match judge(package, &ty) {
+                match judge(packages, &ty) {
                     Verdict::Unbounded => {
                         return cause(v1::FbUnboundedCause::Member, Some(arm.name.clone()), None);
                     }
@@ -74,7 +76,7 @@ pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
                     None,
                 );
             }
-            match judge(package, &named(&decl.name)) {
+            match judge(packages, &named(&decl.name)) {
                 Verdict::Unbounded => {
                     return cause(
                         v1::FbUnboundedCause::Member,
@@ -106,7 +108,7 @@ pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
                                 r#type: field
                                     .r#type
                                     .as_ref()
-                                    .map(|ty| lower_bound_stand_in(package, ty)),
+                                    .map(|ty| lower_bound_stand_in(packages, ty)),
                                 ..(**field).clone()
                             }))),
                         },
@@ -117,7 +119,7 @@ pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
             })),
             ..decl.clone()
         };
-        if fb::max_size(alone(package), &stand_in).is_none() {
+        if fb::max_size(packages, &stand_in).is_none() {
             return cause(v1::FbUnboundedCause::Aggregate, None, None);
         }
     }
@@ -125,21 +127,22 @@ pub fn attribute(package: &v2::Package, decl: &v2::Decl) -> v1::FbUnbounded {
         cause: v1::FbUnboundedCause::Exempt as i32,
         member: None,
         layout_message: None,
-        unjudgeable_members: unjudgeable_members(package, decl),
+        unjudgeable_members: unjudgeable_members(packages, decl),
     }
 }
 
 /// The members of `decl` this attribution cannot judge — a cross-package
 /// reference, a same-package cycle, a stream, or an unspecified primitive.
 /// What a withheld codec's note lists.
-pub(crate) fn unjudgeable_members(package: &v2::Package, decl: &v2::Decl) -> Vec<String> {
+pub(crate) fn unjudgeable_members(packages: fb::Packages<'_>, decl: &v2::Decl) -> Vec<String> {
+    let package = packages.package;
     let mut names = Vec::new();
     match &decl.kind {
         Some(v2::decl::Kind::StructDef(def)) => {
             for member in &def.members {
                 if let Some(v2::struct_member::Member::Field(field)) = &member.member
                     && let Some(ty) = field.r#type.as_ref()
-                    && !field_type_resolves_locally(package, ty, &mut HashSet::new())
+                    && !field_type_resolves(packages, package, ty, &mut HashSet::new())
                 {
                     names.push(field.name.clone());
                 }
@@ -147,7 +150,7 @@ pub(crate) fn unjudgeable_members(package: &v2::Package, decl: &v2::Decl) -> Vec
         }
         Some(v2::decl::Kind::UnionDef(def)) => {
             for arm in &def.arms {
-                if !decl_resolves_locally(package, &arm.type_ref, &mut HashSet::new()) {
+                if !decl_resolves(packages, package, &arm.type_ref, &mut HashSet::new()) {
                     names.push(arm.name.clone());
                 }
             }
@@ -170,13 +173,6 @@ fn cause(
     }
 }
 
-fn alone(package: &v2::Package) -> fb::Packages<'_> {
-    fb::Packages {
-        package,
-        others: &[],
-    }
-}
-
 fn named(reference: &str) -> v2::FieldType {
     v2::FieldType {
         optional: false,
@@ -193,15 +189,16 @@ enum Verdict {
     Unjudgeable,
 }
 
-fn judge(package: &v2::Package, ty: &v2::FieldType) -> Verdict {
-    if field_type_resolves_locally(package, ty, &mut HashSet::new()) {
-        return if probe(package, ty).is_some() {
+fn judge(packages: fb::Packages<'_>, ty: &v2::FieldType) -> Verdict {
+    let package = packages.package;
+    if field_type_resolves(packages, package, ty, &mut HashSet::new()) {
+        return if probe(packages, ty).is_some() {
             Verdict::Bounded
         } else {
             Verdict::Unbounded
         };
     }
-    if probe(package, &lower_bound_stand_in(package, ty)).is_some() {
+    if probe(packages, &lower_bound_stand_in(packages, ty)).is_some() {
         Verdict::Unjudgeable
     } else {
         Verdict::Unbounded
@@ -210,7 +207,8 @@ fn judge(package: &v2::Package, ty: &v2::FieldType) -> Verdict {
 
 /// `ty` with every leaf that cannot be judged replaced by a `boolean`, the
 /// smallest thing the projection charges anything for.
-fn lower_bound_stand_in(package: &v2::Package, ty: &v2::FieldType) -> v2::FieldType {
+fn lower_bound_stand_in(packages: fb::Packages<'_>, ty: &v2::FieldType) -> v2::FieldType {
+    let package = packages.package;
     fn boolean(optional: bool) -> v2::FieldType {
         v2::FieldType {
             optional,
@@ -225,7 +223,7 @@ fn lower_bound_stand_in(package: &v2::Package, ty: &v2::FieldType) -> v2::FieldT
                 element: array
                     .element
                     .as_deref()
-                    .map(|leaf| Box::new(lower_bound_stand_in(package, leaf))),
+                    .map(|leaf| Box::new(lower_bound_stand_in(packages, leaf))),
                 min: array.min,
                 max: array.max,
             }))
@@ -234,11 +232,11 @@ fn lower_bound_stand_in(package: &v2::Package, ty: &v2::FieldType) -> v2::FieldT
             key: map
                 .key
                 .as_deref()
-                .map(|leaf| Box::new(lower_bound_stand_in(package, leaf))),
+                .map(|leaf| Box::new(lower_bound_stand_in(packages, leaf))),
             value: map
                 .value
                 .as_deref()
-                .map(|leaf| Box::new(lower_bound_stand_in(package, leaf))),
+                .map(|leaf| Box::new(lower_bound_stand_in(packages, leaf))),
             min: map.min,
             max: map.max,
         })),
@@ -250,12 +248,12 @@ fn lower_bound_stand_in(package: &v2::Package, ty: &v2::FieldType) -> v2::FieldT
                     r#type: field
                         .r#type
                         .as_ref()
-                        .map(|leaf| lower_bound_stand_in(package, leaf)),
+                        .map(|leaf| lower_bound_stand_in(packages, leaf)),
                     ..field.clone()
                 })
                 .collect(),
         }),
-        _ if field_type_resolves_locally(package, ty, &mut HashSet::new()) => return ty.clone(),
+        _ if field_type_resolves(packages, package, ty, &mut HashSet::new()) => return ty.clone(),
         _ => return boolean(ty.optional),
     };
     v2::FieldType {
@@ -266,7 +264,7 @@ fn lower_bound_stand_in(package: &v2::Package, ty: &v2::FieldType) -> v2::FieldT
 
 /// The bound of one type position alone, charged as `max_size` charges it as
 /// one member of a struct.
-fn probe(package: &v2::Package, ty: &v2::FieldType) -> Option<u64> {
+fn probe(packages: fb::Packages<'_>, ty: &v2::FieldType) -> Option<u64> {
     let probe = v2::Decl {
         kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
             members: vec![v2::StructMember {
@@ -280,18 +278,23 @@ fn probe(package: &v2::Package, ty: &v2::FieldType) -> Option<u64> {
         })),
         ..Default::default()
     };
-    fb::max_size(alone(package), &probe)
+    fb::max_size(packages, &probe)
 }
 
-fn decl_resolves_locally(
-    package: &v2::Package,
+/// Whether `reference`, written in `home`, reaches only declarations the scope
+/// holds, with no cycle. A declaration in another package is judged the same
+/// way, with that package as the home of the names written in it.
+fn decl_resolves<'a>(
+    packages: fb::Packages<'a>,
+    home: &'a v2::Package,
     reference: &str,
     visiting: &mut HashSet<String>,
 ) -> bool {
-    let Some(decl) = package.decls.iter().find(|decl| decl.name == reference) else {
+    let Some((decl, declaring)) = packages.resolve(home, reference) else {
         return false;
     };
-    if !visiting.insert(reference.to_string()) {
+    let key = format!("{}.{}", declaring.name, decl.name);
+    if !visiting.insert(key.clone()) {
         return false;
     }
     let resolves = match &decl.kind {
@@ -300,28 +303,29 @@ fn decl_resolves_locally(
                 Some(v2::struct_member::Member::Field(field)) => field
                     .r#type
                     .as_ref()
-                    .is_some_and(|ty| field_type_resolves_locally(package, ty, visiting)),
+                    .is_some_and(|ty| field_type_resolves(packages, declaring, ty, visiting)),
                 _ => true,
             })
         }
         Some(v2::decl::Kind::UnionDef(def)) => def
             .arms
             .iter()
-            .all(|arm| decl_resolves_locally(package, &arm.type_ref, visiting)),
+            .all(|arm| decl_resolves(packages, declaring, &arm.type_ref, visiting)),
         _ => true,
     };
-    visiting.remove(reference);
+    visiting.remove(&key);
     resolves
 }
 
-fn field_type_resolves_locally(
-    package: &v2::Package,
+fn field_type_resolves<'a>(
+    packages: fb::Packages<'a>,
+    home: &'a v2::Package,
     ty: &v2::FieldType,
     visiting: &mut HashSet<String>,
 ) -> bool {
     match &ty.kind {
         Some(v2::field_type::Kind::Named(reference)) => {
-            decl_resolves_locally(package, reference, visiting)
+            decl_resolves(packages, home, reference, visiting)
         }
         Some(v2::field_type::Kind::Primitive(primitive)) => v2::PrimitiveType::try_from(*primitive)
             .is_ok_and(|primitive| primitive != v2::PrimitiveType::Unspecified),
@@ -330,20 +334,20 @@ fn field_type_resolves_locally(
             field
                 .r#type
                 .as_ref()
-                .is_some_and(|ty| field_type_resolves_locally(package, ty, visiting))
+                .is_some_and(|ty| field_type_resolves(packages, home, ty, visiting))
         }),
         Some(v2::field_type::Kind::Array(array)) => array
             .element
             .as_deref()
-            .is_some_and(|element| field_type_resolves_locally(package, element, visiting)),
+            .is_some_and(|element| field_type_resolves(packages, home, element, visiting)),
         Some(v2::field_type::Kind::Map(map)) => {
             map.key
                 .as_deref()
-                .is_some_and(|key| field_type_resolves_locally(package, key, visiting))
+                .is_some_and(|key| field_type_resolves(packages, home, key, visiting))
                 && map
                     .value
                     .as_deref()
-                    .is_some_and(|value| field_type_resolves_locally(package, value, visiting))
+                    .is_some_and(|value| field_type_resolves(packages, home, value, visiting))
         }
         Some(v2::field_type::Kind::Stream(_)) => false,
         None => true,

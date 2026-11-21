@@ -1646,7 +1646,16 @@ impl<'a> Lowering<'a> {
             SizeState::Unbounded(cause) => {
                 let attribution = reference
                     .and_then(|reference| self.scope.resolve(home, reference))
-                    .map(|(decl, declaring)| super::fb_unbounded(declaring, decl))
+                    .map(|(decl, declaring)| {
+                        let others = self.scope.projection_others(declaring);
+                        super::fb_unbounded(
+                            fb::Packages {
+                                package: declaring,
+                                others: &others,
+                            },
+                            decl,
+                        )
+                    })
                     .unwrap_or_else(|| v1::FbUnbounded {
                         cause: cause as i32,
                         ..Default::default()

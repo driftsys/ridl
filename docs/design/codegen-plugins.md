@@ -873,12 +873,11 @@ guide for a plugin author, and its "Reading order" section is the reading list.
    Constants resolve across packages. **Open:** driftsys/ridl#1382. A contract
    clause on a parameter of a foreign scalar type is a defect and not a
    conservative rule: driftsys/ridl#1414.
-7. **The model's unbounded-member facts are computed over the package alone**
-   (`others: &[]` in `crates/ridl-ir/src/codegen/unbounded.rs`), as
-   `check_flatbuffers_bound` computes them, even when the pipeline hands the
-   codec a scope. A cross-package aggregate that exceeds the FlatBuffers ceiling
-   gets no codec and a note that states a false cause, where the same shape in
-   one package is an error. **Open:** driftsys/ridl#1383.
+7. **The model's unbounded-member facts are computed over the scope the codec is
+   handed.** Resolved: a cross-package aggregate that exceeds the FlatBuffers
+   ceiling is an error, as the same shape in one package is, and the attribution
+   can name a member from another package. A build that passed with the codec
+   withheld and a note now fails (driftsys/ridl#1383).
 8. **The corpus harness and the CLI generate over different scopes.** Resolved:
    [section 6](#6-the-parity-test-and-what-it-proves) states the difference.
 9. **The module documentation of the TypeScript backend's `generate` names an
