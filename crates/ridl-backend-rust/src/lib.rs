@@ -1055,6 +1055,26 @@ impl<'a> Ctx<'a> {
         self.declaration(reference.index)
     }
 
+    /// The declaration a resolved reference names, in this package or in
+    /// another package of the build: a foreign reference indexes the model's
+    /// foreign declarations, as `Codec::resolve` reads them. `None` for an
+    /// unresolved reference and for a foreign declaration the caller did not
+    /// hand the backend.
+    pub(crate) fn resolved(&self, reference: &v1::TypeRef) -> Option<&'a v1::Declaration> {
+        if !reference.resolved {
+            return None;
+        }
+        if reference.foreign {
+            return self
+                .model
+                .foreign
+                .get(reference.index as usize)?
+                .declaration
+                .as_ref();
+        }
+        self.declaration(reference.index)
+    }
+
     /// Marks `name` as being expanded by the Default recursion. Returns `true`
     /// when it was newly inserted, `false` when it is already on the expansion
     /// stack — a reference cycle that the caller must not recurse into (C1b).
