@@ -1049,8 +1049,8 @@ message FbRoot {
   }
 }
 
-// `unbounded_member`'s attribution, computed as the Rust backend computes it
-// today — over the package alone (design note §9 item 7).
+// `unbounded_member`'s attribution, computed over the scope the codec is
+// handed.
 message FbUnbounded {
   FbUnboundedCause cause = 1;
   // MEMBER, UNTYPED: the member named.

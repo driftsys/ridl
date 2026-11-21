@@ -8257,3 +8257,45 @@ fn match_clauses_legacy_model_emits_the_original_search() {
     );
     assert!(tokens.contains("PATTERN . is_match (value)"), "{tokens}");
 }
+
+/// A member whose type lives in another package of the build is judged
+/// through that package. `px.a.Big` is over the FlatBuffers ceiling on its
+/// own, so a struct of `px.b` that holds it has no finite bound, and the
+/// build fails as it does for the same shape in one package.
+#[test]
+fn a_cross_package_member_over_the_ceiling_is_refused_like_a_local_one() {
+    let foreign = package(
+        "px.a",
+        vec![public_decl(
+            "Big",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(shaped_field(
+                    "readings",
+                    1,
+                    v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                        element: Some(Box::new(v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::Primitive(
+                                v2::PrimitiveType::Boolean as i32,
+                            )),
+                        })),
+                        min: 0,
+                        // Over `fb_projection::MAX_ENCODABLE` at one byte an element.
+                        max: 1 << 40,
+                    })),
+                ))],
+                fixed_layout: false,
+            }),
+        )],
+    );
+    let local = package(
+        "px.b",
+        vec![struct_with_field("Holder", "from", "px.a.Big")],
+    );
+    let err = generate_pipeline(&local, &[WireEncoding::FlatBuffers], false, &[&foreign])
+        .expect_err("a member over the ceiling must fail the build, not withhold the codec");
+    assert_eq!(
+        err.message, "`px.b.Holder.from` has no finite FlatBuffers bound",
+        "the member from the other package is the named cause"
+    );
+}
