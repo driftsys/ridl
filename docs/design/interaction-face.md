@@ -140,8 +140,10 @@ pre-empting the tree:
   query's `ensure`) and `<comparison>` is one of `< <= > >= == !=`. The
   subject's named type must be an integer- or float-backed scalar.
 - It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op> <literal>`
-  for `result`; several clauses of one kind conjoin with `&&`. Float literals
-  are rounded at generation to preserve exact rational comparisons. Comparisons
+  for `result`. A scalar declared in another package is read with `args.get()`
+  and `reply.get()` instead, because the tuple field is private to the declaring
+  module. Several clauses of one kind conjoin with `&&`. Float literals are
+  rounded at generation to preserve exact rational comparisons. Comparisons
   using `==` or `!=` with an inexact literal are refused, as are literals
   outside the finite binary64 range. The book's
   [contract clause translation](../book/generated-code.md#contract-clause-translation)

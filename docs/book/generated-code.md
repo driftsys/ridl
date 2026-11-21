@@ -185,10 +185,10 @@ The provider does not repeat those checks.
 The Rust backend translates `<subject> <comparison> <numeric literal>` when
 `subject` is the call's single non-stream parameter, or `result` in a query's
 `ensure`, and its named type is an integer- or float-backed scalar declared in
-the same package as the interface. The comparisons are `<`, `<=`, `>`, `>=`,
-`==` and `!=`. Several clauses of one kind are joined with `&&`. Other forms are
-refused; the interface and its descriptors are left out with a note explaining
-the refusal.
+the same package as the interface or in another package. The comparisons are
+`<`, `<=`, `>`, `>=`, `==` and `!=`. Several clauses of one kind are joined with
+`&&`. Other forms are refused; the interface and its descriptors are left out
+with a note explaining the refusal.
 
 Float comparisons follow the exact rational semantics of
 [expr-core section 7](reference/expr-core.md#7-evaluation-domains). For literals
