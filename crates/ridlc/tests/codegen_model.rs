@@ -201,8 +201,10 @@ fn lowering_is_deterministic_and_the_canonical_encoding_round_trips() {
 /// is drawn at 128, so 127 is the deepest type nesting that compiles.
 const DEEPEST_ADMITTED: usize = 127;
 
-/// The bound a reader of `ridl.codegen.v1` must provision, asserted rather
-/// than described (design note §6.2).
+/// The nesting of the deepest shape declared in the lowered package itself,
+/// asserted rather than described (design note §6.2). A shape imported from
+/// another package nests one level deeper; the test after the next one pins
+/// that bound, which is the one a reader of `ridl.codegen.v1` must provision.
 ///
 /// Per shape: the message levels below the `Model` root that the lowered
 /// deepest admissible source nests, and the JSON levels its canonical
@@ -303,6 +305,53 @@ fn the_deepest_package_the_front_end_admits_pins_the_model_nesting_bound() {
                 codegen::request_from_json(&text).expect("the deepest request reads"),
                 request,
                 "{shape}: the deepest request must round-trip"
+            );
+        }
+    });
+}
+
+/// The deepest shape reached through a declaration of another package: the
+/// importer's model copies the declaration inside a `ForeignDeclaration`,
+/// which adds one object level, so this is the bound a reader of a request
+/// must provision (driftsys/ridl#1417).
+#[test]
+fn the_deepest_shape_imported_from_another_package_pins_the_request_nesting_bound() {
+    with_sized_stack(|| {
+        for (shape, message_levels, json_levels) in SHAPE_BOUNDS {
+            let declaring = shaped_source(shape, DEEPEST_ADMITTED).replace("veh.deep", "p.a");
+            let importing = "package p.b\n\nimport p.a.Deep\n\nstruct Local {\n  d : Deep\n}\n";
+            let model = two_package_model(&declaring, importing);
+            assert_eq!(
+                model.foreign.len(),
+                1,
+                "{shape}: `Deep` is copied as foreign"
+            );
+            let json = codegen::to_json_pretty(&model).expect("the model serializes");
+            let (objects, brackets) = depths(&json);
+            assert_eq!(
+                objects - 1,
+                message_levels + 1,
+                "{shape}: the foreign wrapper adds one message level"
+            );
+            assert_eq!(
+                brackets,
+                json_levels + 1,
+                "{shape}: the foreign wrapper adds one JSON level"
+            );
+            let request = v1::CodegenRequest {
+                model: Some(model),
+                ..Default::default()
+            };
+            let text = codegen::request_to_json(&request).expect("the request serializes");
+            assert_eq!(
+                depths(&text).1,
+                json_levels + 2,
+                "{shape}: the request adds one more JSON level"
+            );
+            assert_eq!(
+                codegen::request_from_json(&text).expect("the deepest request reads"),
+                request,
+                "{shape}: the deepest imported request must round-trip"
             );
         }
     });
