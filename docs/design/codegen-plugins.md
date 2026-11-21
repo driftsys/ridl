@@ -871,8 +871,9 @@ guide for a plugin author, and its "Reading order" section is the reading list.
    with a foreign first arm, gives no `Default` and no `init`) are conservative:
    correct, and lifting them changes what the generated crate contains.
    Constants resolve across packages. **Open:** driftsys/ridl#1382. A contract
-   clause on a parameter of a foreign scalar type is a defect and not a
-   conservative rule: driftsys/ridl#1414.
+   clause on a parameter or a reply of a foreign scalar type resolves across
+   packages: the Rust backend translates it and keeps the interface's face
+   (driftsys/ridl#1414).
 7. **The model's unbounded-member facts are computed over the package alone**
    (`others: &[]` in `crates/ridl-ir/src/codegen/unbounded.rs`), as
    `check_flatbuffers_bound` computes them, even when the pipeline hands the

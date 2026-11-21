@@ -267,16 +267,12 @@ fn literal_tokens(
     }
 }
 
-/// The backing of a **same-package** named scalar, restricted to the integer
-/// and float classes the accepted form allows.
-///
-/// The lowering resolves a reference over the whole scope, and this backend
-/// resolves nothing across packages: a subject whose scalar is declared in
-/// another package is refused here, which is what this backend did before the
-/// lowering took over, and what byte identity requires. Lifting it is a change to what the generated
-/// crate contains, made on its own (design note §9 item 6).
+/// The backing of a named scalar, restricted to the integer and float classes
+/// the accepted form allows. The scalar may be declared in this package or in
+/// another package of the build (driftsys/ridl#1414); a foreign scalar the
+/// caller did not hand the backend has no backing, and the clause is refused.
 fn scalar_backing(ctx: &Ctx, reference: &v1::TypeRef) -> Option<ScalarBacking> {
-    let Some(v1::declaration::Kind::Scalar(sc)) = ctx.local(reference)?.kind.as_ref() else {
+    let Some(v1::declaration::Kind::Scalar(sc)) = ctx.resolved(reference)?.kind.as_ref() else {
         return None;
     };
     match class_backing(sc.class) {
