@@ -536,6 +536,30 @@ mod tests {
         );
     }
 
+    /// An `ensure` clause on a reply whose scalar is declared in another
+    /// package reads the value through the public accessor.
+    #[test]
+    fn a_result_clause_on_a_foreign_scalar_is_accepted() {
+        let mut foreign = call_package(Vec::new(), Vec::new(), None);
+        foreign.name = "q".to_string();
+        foreign.interfaces.clear();
+        let package = call_package(
+            Vec::new(),
+            vec![clause(v2::ContractKind::Ensure, "result < 100")],
+            Some("q.Level"),
+        );
+        let model = ridl_ir::codegen::lower(&package, &[&foreign]);
+        let ctx = Ctx::new(&package, &model);
+        let (params, clauses, reply) = shape_of(&model);
+
+        let body = translate(&ctx, clauses, ClauseKind::Ensure, params, reply)
+            .expect("a foreign integer reply scalar is accepted");
+        assert_eq!(
+            dense(&body.expr),
+            "ifreply.get()<100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+        );
+    }
+
     /// Pins `Comparison::Le`'s emitted operator: `<=`, not `<` or any other
     /// token. Before this test, `<=` appeared in no test and no fixture, so a
     /// mutation emitting `<` for `Comparison::Le` passed the whole suite.
