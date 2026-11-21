@@ -548,6 +548,12 @@ diag_codes! {
         TYPL_225 = "TYPL-225", Error,
             "enum value outside the `int32` range";
 
+        /// A `match` clause that cannot apply (typl §4.4, §5.4): a `match` on
+        /// `bytes`, or a `match` that names no constant or a constant that is
+        /// not a regex. No pattern would be checked. Emitted by the checker.
+        TYPL_226 = "TYPL-226", Error,
+            "`match` clause that cannot apply";
+
         /// Stream type `<T>` outside interaction position (typl §16.4, ridl
         /// §12.3). Emitted by the parser in a `.typl` parse and by the checker
         /// for struct fields and collections in a `.ridl` file.

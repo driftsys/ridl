@@ -677,8 +677,9 @@ more times without a length bound. A value must match every clause. Clause order
 does not change which values match, and `ridl diff` ignores it. The IR keeps
 source order, and changing the order changes the catalog hash when the unit
 reaches the type. Each clause references a named regex constant or an inline
-regex literal. The example below requires a value that holds no line break (see
-[§2.7](#27-regex-literals)).
+regex literal; a clause that names no constant, or a constant that is not a
+regex, is TYPL-226. The example below requires a value that holds no line break
+(see [§2.7](#27-regex-literals)).
 
 ```ridl
 type Token : string [8..64 match /.*[0-9].*/ match /.*[A-Z].*/]
@@ -693,7 +694,7 @@ See [§5.8](#58-init-values) for declared and derived init values.
 | `bytes [N]`        | exactly N bytes  |
 | `bytes [min..max]` | min to max bytes |
 
-No `match` — bytes are opaque.
+No `match` — bytes are opaque. A `match` clause on `bytes` is TYPL-226.
 
 ### 5.5 Range Bounds
 
@@ -1534,31 +1535,32 @@ scope is checked under, is in ridl §16.4.
 
 ### 16.3 Composites (TYPL-2xx)
 
-| Code     | Rule                                                                                                                                                                           | Severity |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| TYPL-201 | array without explicit bounds                                                                                                                                                  | error    |
-| TYPL-202 | map without explicit bounds                                                                                                                                                    | error    |
-| TYPL-203 | enum values not unique or not explicitly assigned                                                                                                                              | error    |
-| TYPL-204 | union arm with a primitive type                                                                                                                                                | error    |
-| TYPL-205 | same tuple shape used in multiple places                                                                                                                                       | warning  |
-| TYPL-206 | recursive composite reference, direct or transitive                                                                                                                            | error    |
-| TYPL-207 | enumset bit positions not unique                                                                                                                                               | error    |
-| TYPL-208 | `string`/`bytes` used directly as a field type                                                                                                                                 | error    |
-| TYPL-209 | map key is not a named string type or a primitive                                                                                                                              | error    |
-| TYPL-210 | field, arm, or enum value re-declared under a `reserved` entry (a name or a value)                                                                                             | error    |
-| TYPL-211 | duplicate `reserved` entry — a dangling entry (a name or value never previously used) falls under this rule too, but its check needs the previous IR snapshot and is not built | warning  |
-| TYPL-212 | `error` modifier on a declaration other than `enum`, `struct`, `union`                                                                                                         | error    |
-| TYPL-213 | union mixes error and non-error arms without the result-union shape (exactly one success + one error arm)                                                                      | error    |
-| TYPL-214 | `error union` contains a non-error-typed arm                                                                                                                                   | error    |
-| TYPL-215 | field name declared twice in one struct or one tuple                                                                                                                           | error    |
-| TYPL-216 | enum value name declared twice in one enum                                                                                                                                     | error    |
-| TYPL-217 | union arm name declared twice in one union                                                                                                                                     | error    |
-| TYPL-218 | enumset bit name declared twice in one enumset                                                                                                                                 | error    |
-| TYPL-219 | enumset bit position is not a number with an integer value                                                                                                                     | error    |
-| TYPL-220 | regex pattern the Rust `regex` crate cannot compile — an accepted I-Regexp, including one over its compiled-size limit (§2.7); numbered in this range, but not a composite     | error    |
-| TYPL-222 | one field name used with different units                                                                                                                                       | info     |
-| TYPL-224 | duplicate declaration shape                                                                                                                                                    | info     |
-| TYPL-225 | enum value outside the `int32` range (declared live values only)                                                                                                               | error    |
+| Code     | Rule                                                                                                                                                                               | Severity |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| TYPL-201 | array without explicit bounds                                                                                                                                                      | error    |
+| TYPL-202 | map without explicit bounds                                                                                                                                                        | error    |
+| TYPL-203 | enum values not unique or not explicitly assigned                                                                                                                                  | error    |
+| TYPL-204 | union arm with a primitive type                                                                                                                                                    | error    |
+| TYPL-205 | same tuple shape used in multiple places                                                                                                                                           | warning  |
+| TYPL-206 | recursive composite reference, direct or transitive                                                                                                                                | error    |
+| TYPL-207 | enumset bit positions not unique                                                                                                                                                   | error    |
+| TYPL-208 | `string`/`bytes` used directly as a field type                                                                                                                                     | error    |
+| TYPL-209 | map key is not a named string type or a primitive                                                                                                                                  | error    |
+| TYPL-210 | field, arm, or enum value re-declared under a `reserved` entry (a name or a value)                                                                                                 | error    |
+| TYPL-211 | duplicate `reserved` entry — a dangling entry (a name or value never previously used) falls under this rule too, but its check needs the previous IR snapshot and is not built     | warning  |
+| TYPL-212 | `error` modifier on a declaration other than `enum`, `struct`, `union`                                                                                                             | error    |
+| TYPL-213 | union mixes error and non-error arms without the result-union shape (exactly one success + one error arm)                                                                          | error    |
+| TYPL-214 | `error union` contains a non-error-typed arm                                                                                                                                       | error    |
+| TYPL-215 | field name declared twice in one struct or one tuple                                                                                                                               | error    |
+| TYPL-216 | enum value name declared twice in one enum                                                                                                                                         | error    |
+| TYPL-217 | union arm name declared twice in one union                                                                                                                                         | error    |
+| TYPL-218 | enumset bit name declared twice in one enumset                                                                                                                                     | error    |
+| TYPL-219 | enumset bit position is not a number with an integer value                                                                                                                         | error    |
+| TYPL-220 | regex pattern the Rust `regex` crate cannot compile — an accepted I-Regexp, including one over its compiled-size limit (§2.7); numbered in this range, but not a composite         | error    |
+| TYPL-222 | one field name used with different units                                                                                                                                           | info     |
+| TYPL-224 | duplicate declaration shape                                                                                                                                                        | info     |
+| TYPL-225 | enum value outside the `int32` range (declared live values only)                                                                                                                   | error    |
+| TYPL-226 | `match` clause that cannot apply — a `match` on `bytes` (§5.4), or a `match` that names no constant or a constant that is not a regex; numbered in this range, but not a composite | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 

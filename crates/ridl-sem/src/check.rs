@@ -1137,11 +1137,10 @@ impl Checker<'_> {
             return None;
         }
         let canonical = self.canonical_ref(&symbol);
-        let Definition::Const(decl) = self.find_definition(&symbol)? else {
-            return None;
-        };
-        match literal_kind(&decl.value()?) {
-            LitKind::Regex(text) => Some((text, canonical)),
+        // Follow `const Q = R` chains, so that a chained regex constant
+        // resolves like its target.
+        match self.const_value_in(package, name)? {
+            ConstValue::Regex(text) => Some((text, canonical)),
             _ => None,
         }
     }
@@ -2163,6 +2162,16 @@ impl Checker<'_> {
         };
 
         let mut matches = Vec::new();
+        if !allow_pattern {
+            // §5.4: bytes take no `match`; the clause would be dropped.
+            for match_literal in constraint.iter().flat_map(ast::Constraint::match_patterns) {
+                self.error(
+                    DiagCode::TYPL_226,
+                    match_literal.syntax().text_range(),
+                    format!("`{noun}` takes no `match` clause; it is opaque"),
+                );
+            }
+        }
         if allow_pattern {
             for match_literal in constraint.iter().flat_map(ast::Constraint::match_patterns) {
                 let (pattern, pattern_const) = match literal_kind(&match_literal) {
@@ -2174,8 +2183,19 @@ impl Checker<'_> {
                     }
                     LitKind::ConstRef(name) => match self.const_regex_value(&name) {
                         Some((text, canonical)) => (Some(text), Some(canonical)),
-                        // Keep the name of an unresolved or non-regex constant.
-                        None => (None, Some(name)),
+                        // Keep the name of an unresolved or non-regex constant,
+                        // and report it: no pattern would be checked.
+                        None => {
+                            self.error(
+                                DiagCode::TYPL_226,
+                                match_literal.syntax().text_range(),
+                                format!(
+                                    "`match {name}` does not name a regex constant; \
+                                     no pattern would be checked"
+                                ),
+                            );
+                            (None, Some(name))
+                        }
                     },
                     _ => continue,
                 };
@@ -10519,6 +10539,51 @@ mod tests {
                 message.starts_with("the Rust `regex` crate cannot compile this pattern: ")
                     && !message.contains('\n'),
                 "{raw}: {message}"
+            );
+        }
+    }
+
+    /// A `match` clause that cannot apply draws TYPL-226 at the clause: on
+    /// `bytes`, naming a constant that is not a regex, and naming no constant.
+    #[test]
+    fn typl_226_reports_a_match_clause_that_cannot_apply() {
+        for (decl, clause) in [
+            ("type T : bytes [4 match /a/]", "/a/"),
+            ("const N : int = 3\ntype T : string [8 match N]", "N"),
+            ("type T : string [8 match MISSING]", "MISSING"),
+        ] {
+            let source = format!("package app\n{decl}\n");
+            let checked = check_source("app", &source);
+            let found: Vec<_> = checked
+                .diagnostics
+                .iter()
+                .filter(|d| d.code.as_str() == "TYPL-226")
+                .collect();
+            assert_eq!(found.len(), 1, "{decl}: got: {:?}", checked.diagnostics);
+            let start = source.rfind(clause).expect("the clause is in the source");
+            let range = found[0].primary.range;
+            assert_eq!(usize::from(range.start()), start, "{decl}");
+            assert_eq!(usize::from(range.end()), start + clause.len(), "{decl}");
+        }
+    }
+
+    /// An inline regex and a regex constant in `match` still check clean.
+    #[test]
+    fn typl_226_accepts_an_inline_regex_and_a_regex_constant() {
+        for decl in [
+            "type T : string [8 match /a/]",
+            "const R = /a/\ntype T : string [8 match R]",
+            "const R = /a/\nconst Q = R\ntype T : string [8 match Q]",
+        ] {
+            let source = format!("package app\n{decl}\n");
+            let checked = check_source("app", &source);
+            assert!(
+                !checked
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.severity == Severity::Error),
+                "{decl}: got: {:?}",
+                checked.diagnostics
             );
         }
     }
