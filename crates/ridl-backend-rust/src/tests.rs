@@ -7486,9 +7486,9 @@ fn doc_links_to_foreign_items_and_to_skipped_constants() {
 
 /// A doc link to a constant is a path link only when the backend emits the
 /// constant ([`super::declaration_emitted`]): a constant of a named scalar of
-/// its own package, backed by anything but `bytes`, and a regex constant. It
-/// is a code span for a constant of a `bytes`-backed named scalar, one of a
-/// named scalar of another package, and one of a type no package declares.
+/// its own package or of another package, backed by anything but `bytes`,
+/// and a regex constant. It is a code span for a constant of a
+/// `bytes`-backed named scalar and one of a type no package declares.
 #[test]
 fn doc_links_to_constants_follow_how_each_is_typed() {
     let other = package("other.pkg", vec![speed_decl()]);
@@ -7529,20 +7529,19 @@ fn doc_links_to_constants_follow_how_each_is_typed() {
         .expect("generation succeeds")
         .rust_source;
     assert!(
-        source.contains("const OWN_SPEED") && source.contains("const PATTERN"),
-        "the same-package scalar constant and the regex constant are emitted:\n{source}"
+        source.contains("const OWN_SPEED")
+            && source.contains("const OTHER_SPEED")
+            && source.contains("const PATTERN"),
+        "the two scalar constants and the regex constant are emitted:\n{source}"
     );
     assert!(
-        !source.contains("const OWN_BLOB")
-            && !source.contains("const OTHER_SPEED")
-            && !source.contains("const MISSING"),
-        "the other three constants are not emitted:\n{source}"
+        !source.contains("const OWN_BLOB") && !source.contains("const MISSING"),
+        "the other two constants are not emitted:\n{source}"
     );
     assert!(
         source.contains(
             "See [OWN_SPEED], `veh.common.OWN_BLOB`, \
-             `veh.common.OTHER_SPEED`, `veh.common.MISSING` and \
-             [PATTERN]."
+             [OTHER_SPEED], `veh.common.MISSING` and [PATTERN]."
         ),
         "got:\n{source}"
     );
@@ -8297,5 +8296,48 @@ fn a_cross_package_member_over_the_ceiling_is_refused_like_a_local_one() {
     assert_eq!(
         err.message, "`px.b.Holder.from` has no finite FlatBuffers bound",
         "the member from the other package is the named cause"
+    );
+}
+
+/// A constant typed by a named scalar of another package is emitted with the
+/// foreign type's path and constructor. Two foreign scalars are declared, and
+/// the constant names the second one, so a lookup that always takes the first
+/// foreign declaration would render the wrong backing.
+#[test]
+fn a_constant_typed_by_a_scalar_of_another_package_is_emitted() {
+    let other = package(
+        "other.pkg",
+        vec![
+            public_decl(
+                "Flag",
+                primitive_type(
+                    v2::PrimitiveType::Boolean,
+                    init_value(true, Some("false")),
+                    None,
+                ),
+            ),
+            speed_decl(),
+        ],
+    );
+    let local = package(
+        "veh.common",
+        vec![
+            const_decl("ON", "other.pkg.Flag", "true"),
+            const_decl("LIMIT", "other.pkg.Speed", "50.5"),
+        ],
+    );
+    let source = generate_pipeline(&local, &[], false, &[&other])
+        .expect("the package generates against the build")
+        .rust_source;
+    let flat: String = source.split_whitespace().collect();
+    assert!(
+        flat.contains(
+            "pubconstLIMIT:crate::other::pkg::Speed=crate::other::pkg::Speed::new_unchecked(50.5"
+        ),
+        "got:\n{source}"
+    );
+    assert!(
+        flat.contains("pubconstON:crate::other::pkg::Flag=crate::other::pkg::Flag::new(true);"),
+        "got:\n{source}"
     );
 }

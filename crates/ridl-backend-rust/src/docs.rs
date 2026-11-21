@@ -186,7 +186,7 @@ impl<'a> Links<'a> {
                 continue;
             }
             if decl.visibility == v1::Visibility::Internal as i32
-                || !crate::declaration_emitted(self.model, owner, decl)
+                || !crate::declaration_emitted(self.model, decl)
             {
                 return None;
             }

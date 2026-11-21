@@ -2426,6 +2426,62 @@ fn a_parent_package_with_no_public_item_compiles_denying_warnings() {
 /// declared in another package compiles in the emitted crate: the other
 /// package's newtype field is private to its module, so the clause must read
 /// it through the newtype's public accessor (driftsys/ridl#1414).
+/// A constant of package `pb` typed by a named scalar of package `pa` is
+/// emitted in `pb.rs` and compiles. `pa` declares four scalars, an integer, a
+/// float, a boolean and a string, so a lookup that always takes the first
+/// foreign declaration renders a constant of the wrong type and fails to
+/// compile.
+#[test]
+fn a_constant_typed_by_a_scalar_of_another_package_compiles_in_the_emitted_crate() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path().join("workspace");
+    for (member, package, source) in [
+        (
+            "member-pa",
+            "pa",
+            "package pa\n\ntype Level: integer [0..100] = 7\n\n\
+             type Ratio: float [0.0..1.0] = 0.0\n\ntype On: boolean = false\n\n\
+             type Name: string = \"\"\n",
+        ),
+        (
+            "member-pb",
+            "pb",
+            "package pb\n\nimport pa.Level\nimport pa.Ratio\nimport pa.On\n\
+             import pa.Name\n\nconst MAX: Level = 50\n\nconst HALF: Ratio = 0.5\n\n\
+             const ENABLED: On = true\n\nconst LABEL: Name = \"cabin\"\n",
+        ),
+    ] {
+        std::fs::create_dir_all(root.join(member)).expect("the member directory");
+        std::fs::write(
+            root.join(member).join("ridl.toml"),
+            format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        )
+        .expect("the member manifest is written");
+        std::fs::write(root.join(member).join(format!("{package}.ridl")), source)
+            .expect("the member source is written");
+    }
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[workspace]\nmembers = [\"member-pa\", \"member-pb\"]\n",
+    )
+    .expect("the workspace manifest is written");
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(&root, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    let pb = std::fs::read_to_string(out.path().join("pb.rs")).expect("the build writes pb.rs");
+    for constant in ["const MAX", "const HALF", "const ENABLED", "const LABEL"] {
+        assert!(
+            pb.contains(constant),
+            "{constant} must be emitted, or this proof compiles nothing:\n{pb}"
+        );
+    }
+    compile_crate_root(out.path());
+}
+
 #[test]
 fn a_clause_on_a_scalar_of_another_package_compiles_in_the_emitted_crate() {
     let dir = tempfile::tempdir().expect("temp dir");
