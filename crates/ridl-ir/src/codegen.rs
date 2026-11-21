@@ -166,9 +166,10 @@ pub fn to_json_pretty(model: &v1::Model) -> Result<String, SerializeError> {
 /// input's nesting is measured first and refused past the same ceiling, and
 /// the parse runs on the same explicitly sized stack.
 ///
-/// The bound a reader of this schema must provision is 266 JSON levels, from
-/// the map shape at the front end's own type-depth limit (design note §6.2),
-/// so the ceiling of 1,000 leaves a factor of 3.8.
+/// The bound a reader of this schema must provision is 267 JSON levels, from
+/// the map shape at the front end's own type-depth limit when another package
+/// declares it (design note §6.2), so the ceiling of 1,000 leaves a factor of
+/// 3.7.
 pub fn from_json(text: &str) -> Result<v1::Model, serde_json::Error> {
     let model: v1::Model = read_json(text)?;
     crate::class::check_model(&model).map_err(serde::de::Error::custom)?;

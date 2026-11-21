@@ -308,6 +308,91 @@ fn the_deepest_package_the_front_end_admits_pins_the_model_nesting_bound() {
     });
 }
 
+/// The bound for a deepest shape that another package declares and the
+/// lowered package imports. `Model.foreign` wraps the declaration in a
+/// `ForeignDeclaration`, which adds one message level and one JSON level to
+/// the figures of `SHAPE_BOUNDS`.
+const FOREIGN_SHAPE_BOUNDS: &[(&str, usize, usize)] =
+    &[("arrays", 260, 263), ("maps", 263, 267), ("tuples", 7, 10)];
+
+/// The deepest shape reached through a declaration of another package nests
+/// one level deeper than the same shape declared locally, in the model and in
+/// the request.
+#[test]
+fn the_deepest_shape_from_another_package_pins_the_foreign_nesting_bound() {
+    with_sized_stack(|| {
+        for (shape, message_levels, json_levels) in FOREIGN_SHAPE_BOUNDS {
+            let dir = tempfile::tempdir().expect("a temporary directory");
+            let root = dir.path();
+            let write = |path: &str, text: &str| {
+                let path = root.join(path);
+                std::fs::create_dir_all(path.parent().expect("a parent")).expect("a directory");
+                std::fs::write(path, text).expect("a written file");
+            };
+            write("ridl.toml", "[workspace]\nmembers = [\"deep\", \"user\"]\n");
+            write(
+                "deep/ridl.toml",
+                "[package]\nname = \"veh.deep\"\nversion = \"1.0.0\"\n",
+            );
+            write("deep/deep.typl", &shaped_source(shape, DEEPEST_ADMITTED));
+            write(
+                "user/ridl.toml",
+                "[package]\nname = \"veh.user\"\nversion = \"1.0.0\"\n",
+            );
+            write(
+                "user/user.typl",
+                "package veh.user\n\nimport veh.deep.Deep\n\nstruct Holder {\n  deep : Deep\n}\n",
+            );
+
+            let mut db = RidlDatabase::default();
+            let output = ridlc::compile_workspace(&mut db, root).expect("the workspace loads");
+            let packages: Vec<v2::Package> = output
+                .checked
+                .iter()
+                .map(|checked| checked.ir.clone())
+                .collect();
+            let user = packages
+                .iter()
+                .find(|package| package.name == "veh.user")
+                .expect("the importing package");
+            let scope: Vec<&v2::Package> = packages.iter().collect();
+            let model = codegen::lower(user, &scope);
+            assert_eq!(
+                model.foreign.len(),
+                1,
+                "{shape}: the deep declaration is reached as a foreign declaration"
+            );
+            let json = codegen::to_json_pretty(&model).expect("the model serializes");
+            let (objects, brackets) = depths(&json);
+            assert_eq!(
+                objects - 1,
+                *message_levels,
+                "{shape}: the message levels below the model root through a foreign declaration"
+            );
+            assert_eq!(
+                brackets, *json_levels,
+                "{shape}: the JSON levels through a foreign declaration"
+            );
+            let request = v1::CodegenRequest {
+                model: Some(model),
+                ..Default::default()
+            };
+            let text = codegen::request_to_json(&request).expect("the request serializes");
+            let (_, request_brackets) = depths(&text);
+            assert_eq!(
+                request_brackets,
+                json_levels + 1,
+                "{shape}: the request adds one JSON level"
+            );
+            assert_eq!(
+                codegen::request_from_json(&text).expect("the deepest request reads"),
+                request,
+                "{shape}: the deepest foreign request must round-trip"
+            );
+        }
+    });
+}
+
 /// Every corpus package lowers to a model whose request reads back equal
 /// through `request_from_json`, which ignores unknown keys by filtering a
 /// `serde_json::Value` against the descriptor before the generated
