@@ -52,11 +52,10 @@ and `rmdl` stays a Proposed draft with no implementation. See
   Read the record itself before the matching work:
   - ADR-0002 — before changing packages, imports, visibility, the manifest, or
     the resolver and lockfile.
-  - ADR-0005 (_proposed_) — before building agent-facing tooling: `ridl-mcp`,
-    `ridl-lsp`, or a skill.
-  - ADR-0035 (_proposed_) and `docs/design/authoring-skill.md` — before changing
-    the `ridl-authoring` skill, its gates, or the eval runner's tasks or
-    scoring.
+  - ADR-0005 — before building agent-facing tooling: `ridl-mcp`, `ridl-lsp`, or
+    a skill.
+  - ADR-0035 and `docs/design/authoring-skill.md` — before changing the
+    `ridl-authoring` skill, its gates, or the eval runner's tasks or scoring.
   - ADR-0008 — read its `## Status` before editing it.
   - ADR-0009 (toolchain pin and gate parity) and ADR-0010 (CLI conventions) —
     bind every contributor and every subcommand.

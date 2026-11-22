@@ -19,8 +19,8 @@ repeated here.
 - The judge check has not been run, so neither `<dir>/judge-check/labels.toml`
   (written by `cargo xtask eval sample --from <dir>`) nor the `agreement.md`
   next to it (written by `cargo xtask eval agreement <labels.toml>`) exists, and
-  the judge is not known to agree with the maintainer. The owner dropped the
-  check on 2026-11-19.
+  the judge is not known to agree with the maintainer. The maintainer deferred
+  the check on 2026-11-22 (ADR-0035 status, driftsys/ridl#1401).
 - No release record exists: `evals/results/` is absent, and the skill's effect
   on an agent's result is not measured.
 - The model ids in `evals/runner.toml` are pinned but not confirmed for a
