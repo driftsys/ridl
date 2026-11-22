@@ -4064,7 +4064,7 @@ vscode-verify:
             echo "vscode-verify: a compiled test file would ship in the VSIX — check .vscodeignore" >&2
             exit 1
         fi
-        for f in SKILL.md rules.md; do
+        for f in SKILL.md RULES.md; do
             if ! grep -qx "extension/skills/ridl-authoring/$f" <<<"$listing"; then
                 echo "vscode-verify: $archive lacks skills/ridl-authoring/$f" >&2
                 exit 1
@@ -4100,7 +4100,7 @@ vscode-verify:
         echo "vscode-verify: $skill_zip holds a path outside ridl-authoring/" >&2
         exit 1
     fi
-    for f in SKILL.md rules.md; do
+    for f in SKILL.md RULES.md; do
         if ! grep -qx "ridl-authoring/$f" <<<"$skill_listing"; then
             echo "vscode-verify: $skill_zip lacks ridl-authoring/$f" >&2
             exit 1

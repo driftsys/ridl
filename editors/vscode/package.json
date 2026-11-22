@@ -34,7 +34,7 @@
     ],
     "chatInstructions": [
       {
-        "path": "./skills/ridl-authoring/rules.md"
+        "path": "./skills/ridl-authoring/RULES.md"
       }
     ],
     "mcpServerDefinitionProviders": [
