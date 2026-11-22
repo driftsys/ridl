@@ -40,8 +40,12 @@ impl ToolError {
 
 pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolError> {
     let entry = Path::new(path);
-    if !entry.exists() {
-        return Err(ToolError::Request(format!("`{path}` does not exist")));
+    match ridl_core::fs_probe::exists(entry) {
+        Ok(true) => {}
+        Ok(false) => return Err(ToolError::Request(format!("`{path}` does not exist"))),
+        Err(error) => {
+            return Err(ToolError::Request(format!("cannot read `{path}`: {error}")));
+        }
     }
     let overlays: Vec<_> = overlays
         .iter()

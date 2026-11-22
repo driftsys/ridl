@@ -1715,11 +1715,11 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-For `ridl check`, `ridl build` and `ridl test`, an unreadable workspace root or
-subdirectory also reports the path and operating system cause. `ridl baseline`
-over an unreadable directory (the root, or an ancestor of the entry) reports an
-unreadable baseline-publication marker instead of the directory
-(driftsys/ridl#1320).
+For `ridl check`, `ridl build`, `ridl baseline` and `ridl test`, an unreadable
+workspace root, subdirectory or ancestor of the entry also reports the path and
+operating system cause. A path whose type cannot be read is never reported as
+absent: `--baseline`, `ridl vendor` and the `ridl fmt` walk name the path and
+the cause, and only a path that does not exist is reported as missing.
 
 ### `ridl diff`
 

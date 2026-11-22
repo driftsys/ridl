@@ -2154,7 +2154,7 @@ fn refuse_overwrite(
     comment: &str,
     old_marker: Option<&str>,
 ) -> std::io::Result<Option<Diagnostic>> {
-    if !path.exists() {
+    if !ridl_core::fs_probe::exists(path)? {
         return Ok(None);
     }
     let marker = format!("{comment} {}", codegen::GENERATED_MARKER_PREFIX);

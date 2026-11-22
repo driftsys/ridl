@@ -61,10 +61,12 @@ Amended 2026-11-11: driftsys/ridl#196 is closed. Decision 6, the Context
 paragraph and the Positive and Negative consequences that cite it record the
 state on 2026-07-27. `crates/ridl/tests/unreadable_paths.rs` now verifies that
 `ridl check`, `ridl build`, `ridl baseline` and `ridl test` name the unreadable
-path and its cause, except that `ridl baseline` over an unreadable directory
-(the root, or an ancestor of the entry) reports an unreadable
-baseline-publication marker instead of the directory; driftsys/ridl#1320 tracks
-this.
+path and its cause. Until driftsys/ridl#1320 was fixed, `ridl baseline` over an
+unreadable directory (the root, or an ancestor of the entry) reported an
+unreadable baseline-publication marker instead of the directory; it now probes
+the entry first. The probes that decide whether a path exists use
+`ridl_core::fs_probe`, which returns an error other than "not found" instead of
+treating the path as absent.
 
 ## Context
 

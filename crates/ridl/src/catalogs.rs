@@ -289,7 +289,11 @@ impl Judgment {
 /// [`read_history_if_present`] reports it; a directory entry that cannot be
 /// read is an error (exit 2).
 fn holds_history_and_snapshot(dir: &Path) -> Result<bool, ExitCode> {
-    if !dir.is_dir() {
+    let is_dir = ridl_core::fs_probe::is_dir(dir).map_err(|err| {
+        errprintln!("error: cannot read {}: {err}", dir.display());
+        ExitCode::from(2)
+    })?;
+    if !is_dir {
         return Ok(false);
     }
     let entries = ridlc::diff_side::files_matching_strict(dir, |_| true).map_err(|err| {

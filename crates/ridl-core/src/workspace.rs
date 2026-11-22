@@ -504,9 +504,9 @@ fn is_appledouble(name: &str) -> bool {
 /// The manifest that MANI-013 reports for the directory `subdirectory` of a
 /// unit's tree: `subdirectory/ridl.toml`, when that is a file. The loader's
 /// tree walk and [`find_nested_manifest`] both decide with this function.
-fn nested_manifest_of(subdirectory: &Path) -> Option<PathBuf> {
+fn nested_manifest_of(subdirectory: &Path) -> io::Result<Option<PathBuf>> {
     let manifest = subdirectory.join("ridl.toml");
-    manifest.is_file().then_some(manifest)
+    Ok(crate::fs_probe::is_file(&manifest)?.then_some(manifest))
 }
 
 /// The first `ridl.toml` found in a subdirectory of `dir`, searched the way
@@ -525,7 +525,7 @@ pub fn find_nested_manifest(dir: &Path) -> io::Result<Option<PathBuf>> {
                 continue;
             }
             let path = entry.path();
-            if let Some(manifest) = nested_manifest_of(&path) {
+            if let Some(manifest) = nested_manifest_of(&path)? {
                 return Ok(Some(manifest));
             }
             pending.push(path);
@@ -1146,7 +1146,7 @@ impl Loader {
             {
                 continue;
             }
-            if path.is_dir() {
+            if crate::fs_probe::is_dir(&path).map_err(|e| cannot_read(&path, e))? {
                 if walk_enters(&entry).map_err(named)? {
                     subdirs.push(path);
                 }
@@ -1270,7 +1270,9 @@ impl Loader {
             {
                 continue;
             }
-            if let Some(nested_manifest) = nested_manifest_of(&subdir) {
+            if let Some(nested_manifest) = nested_manifest_of(&subdir)
+                .map_err(|e| cannot_read(&subdir.join("ridl.toml"), e))?
+            {
                 let nested_text = fs::read_to_string(&nested_manifest)
                     .map_err(|e| cannot_read(&nested_manifest, e))?;
                 let nested_id = self

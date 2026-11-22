@@ -156,9 +156,16 @@ pub fn run_check(path: &Path) -> ExitCode {
 /// above it. A missing path is refused before root discovery, which would
 /// otherwise walk up from it and act on the project around it.
 fn root_of(path: &Path) -> Result<PathBuf, ExitCode> {
-    if !path.exists() {
-        errprintln!("error: `{}` does not exist", path.display());
-        return Err(ExitCode::from(2));
+    match ridl_core::fs_probe::exists(path) {
+        Ok(true) => {}
+        Ok(false) => {
+            errprintln!("error: `{}` does not exist", path.display());
+            return Err(ExitCode::from(2));
+        }
+        Err(err) => {
+            errprintln!("error: cannot read `{}`: {err}", path.display());
+            return Err(ExitCode::from(2));
+        }
     }
     manifest_root(path).ok_or_else(|| {
         errprintln!(
