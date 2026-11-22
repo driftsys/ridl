@@ -2513,10 +2513,11 @@ story-id-check root="":
         # epic id), a bare number, a letter directly before the word or after
         # the name, and the `E<n> task` form with no space, a missing or
         # non-digit number, a missing epic number, a plural word, or a letter
-        # glued to the epic id or to the task number.
-        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx, task 9, E2 task, e2 task 9, E2 task x, xE2 task 9, E2 tasks 9, E2 task9, E task 9, 2 task 9, E2 task 9bc"
+        # glued to the epic id or to the task number, a missing `E`, a doubled space
+        # on either side of the word, or an upper-case suffix letter.
+        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx, task 9, E2 task, e2 task 9, E2 task x, xE2 task 9, E2 tasks 9, E2 task9, E task 9, 2 task 9, E2 task 9bc, E2task 9, E2  task 9, E2 task  9, E2 task 9B"
         # Phrases that are a plan name, in the cases the pattern states.
-        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's" "E2 task 9" "E2 task 11b" "(E2 task 9)" "E16 task 3" "E2 Task 9")
+        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's" "E2 task 9" "E2 task 11b" "(E2 task 9)" "E16 task 3" "E2 Task 9" "E2 TASK 9")
         root="$work/fixture"
         report="$work/report"
         clean_tree() {
