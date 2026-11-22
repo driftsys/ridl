@@ -3100,26 +3100,31 @@ mod tests {
                 for trailing in ["// member", "/* member */", "/* member\nmore */"] {
                     let colliding =
                         format!("  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n");
-                    let unrelated_before = "  signal  s : T\n";
-                    let unrelated_after = "  signal s: T\n";
-                    for (input_members, expected_members) in [
-                        (
-                            format!("{colliding}{unrelated_before}"),
-                            format!("{colliding}{unrelated_after}"),
-                        ),
-                        (
-                            format!("{unrelated_before}{colliding}"),
-                            format!("{unrelated_after}{colliding}"),
-                        ),
+                    for (before, after) in [
+                        ("  signal  s : T\n", "  signal s: T\n"),
+                        ("  signal  s : T // note\n", "  signal s: T // note\n"),
                     ] {
-                        assert_profile_format(
-                            &format!("package p\nservice veh.control {{\n{input_members}}}\n"),
-                            &format!("package p\n\nservice veh.control {{\n{expected_members}}}\n"),
-                            Profile::Ridl,
-                            &FormatOptions {
-                                max_line_length: Some(width),
-                            },
-                        );
+                        for (input_members, expected_members) in [
+                            (
+                                format!("{colliding}{before}"),
+                                format!("{colliding}{after}"),
+                            ),
+                            (
+                                format!("{before}{colliding}"),
+                                format!("{after}{colliding}"),
+                            ),
+                        ] {
+                            assert_profile_format(
+                                &format!("package p\nservice veh.control {{\n{input_members}}}\n"),
+                                &format!(
+                                    "package p\n\nservice veh.control {{\n{expected_members}}}\n"
+                                ),
+                                Profile::Ridl,
+                                &FormatOptions {
+                                    max_line_length: Some(width),
+                                },
+                            );
+                        }
                     }
                 }
             }
