@@ -36,7 +36,9 @@ per combination, 144 agent runs in all. It is committed as
 The gate holds on both hosts. The maintainer waived the judge check of decision
 11 for this record: no labels were made, so the rubric scores rest on a judge
 that was not checked against the maintainer. The mechanical pass rates do not
-depend on the judge. Decision 11 still applies to a later record.
+depend on the judge. Decision 11 still applies to a later record. The record's
+numbers are provisional: its runs used `ridl` 0.20.0 instead of the workspace's
+0.21.0, and the record is to be re-run (driftsys/ridl#1460).
 
 Scope: what the `ridl-authoring` skill is made of, how it is kept consistent
 with the compiler, how it reaches each agent host, and how its effect is
@@ -188,10 +190,11 @@ numbering.
 - `skills/` is Markdown only. A change to a diagnostic code, a book heading or a
   fenced sample that the skill cites fails a test in `just build`, not a review.
 - The record of 2026-11-22 measures the skill's behaviour on Copilot and Codex,
-  and the gate holds on both hosts. The judge was not checked, so the rubric
-  scores are unverified. Until the judge check is done, a document that states
-  the skill improves an agent's result must also state that the judge is
-  unchecked and cite the record.
+  and the gate holds on both hosts. Its numbers are provisional, because its
+  runs used `ridl` 0.20.0 (driftsys/ridl#1460). The judge was not checked, so
+  the rubric scores are unverified. Until the judge check is done, a document
+  that states the skill improves an agent's result must also state that the
+  judge is unchecked and cite the record.
 - `evals/runner.toml` pins the model of each host; the maintainer approved the
   pinned ids for the record of 2026-11-22.
 - The skill's version moves with every release, so each release changes

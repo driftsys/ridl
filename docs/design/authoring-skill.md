@@ -27,6 +27,8 @@ repeated here.
   [`evals/results/record-2026-11-22/`](../../evals/results/record-2026-11-22/README.md)
   holds the runs of 2026-11-22, and the gate holds on Copilot and Codex. The
   maintainer waived the judge check for it, so its rubric scores are unverified.
+  Its numbers are provisional, because the runs used `ridl` 0.20.0
+  (driftsys/ridl#1460).
 
 ## The skill
 
