@@ -14,7 +14,7 @@
 //! A run that cannot be scored is recorded with a `setup_error` and no
 //! score, and the batch goes on: a "with" run that shows no evidence of
 //! loading the skill, or a host that did not run (it could not be started,
-//! exited with an error and printed nothing, or ran past `--timeout`, 1800
+//! exited with an error before the agent ran a turn, or ran past `--timeout`, 1800
 //! seconds by default, which also bounds the wait for a handed-off run). Such
 //! a run is left out of the pass rates and the rubric means and listed in the
 //! summary.
@@ -278,8 +278,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
 }
 
 /// Why a run cannot be scored, or `None` when it can: the host could not be
-/// started, ran past the timeout, or exited with an error and wrote no
-/// transcript, or a "with" run shows no evidence that the host loaded the
+/// started, ran past the timeout, or exited with an error before the agent
+/// ran a turn (with no transcript, or with only the host's startup events,
+/// as when the host cannot reach its service), or a "with" run shows no evidence that the host loaded the
 /// skill.
 fn setup_error(
     outcome: &Result<host::Outcome, String>,
@@ -293,6 +294,13 @@ fn setup_error(
         Ok(host::Outcome::Exited(code)) if *code != Some(0) && transcript.trim().is_empty() => {
             return Some(format!(
                 "the host exited with {code:?} and wrote no transcript"
+            ));
+        }
+        Ok(host::Outcome::Exited(code))
+            if *code != Some(0) && !score::agent_turn_ran(host, transcript) =>
+        {
+            return Some(format!(
+                "the host exited with {code:?} before the agent ran a turn"
             ));
         }
         _ => {}

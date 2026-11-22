@@ -116,8 +116,9 @@ A run goes through these steps:
 3. The host runs the task's prompt with no user, and its transcript is saved.
 4. `score.rs` checks the run mechanically and, for a "with" run, checks that the
    transcript shows the skill loaded. A "with" run that shows no load, a host
-   that does not start, and a run that exceeds the timeout are recorded with a
-   `setup_error`, and `report.rs` leaves them out of both sides.
+   that does not start or exits with an error before the agent runs a turn, and
+   a run that exceeds the timeout are recorded with a `setup_error`, and
+   `report.rs` leaves them out of both sides.
 5. A run that passes the mechanical checks goes to `judge.rs`, which asks a host
    of the other vendor to mark each rubric item met or not met: Codex for a
    Claude or Copilot run, and the Claude CLI or the Copilot CLI, as the

@@ -125,10 +125,12 @@ no MCP server, and in an empty directory.
 
 A run that cannot be scored is recorded with a `setup_error` and no score, and
 the batch goes on: a "with" run that shows no evidence of loading the skill, or
-a host that could not be started, exited with an error and wrote no transcript,
-or ran past `--timeout` (1800 seconds by default; the same limit bounds the wait
-for a handed-off run and each judgement). Such a run is left out of the pass
-rates and the rubric means of both sides, and `summary.md` lists it.
+a host that could not be started, exited with an error before the agent ran a
+turn (with no transcript, or with only the host's startup events, as when the
+host cannot reach its service), or ran past `--timeout` (1800 seconds by
+default; the same limit bounds the wait for a handed-off run and each
+judgement). Such a run is left out of the pass rates and the rubric means of
+both sides, and `summary.md` lists it.
 
 Each host signs in with its own CLI login, and every host that is either
 selected or judges a selected one needs its login found before any command runs:

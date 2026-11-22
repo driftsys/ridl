@@ -118,6 +118,23 @@ fn names_the_skill_directory(command: &str) -> bool {
 /// it or its `SKILL.md` path, or a `tool.execution_start` event calls the
 /// `skill` tool on it (a real run records the second form). Text that only
 /// mentions the skill does not count.
+/// Whether the transcript shows the agent ran at least one turn: an
+/// assistant message for Claude, a completed item for Codex, an assistant
+/// turn for Copilot. A host that fails while it starts writes only its
+/// startup events, which show none of these.
+pub fn agent_turn_ran(host: Host, transcript: &str) -> bool {
+    let kind = match host {
+        Host::Claude => "assistant",
+        Host::Codex => "item.completed",
+        Host::Copilot => "assistant.turn_start",
+    };
+    json_lines(transcript).any(|line| str_field_top(&line) == Some(kind))
+}
+
+fn str_field_top(line: &serde_json::Value) -> Option<&str> {
+    line.get("type").and_then(serde_json::Value::as_str)
+}
+
 pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
     json_lines(transcript).any(|line| {
         objects(&line).into_iter().any(|map| match host {
@@ -575,5 +592,33 @@ mod tests {
             }
             .passed()
         );
+    }
+
+    #[test]
+    fn a_host_that_fails_while_it_starts_ran_no_agent_turn() {
+        let codex_failed = r#"{"type":"thread.started"}
+{"type":"error","message":"Reconnecting... 1/5 (workspace routing discovery failed)"}
+{"type":"turn.failed","error":{"message":"workspace routing discovery failed"}}"#;
+        let copilot_failed = r#"{"type":"session.start"}
+{"type":"session.mcp_server_tools_loaded"}
+{"type":"result","exitCode":1,"usage":{"premiumRequests":0}}"#;
+        assert!(!agent_turn_ran(Host::Codex, codex_failed));
+        assert!(!agent_turn_ran(Host::Copilot, copilot_failed));
+        assert!(!agent_turn_ran(
+            Host::Claude,
+            r#"{"type":"system","subtype":"init"}"#
+        ));
+        assert!(agent_turn_ran(
+            Host::Codex,
+            r#"{"type":"item.completed","item":{"type":"agent_message"}}"#
+        ));
+        assert!(agent_turn_ran(
+            Host::Copilot,
+            r#"{"type":"assistant.turn_start"}"#
+        ));
+        assert!(agent_turn_ran(
+            Host::Claude,
+            r#"{"type":"assistant","message":{"content":[]}}"#
+        ));
     }
 }
