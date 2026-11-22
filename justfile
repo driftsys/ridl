@@ -1974,29 +1974,44 @@ doc-path-check root="":
     # it is not read for paths, so whatever it cites goes unchecked, and a gate
     # that loses coverage has to say where.
     scan_paths() {
-        local root="$1" broken=0 file target targets test_op
+        local root="$1" broken=0 file target targets tracked_files tracked_dirs
+        # A path resolves when a tracked file or a directory holding a tracked
+        # file has that name, not when it exists on disk: CI checks out only
+        # tracked files, and an ignored file left in a removed directory would
+        # keep a dead citation passing on a contributor's machine. The
+        # listing has to succeed, so a root that is not a repository fails
+        # instead of reporting every path as broken.
+        tracked_files="$(mktemp)"
+        tracked_dirs="$(mktemp)"
+        if ! list_files "$root" >"$tracked_files"; then
+            rm -f "$tracked_files" "$tracked_dirs"
+            echo "doc-path-check: git ls-files failed in '$root'; the tracked tree cannot be read." >&2
+            return 1
+        fi
+        # Every directory above a tracked file, spelled with a trailing slash.
+        awk '{ n = split($0, seg, "/"); path = ""; for (i = 1; i < n; i++) { path = path seg[i] "/"; print path } }' \
+            "$tracked_files" | sort -u >"$tracked_dirs"
         while IFS= read -r file; do
             if ! targets="$(extract_paths "$root/$file")"; then
                 echo "doc-path-check: cannot read '$file'." >&2
+                rm -f "$tracked_files" "$tracked_dirs"
                 return 1
             fi
             if [ -n "$targets" ]; then
                 while IFS= read -r target; do
-                    # A directory path has to name a directory; a file
-                    # path has to name anything that exists. While the
-                    # trailing slash is kept, `-e` on a directory path is
-                    # already false for a file, so `-d` gives the same
-                    # result; it is written out so that the rule does not
-                    # rest on how the system resolves `file/`.
+                    # A directory path has to name a tracked directory; a file
+                    # path has to name a tracked file or a tracked directory.
+                    # A directory is matched only through the form with a
+                    # trailing slash, so the rule does not rest on how the
+                    # system resolves `file/`.
                     if [ "${target%/}" != "$target" ]; then
-                        test_op=-d
+                        grep -qxF -- "$target" "$tracked_dirs" && continue
                     else
-                        test_op=-e
+                        grep -qxF -- "$target" "$tracked_files" && continue
+                        grep -qxF -- "$target/" "$tracked_dirs" && continue
                     fi
-                    if [ ! "$test_op" "$root/$target" ]; then
-                        echo "doc-path-check: $file -> $target" >&2
-                        broken=$((broken + 1))
-                    fi
+                    echo "doc-path-check: $file -> $target" >&2
+                    broken=$((broken + 1))
                 done <<<"$targets"
             elif [ -s "$root/$file" ] && ! grep -Iq -e '' "$root/$file"; then
                 # Nothing came back from a file that is not empty. `-e ''`
@@ -2007,6 +2022,7 @@ doc-path-check root="":
                 echo "doc-path-check: not text, so not scanned: $file" >&2
             fi
         done
+        rm -f "$tracked_files" "$tracked_dirs"
         if [ "$broken" -ne 0 ]; then
             echo "doc-path-check: $broken docs/ path(s) above do not resolve." >&2
             echo "doc-path-check: a path with an extension has to exist; a path ending with '/' has to be a directory." >&2
@@ -2170,6 +2186,13 @@ doc-path-check root="":
             "//! $d/design/cc-gone.md" > "$root/src/a.rs"
         printf '%s\n' "// $d/design/dd-gone.md" "// $d/design/" "// $d/design/ff-gone/" \
             "// $d/design/ee-file/" "// $d/design/aa-present.md/" > "$root/src/b.ridl"
+        # The scan resolves paths against the tracked tree, so each fixture
+        # root is a repository holding its files.
+        track() {
+            git_at "$1" -c init.defaultBranch=main -c init.templateDir= init -q
+            git_at "$1" -c core.excludesFile=/dev/null add -A
+        }
+        track "$root"
         report="$work/report"
         if printf '%s\n' src/a.rs src/b.ridl | scan_paths "$root" 2>"$report"; then
             echo "doc-path-check: the scan returned 0 over a fixture citing six paths that do not resolve:" >&2
@@ -2196,6 +2219,7 @@ doc-path-check root="":
         : > "$slashless/$d/design/ee-file"
         printf '%s\n' "// $d/design" "// $d/design." "// $d/design/ee-file" \
             "// $d/design/ee-file." "// $d/design/gone-dir" "// $d/design/gone-dir." > "$slashless/src/c.rs"
+        track "$slashless"
         if printf '%s\n' src/c.rs | scan_paths "$slashless" 2>"$report"; then
             echo "doc-path-check: the scan returned 0 over a fixture citing a missing path with no extension:" >&2
             cat "$report" >&2
@@ -2328,6 +2352,29 @@ doc-path-check root="":
             || ! grep -q -- "src/CHANGELOG.md -> $d/design/jj-gone.md" "$run" \
             || ! grep -q -- "^doc-path-check: $skip_archive, $skip_wip and $skip_changelog are not scanned" "$run"; then
             echo "doc-path-check: the gate did not report the broken paths in its fixture:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        # A path counts only when it is tracked. A directory and a file that
+        # exist on disk but are not tracked, which is what an ignored file
+        # left in a removed directory looks like, are cited from a tracked
+        # file, and the gate has to report both.
+        rm "$gate/src/broken.rs" "$gate/src/CHANGELOG.md"
+        git_at "$gate" -c core.excludesFile=/dev/null add -A
+        mkdir -p "$gate/$d/ghost"
+        : > "$gate/$d/ghost/leftover.md"
+        : > "$gate/$d/design/untracked.md"
+        printf '%s\n' "//! $d/ghost/ and $d/design/untracked.md" > "$gate/src/ghost.rs"
+        git_at "$gate" -c core.excludesFile=/dev/null add src/ghost.rs
+        if "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1; then
+            echo "doc-path-check: the gate returned 0 over citations of paths that are on disk but not tracked:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q -- "src/ghost.rs -> $d/ghost/\$" "$run" \
+            || ! grep -q -- "src/ghost.rs -> $d/design/untracked.md" "$run" \
+            || ! grep -q -- "^doc-path-check: 2 docs/ path" "$run"; then
+            echo "doc-path-check: the gate did not report the untracked paths in its fixture:" >&2
             cat "$run" >&2
             exit 1
         fi
