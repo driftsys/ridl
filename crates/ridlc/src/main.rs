@@ -7,6 +7,7 @@
 //! (warnings and info alone still exit 0), 1 when at least one error diagnostic
 //! is present, and 2 on an input/output or usage error.
 
+use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Duration;
@@ -102,7 +103,12 @@ fn main() -> ExitCode {
 fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     match run {
         Ok(run) => {
-            eprint!("{}", render(&run.diagnostics, &run.sources));
+            // A closed stderr reader must not change the exit code.
+            let _ = write!(
+                std::io::stderr(),
+                "{}",
+                render(&run.diagnostics, &run.sources)
+            );
             if run.usage_error {
                 ExitCode::from(2)
             } else if run.has_error() {
@@ -112,7 +118,7 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
             }
         }
         Err(err) => {
-            eprintln!("error: {err}");
+            let _ = writeln!(std::io::stderr(), "error: {err}");
             ExitCode::from(2)
         }
     }

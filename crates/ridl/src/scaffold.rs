@@ -63,7 +63,7 @@ pub fn run(request: &Request<'_>) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(message) => {
-            eprintln!("error: {message}");
+            errprintln!("error: {message}");
             ExitCode::from(2)
         }
     }

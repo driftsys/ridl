@@ -1,5 +1,7 @@
-//! Checked writes to stdout for command output.
+//! Checked writes to stdout for command output, and unchecked writes to stderr
+//! for messages.
 
+use std::fmt;
 use std::io::{self, Write};
 use std::process::ExitCode;
 
@@ -10,6 +12,30 @@ pub fn write(text: &str) -> Result<(), ExitCode> {
         let _ = writeln!(io::stderr(), "error: {err}");
         ExitCode::from(2)
     })
+}
+
+/// Writes formatted text to stderr and ignores a write error. A closed stderr
+/// reader (EPIPE) must not panic the way `eprint!` does, so the command keeps
+/// the exit code it intended.
+pub fn write_err(args: fmt::Arguments<'_>) {
+    let _ = io::stderr().write_fmt(args);
+}
+
+/// Like `eprint!`, but ignores a write error.
+macro_rules! errprint {
+    ($($arg:tt)*) => {
+        $crate::out::write_err(format_args!($($arg)*))
+    };
+}
+
+/// Like `eprintln!`, but ignores a write error.
+macro_rules! errprintln {
+    () => {
+        $crate::out::write_err(format_args!("\n"))
+    };
+    ($($arg:tt)*) => {
+        $crate::out::write_err(format_args!("{}\n", format_args!($($arg)*)))
+    };
 }
 
 fn write_to(out: &mut impl Write, text: &str) -> io::Result<()> {

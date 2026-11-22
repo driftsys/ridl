@@ -119,7 +119,7 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
     let mut output = match ridlc::compile_workspace(&mut db, path) {
         Ok(output) => output,
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
@@ -144,7 +144,7 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error);
     if has_error && !(editing && only_lock_orphans(&output.diagnostics)) {
-        eprint!("{}", render(&output.diagnostics, &output.sources));
+        errprint!("{}", render(&output.diagnostics, &output.sources));
         return ExitCode::FAILURE;
     }
 
@@ -159,7 +159,7 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
     let mut units = match locked_units(path, irs, output.report_scope.as_deref()) {
         Ok(units) => units,
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
@@ -205,7 +205,7 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
     } else {
         output.diagnostics
     };
-    eprint!("{}", render(&shown, &output.sources));
+    errprint!("{}", render(&shown, &output.sources));
     ExitCode::SUCCESS
 }
 
@@ -243,7 +243,7 @@ fn parse_flag_key(flag: &str, text: &str) -> Result<FlagKey, String> {
 
 /// A bad flag: exit 2 with the reason.
 fn usage_error(message: &str) -> ExitCode {
-    eprintln!("error: {message}");
+    errprintln!("error: {message}");
     ExitCode::from(2)
 }
 
@@ -361,7 +361,7 @@ impl InstanceSide<'_> {
     /// The lock as it is on disk: the empty table when there is no file.
     fn load(&self) -> Result<InstanceLock, ExitCode> {
         let fail = |message: String| {
-            eprintln!("error: {message}");
+            errprintln!("error: {message}");
             ExitCode::from(2)
         };
         let text = instance_lock::read(self.dir)
@@ -740,7 +740,7 @@ fn write_locks_with(
     mut rename: impl FnMut(&Path, &Path) -> std::io::Result<()>,
 ) -> Result<(), ExitCode> {
     let fail = |path: &Path, err: std::io::Error| {
-        eprintln!("error: cannot write {}: {err}", path.display());
+        errprintln!("error: cannot write {}: {err}", path.display());
         ExitCode::from(2)
     };
     let mut prepared = Vec::with_capacity(files.len());
@@ -859,7 +859,7 @@ fn merge_texts<K: TableKey>(
         match interface_lock::merge(&base_lock, &ours_lock, &theirs_lock, marker_size) {
             MergeOutcome::Clean(merged) => (merged.render(), ExitCode::SUCCESS),
             MergeOutcome::Exhausted => {
-                eprintln!(
+                errprintln!(
                     "error: {}: {} has no number left to renumber THEIRS entry",
                     ours_path.display(),
                     K::FILE_NAME
@@ -867,7 +867,7 @@ fn merge_texts<K: TableKey>(
                 return ExitCode::from(2);
             }
             MergeOutcome::Conflict { text } => {
-                eprintln!(
+                errprintln!(
                     "error: {}: the two sides disagree; the disagreeing entries are between git \
                  conflict markers, and the file is malformed ({code}) until they are resolved \
                  by hand",
@@ -886,7 +886,7 @@ fn merge_texts<K: TableKey>(
 /// reason.
 fn read_text(path: &Path) -> Result<String, ExitCode> {
     std::fs::read_to_string(path).map_err(|err| {
-        eprintln!("error: cannot read {}: {err}", path.display());
+        errprintln!("error: cannot read {}: {err}", path.display());
         ExitCode::from(2)
     })
 }
@@ -902,7 +902,7 @@ fn parse_side<K: TableKey>(
         return Ok(LockTable::default());
     }
     interface_lock::parse_table(text).map_err(|err| {
-        eprintln!(
+        errprintln!(
             "error: {}:{}: {}",
             path.display(),
             line_of(text, err.range),

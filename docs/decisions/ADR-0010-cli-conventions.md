@@ -51,6 +51,12 @@ written to stdout, and when lock merge renumbering exhausts the available
 numbers. `crates/ridl/tests/closed_stdout.rs` and
 `crates/ridl/tests/lock_merge.rs` verify these outcomes.
 
+Amended 2026-11-22: a failed write to stderr, such as a closed pipe, is ignored,
+so a command returns the exit code it intended instead of panicking with 101.
+`crates/ridl/tests/closed_stderr.rs` verifies this for `ridl check`,
+`ridl describe` and `ridl fmt`, and `crates/ridlc/tests/closed_stderr.rs` for
+`ridlc check`.
+
 Amended 2026-11-11: driftsys/ridl#196 is closed. Decision 6, the Context
 paragraph and the Positive and Negative consequences that cite it record the
 state on 2026-07-27. `crates/ridl/tests/unreadable_paths.rs` now verifies that

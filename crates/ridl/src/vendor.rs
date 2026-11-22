@@ -43,7 +43,7 @@ pub fn run(path: &Path) -> ExitCode {
     ) {
         Ok(output) => output,
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
@@ -66,14 +66,14 @@ pub fn run(path: &Path) -> ExitCode {
         None
     };
     if let Some(code) = refused {
-        eprint!("{}", render(&output.diagnostics, &output.sources));
+        errprint!("{}", render(&output.diagnostics, &output.sources));
         return code;
     }
     let report = match write_vendor(&root, &output.remote_units) {
         Ok(report) => report,
         Err(err) => {
-            eprint!("{}", render(&output.diagnostics, &output.sources));
-            eprintln!(
+            errprint!("{}", render(&output.diagnostics, &output.sources));
+            errprintln!(
                 "error: cannot write `{}`: {err}",
                 root.join(VENDOR_DIR).display()
             );
@@ -95,7 +95,7 @@ pub fn run(path: &Path) -> ExitCode {
                 .path(diagnostic.primary.file)
                 .is_some_and(|path| removed.iter().any(|dir| Path::new(path).starts_with(dir)))
     });
-    eprint!("{}", render(&output.diagnostics, &output.sources));
+    errprint!("{}", render(&output.diagnostics, &output.sources));
     for name in &report.written {
         if let Err(code) = crate::out::write(&format!("vendored {name}\n")) {
             return code;
@@ -132,7 +132,7 @@ pub fn run_check(path: &Path) -> ExitCode {
     let loaded = match load_workspace(&mut db, &root) {
         Ok(loaded) => loaded,
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
@@ -140,7 +140,7 @@ pub fn run_check(path: &Path) -> ExitCode {
     let (lock, lock_diagnostics) = read_lockfile(&root.join("ridl.lock"));
     diagnostics.extend(lock_diagnostics);
     diagnostics.extend(check_vendor(&root, &loaded.imports, lock.as_ref()));
-    eprint!("{}", render(&diagnostics, &loaded.sources));
+    errprint!("{}", render(&diagnostics, &loaded.sources));
     if diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error)
@@ -157,11 +157,11 @@ pub fn run_check(path: &Path) -> ExitCode {
 /// otherwise walk up from it and act on the project around it.
 fn root_of(path: &Path) -> Result<PathBuf, ExitCode> {
     if !path.exists() {
-        eprintln!("error: `{}` does not exist", path.display());
+        errprintln!("error: `{}` does not exist", path.display());
         return Err(ExitCode::from(2));
     }
     manifest_root(path).ok_or_else(|| {
-        eprintln!(
+        errprintln!(
             "error: no `ridl.toml` found at or above `{}`",
             path.display()
         );

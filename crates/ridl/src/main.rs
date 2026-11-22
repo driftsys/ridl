@@ -48,10 +48,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+#[macro_use]
+mod out;
 mod baseline;
 mod catalogs;
 mod lock;
-mod out;
 mod podbuf_padding;
 mod property;
 mod scaffold;
@@ -426,7 +427,7 @@ fn main() -> ExitCode {
             None => match (old, new) {
                 (Some(old), Some(new)) => run_diff(&old, &new, format, &encoding),
                 _ => {
-                    eprintln!(
+                    errprintln!(
                         "error: `ridl diff` needs both an old and a new input, \
                          or `--explain <CATEGORY>`"
                     );
@@ -491,7 +492,7 @@ fn run_describe(path: &Path) -> ExitCode {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(err) => {
-            eprintln!("error: {}: {err}", path.display());
+            errprintln!("error: {}: {err}", path.display());
             return ExitCode::from(2);
         }
     };
@@ -504,7 +505,7 @@ fn run_describe(path: &Path) -> ExitCode {
         let deployment = match ridl_descriptor::deployment::verify(&bytes) {
             Ok(deployment) => deployment,
             Err(err) => {
-                eprintln!("error: {}: {err}", path.display());
+                errprintln!("error: {}: {err}", path.display());
                 return ExitCode::from(2);
             }
         };
@@ -516,7 +517,7 @@ fn run_describe(path: &Path) -> ExitCode {
         let catalog = match ridl_descriptor::verify(&bytes) {
             Ok(catalog) => catalog,
             Err(err) => {
-                eprintln!("error: {}: {err}", path.display());
+                errprintln!("error: {}: {err}", path.display());
                 return ExitCode::from(2);
             }
         };
@@ -544,7 +545,10 @@ fn run_describe(path: &Path) -> ExitCode {
             }
         }
         Err(err) => {
-            eprintln!("error: {}: {kind} is malformed: {err}", path.display());
+            errprintln!(
+                "error: {}: the verified {kind} cannot be rendered as JSON: {err}",
+                path.display()
+            );
             ExitCode::from(2)
         }
     }
@@ -563,18 +567,18 @@ fn run_lsp() -> ExitCode {
     {
         Ok(end) => end,
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
     if let Err(err) = io_threads.join() {
-        eprintln!("error: {err}");
+        errprintln!("error: {err}");
         return ExitCode::from(2);
     }
     match end {
         ridl_lsp::server::SessionEnd::Shutdown => ExitCode::SUCCESS,
         ridl_lsp::server::SessionEnd::WithoutShutdown => {
-            eprintln!("error: the client ended the session without a `shutdown` request");
+            errprintln!("error: the client ended the session without a `shutdown` request");
             ExitCode::from(1)
         }
     }
@@ -590,7 +594,7 @@ fn run_mcp() -> ExitCode {
     {
         Ok(runtime) => runtime,
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
@@ -599,7 +603,7 @@ fn run_mcp() -> ExitCode {
     )))) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             ExitCode::from(2)
         }
     }
@@ -622,10 +626,10 @@ fn run_explain(category: &str) -> ExitCode {
             ExitCode::SUCCESS
         }
         None => {
-            eprintln!("error: unknown change category `{category}`");
-            eprintln!("the categories `ridl diff` reports are:");
+            errprintln!("error: unknown change category `{category}`");
+            errprintln!("the categories `ridl diff` reports are:");
             for known in ridl_diff::CATEGORIES {
-                eprintln!("  {}", ridl_diff::category_word(known));
+                errprintln!("  {}", ridl_diff::category_word(known));
             }
             ExitCode::from(2)
         }
@@ -668,7 +672,7 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncodin
     ) {
         Ok(report) => report,
         Err(error) => {
-            eprintln!(
+            errprintln!(
                 "error: cannot establish podbuf compatibility: {error}\n\
 Repair context only from the exact historical local snapshots and verified historical remote pins: ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE.\n\
 To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility for the whole baseline. It retains the normal publication refusal checks except for a whole unit removed on purpose. BASELINE is the affected snapshot input named by the old or new context issue."
@@ -678,7 +682,7 @@ To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out B
                 .iter()
                 .any(|issue| issue.side == ridl_diff::ContextSide::New)
             {
-                eprintln!(
+                errprintln!(
                     "For missing or unusable candidate evidence, compare its source path or an enriched snapshot directory."
                 );
             }
@@ -706,8 +710,8 @@ fn report_diff_side_error(error: ridlc::DiffSideError) -> ExitCode {
         ridlc::DiffSideError::Compile {
             diagnostics,
             sources,
-        } => eprint!("{}", render(&diagnostics, &sources)),
-        error => eprintln!("error: {error}"),
+        } => errprint!("{}", render(&diagnostics, &sources)),
+        error => errprintln!("error: {error}"),
     }
     ExitCode::from(2)
 }
@@ -790,7 +794,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     let (mut run, ir) = match ridlc::run_check_unlevelled(path, frozen.into()) {
         Ok(run) => run,
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
@@ -933,18 +937,18 @@ fn run_baseline(
     let out_dir = match std::path::absolute(out_dir) {
         Ok(out_dir) => out_dir,
         Err(err) => {
-            eprintln!("error: cannot resolve baseline output: {err}");
+            errprintln!("error: cannot resolve baseline output: {err}");
             return ExitCode::from(2);
         }
     };
     if let Err(err) = ridlc::baseline_context::refuse_interrupted_publication(&out_dir) {
-        eprintln!("error: {err}");
+        errprintln!("error: {err}");
         return ExitCode::from(2);
     }
     let staging = match baseline::reserve_staging(&out_dir) {
         Ok(staging) => staging,
         Err(err) => {
-            eprintln!(
+            errprintln!(
                 "error: cannot reserve baseline staging beside {}: {err}",
                 out_dir.display()
             );
@@ -986,7 +990,7 @@ fn run_baseline(
         Ok(run) => run,
         Err(err) => {
             let _ = std::fs::remove_dir_all(&staging);
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
@@ -1023,10 +1027,10 @@ fn run_baseline(
             baseline::prepare_repair(&out_dir, &staging, &sets.published, &sets.fresh, &context)
         {
             let _ = std::fs::remove_dir_all(&staging);
-            eprintln!("error: cannot repair historical baseline: {err}");
+            errprintln!("error: cannot repair historical baseline: {err}");
             return ExitCode::from(2);
         }
-        eprintln!(
+        errprintln!(
             "note: repair relies on the operator supplying the original historical source checkout and lockfile; frozen verification confirms the declared pins, but legacy snapshots cannot prove their historical provenance"
         );
     }
@@ -1074,7 +1078,7 @@ fn run_baseline(
         }
     };
     if let Err(err) = publish_baseline(&staging, &out_dir, preserve) {
-        eprintln!(
+        errprintln!(
             "error: cannot publish the baseline to {}: {err}; staged files remain at {}",
             out_dir.display(),
             staging.display()
@@ -1083,7 +1087,7 @@ fn run_baseline(
     }
 
     for note in reset_notes {
-        eprintln!("note: {note}");
+        errprintln!("note: {note}");
     }
     finish(Ok(run))
 }
@@ -1658,7 +1662,7 @@ fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf
         // stay `.ir.json` (ADR-0014 decision 5) — before the snapshot loader
         // can report it as malformed JSON, which misdiagnoses the mistake.
         Some(explicit) if is_non_json_ir(explicit) => {
-            eprintln!(
+            errprintln!(
                 "error: the baseline `{}` is not an `.ir.json` snapshot: a baseline stays \
                  `.ir.json` (ADR-0014 decision 5); publish one with `ridl baseline`",
                 explicit.display()
@@ -1667,7 +1671,7 @@ fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf
         }
         Some(explicit) if explicit.exists() => Ok(Some(explicit.to_path_buf())),
         Some(explicit) => {
-            eprintln!(
+            errprintln!(
                 "error: the baseline `{}` does not exist",
                 explicit.display()
             );
@@ -2657,7 +2661,7 @@ fn baseline_position(change: &ridl_diff::Change, word: &str) -> String {
 fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
         if let Err(err) = ridlc::baseline_context::refuse_interrupted_publication(location) {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             return Err(ExitCode::from(2));
         }
         let snapshots = snapshot_files(location).map_err(report_diff_side_error)?;
@@ -2720,7 +2724,7 @@ fn refuse_empty_baseline(location: &Path) -> ExitCode {
             location.display(),
         )
     };
-    eprintln!(
+    errprintln!(
         "error: the baseline `{}` holds no `.ir.json` snapshot directly inside it; point \
          `--baseline` at the directory that holds the snapshots (`ridl baseline` publishes \
          them to `.ridl/baseline/` at the workspace root){publish_clause}",
@@ -2745,7 +2749,7 @@ fn refuse_empty_baseline(location: &Path) -> ExitCode {
 /// `nested` is the subdirectory the message names; `remedy` finishes the
 /// message with the path the calling command should have been given.
 fn refuse_nested_snapshot_directory(dir: &Path, nested: &Path, remedy: &str) -> ExitCode {
-    eprintln!(
+    errprintln!(
         "error: {}: no `.ir.json` snapshot directly inside, but the subdirectory `{}` holds one; \
          snapshots are read from one directory, never from the directories below it; {remedy}",
         dir.display(),
@@ -2763,7 +2767,7 @@ fn refuse_nested_snapshot_directory(dir: &Path, nested: &Path, remedy: &str) -> 
 /// `witness` is the artifact the message names; `expectation` finishes the
 /// message with what the calling command accepts and the remedy.
 fn refuse_artifact_directory(dir: &Path, witness: &Path, expectation: &str) -> ExitCode {
-    eprintln!(
+    errprintln!(
         "error: {}: the directory holds IR artifacts (`{}`) but no `.ir.json` snapshot; \
          {expectation}",
         dir.display(),
@@ -2813,7 +2817,7 @@ fn load_published(out_dir: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode>
     let mut first_file_of: BTreeMap<&str, &Path> = BTreeMap::new();
     for (file, package) in files.iter().zip(&packages) {
         if let Some(first) = first_file_of.insert(&package.name, file) {
-            eprintln!(
+            errprintln!(
                 "error: two published snapshots declare the package `{}`: `{}` and `{}`; both \
                  files are left as they are, because the gate cannot tell which one is the \
                  published record. Remove the copy that is not the published record (restore \
@@ -2851,11 +2855,11 @@ fn load_snapshots(
             Ok(package) => packages.push(package),
             Err(err @ ridl_diff::LoadError::Parse(_)) => {
                 let remedy = parse_remedy.map_or(String::new(), |remedy| format!("; {remedy}"));
-                eprintln!("error: {}: {err}{remedy}", file.display());
+                errprintln!("error: {}: {err}{remedy}", file.display());
                 return Err(ExitCode::from(2));
             }
             Err(err) => {
-                eprintln!("error: {}: {err}", file.display());
+                errprintln!("error: {}: {err}", file.display());
                 return Err(ExitCode::from(2));
             }
         }
@@ -3320,11 +3324,11 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
 fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     match run {
         Ok(run) => {
-            eprint!("{}", render(&run.diagnostics, &run.sources));
+            errprint!("{}", render(&run.diagnostics, &run.sources));
             exit_code(&run)
         }
         Err(err) => {
-            eprintln!("error: {err}");
+            errprintln!("error: {err}");
             ExitCode::from(2)
         }
     }
@@ -3348,7 +3352,7 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
     let mut any_broken = false;
 
     if is_under_vendor(path) {
-        eprintln!(
+        errprintln!(
             "error: `{}` is under `vendor/`, which `ridl fmt` never formats: a vendored unit is its owner's",
             path.display()
         );
@@ -3357,7 +3361,7 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
     let files = match collect_source_files(path) {
         Ok(files) => files,
         Err((dir, err)) => {
-            eprintln!("error: cannot read {}: {err}", dir.display());
+            errprintln!("error: cannot read {}: {err}", dir.display());
             return ExitCode::from(2);
         }
     };
@@ -3366,7 +3370,7 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
         let text = match std::fs::read_to_string(&file) {
             Ok(text) => text,
             Err(err) => {
-                eprintln!("error: cannot read {}: {err}", file.display());
+                errprintln!("error: cannot read {}: {err}", file.display());
                 return ExitCode::from(2);
             }
         };
@@ -3376,7 +3380,7 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
                 if formatted != text {
                     any_would_change = true;
                     if !check && let Err(err) = std::fs::write(&file, &formatted) {
-                        eprintln!("error: cannot write {}: {err}", file.display());
+                        errprintln!("error: cannot write {}: {err}", file.display());
                         return ExitCode::from(2);
                     }
                 }
@@ -3391,7 +3395,7 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
         }
     }
 
-    eprint!("{}", render(&diagnostics, &sources));
+    errprint!("{}", render(&diagnostics, &sources));
     if any_broken || (check && any_would_change) {
         ExitCode::FAILURE
     } else {

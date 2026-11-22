@@ -3102,10 +3102,12 @@ use at all, including `ridl fmt`'s missing or unreadable path since
 above. A failed write of a command's report to stdout, for example when a reader
 has closed the pipe, is also exit 2 for every subcommand that writes to stdout,
 other than the stdio transports of `ridl lsp` and `ridl mcp`, which their own
-sections describe. Help and version output are not covered by this rule. A
-`clap`-level usage error — a missing required argument, an unrecognized flag, or
-no subcommand at all — is also exit 2 on both binaries, which happens to agree
-with the applications' own convention rather than being one of their exit paths:
+sections describe. A failed write to stderr, for example when a reader has
+closed the pipe, is ignored and never changes the exit code. Help and version
+output are not covered by this rule. A `clap`-level usage error — a missing
+required argument, an unrecognized flag, or no subcommand at all — is also exit
+2 on both binaries, which happens to agree with the applications' own convention
+rather than being one of their exit paths:
 
 ```sh
 ridl check --bogus-flag
