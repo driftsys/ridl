@@ -44,6 +44,10 @@
 //! that is not a source (`ridlc` gains no `lock` subcommand); the compile it
 //! runs first is `ridlc`'s own.
 
+// Every message goes through `out`, which ignores a closed pipe instead of
+// panicking.
+#![deny(clippy::print_stderr, clippy::print_stdout)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

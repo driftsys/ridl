@@ -7,6 +7,9 @@
 //! (warnings and info alone still exit 0), 1 when at least one error diagnostic
 //! is present, and 2 on an input/output or usage error.
 
+// A write to a closed pipe must not panic, so no print macro is used.
+#![deny(clippy::print_stderr, clippy::print_stdout)]
+
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
