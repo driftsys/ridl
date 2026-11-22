@@ -45,8 +45,8 @@ records the decisions taken when the skill and its evals were built:
   applies to `rsdl` alone.
 
 Accepted 2026-11-22 by the maintainer. The acceptance leaves the judge check and
-the release record of ADR-0035 decisions 11 and 12 deferred; that record
-describes why.
+the release record of ADR-0035 decisions 11 and 12 deferred; ADR-0035's status
+gives the conditions.
 
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept
@@ -330,7 +330,7 @@ Agent enablement is not a separate program; it rides the existing phases:
   is marked against a rubric by a judge model of the other vendor
   ([ADR-0035](ADR-0035-authoring-skill-and-evals.md) decision 10). The judge is
   checked once against the maintainer's labels; that check is deferred (ADR-0035
-  status, driftsys/ridl#1401).
+  status, driftsys/ridl#1440).
 - **Rules-file portability.** One canonical rules text, N host formats — define
   the generator (or hand-maintain until a second host actually demands it).
 

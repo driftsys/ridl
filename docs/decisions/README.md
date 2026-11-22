@@ -739,7 +739,7 @@ other entry below is Accepted.
   distribute it; and `cargo xtask eval` compares an agent with and without it,
   scored mechanically and then against a rubric by a judge of the other vendor.
   The judge check and the release record are decided but deferred
-  (driftsys/ridl#1401). Amends ADR-0005 §2, §5 and §7 and adds a dated amendment
+  (driftsys/ridl#1440). Amends ADR-0005 §2, §5 and §7 and adds a dated amendment
   to ADR-0027.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
