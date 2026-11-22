@@ -1313,7 +1313,7 @@ book-check root="":
     # The fixture. It builds books of its own and runs this recipe over each
     # as a child process, given a root, which is the form that runs the gate
     # and nothing else. It runs no git command, so the git environment a hook
-    # exports does not reach it. Twelve cases:
+    # exports does not reach it. Fifteen cases:
     #
     # 1. A whole book, whose chapters all exist. The gate has to pass.
     # 2. A chapter that includes a file that does not exist. mdBook logs an
@@ -1358,6 +1358,16 @@ book-check root="":
     #     `.ridl` source under examples/. The gate has to pass: a line range
     #     and a whole-file include name no anchor, and the copy carries the
     #     `.ridl` source.
+    # 13. The book from case 1, built with a stand-in `mdbook` that creates a
+    #     file that is not Markdown under the copy's docs/ and then runs the
+    #     real mdbook. The gate has to fail and name the file, which pins that
+    #     check 3 compares every file and not only `.md` files.
+    # 14. Cases 2 and 3 again, with their detail lines asserted: the gate has
+    #     to print mdBook's own log of the broken include, and the text of the
+    #     surviving directive, and not only its fixed summary line.
+    # 15. The book from case 1, built with a stand-in `mdbook` that logs an
+    #     `ERROR` line other than the include-update one and exits 0. The gate
+    #     has to fail, which pins that check 1 reads every `ERROR` line.
     fixtures() (
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
@@ -1391,6 +1401,12 @@ book-check root="":
             cat "$run" >&2
             exit 1
         fi
+        # Case 14, first half: the log itself is printed, not only the summary.
+        if ! grep -q 'missing-target.md' "$run"; then
+            echo "book-check: the gate did not print mdBook's log of the broken include:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
 
         # Case 3: a chapter carrying a directive mdBook does not recognise.
         # mdBook logs no `ERROR` for this one, so it pins check 2 on its own.
@@ -1411,6 +1427,12 @@ book-check root="":
         fi
         if ! grep -q 'directive survived into the rendered output' "$run"; then
             echo "book-check: the gate did not report the surviving directive:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        # Case 14, second half: the directive's own text is listed.
+        if ! grep -q 'nosuchdirective foo' "$run"; then
+            echo "book-check: the gate did not list the text of the surviving directive:" >&2
             cat "$run" >&2
             exit 1
         fi
@@ -1567,6 +1589,45 @@ book-check root="":
             cat "$run" >&2
             exit 1
         fi
+
+        # Cases 13 and 15: a stand-in `mdbook`, placed first on PATH, adds to
+        # the build and then runs the real mdbook. $2 is the directory given
+        # to `mdbook build`, which is the gate's copy of the book.
+        for variant in file error; do
+            standin_book="$work/standin-$variant"
+            mkdir -p "$standin_book/docs/book"
+            printf '%s\n' '[book]' 'title = "standin"' 'src = "docs/book"' > "$standin_book/book.toml"
+            printf '%s\n' '# Summary' '' '- [Present](present.md)' > "$standin_book/docs/book/SUMMARY.md"
+            printf '%s\n' '# Present' > "$standin_book/docs/book/present.md"
+            standin_bin="$work/bin-$variant"
+            mkdir -p "$standin_bin"
+            if [ "$variant" = file ]; then
+                action='touch "$2/docs/created-by-mdbook.txt"'
+            else
+                action='echo "ERROR a failure that is not an include update" >&2'
+            fi
+            printf '%s\n' \
+                '#!/usr/bin/env bash' \
+                "$action" \
+                "exec '$real_mdbook' \"\$@\"" \
+                > "$standin_bin/mdbook"
+            chmod +x "$standin_bin/mdbook"
+            if PATH="$standin_bin:$PATH" "{{just_executable()}}" book-check "$standin_book" >"$run" 2>&1; then
+                echo "book-check: the gate returned 0 over a build that added a $variant case:" >&2
+                cat "$run" >&2
+                exit 1
+            fi
+            if [ "$variant" = file ]; then
+                expected_report="$d/created-by-mdbook.txt"
+            else
+                expected_report="mdBook reported the error above"
+            fi
+            if ! grep -q -- "$expected_report" "$run"; then
+                echo "book-check: the gate did not report the $variant case with '$expected_report':" >&2
+                cat "$run" >&2
+                exit 1
+            fi
+        done
     )
     # One call site, so the fixture above and the real run take the same line.
     root=.
