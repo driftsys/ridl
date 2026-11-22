@@ -945,6 +945,15 @@ fn run_baseline(
             return ExitCode::from(2);
         }
     };
+    // The entry is probed before the publication marker, whose own check
+    // fails with the same permission error when an ancestor of the entry
+    // cannot be searched and would then name the marker instead of the
+    // directory (driftsys/ridl#1320). An absent entry is left to the compile,
+    // which reports it.
+    if let Err(err) = ridl_core::fs_probe::exists(path) {
+        errprintln!("error: cannot read `{}`: {err}", path.display());
+        return ExitCode::from(2);
+    }
     if let Err(err) = ridlc::baseline_context::refuse_interrupted_publication(&out_dir) {
         errprintln!("error: {err}");
         return ExitCode::from(2);
@@ -1118,7 +1127,11 @@ impl PublicationSets {
     /// staged side second, so the first error reported is the one the gates
     /// reported when each read its own sets.
     fn load(out_dir: &Path, staging: &Path) -> Result<Self, ExitCode> {
-        let published = if out_dir.is_dir() {
+        let published_dir = ridl_core::fs_probe::is_dir(out_dir).map_err(|err| {
+            errprintln!("error: cannot read `{}`: {err}", out_dir.display());
+            ExitCode::from(2)
+        })?;
+        let published = if published_dir {
             load_published(out_dir)?
         } else {
             Vec::new()
@@ -1673,17 +1686,32 @@ fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf
             );
             Err(ExitCode::from(2))
         }
-        Some(explicit) if explicit.exists() => Ok(Some(explicit.to_path_buf())),
-        Some(explicit) => {
-            errprintln!(
-                "error: the baseline `{}` does not exist",
-                explicit.display()
-            );
-            Err(ExitCode::from(2))
-        }
+        Some(explicit) => match ridl_core::fs_probe::exists(explicit) {
+            Ok(true) => Ok(Some(explicit.to_path_buf())),
+            Ok(false) => {
+                errprintln!(
+                    "error: the baseline `{}` does not exist",
+                    explicit.display()
+                );
+                Err(ExitCode::from(2))
+            }
+            Err(err) => {
+                errprintln!(
+                    "error: cannot read the baseline `{}`: {err}",
+                    explicit.display()
+                );
+                Err(ExitCode::from(2))
+            }
+        },
         None => {
             let default = default_baseline_dir(entry);
-            Ok(default.is_dir().then_some(default))
+            match ridl_core::fs_probe::is_dir(&default) {
+                Ok(found) => Ok(found.then_some(default)),
+                Err(err) => {
+                    errprintln!("error: cannot read `{}`: {err}", default.display());
+                    Err(ExitCode::from(2))
+                }
+            }
         }
     }
 }
@@ -3420,6 +3448,8 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
 /// "absent" or "unreadable" any other way, and treating those as zero files
 /// is what let `ridl fmt` report success over a tree it never read.
 fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::Error)> {
+    // A failed type probe of `path` itself is not hidden by `is_file`: the
+    // `read_dir` below fails on the same path and reports it.
     if path.is_file() {
         return Ok(vec![path.to_path_buf()]);
     }
@@ -3429,7 +3459,7 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
         let entries = std::fs::read_dir(&dir).map_err(|err| (dir.clone(), err))?;
         for entry in entries.flatten() {
             let child = entry.path();
-            if child.is_dir() {
+            if ridl_core::fs_probe::is_dir(&child).map_err(|err| (child.clone(), err))? {
                 let hidden = child
                     .file_name()
                     .and_then(|name| name.to_str())
@@ -3458,6 +3488,19 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A published directory whose type cannot be read (a symbolic link loop)
+    /// is an error, not an empty published set (driftsys/ridl#1320).
+    #[cfg(unix)]
+    #[test]
+    fn the_publication_sets_report_an_output_directory_that_cannot_be_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out");
+        std::os::unix::fs::symlink("out", &out).unwrap();
+        let staging = dir.path().join("staging");
+        std::fs::create_dir(&staging).unwrap();
+        assert!(PublicationSets::load(&out, &staging).is_err());
+    }
 
     /// Historical IR can hold two shapes under one name even though current
     /// source declarations cannot. Search both for the retired interaction.

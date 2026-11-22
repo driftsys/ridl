@@ -1,5 +1,7 @@
 //! A path that cannot be read is reported with the operating system's cause
-//! and the path that failed (driftsys/ridl#196). The exit code stays 2.
+//! and the path that failed (driftsys/ridl#196, driftsys/ridl#1320). The exit
+//! code stays 2. A path whose type cannot be read is never reported as absent;
+//! the probes that decide this are `ridl_core::fs_probe`.
 //!
 //! Unix only: the fixtures use `chmod 000`, which does not bind the root user,
 //! so every test that uses it returns early when it runs as root. Tests that
@@ -256,7 +258,7 @@ fn an_unreadable_ancestor_of_the_entry_is_named_with_the_os_error() {
         let (code, stderr) = run(RIDL, args, &entry);
         assert_eq!(code, 2, "ridl {args:?}: {stderr}");
         assert!(
-            stderr.contains(&entry.display().to_string()),
+            stderr.contains(&format!("cannot read `{}`", entry.display())),
             "ridl {args:?} names the entry: {stderr}"
         );
         assert!(
@@ -267,7 +269,112 @@ fn an_unreadable_ancestor_of_the_entry_is_named_with_the_os_error() {
             !stderr.contains("does not exist"),
             "ridl {args:?} does not claim the entry is missing: {stderr}"
         );
+        assert!(
+            !stderr.contains("publication"),
+            "ridl {args:?} does not report a baseline-publication marker: {stderr}"
+        );
     }
+}
+
+/// An explicit `--baseline` below an unreadable directory is unreadable, not
+/// absent (driftsys/ridl#1320).
+#[test]
+fn an_explicit_baseline_below_an_unreadable_directory_is_not_reported_missing() {
+    if skip_as_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("baseline-flag");
+    let package = fixture.root.join("pkg");
+    std::fs::create_dir_all(&package).unwrap();
+    std::fs::write(package.join("ridl.toml"), MANIFEST).unwrap();
+    std::fs::write(package.join("a.ridl"), SOURCE).unwrap();
+    let locked = fixture.root.join("locked");
+    std::fs::create_dir_all(locked.join("base")).unwrap();
+    fixture.lock_down(&locked);
+    let baseline = locked.join("base");
+    let output = Command::new(RIDL)
+        .args(["check", "--baseline"])
+        .arg(&baseline)
+        .arg(&package)
+        .output()
+        .expect("the binary must run");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "cannot read the baseline `{}`",
+            baseline.display()
+        )),
+        "the baseline is named: {stderr}"
+    );
+    assert!(stderr.contains("Permission denied"), "the cause: {stderr}");
+    assert!(!stderr.contains("does not exist"), "not absent: {stderr}");
+}
+
+/// An auto-discovered `.ridl/baseline` whose type cannot be read (a symbolic
+/// link loop) is an error, not a missing baseline that `ridl check` skips
+/// (driftsys/ridl#1320). The exit code was 0 before.
+#[test]
+fn an_auto_discovered_baseline_that_cannot_be_read_is_an_error() {
+    let fixture = Fixture::new("baseline-auto");
+    std::fs::write(fixture.root.join("ridl.toml"), MANIFEST).unwrap();
+    std::fs::write(fixture.root.join("a.ridl"), SOURCE).unwrap();
+    let ridl_dir = fixture.root.join(".ridl");
+    std::fs::create_dir(&ridl_dir).unwrap();
+    let baseline = ridl_dir.join("baseline");
+    std::os::unix::fs::symlink("baseline", &baseline).unwrap();
+    let (code, stderr) = run(RIDL, &["check"], &fixture.root);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(
+        stderr.contains(&format!("cannot read `{}`", baseline.display())),
+        "names the baseline directory: {stderr}"
+    );
+}
+
+/// `ridl vendor` over a path below an unreadable directory names the
+/// directory failure instead of claiming the path is missing.
+#[test]
+fn vendor_below_an_unreadable_directory_is_not_reported_missing() {
+    if skip_as_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("vendor-ancestor");
+    let ancestor = fixture.root.join("anc");
+    let entry = ancestor.join("pkg");
+    std::fs::create_dir_all(&entry).unwrap();
+    std::fs::write(entry.join("ridl.toml"), MANIFEST).unwrap();
+    fixture.lock_down(&ancestor);
+    let (code, stderr) = run(RIDL, &["vendor"], &entry);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(
+        stderr.contains(&format!("cannot read `{}`", entry.display())),
+        "names the path: {stderr}"
+    );
+    assert!(stderr.contains("Permission denied"), "the cause: {stderr}");
+    assert!(!stderr.contains("does not exist"), "not absent: {stderr}");
+}
+
+/// A directory that can be listed but not searched (mode 0444) holds entries
+/// whose type cannot be read. `ridl fmt` reports the first one instead of
+/// skipping it as if it were a file.
+#[test]
+fn fmt_reports_an_entry_whose_type_cannot_be_read() {
+    if skip_as_root() {
+        return;
+    }
+    let mut fixture = Fixture::new("fmt-unsearchable");
+    let sub = fixture.root.join("sub");
+    std::fs::create_dir_all(sub.join("deep")).unwrap();
+    std::fs::write(sub.join("deep").join("a.ridl"), SOURCE).unwrap();
+    std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o444)).unwrap();
+    fixture.restore.push(sub.clone());
+    let (code, stderr) = run(RIDL, &["fmt", "--check"], &fixture.root);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(
+        stderr.contains(&sub.join("deep").display().to_string()),
+        "names the entry: {stderr}"
+    );
+    assert!(stderr.contains("Permission denied"), "the cause: {stderr}");
 }
 
 #[test]

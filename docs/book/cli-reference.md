@@ -326,7 +326,9 @@ a `ridl.toml`, or a `.typl`, `.ridl` or `.rsdl` file, directly inside it — sin
 publishing a baseline there would write snapshots next to the sources.
 Auto-discovery asserts nothing about a baseline being present, so a
 `.ridl/baseline/` directory found this way, empty or absent, keeps the silent
-skip the two paragraphs above do not touch.
+skip the two paragraphs above do not touch. A `.ridl/baseline/` whose type
+cannot be read — a permission error, or a symbolic link loop — is not absent:
+`ridl check` names it with the operating system cause and exits 2.
 
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares the
@@ -1715,11 +1717,11 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-For `ridl check`, `ridl build` and `ridl test`, an unreadable workspace root or
-subdirectory also reports the path and operating system cause. `ridl baseline`
-over an unreadable directory (the root, or an ancestor of the entry) reports an
-unreadable baseline-publication marker instead of the directory
-(driftsys/ridl#1320).
+For `ridl check`, `ridl build`, `ridl baseline` and `ridl test`, an unreadable
+workspace root, subdirectory or ancestor of the entry also reports the path and
+operating system cause. A path whose type cannot be read is never reported as
+absent: `--baseline`, `ridl vendor` and the `ridl fmt` walk name the path and
+the cause, and only a path that does not exist is reported as missing.
 
 ### `ridl diff`
 

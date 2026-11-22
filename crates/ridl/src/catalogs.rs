@@ -289,7 +289,11 @@ impl Judgment {
 /// [`read_history_if_present`] reports it; a directory entry that cannot be
 /// read is an error (exit 2).
 fn holds_history_and_snapshot(dir: &Path) -> Result<bool, ExitCode> {
-    if !dir.is_dir() {
+    let is_dir = ridl_core::fs_probe::is_dir(dir).map_err(|err| {
+        errprintln!("error: cannot read {}: {err}", dir.display());
+        ExitCode::from(2)
+    })?;
+    if !is_dir {
         return Ok(false);
     }
     let entries = ridlc::diff_side::files_matching_strict(dir, |_| true).map_err(|err| {
@@ -363,6 +367,17 @@ fn write_history(staging: &Path, unit: &str, history: &CatalogHistory) -> Result
 mod tests {
     use super::*;
     use ridl_ir::v2::{Backing, PrimitiveType, TypeDef, backing, decl};
+
+    /// A directory whose type cannot be read (a symbolic link loop) is an
+    /// error, not a directory with no history (driftsys/ridl#1320).
+    #[cfg(unix)]
+    #[test]
+    fn a_directory_whose_type_cannot_be_read_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let link = dir.path().join("loop");
+        std::os::unix::fs::symlink("loop", &link).unwrap();
+        assert!(holds_history_and_snapshot(&link).is_err());
+    }
 
     #[test]
     fn a_proved_type_only_break_requires_preserving_prior_artifacts() {

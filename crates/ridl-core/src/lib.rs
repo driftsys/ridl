@@ -19,6 +19,8 @@ pub mod db;
 pub mod diag;
 #[cfg(feature = "fetch")]
 pub mod fetch;
+#[cfg(feature = "fs")]
+pub mod fs_probe;
 pub mod instance_lock;
 pub mod interface_lock;
 pub mod limits;

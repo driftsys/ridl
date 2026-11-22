@@ -40,8 +40,12 @@ impl ToolError {
 
 pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolError> {
     let entry = Path::new(path);
-    if !entry.exists() {
-        return Err(ToolError::Request(format!("`{path}` does not exist")));
+    match ridl_core::fs_probe::exists(entry) {
+        Ok(true) => {}
+        Ok(false) => return Err(ToolError::Request(format!("`{path}` does not exist"))),
+        Err(error) => {
+            return Err(ToolError::Request(format!("cannot read `{path}`: {error}")));
+        }
     }
     let overlays: Vec<_> = overlays
         .iter()
@@ -221,6 +225,27 @@ pub(crate) mod tests {
 
     pub fn fixture(name: &str) -> String {
         format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"))
+    }
+
+    /// A path whose type cannot be read (a symbolic link loop) is reported
+    /// with the cause, not as a path that does not exist (driftsys/ridl#1320).
+    #[cfg(unix)]
+    #[test]
+    fn a_path_that_cannot_be_read_is_not_reported_missing() {
+        let dir = std::env::temp_dir().join(format!("ridl-mcp-loop-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let link = dir.join("loop");
+        std::os::unix::fs::symlink("loop", &link).unwrap();
+        let result = snapshot(link.to_str().unwrap(), &[]);
+        fs::remove_dir_all(&dir).unwrap();
+        let message = match result {
+            Err(ToolError::Request(message)) => message,
+            Err(_) => panic!("a request error"),
+            Ok(_) => panic!("a loop is not a workspace"),
+        };
+        assert!(message.contains("cannot read"), "{message}");
+        assert!(!message.contains("does not exist"), "{message}");
     }
     /// `snap` without its TYPL-406 (`missing-docs`) diagnostics, for a test
     /// that counts warnings over a fixture that leaves items undocumented.
