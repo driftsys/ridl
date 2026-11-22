@@ -410,8 +410,9 @@ provenance. Nothing here is normative — the current references live in
   tools over a workspace on disk, with overlays applied inside the loader. Its
   §2 holds the six brainstorming decisions, its §4.4 the approved amendment for
   rsdl component uses, its §7 the compatibility rules and its §10 the
-  alternatives. Archived verbatim with its two plans; its links to the brief and
-  to the skill outline point at `../wip/`. The gardened records are
+  alternatives. Archived verbatim with its two plans; its link to the brief
+  points at `../wip/`, and its link to the skill outline points at the archived
+  copy beside it. The gardened records are
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md), where design
   D-1 to D-6 are decisions 1 to 6, the amended
   [ADR-0005](../decisions/ADR-0005-agent-enablement.md), and
@@ -1051,15 +1052,16 @@ provenance. Nothing here is normative — the current references live in
 - **2026-10-11-ridl-authoring-skill-design.md** — the design of the
   `ridl-authoring` skill, its gates, its distribution and its evals (decisions
   R-S-1 to R-S-4 and D-1 to D-9). Archived verbatim on 2026-11-19, with two
-  links to sibling working files pointed at `../wip/`. Built: the skill, its
-  three gates, the editor and release distribution, the twelve eval tasks and
-  `cargo xtask eval` (driftsys/ridl#893). Not built: the per-language references
-  of its section 3 (written and removed; ADR-0005 records why), the judge check
-  of section 6.3 and the release record of section 6.5 (driftsys/ridl#1401,
-  optional). As built, the gate of section 4 item 3 checks the links of
-  `SKILL.md` against the published book, not a reference file's links, and the
-  Copilot CLI is an opt-in eval host, which section 8 left out of scope. The
-  durable records are
+  links to sibling working files pointed at `../wip/`; the link to the skill
+  outline was repointed to the archived copy on 2026-11-22. Built: the skill,
+  its three gates, the editor and release distribution, the twelve eval tasks
+  and `cargo xtask eval` (driftsys/ridl#893). Not built: the per-language
+  references of its section 3 (written and removed; ADR-0005 records why), the
+  judge check of section 6.3 and the release record of section 6.5
+  (driftsys/ridl#1401, optional). As built, the gate of section 4 item 3 checks
+  the links of `SKILL.md` against the published book, not a reference file's
+  links, and the Copilot CLI is an opt-in eval host, which section 8 left out of
+  scope. The durable records are
   [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md),
   [the authoring skill design record](../design/authoring-skill.md), and the
   amended [ADR-0005](../decisions/ADR-0005-agent-enablement.md) and
@@ -1075,9 +1077,9 @@ provenance. Nothing here is normative — the current references live in
   described in [the design record](../design/authoring-skill.md).
 - **skill-ridl-authoring-outline.md** — the outline of the `ridl-authoring`
   skill, the distilled table of contents that ADR-0005 Layer A refers to.
-  Archived verbatim on 2026-11-22 from `docs/wip/`, with its status banner
-  updated. It is background only: the skill that shipped is written by hand,
-  with no per-language reference files, and the statements that the skill is
+  Archived on 2026-11-22 from `docs/wip/`, unchanged except for its status
+  banner. It is background only: the skill that shipped is written by hand, with
+  no per-language reference files, and the statements that the skill is
   generated from the reference docs describe the first plan. The durable records
   are [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md),
   [the authoring skill design record](../design/authoring-skill.md) and the
