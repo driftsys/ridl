@@ -16,9 +16,12 @@ description: Constraints that every RIDL-family source must meet.
   (`TYPL-204`).
 - Never write a recursive struct, enum, or union, directly or transitively
   (`TYPL-206`).
-- Never reorder or reuse a struct field, enum value, or union arm after
-  publication; append new ones at the end and retire the rest with `reserved`
-  (`TYPL-210`).
+- Never re-declare a name or value that a `reserved` entry lists (`TYPL-210`).
+- Never publish a change that `ridl diff` classifies as breaking, such as a
+  struct field or union arm inserted, reordered or removed, or an enum value
+  removed or renumbered; compare with the baseline first
+  ([the verdicts](https://driftsys.github.io/ridl/evolving-an-interface.html#the-verdicts))
+  (`RIDL-407`).
 - Never write a wildcard, relative, or re-exporting import (`TYPL-003`).
 - Never use a semicolon; a newline or a comma separates, with an optional
   trailing comma (`FORM-102`).

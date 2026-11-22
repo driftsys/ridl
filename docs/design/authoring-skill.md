@@ -33,7 +33,7 @@ repeated here.
 ```text
 skills/ridl-authoring/
   SKILL.md   frontmatter, the family, the verify loop, three samples, links
-  rules.md   19 always-on rules, each citing a diagnostic code
+  rules.md   20 always-on rules, each citing a diagnostic code
 ```
 
 `SKILL.md` has the frontmatter that Claude Code, Codex and Copilot read: `name`
