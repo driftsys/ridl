@@ -15,7 +15,8 @@ Two kinds of users need more help than the toolchain gives today.
   package does not resolve and spans name a synthetic file. No skill or rules
   file exists (2026-11-19: no longer true; the skill shipped in #893, see
   [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md)); only
-  [`skill-ridl-authoring-outline.md`](skill-ridl-authoring-outline.md) does.
+  [`skill-ridl-authoring-outline.md`](../archive/skill-ridl-authoring-outline.md)
+  does.
 - **Developers who write and consume RIDL**. typl §14 specifies doc comments
   (`///`, `/** */`, CommonMark, `[Type]` links, `@see`, `@labels`,
   `@deprecated`), but the compiler checks almost none of it. The TypeScript

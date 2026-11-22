@@ -356,8 +356,8 @@ Agent enablement is not a separate program; it rides the existing phases:
   (evolution), §5 (ranges/units/width — the IR-query payload).
 - ridl Language Reference §3–§10 (the `interact` core, timing, errors — the
   kind-selection tables), §11 (evolution), §16 (diagnostics).
-- Companion: `docs/wip/skill-ridl-authoring-outline.md` — the distilled skill
-  table of contents this ADR's Layer A refers to.
+- Companion: `docs/archive/skill-ridl-authoring-outline.md` — the distilled
+  skill table of contents this ADR's Layer A refers to.
 
 _Corrected (2026-07-26)._ The entry above read
 `claude/skill-ridl-authoring-outline.md`, which named no file: no `claude/`

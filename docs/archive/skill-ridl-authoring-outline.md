@@ -6,8 +6,8 @@
 > ([ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md) decision 1,
 > [ADR-0005](../decisions/ADR-0005-agent-enablement.md) amended 2026-11-11). The
 > statements below that the skill is generated from the reference docs, and its
-> target length, describe the first plan and no longer hold. Whether to archive
-> this file is an owner decision that is still pending.
+> target length, describe the first plan and no longer hold. This file was
+> archived on 2026-11-22 as background only.
 
 Stub / table of contents for the agent-facing skill described in ADR-0005 Layer
 A. This is the **shape**, distilled from the typl and ridl references — not the

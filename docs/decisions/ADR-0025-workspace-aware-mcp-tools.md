@@ -102,8 +102,8 @@ pasted-source form.
    summary; a diff category word is looked up through `ridl_diff` and returns
    its explanation text. The mapping from each namespace to its explaining
    document is recorded in
-   [the authoring skill outline](../wip/skill-ridl-authoring-outline.md) §7, for
-   the authoring skill of piece 1c. The skill that shipped,
+   [the authoring skill outline](../archive/skill-ridl-authoring-outline.md) §7,
+   for the authoring skill of piece 1c. The skill that shipped,
    `skills/ridl-authoring/`, links the published book for the rule behind a code
    instead ([ADR-0035](ADR-0035-authoring-skill-and-evals.md)). A skill is prose
    that changes together with the documents, and a URL in a tool result is a

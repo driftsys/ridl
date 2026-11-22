@@ -263,9 +263,11 @@ on 2026-10-15, as version 0.3.0, edited to match the system as built.
   [`../technotes/ridl-family-concept.md`](../technotes/ridl-family-concept.md)
   on 2026-11-18, as a technote with a status banner; it is background, and
   nothing binds to it.
-- **skill-ridl-authoring-outline.md** — outline for the agent-authoring skill
-  (see ADR-0005). The skill shipped as `SKILL.md` and `rules.md`; see the entry
-  under "Files that stay" below.
+- **skill-ridl-authoring-outline.md** — the outline of the authoring skill,
+  archived on 2026-11-22 with its status banner updated. It is background only;
+  see [`../archive/README.md`](../archive/README.md) for its durable records.
+  The owner dropped the judge check (task 12 of the archived plan) on
+  2026-11-19, and driftsys/ridl#1401 is closed.
 - Four 2026-08-03 design notes (ir-protobuf-encodings, rpc-response-bound,
   multi-interface-services, schema-projection) are archived, gardened into
   ADR-0014, ADR-0015 and ADR-0016 — see
@@ -383,15 +385,6 @@ are their durable records.
 Each file below was read against the code and the issue tracker on 2026-10-13
 and was not archived. The reason is stated once per file or group.
 
-- **skill-ridl-authoring-outline.md** — the outline of the authoring skill,
-  which ADR-0005, ADR-0025 and archived records cite by this path. The design
-  and the plan of the skill were gardened and archived on 2026-11-19
-  ([ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md),
-  [the design record](../design/authoring-skill.md)). The outline stays: it
-  belongs to the same unit but is not the design or the plan, and whether to
-  archive it is the owner's decision, which is pending. The owner dropped the
-  judge check and the release record (task 12 of the archived plan) on
-  2026-11-19, and driftsys/ridl#1401 is closed.
 - **2026-10-07-generated-observation-design.md** and
   **2026-10-07-generated-observation-plan.md** — optional trace spans from the
   generated Rust face, driftsys/ridl#754. Open; the generated crate has no
