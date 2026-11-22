@@ -182,7 +182,7 @@ pub fn preflight(root: &Path, tasks: &[Task]) -> Result<String, String> {
     for task in tasks {
         let Some(start) = &task.start else { continue };
         let check = Command::new(&ridl)
-            .arg("check")
+            .args(["check", "--frozen"])
             .arg(start)
             .stdin(Stdio::null())
             .output()
@@ -192,7 +192,7 @@ pub fn preflight(root: &Path, tasks: &[Task]) -> Result<String, String> {
                 "{}: ridl check fails on the starting workspace {}:\n{}",
                 task.id,
                 start.display(),
-                String::from_utf8_lossy(&check.stdout)
+                String::from_utf8_lossy(&check.stderr)
             ));
         }
     }
@@ -200,11 +200,15 @@ pub fn preflight(root: &Path, tasks: &[Task]) -> Result<String, String> {
 }
 
 /// The version in a `ridl --version` line: its last word, without a tag
-/// prefix that ends in `v` (`ridl 0.21.0` and `ridl editor-v0.21.0` both
+/// prefix `editor-v` or `v` (`ridl 0.21.0` and `ridl editor-v0.21.0` both
 /// give `0.21.0`).
 fn version_of(line: &str) -> Option<&str> {
     let word = line.split_whitespace().last()?;
-    Some(word.rsplit_once('v').map_or(word, |(_, v)| v))
+    Some(
+        word.strip_prefix("editor-v")
+            .or_else(|| word.strip_prefix('v'))
+            .unwrap_or(word),
+    )
 }
 
 /// Creates `<base>/home` and `<base>/ws`, copies the task's starting workspace
@@ -1362,6 +1366,11 @@ mod tests {
     fn the_version_is_the_last_word_without_a_tag_prefix() {
         assert_eq!(version_of("ridl 0.21.0"), Some("0.21.0"));
         assert_eq!(version_of("ridl editor-v0.20.0"), Some("0.20.0"));
+        assert_eq!(version_of("ridl 0.22.0-dev"), Some("0.22.0-dev"));
+        assert_eq!(
+            version_of("ridl v0.22.0-preview.1"),
+            Some("0.22.0-preview.1")
+        );
         assert_eq!(version_of(""), None);
     }
 }

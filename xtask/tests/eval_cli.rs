@@ -153,8 +153,8 @@ echo '{{"type":"assistant.message","data":{{"messageId":"m1","content":"The Copi
         &format!(
             r#"echo "ridl $*" >> '{d}/calls.log'
 case "$1" in
---version) echo "ridl {v}";;
-check) [ $# -eq 2 ] && exit 0; if [ -f "$4/ridl.toml" ]; then if [ -f '{d}/check.json' ]; then cat '{d}/check.json'; else echo '[]'; fi; else echo "error: no ridl.toml in $4" >&2; exit 2; fi;;
+--version) if [ -f '{d}/version' ]; then cat '{d}/version'; else echo "ridl {v}"; fi;;
+check) if [ "$2" = --frozen ]; then [ -f '{d}/start-fails' ] && {{ echo 'error: start' >&2; exit 1; }}; exit 0; fi; if [ -f "$4/ridl.toml" ]; then if [ -f '{d}/check.json' ]; then cat '{d}/check.json'; else echo '[]'; fi; else echo "error: no ridl.toml in $4" >&2; exit 2; fi;;
 diff)
   case "$4" in */evals/corpus/*|*/start) ;; *) exit 3;; esac
   case "$5" in */ws) ;; *) exit 3;; esac
@@ -255,6 +255,69 @@ fn a_run_copies_its_transcript() {
         std::fs::read_to_string(out.join("transcripts/design-0001/claude-without-1.jsonl"))
             .unwrap();
     assert!(transcript.contains("mcp__ridl__ridl_check"));
+}
+
+/// Runs evolve-0003, which has a starting workspace, on Codex without the
+/// skill, and returns the eval's output.
+fn eval_evolve(fakes: &Fakes, out: &Path) -> std::process::Output {
+    eval(
+        fakes,
+        &[
+            "--task",
+            "evolve-0003",
+            "--host",
+            "codex",
+            "--skill",
+            "without",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        true,
+    )
+}
+
+#[test]
+fn a_ridl_binary_of_another_version_stops_the_eval_before_any_run() {
+    let fakes = fakes_with(None);
+    std::fs::write(fakes.dir.join("version"), "ridl editor-v0.0.1\n").unwrap();
+    let out = fakes.dir.join("results");
+    let output = eval_evolve(&fakes, &out);
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("not version"));
+    assert!(!out.exists());
+}
+
+#[test]
+fn a_start_that_fails_ridl_check_stops_the_eval_before_any_run() {
+    let fakes = fakes_with(None);
+    std::fs::write(fakes.dir.join("start-fails"), "").unwrap();
+    let out = fakes.dir.join("results");
+    let output = eval_evolve(&fakes, &out);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!output.status.success());
+    assert!(stderr.contains("evolve-0003: ridl check fails"), "{stderr}");
+    assert!(stderr.contains("error: start"), "{stderr}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn each_result_records_the_ridl_version() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let output = eval_evolve(&fakes, &out);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let result = std::fs::read_to_string(out.join("evolve-0003/codex-without-1.toml")).unwrap();
+    assert!(
+        result.contains(&format!(
+            "ridl_version = \"ridl {}\"",
+            env!("CARGO_PKG_VERSION")
+        )),
+        "{result}"
+    );
 }
 
 #[test]
