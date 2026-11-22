@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "design-0002"
@@ -13,20 +14,20 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "cli"
 
 [rubric]
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, false, false, false, true, true]
+met = [true, true, false, false, false, false, true]
 reasons = [
-  "PlanKind, Participant, TransferId, ItemCount, ItemIndex and ItemData are all declared in the RIDL.",
-  "Count, ItemRequest, PlanItem and TransferResult are carried by events in ReceiverIngress and SenderIngress, covering both directions.",
-  "The README procedure is not shown, so separate storage per plan type can only be inferred from RIDL comments, which describe independent namespaces and Busy per namespace.",
-  "The README is not shown, so the procedure for advancing and re-requesting cannot be verified.",
-  "The README is not shown, so the timeout and retry procedure cannot be verified, though the RIDL comments hint at it.",
-  "A single focused planupload package holds the types and interfaces, and the RIDL docs carry correlation and lifecycle comments with the procedure in the README.",
-  "The RIDL comments state there is no implicit transport reliability and put retransmission in the procedure, not in the bounds.",
+  "The RIDL declares PlanType, Participant/SystemId/ComponentId, ItemCount, ItemIndex, and ItemSupply with a PlanItem payload.",
+  "Announce and supply on PlanReceiver and request and complete on PlanSender cover all four interactions, with each side sending its own messages.",
+  "The README is not shown; the RIDL only has a planType header and a union, and the answer's message claims separation but the visible material does not demonstrate separate storage and procedure.",
+  "Advance and re-request rules are said to be in the README, but the README is not provided, so they cannot be verified.",
+  "Timeout, retry and the distinction between completion and item delivery appear only as brief mentions in the message and RIDL comments, and the README is not shown.",
+  "Lifecycle and correlation are documented in a README rather than together with the plan-transfer interface; the RIDL has only a minimal comment.",
+  "Nothing in the visible material claims that a stream signature or response bound supplies loss recovery; the comments say delivery is not an acknowledgement.",
 ]
-score = 0.5384615384615384
+score = 0.46153846153846156

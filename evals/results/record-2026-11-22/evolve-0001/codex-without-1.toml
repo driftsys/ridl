@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "evolve-0001"
@@ -22,10 +23,10 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true]
 reasons = [
-  "Uses /// doc comments directly attached to struct Point and Vector3, valid RIDL doc syntax, and the answer reports ridl diff saw doc_only changes, indicating they were lowered to exported documentation.",
-  "Point doc says it is a position transformed by rotation and translation; Vector3 doc says it is anchored at the origin and only rotation applies.",
-  "Only doc lines were added; all declarations, fields, types, order and the original // upstream comments remain.",
-  "Answer states ridl check passed with only warnings and that ridl diff gives a compatible verdict with two doc_only changes.",
-  "Point and Vector3 remain separate and no unit or range constraints were added.",
+  "Both structs have `///` doc comments directly attached, and the answer reports they lowered to doc_only changes in ridl diff, indicating valid RIDL syntax.",
+  "Point is described as a position transformed by R p + t; Vector3 is described as anchored at the origin and transformed only by rotation R, with translation not applied.",
+  "All declarations, fields, numbers, imports and interactions are unchanged, and the original // upstream comments remain in the workspace.",
+  "The answer says ridl check passed with warnings (no Error) and that the diff gives a compatible verdict with doc_only changes for Point and Vector3.",
+  "Point and Vector3 remain separate structs and no unit or range constraints were added.",
 ]
 score = 1.0

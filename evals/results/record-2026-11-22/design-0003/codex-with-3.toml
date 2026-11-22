@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "design-0003"
@@ -21,13 +22,13 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, false, true, true]
 reasons = [
-  "Name is bytes [1..16], a byte-based bound admitting 16-byte names with no terminator, and the comment says no embedded NUL.",
-  "Number pairs a NumericType kind with NumericBits, and the encoding is documented.",
-  "readOne, readAll and write commands are distinct, and the valueReported event carries post-write readback.",
-  "Value has count and index, and the ListComplete event is derived from coverage of distinct validated indices; the README is said to cover completeness rules.",
-  "Failure is a separate error struct and event, and the request id correlates replies; the service binding scopes the component.",
-  "The README is only mentioned in the final message and not shown, so byte-wise versus numeric-cast selection cannot be verified; the IDL only mentions the float carrier in a comment.",
-  "Reads by index need no names and the write is followed by a readback report; nothing claims the write was applied.",
-  "The Selector union has an index alternative, enabling reads without knowing the name.",
+  "Name is bytes [1..16], a byte-based bound admitting 16-byte names with no terminator.",
+  "NumericValue union's active arm carries the numeric type with exact bit representation.",
+  "readOne, readAll and write are distinct commands, and valueReported publishes the current stored value after a write.",
+  "ValueReport has count and index; the final message and API docs say completeness requires index coverage 0..count-1, and the README is cited as describing this.",
+  "A separate failed event with ErrorCode exists, and request IDs correlate replies; the service-instance-per-component model is documented.",
+  "The visible material doesn't show the README explaining byte-wise vs numeric-cast selection for MAVLink; only the final message mentions transport encoding generically.",
+  "The selector allows index reads and readAll needs no names; docs say the write is followed by a stored-value report, not proof of application.",
+  "The Selector union offers an index arm requiring no name.",
 ]
 score = 0.875

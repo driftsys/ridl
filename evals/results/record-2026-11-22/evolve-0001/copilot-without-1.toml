@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "evolve-0001"
@@ -22,10 +23,10 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true]
 reasons = [
-  "The added /// documentation comments attach directly to Point and Vector3 and are reported as exported doc_only changes.",
-  "The documentation describes Point as a position affected by rotation and translation and Vector3 as anchored at the origin and affected only by rotation.",
-  "The patch only adds documentation while retaining the original upstream comments and all declarations, fields, numbers, packages, imports and interactions.",
-  "The answer reports that ridl check has no errors and explains that the exported documentation changes produce doc_only changes with an overall compatible verdict.",
-  "Point and Vector3 remain separate structs, and no unit or range constraints are added.",
+  "The added /// documentation comments attach directly to Point and Vector3 and survive lowering as exported documentation.",
+  "The documentation identifies Point as a position and Vector3 as anchored at the origin, with only rotation applied to vectors.",
+  "The patch only adds documentation while preserving existing declarations, fields, numbers, packages, imports, interactions and upstream comments.",
+  "The documentation-only edits introduce no checking errors, and the answer reports a compatible verdict with two doc_only changes despite not separately running ridl check.",
+  "Point and Vector3 remain separate types with no added unit or range constraints.",
 ]
 score = 1.0

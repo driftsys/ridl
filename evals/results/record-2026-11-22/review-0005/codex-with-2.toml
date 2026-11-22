@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "review-0005"
@@ -13,19 +14,19 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "cli"
+verify_via = "mcp"
 
 [rubric]
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [false, false, false, true, false, true]
+met = [true, true, false, true, false, false]
 reasons = [
-  "The answer notes that each concrete station repeats three locally defined payload types across eight Driver/Passenger interfaces, but it never discusses the maintenance cost of keeping the definitions consistent.",
-  "It recommends considering shared station types, but it does not tie the repetition to the frozen one-package-per-branch rule or discuss preserving separate addressed station instances.",
-  "It says percent survives only in comments because integer-backed unit types are unavailable, but it does not say that adding a unit directly would change the representation.",
-  "It says AirDistribution keeps the three upstream names as enum codes 0, 1, 2 rather than upstream strings, and that an adapter must map names to codes explicitly.",
-  "It says setters have no explicit result or error and that completion is not tied to observed state, but it does not say that the matching signal cannot be correlated with a particular request.",
-  "It says upstream supplies no timing, bounds, or default values, and it labels the compiler's default timing and initial values as compiler behavior, so it invents none.",
+  "Observation 6 notes repeated station types across eight Driver/Passenger packages and maintenance work, though the cost of consistent changes is only briefly explained.",
+  "The answer says the duplication follows the frozen mapping, and recommends a shared station vocabulary with a migration path; it does not explicitly say the addressed instances stay separate, but it keeps the qualified names.",
+  "It identifies the 0..100 integer range and percent as comment-only because of the integer-backed unit limitation, but never says that adding a unit directly would change the representation.",
+  "It says the three upstream names are converted to enum codes 0, 1 and 2 instead of strings, and that an explicit name/code adapter is needed.",
+  "It notes setters have no result, error or completion condition, but never says that the matching signal alone does not establish correlation with a particular request.",
+  "It states that the checker applies timing @[100ms..1s] and @[..1s], which it frames as RIDL checker behavior, but 'Setter acceptance' and 'Temperature' sections are mostly grounded; however, the claim about timing attributes is not shown in the provided contracts, so it appears invented.",
 ]
-score = 0.3333333333333333
+score = 0.5

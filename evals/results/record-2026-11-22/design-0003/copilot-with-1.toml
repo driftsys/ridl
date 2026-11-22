@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "design-0003"
@@ -19,15 +20,15 @@ verify_via = "cli"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [false, true, true, true, false, false, true, true]
+met = [true, true, true, true, false, false, true, true]
 reasons = [
-  "ParamName uses a string bound merely assumed to measure bytes, so the workspace does not establish a byte-based 16-byte limit.",
-  "ParamValue pairs a numeric payload union with an explicit ParamType describing the stored numeric type.",
-  "Separate read, readAll and write operations are provided, with value events reporting the stored value after every write.",
-  "Values include count and index, and the adapter rules require tracking missing indices and requesting them after a timeout.",
-  "Errors and values are separate, but the answer does not explain association with the intended remote component or correlate asynchronous failures with a parameter.",
-  "The adapter rules do not explain selecting between MAVLink byte-wise and numeric-cast encoding.",
-  "Discovery and index-based reads avoid advance name knowledge, and write reports explicitly reflect the stored value even when the request was not applied.",
-  "The read operation accepts an explicit ByIndex selector without requiring discovery of the parameter name.",
+  "ParamName uses a 1-to-16-byte bound and explicitly permits 16 bytes without a terminator.",
+  "ParamValue provides typed numeric alternatives, with explicit byte representations for u64, f32 and f64.",
+  "Separate read, readAll and write commands provide a value event channel for reporting the current stored value after writes.",
+  "Reports include count and index, and the adapter rules require tracking missing indices and rereading them after a timeout.",
+  "Errors are separate and parameters are identified, but the answer does not explain how replies or updates are associated with the intended remote component.",
+  "The adapter rules mention a type tag but do not explain selecting MAVLink byte-wise versus numeric-cast encoding.",
+  "Discovery requires no names, and write responses report stored values without treating the request as proof of application.",
+  "The read command accepts an explicit byIndex selector that requires no prior knowledge of a parameter name.",
 ]
-score = 0.625
+score = 0.75

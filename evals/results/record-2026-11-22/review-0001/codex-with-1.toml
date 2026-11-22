@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "review-0001"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, false, false, false, true, true]
+met = [true, true, false, false, true, true]
 reasons = [
-  "Item 1 explains that Vector3 has rotation-only transformation semantics versus Point, and that merging would invite applying the wrong operation.",
-  "It says RosFloat32 and RosFloat64 both lower to float64 and classifies it as a translation limitation, but it never states that Point and Point32 have distinct upstream precision intentions, only that Point32 loses its float32 advantage.",
-  "It notes that com keeps metre information only in prose because it is a Vector3, but it does not explain the risk of accepting a vector with a different physical meaning.",
-  "It suggests specialized composites only generally and never proposes a separately typed centre-of-mass vector or notes that it would change the frozen schema.",
-  "It explicitly warns against assigning Vector3 one global unit.",
-  "It argues that the identical shapes do not justify consolidation and keeps both declarations.",
+  "Item 2 says Point and Vector3 must stay distinct because points undergo translation and rotation while free vectors undergo rotation only, and that merging would erase client intent.",
+  "Item 3 explains that RosFloat32 and RosFloat64 both lower to float64, which loses Point32's compact precision intent, and classifies this as a translation limitation.",
+  "It says Inertia.com keeps metres only in prose and that clients can confuse physical quantities, but it does not clearly explain the risk of accepting a vector with a different physical meaning for centre of mass.",
+  "It suggests separate dimensioned composites for a redesigned API, but never proposes a centre-of-mass-specific vector type or says that doing so changes the frozen upstream-shaped schema.",
+  "It explicitly says not to assign metres globally to Vector3.",
+  "It argues for keeping Point and Vector3 on the basis of their differing semantics, not their matching shapes.",
 ]
-score = 0.5454545454545454
+score = 0.7272727272727273

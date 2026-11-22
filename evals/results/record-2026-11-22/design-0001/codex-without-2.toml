@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "design-0001"
@@ -13,7 +14,7 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "cli"
 
 [rubric]
 handoff = false
@@ -21,12 +22,12 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "Declares SystemId, ComponentId, ComponentKey, Announcement structs and an Announcer interface with an announcement event for repeated presence.",
-  "ComponentId and ComponentType are separate types, with comments stating componentType is never inferred from componentId.",
-  "ConnectionReport pairs ConnectionState (CONNECTED/DISCONNECTED) with lastAnnouncement containing the composite key.",
-  "TrackingPolicy has intervalMs and missedLimit as deployment-supplied with no defaults, and the schema does not assert a universal timeout.",
-  "The final message says runtime code must enforce fault-aware periodic sending, per-component deadlines and disconnection, and RIDL cannot enforce these; the README also covers it.",
-  "The presence package contains only the discovery-focused Announcer and Monitor interfaces, with no mission or parameter operations.",
-  "The answer explicitly says RIDL validates structure and cannot enforce the behaviors, and the toml comments say timing does not schedule sends.",
+  "Declares SystemId, ComponentId, Announcement metadata, and a PresenceMonitor interface with an announce command intended for repeated submission.",
+  "ComponentKey holds system and component IDs, while ComponentType is a separate metadata field with docs saying codes are not identity values.",
+  "ConnectionReport pairs an Announcement (containing the key) with a CONNECTED/DISCONNECTED state, returned by snapshot.",
+  "TrackingPolicy with interval and missed limit is documented as deployment-selected with no default, exposed via getPolicy.",
+  "The schema comments say fault suppression and periodic scheduling are runtime obligations, and the final message and README cover the runtime health gate, scheduling, registry and timeout tracking.",
+  "PresenceMonitor is focused solely on discovery, with no mission or parameter operations.",
+  "The answer explicitly says runtime code must implement the health gate, scheduling, registry and timeout tracking, and does not claim the types or timing annotations implement discovery.",
 ]
 score = 1.0

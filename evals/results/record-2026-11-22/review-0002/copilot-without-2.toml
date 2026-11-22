@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "review-0002"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, true, true, true, false, true]
+met = [true, false, true, true, false, true]
 reasons = [
-  "The answer identifies low cohesion and proposes separate costmap, map, lifecycle, and per-action interfaces.",
-  "It identifies defaults in IsPathValidRequest and explains that the flattened call cannot retain them and requires all seven arguments.",
-  "It attributes goal commands and feedback events to the pinned rule and explains that declared result structs lack interactions for delivering completion or failure.",
-  "The separate redesign proposes a result query or event and goal IDs for result and feedback correlation without claiming compiler support for ROS action execution.",
-  "It does not identify loadMap and saveMap as state-changing queries produced mechanically by the service rule or distinguish that mapping from redesign recommendations.",
-  "It attributes missing result interactions to the pinned rule, reports no file changes, and keeps proposed additions separate from the evidence port.",
+  "The answer identifies mixed map, lifecycle, and navigation responsibilities and proposes separate capability interfaces.",
+  "The answer fails to identify seven independent parameters and incorrectly says the flat parameters re-declare defaults rather than explaining that they lose the request struct's defaults.",
+  "The answer attributes goal commands and feedback events to the provenance rule and explains that no interaction delivers result structs or specifies failure delivery.",
+  "The proposed redesign adds goal IDs and terminal events or keyed result queries without claiming that the compiler implements ROS action execution.",
+  "Although it identifies loadMap and saveMap as state-changing queries and separately proposes commands, it does not explain that their current query classification follows the mechanical service rule.",
+  "The answer attributes disconnected results to the provenance mapping, preserves the workspace, and labels additions as proposals only.",
 ]
-score = 0.8181818181818182
+score = 0.6363636363636364

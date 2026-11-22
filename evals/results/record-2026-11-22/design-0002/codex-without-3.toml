@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "design-0002"
@@ -16,17 +17,7 @@ verify_loop = true
 verify_via = "both"
 
 [rubric]
+error = "the judge reply is not JSON"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, false, false, false, false, true]
-reasons = [
-  "PlanType, Participant/Identity, Count, Sequence (itemIndex) and PlanItem payload are all declared in the RIDL.",
-  "PlanSender has announce and supply events, PlanReceiver has request and complete, covering all four interactions split between the two participants.",
-  "The RIDL separates plan types via enum and union, but the README that describes storage and procedure is not shown, so separation in the described procedure cannot be confirmed.",
-  "The final message says the README covers unexpected items, but its content is not shown, so the advance and re-request rules cannot be verified.",
-  "Timeout, retry and distinction between final acknowledgement and item delivery are said to be in the README, but this is not visible; only the Completion comment and RETRIES_EXHAUSTED hint at it.",
-  "The lifecycle and correlation are documented in a separate README, and the interface docs are only brief; no evidence they are kept together with the interface.",
-  "Nothing shown claims that stream signatures or response bounds supply loss recovery; the final message says stateful rules are documented for endpoint implementation.",
-]
-score = 0.46153846153846156

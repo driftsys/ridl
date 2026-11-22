@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "design-0004"
@@ -13,22 +14,22 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "mcp"
 
 [rubric]
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, true, true, true, true, true, true, true, false]
+met = [true, true, true, true, true, true, true, true, true]
 reasons = [
-  "A new SeatHeating interface contains the seat heating interactions.",
-  "The reached levels are driverLevel and passengerLevel signals, and heater faults use the fault event.",
-  "The setSeatLevel command takes both a Seat and a Level parameter.",
-  "The new Heater component offers veh.cabin.heating, which provides SeatHeating.",
-  "The Vehicle system includes Heater.",
-  "The Bench deployment places Heater on Hpc alongside Climate.",
-  "Panel gains requires SeatHeating.",
+  "A new SeatHeating interface contains the heating interactions.",
+  "The reached level is a signal carrying SeatHeat, and the heater fault is an event carrying SeatFault.",
+  "The setSeatLevel command has seat and level parameters.",
+  "HeatingController offers the Heating service, which provides SeatHeating.",
+  "Vehicle lists HeatingController among its components.",
+  "Bench deploys HeatingController on Hpc alongside Climate.",
+  "Panel requires SeatHeating.",
   "Heating uses the ranged Level type and the Seat enum.",
-  "The answer explicitly renames the existing Control service to veh.cabin.control and changes Climate's offers entry, which exceeds the permitted additions.",
+  "The supplied workspace preserves existing entries and adds only new declarations and the permitted system, machine, and Panel entries.",
 ]
-score = 0.8823529411764706
+score = 1.0

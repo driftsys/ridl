@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "review-0003"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [false, true, false, true, true, true]
+met = [true, true, false, true, true, true]
 reasons = [
-  "The answer mentions only that a legacy request should receive MISSION_ITEM_INT as the port's deliberate resolution, but never states that missionRequest and missionRequestInt both return MissionItemInt or that the deprecated request historically pairs with MissionItem.",
-  "It says the signatures do not enforce ordering, routing, correlation, or completion, and lists the re-request, retry, and ACK behaviors as rules that are absent from the signatures.",
-  "It mentions sequence numbers, plan types and MavMissionType.FENCE/RALLY in general terms, but never explains missionType and seq as necessary distinctions for independently stored plans and ordered item transfer.",
-  "It recommends documenting transaction ownership and ACK matching, recovery and a companion transfer procedure with state and correlation rules alongside the port.",
-  "The answer does not recommend removing target, sequence, or missionType fields.",
-  "The answer says retry settings are behavioral requirements absent from the signatures and does not claim that RIDL timing defaults implement the retry procedure.",
+  "It notes both item queries return MissionItemInt, including the 'intended legacy-request interpretation', and that legacy requests are answered with INT items despite the retained conflicting description, framing this as deliberate in the provenance.",
+  "It says query signatures cannot enforce wire-level correlation and that the interface cannot express the sequences, and it calls for a state machine covering retransmission, timeouts and final-ACK loss, though it never uses the phrase 'missionAck completion'.",
+  "It mentions plan type and expected sequence and names MavMissionType and MissionItemInt, but never ties missionType and seq fields to independent plan storage and ordered transfer.",
+  "Recommendations 1-3 call for documenting transfer roles, correlation and ownership, and a recovery state machine alongside the port.",
+  "It recommends leaving the evidence port unchanged and says to require targets, plan type and sequence in adapters, so it does not remove these fields.",
+  "It cites the guide's recommended timeouts and retries as part of a procedure to document, and does not claim RIDL timing defaults implement the retry.",
 ]
-score = 0.6363636363636364
+score = 0.8181818181818182

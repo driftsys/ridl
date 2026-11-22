@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "review-0004"
@@ -19,14 +20,14 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, false, true, true, true, true, true]
+met = [true, true, true, true, true, true, true]
 reasons = [
-  "Says the pinned guide permits bytewise or numeric-cast encoding and that Float32 does not preserve the wire representation, so the float alone doesn't determine the value.",
-  "It notes Char16 is exactly 16 bytes and that full-length names have no NUL, but never explains how a null-terminated string replacement would change accepted identifiers.",
-  "States paramSet has no application result, paramValue is a broadcast event that also serves queries, and writes need matching-observation correlation per the protocol.",
-  "Discusses paramCount and paramIndex with missing-index tracking, completion and retry policy, and says a timeout cannot establish a complete list.",
-  "Recommends explicit adapter policy for encoding selection, completion, retry and timeouts rather than inferring from the scalar type.",
-  "It does not assume parameters are intrinsically floats and says receipt or a PARAM_VALUE doesn't confirm a write without matching.",
-  "Says Float32 lowers to float64 with no guarantee of binary32 bits, and requires preserving the original four bytes before numeric conversion.",
+  "States that the four-byte field can hold numeric C-cast or raw bytes per paramType, so a float64-backed Float32 does not determine the original value.",
+  "Notes Char16 is a fixed 16-byte array, full-length names have no terminator, and short names are NUL-terminated; it does not explicitly say why a null-terminated string would change accepted identifiers beyond needing 16+1 storage.",
+  "Says paramSet has no result, PARAM_VALUE is broadcast for many purposes, and confirmation needs source/name matching, decoding, comparison, and retry per the protocol.",
+  "Says the list stream does not encode missing-index recovery or completion, and the adapter must track counts and indices and request missing entries; paramCount/paramIndex are not named as list-completeness fields in that item.",
+  "Recommends explicit adapter encoding selection, timeout, retry, and completion policy rather than inferring from types.",
+  "Does not assume all parameters are floats or that any paramValue confirms a write; explicitly says matching name alone is insufficient.",
+  "States Float32 aliases unconstrained float represented as float64, that numeric conversion can destroy bytewise NaN patterns, and the adapter must preserve the raw four bytes.",
 ]
-score = 0.8461538461538461
+score = 1.0

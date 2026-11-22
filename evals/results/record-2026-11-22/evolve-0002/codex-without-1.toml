@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "evolve-0002"
@@ -22,12 +23,12 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The query is added to common.ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, and return type ParamValue.",
-  "It is appended after paramError, the fifth interaction, so existing ordinals 1 through 5 stay unchanged and the new query is sixth; the diff reports only an appended interaction.",
-  "The query has the contract `require paramIndex >= 0`, which rejects negatives and leaves the nonnegative Int16 domain accepted.",
-  "Only one interaction line block is added, and the diff shows no other changes; payloads, packages and imports are untouched.",
-  "The answer says the adapter sends the existing ParamRequestRead with the supplied targets and index, and that the paramId is ignored for a nonnegative index under the selection rule.",
-  "The answer reports 0 errors from ridl check and shows a JSON diff with verdict compatible and a single interaction_appended change.",
-  "The answer states this is not a new upstream message, changes no value encoding, and implements no adapter.",
+  "The query paramRequestReadByIndex is added to ParameterProtocol with Uint8 targetSystem/targetComponent, Int16 paramIndex and return type ParamValue.",
+  "The query is appended after paramError, the fifth interaction, so existing ordinals stay 1-5 and the new one gets 6, confirmed by the interaction_appended diff category.",
+  "The query has `require paramIndex >= 0`, which rejects negatives and accepts the nonnegative part of the Int16 domain.",
+  "Only interactions.ridl changed by appending the new query; existing signatures, payloads, packages and imports are untouched and the diff shows only the appended change.",
+  "The answer says the adapter builds the existing ParamRequestRead with the supplied targets and index and that a nonnegative index makes paramId ignored; it frames the zero-filled paramId as ignored.",
+  "The answer reports a check with 0 errors and shows a JSON diff with verdict compatible and only the interaction_appended change.",
+  "The answer states there is no new upstream message, leaves value encoding unchanged and implements no adapter.",
 ]
 score = 1.0

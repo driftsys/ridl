@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "review-0003"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, false, true, true, true]
+met = [false, true, false, true, true, true]
 reasons = [
-  "Item 5 says the legacy request's MissionItemInt return deliberately resolves conflicting description text and should be documented, though it does not explicitly name both missionRequest and missionRequestInt or the MissionItem pairing.",
-  "The answer says signatures do not define a transfer state machine, and that count, request, item and ACK sequencing, timeout re-request and ACK completion stay procedural, including the 1500 ms timeout, 250 ms item timeout and five retries.",
-  "The answer mentions plan type, expected sequence and separate caches per plan type, and MavMissionType and MissionItemInt appear, but it does not name missionType or seq fields as necessary distinctions.",
-  "It recommends publishing a companion client procedure and documenting transaction ownership, matching of traffic to expected sequence and phase, and ACK correlation.",
-  "The answer does not recommend removing target or sequence or missionType fields; it says payload addressing alone cannot establish matching.",
-  "It cites the guide's recommended timeouts and retries as procedure and never claims RIDL timing defaults implement retry.",
+  "Answer says the legacy request prose conflicts and the query returns MissionItemInt intentionally, but never names that both missionRequest and missionRequestInt return MissionItemInt or the historical MissionItem pairing.",
+  "States that queries have only success-shaped returns, a successful call must not mean transfer success, ACK is an event, and a state machine, timeouts and retry are needed.",
+  "Mentions plan types, sequence continuity and mission type ALL, but does not clearly tie missionType and seq fields to named declarations as necessary distinctions.",
+  "Recommends documenting state transitions and correlation of requests, items and ACKs.",
+  "Does not recommend removing target, sequence or missionType fields; it states no files were changed.",
+  "Never claims RIDL timing defaults implement upstream retry; it says timers and retransmission must be documented, and that missionCurrent has no timing guarantee.",
 ]
-score = 0.8181818181818182
+score = 0.6363636363636364

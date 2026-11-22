@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "review-0005"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [false, false, false, true, true, true]
+met = [false, false, false, true, false, false]
 reasons = [
-  "The answer identifies eight station copies of the three declarations but does not explain the maintenance cost of keeping changes consistent across them.",
-  "It proposes shared station types with keyed instances but does not recognize that the frozen one-package-per-branch rule explains the repetition.",
-  "It states the integer range and comment-only percent unit but omits that integer-backed unit types are unavailable and adding a unit would change representation.",
-  "It identifies all three upstream strings and their corresponding integer codes, explicitly describing the representation mapping clients must accommodate.",
-  "It identifies the setters' missing return and error model and explains that signals have no acknowledgement or feedback relation to particular requests.",
-  "It does not invent upstream timing, temperature bounds, acknowledgement guarantees, or default values, and presents added timing and acknowledgements as recommendations.",
+  "It mentions eight station packages but neither identifies the row/occupant packages nor explains the maintenance cost of keeping their repeated definitions consistent.",
+  "It proposes a shared station interface or package but does not recognize the frozen one-package-per-branch rule as the reason for repetition.",
+  "It identifies the integer range and comment-only percent unit but does not explain that adding a unit directly would change the integer representation.",
+  "It names all three upstream strings, gives their integer enum codes, and calls for a string/code adapter.",
+  "It identifies missing setter results and errors but does not explain that matching signals lack correlation with particular requests.",
+  "It asserts specific compiler timing and response defaults that are absent from the supplied definitions.",
 ]
-score = 0.5
+score = 0.16666666666666666

@@ -3,19 +3,32 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "evolve-0003"
 
 [mechanical]
-diff_matches = false
+diff_matches = true
 lints_match = true
 no_error = true
-notes = ['diff verdict None, expected Some("compatible")']
-passed = false
+notes = []
+passed = true
 verify_loop = true
-verify_via = "cli"
+verify_via = "mcp"
 
 [rubric]
-score = 0.0
-skipped = "mechanical checks failed"
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, false, false, true, false, true]
+reasons = [
+  "Telemetry explicitly requires Horn in system.rsdl.",
+  "Horn appends soundCount after active with the named type SoundCount and explicit range [0..1000000].",
+  "The package version was also changed from 1.0.0 to 1.1.0, outside the permitted changes.",
+  "The answer summarizes a compatible verdict but does not show actual ridl diff or ridl_diff output.",
+  "The activation count is modeled as a signal.",
+  "The explanation incorrectly calls SoundCount unobservable and does not explain that the added requirement changes system composition rather than the wire.",
+  "The workspace retains one Horn provider and keeps every component on its existing machine.",
+]
+score = 0.5833333333333334

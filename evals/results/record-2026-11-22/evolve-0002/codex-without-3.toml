@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "evolve-0002"
@@ -22,12 +23,12 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The query is added to common.ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, and return type ParamValue.",
-  "It is appended after paramError, the fifth interaction, so the existing five keep ordinals 1 through 5 and the new query becomes 6.",
-  "It has `require paramIndex >= 0`, which rejects negatives and accepts the nonnegative Int16 domain.",
-  "The workspace shows the existing interactions, payloads, imports and packages unchanged, and the diff reports only the appended interaction.",
-  "It explains that the adapter sends ParamRequestRead with the supplied targets and nonnegative index, and that the paramId is ignored unless the index is -1.",
-  "It reports a check with 0 errors and a JSON diff with verdict compatible and a single interaction_appended change.",
-  "It states the query is not a new upstream message, leaves ParamValue encoding unchanged, and implements no adapter.",
+  "The query paramRequestReadByIndex is added to ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, returning ParamValue.",
+  "It is appended after paramError, the fifth interaction, so existing ordinals stay 1-5 and the new query becomes 6; the diff reports interaction_appended.",
+  "It uses `require paramIndex >= 0`, which rejects negatives and accepts the nonnegative part of the Int16 domain.",
+  "Only the one query is added; existing interactions, structs, fields, packages and imports are unchanged in the final workspace.",
+  "The answer says the adapter builds the existing ParamRequestRead with the supplied targets and index, and that paramIndex != -1 makes paramId ignored.",
+  "The check reported 0 errors and the JSON diff shows verdict compatible with a single interaction_appended change.",
+  "The answer says there is no new upstream message, does not change value encoding, and does not implement an adapter.",
 ]
 score = 1.0

@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "review-0003"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [false, true, false, true, true, true]
+met = [true, true, false, true, true, true]
 reasons = [
-  "The answer only says the legacy MissionRequest description is stale and the query 'correctly returns MissionItemInt'; it never notes that missionRequest and missionRequestInt both return MissionItemInt, or that this departs from the historical MISSION_ITEM pairing.",
-  "It says signatures capture message roles and payloads but not the transaction, and that a query or command acknowledgement must not be read as 'plan transfer succeeded'. It also covers the reciprocal request roles, the final ACK direction, and re-request and timeout recovery.",
-  "It mentions missionType, sequence numbers and MissionItemInt, but does not explain missionType and sequence as necessary distinctions for independently stored plan types and ordered item transfer; it mostly warns against inferring coverage from missionType.",
-  "It recommends a companion adapter specification covering transfer procedures, state, and correlation of ACKs with source, targets, mission type and active transfer state.",
-  "The answer does not recommend removing targetSystem, targetComponent, sequence or missionType fields, and no files were changed.",
-  "It cites 1500 ms and 250 ms timeouts and five retries as guide recommendations and says the nominal streaming prose introduces no RIDL timing contract, so it never claims RIDL defaults implement the retry procedure.",
+  "It states missionRequest returns MissionItemInt despite conflicting retained prose and calls it an intentional legacy return type, though the adaptation explanation is brief.",
+  "It says a query return does not complete an entire plan transfer, that there are no timing or state-machine contracts, and that re-request, ACK and sequencing procedures live outside the port.",
+  "It says the structs retain sequence and plan type and discusses MavMissionType, but it never names seq or missionType, so the necessity of those fields for independent plan types and ordered transfer is not tied to named declarations.",
+  "It recommends a documented transfer state machine and routing/correlation of requests, items and ACKs outside the port.",
+  "It recommends no field removal and says the structs retain addressing, sequence and plan type.",
+  "It explicitly says the pinned timeout and retry values are procedural recommendations, not encoded deadlines.",
 ]
-score = 0.6363636363636364
+score = 0.8181818181818182

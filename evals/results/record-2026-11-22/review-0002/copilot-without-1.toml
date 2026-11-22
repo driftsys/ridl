@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "review-0002"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, false, true, true, false, true]
+met = [true, true, true, false, false, true]
 reasons = [
-  "The answer identifies the bundled responsibilities and proposes separate costmap, map-server, lifecycle, and navigation-action interfaces.",
-  "The answer explains the request-struct defaults and their loss in call parameters, but does not identify all seven independent parameters.",
-  "The answer explicitly attributes absent result interactions to the fixed rule and explains that callers cannot receive action completion and error results through the declared API.",
-  "The separate migration proposal adds goal IDs, a result query or event, and correlated feedback without claiming compiler support for ROS action execution.",
-  "The answer identifies saveMap as a state-changing service mechanically mapped to a query, but does not identify loadMap as state-changing under that rule.",
-  "The answer attributes missing result interactions to the fixed translation rule and keeps proposed additions separate from the unchanged evidence port.",
+  "The answer identifies the monolithic interface and proposes separate map, costmap, navigation, behavior, and lifecycle capabilities.",
+  "The answer states that isPathValid takes seven parameters whose upstream defaults remain only in the request struct, requiring callers to supply all seven.",
+  "The answer explains that the fixed rule creates goal commands and feedback events but no interaction carrying result structs, leaving success and failure delivery unavailable.",
+  "The migration proposes result events or queries but does not specify goal/result correlation.",
+  "The answer does not discuss loadMap and saveMap as state-affecting queries mechanically produced by the service rule.",
+  "The answer attributes the missing result interaction to the fixed rule and explicitly preserves the frozen evidence port with migration proposals unapplied.",
 ]
-score = 0.6363636363636364
+score = 0.7272727272727273

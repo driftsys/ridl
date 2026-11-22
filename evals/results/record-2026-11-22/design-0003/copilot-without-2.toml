@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "design-0003"
@@ -21,13 +22,13 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, false, false, true, true]
 reasons = [
-  "ParamName uses bytes [0..16] and explicitly allows all 16 bytes without a terminator.",
-  "ParamValue provides typed numeric alternatives, so each value carries its numeric type.",
-  "Separate read, readAll and write operations exist, with updated events reporting the stored value after applied or unapplied writes.",
-  "Reports include count and index, and completeness requires receiving every index from zero through count minus one.",
-  "Errors and updates are separate and parameters are identified, but the supplied material does not explain association with the intended remote component.",
-  "The answer mentions byte-wise versus converted encoding but does not explain how an adapter selects between them, and the referenced README contents are not supplied.",
-  "Index selection and readAll avoid advance name knowledge, and write acceptance explicitly does not establish that the requested value was applied.",
-  "The read operation accepts an explicit Index selector without requiring prior name discovery.",
+  "ParamName uses bytes [1..16] and explicitly permits all 16 bytes without a terminator.",
+  "ParamValue includes a numeric kind and a numeric value union with documented unsigned, signed and real alternatives.",
+  "Separate readByIndex/readByName, readAll and write operations provide individual reads, discovery and writes with a current stored-value report.",
+  "Values carry count and index, and the answer requires checking every expected index for gaps, duplicates and count changes.",
+  "Errors are separate from value updates, but the answer does not explain how replies or events are associated with the intended remote component.",
+  "The answer mentions numeric kinds and float-field limits but does not explain selecting byte-wise versus numeric-cast MAVLink encoding.",
+  "Discovery and indexed reads require no advance name knowledge, and write reports distinguish requested values from the values actually stored.",
+  "readByIndex explicitly allows requesting one parameter without first discovering its name.",
 ]
 score = 0.75

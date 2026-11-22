@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "design-0001"
@@ -21,12 +22,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The RIDL declares both identity fields and all requested metadata, with an announcement event for repeated presence announcements.",
-  "ComponentKey uses both identity fields, while component type comes independently from the announcement's kind field.",
-  "ComponentStatus associates a system/component key with an explicit CONNECTED or DISCONNECTED result.",
-  "MonitorPolicy explicitly makes the announcement interval and missed-announcement limit deployment choices.",
-  "The answer explicitly identifies operational scheduling, fault gating and disconnect detection as runtime behavior beyond RIDL declarations.",
-  "Announcer and Monitor focus on presence discovery and connectivity without unrelated mission or parameter operations.",
-  "The answer states that RIDL only declares the contract and requires runtime behavior to implement discovery and disconnect detection.",
+  "The RIDL declares paired system/component identity, all requested announcement metadata, and a recurring announcement event.",
+  "Component identity and type use separate fields, and type is explicitly inferred from announcement metadata.",
+  "ComponentStatus associates the paired identity with a CONNECTED or DISCONNECTED result exposed through monitor events and queries.",
+  "TrackingPolicy explicitly makes the announcement interval and missed limit deployment choices without prescribing universal values.",
+  "The interface comments and final message explicitly identify operational announcements, fault suppression, and disconnect detection as runtime responsibilities.",
+  "Announcer and Monitor focus exclusively on presence discovery and connection tracking without unrelated operations.",
+  "The answer explicitly separates runtime discovery and disconnect behavior from the RIDL contract and its timing annotations.",
 ]
 score = 1.0

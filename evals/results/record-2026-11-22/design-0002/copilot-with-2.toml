@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "design-0002"
@@ -19,14 +20,14 @@ verify_via = "cli"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, true, true, false, true, true, true]
+met = [true, true, false, false, true, false, true]
 reasons = [
-  "The declarations represent plan type, system and component identity, item count, sequence number, and typed item payloads.",
-  "The receiver and sender interfaces provide announce, request, supply, confirm, and fail interactions in the required directions.",
-  "The contract specifies a separate transfer for each plan type and replacement of only that type's plan, while the summary describes concurrent transfers of different types.",
-  "The supplied material says unexpected items do not advance the transfer but does not describe re-requesting the expected sequence after an unexpected item.",
-  "The constants and interface comments define response timeout and bounded retries, and confirm explicitly marks successful completion separately from supply.",
-  "The focused interfaces document transfer start, completion, failure, cancellation, and retries alongside participant and plan-type correlation metadata.",
-  "The answer explicitly assigns retries and ordered-transfer behavior to the procedure rather than claiming RIDL response bounds provide them.",
+  "The declarations represent plan type, system and component identity, item count, sequence index, and typed item payloads.",
+  "Commands support announcements and item supply, while receiver events support numbered requests, completion, and failure.",
+  "Separate interfaces and payload types are provided, but the supplied material does not describe separate storage for each plan type.",
+  "Unexpected items are ignored without advancing, but re-requesting the expected item after an unexpected sequence is not described.",
+  "The answer describes retries for unanswered requests and announcements, provides retry timing and limits, and distinguishes whole-plan completion from individual item supply.",
+  "The interfaces reference a procedure document, but its contents are absent, leaving the claimed lifecycle and correlation documentation unavailable for assessment.",
+  "The answer does not claim that RIDL timing bounds or stream signatures provide loss recovery or ordered-transfer state.",
 ]
-score = 0.8461538461538461
+score = 0.6153846153846154

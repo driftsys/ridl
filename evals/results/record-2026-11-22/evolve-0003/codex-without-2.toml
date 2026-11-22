@@ -3,19 +3,32 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "evolve-0003"
 
 [mechanical]
-diff_matches = false
+diff_matches = true
 lints_match = true
 no_error = true
-notes = ['diff verdict None, expected Some("compatible")']
-passed = false
+notes = []
+passed = true
 verify_loop = true
 verify_via = "both"
 
 [rubric]
-score = 0.0
-skipped = "mechanical checks failed"
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, false, true, false, true]
+reasons = [
+  "Telemetry now has `requires Horn` in system.rsdl.",
+  "`signal count: SoundCount` is appended after `active`, and SoundCount is a named type with range [0..4294967295].",
+  "Visible changes are limited to the new SoundCount type, the appended count signal, and the Telemetry requires line plus doc edits; no other declarations appear altered.",
+  "The final message only says checks passed and never shows the actual ridl diff output or its top-level `compatible` verdict.",
+  "The count is modeled as a signal.",
+  "It says a consumer observes the new count signal and Telemetry's added Horn connection, which wrongly presents the composition change as observable and does not say the requirement leaves the wire unchanged.",
+  "Only one provider (Climate offering Control) exists and no component was moved between machines.",
+]
+score = 0.75

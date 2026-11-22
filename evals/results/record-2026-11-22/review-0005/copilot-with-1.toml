@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "review-0005"
@@ -21,11 +22,11 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [false, false, true, true, false, false]
 reasons = [
-  "It recognizes eight station copies of the three declarations but does not explain the maintenance cost of keeping changes consistent across those packages.",
-  "It proposes shared types and a parameterised station but does not explicitly preserve separate addressed instances or explain the frozen one-package-per-branch rule.",
-  "It identifies FanSpeed's integer range 0..100, percent metadata in comments, and the representation change caused by float-backed unit types.",
-  "It identifies the preserved UP/MIDDLE/DOWN names, their integer codes, and the required adapter mapping to upstream strings.",
-  "It notes that application and errors are unreported but does not explain that the matching signal lacks correlation with a particular setter request.",
-  "It asserts default command acknowledgement bounds and acceptance semantics that are absent from the supplied definitions.",
+  "It identifies the eight station packages and repeated declarations but does not explain the maintenance cost of keeping changes consistent across them.",
+  "It recommends a reusable station contract with separate instance bindings but does not recognize the frozen one-package-per-branch rule as the reason for repetition.",
+  "It identifies the integer 0..100 constraint, comment-only percent metadata, and float-backed unit types, establishing that adding a unit would change the representation.",
+  "It names the three upstream strings, their integer enum codes, and the adapter mapping required between them.",
+  "It explains the lack of applied-result and failure reporting but does not explain that matching signals lack correlation with individual setter requests.",
+  "It asserts concrete default command and signal timing values that are absent from the supplied selected definitions.",
 ]
 score = 0.3333333333333333

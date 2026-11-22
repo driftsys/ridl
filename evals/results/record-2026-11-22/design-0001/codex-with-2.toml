@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "design-0001"
@@ -21,12 +22,12 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "Declares SystemId, ComponentId, ComponentKey, Announcement metadata, and a PresenceSource event announcement representing repeated announcements.",
-  "ComponentType is a separate field from ComponentId, and docs say never infer type from componentId.",
-  "ComponentStatus pairs the latest announcement (containing key) with ConnectionState CONNECTED/DISCONNECTED, and the status query takes a key.",
-  "TrackingPolicy has intervalMs and missedLimit with 'no default' and 'deployment-selected' docs; no universal timeout is claimed.",
-  "The final message says runtime code must enforce idle announcements, fault-aware sending, timers and timeout transitions, and the schema comments say workers must consult fault state.",
-  "PresenceSource and PresenceMonitor are focused discovery interfaces with no mission or parameter operations.",
-  "The answer says that runtime code enforces the behavior and RIDL only checks types and signatures; it makes no claim that the types or annotations implement detection.",
+  "Identity and metadata structs are declared, and the PresenceSource interface has an announcement event for repeated presence announcements.",
+  "ComponentKey holds only system and component IDs, and ComponentType is a separate field in Announcement with docs saying it is not inferred from IDs.",
+  "ConnectionReport pairs ConnectionState (CONNECTED/DISCONNECTED) with the last announcement, which includes the key, and the report query takes a ComponentKey.",
+  "TrackingPolicy provides deployment-provisioned interval and missedLimit, and the docs state that no universal timing values are prescribed.",
+  "The final message says runtime code must schedule idle announcements, stop them on fault, and track deadlines. The README is not shown, but the message and the interface comments cover this.",
+  "The presence package is focused on discovery and contains no mission or parameter operations.",
+  "The answer explicitly says RIDL checks structure and does not implement the behaviors.",
 ]
 score = 1.0

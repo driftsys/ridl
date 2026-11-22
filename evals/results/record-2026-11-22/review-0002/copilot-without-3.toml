@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "review-0002"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, false, false, true, false, false]
+met = [true, false, true, true, false, true]
 reasons = [
-  "The answer identifies mixed responsibilities and proposes separate navigation, map, and administration interfaces covering lifecycle management.",
-  "The answer does not identify the seven independent isPathValid parameters or explain that their request-struct defaults are absent from the call signature.",
-  "The answer identifies missing result interactions and unavailable outcomes but does not explain that this follows the frozen kind rule.",
-  "The separate proposal adds goal identity and a terminal result event for observable, correlated outcomes without claiming compiler support for ROS action execution.",
-  "The answer does not explicitly identify loadMap and saveMap as state-affecting queries produced mechanically by the service rule or distinguish that mapping from redesign recommendations.",
-  "Although it preserves the workspace, describing results as lost and proposing to reinstate them presents their absence as a porting omission rather than a consequence of the frozen rule.",
+  "The answer identifies mixed responsibilities and proposes separate costmap, map, lifecycle, and action interfaces.",
+  "The answer does not identify isPathValid's seven independent parameters or explain that its request struct's explicit defaults are absent from the call parameters.",
+  "The answer explains that goal commands and feedback events exist while the fixed rule creates no result interaction, leaving completion and failure delivery unspecified.",
+  "The proposal adds explicit result events and goal IDs across goals, feedback, and results without claiming compiler support for ROS action execution.",
+  "The answer does not explain that both loadMap and saveMap are queries because of the mechanical service rule or distinguish that rule from redesigned API semantics.",
+  "The answer attributes missing result interactions to the fixed rule and keeps proposed additions separate from the unchanged evidence port.",
 ]
-score = 0.2727272727272727
+score = 0.6363636363636364

@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "design-0003"
@@ -19,15 +20,15 @@ verify_via = "both"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, true, true, true, true, true, true]
+met = [true, true, true, false, true, false, true, true]
 reasons = [
-  "Name is bytes [1..16], byte-based bound admitting 16-byte names with no terminator.",
-  "NumericValue union with typed arms encodes both value and type.",
-  "readAll, readOne, write commands exist, with a value event carrying write readback.",
-  "ValueReport has count and index; README is said to cover list completeness and retries, which fits the missing-entry detection requirement.",
-  "Separate failure event with ParameterError; README is said to cover adapter association rules, though the schema association is only through selector and operation.",
-  "The README is stated to cover transport encoding, and the schema avoids assuming all types are float with distinct typed arms plus ENCODING_UNSUPPORTED; the explanation itself is not visible but is likely present.",
-  "Index-based reads need no name knowledge, and the write doc says readback reports the current stored value including rejected writes.",
-  "Selector union offers an index arm for reading one value without a name.",
+  "Name is `bytes [1..16]`, a byte-based bound admitting 16-byte names with no terminator.",
+  "NumericValue is a union of typed arms, so the active arm carries the numeric type.",
+  "readOne, readAll and write commands are distinct, and valueUpdated carries the write readback.",
+  "Count and index fields exist, but the RIDL does not describe detecting missing entries; the README is not shown, so this cannot be confirmed.",
+  "ErrorReport and the operationError event are separate from valueUpdated, the one-instance-per-component comment addresses the component, and request IDs and selectors tie replies to parameters.",
+  "The RIDL has no explanation of byte-wise versus numeric-cast MAVLink encoding; the README is not shown, so this cannot be confirmed.",
+  "Nothing requires advance knowledge of names, and the write comment says the stored value is reported rather than claiming the requested value was applied.",
+  "Selector offers byIndex, so a parameter can be requested without knowing its name.",
 ]
-score = 1.0
+score = 0.75

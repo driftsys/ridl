@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "design-0002"
@@ -13,7 +14,7 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "cli"
 
 [rubric]
 handoff = false
@@ -21,12 +22,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, false, false, true, true, true]
 reasons = [
-  "The RIDL declarations represent plan type, sender and receiver identities, item count, sequence index, and typed item payloads.",
-  "PlanStore and PlanSource provide both participants with count announcement, numbered request, item supply, success confirmation, and failure reporting interactions.",
-  "Separate transfers, counts, and indices are described, but the supplied material does not describe separate storage for the three plan types.",
-  "Unexpected items are ignored without advancing, but re-requesting the expected item after an unexpected sequence number is not explicitly described.",
-  "The answer describes request and announcement timeouts with retries and identifies accepted as final plan confirmation distinct from item delivery.",
-  "The focused interfaces and associated types document transfer initiation, cancellation, completion, failure, and correlation through participant identities, plan type, and transfer ID.",
-  "The answer explicitly states that retry and ordering rules are not enforced by the contract and makes no claim that response bounds supply them.",
+  "The RIDL declarations represent plan type, participant identity, item count, item index and typed item payloads.",
+  "The two participant interfaces define count announcement, numbered requests, item supply, success confirmation and failure reporting.",
+  "The declarations identify independent plan types, but the supplied material does not describe separate storage or provide the referenced transfer procedure.",
+  "Unexpected items are explicitly prevented from advancing the transfer, but re-requesting the expected index after an unexpected item is not described.",
+  "The answer specifies a response timeout and request attempt limit, describes resending unanswered requests, and distinguishes item supply from final success confirmation.",
+  "Transfer identity, announcement idempotence, request repetition, completion and failure are documented alongside the focused plan-transfer interfaces.",
+  "The answer does not claim that RIDL response bounds or stream signatures provide loss recovery or ordered-transfer state.",
 ]
 score = 0.6923076923076923
