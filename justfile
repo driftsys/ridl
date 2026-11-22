@@ -842,9 +842,10 @@ _cabin-generate:
 # This is the one place the whole chain runs as a person runs it: `ridl build`
 # writes a crate from `examples/cabin/cabin.ridl`, and `cargo` builds a program
 # against it and executes it. The program prints one line per round trip — a
-# signal, an event, a command and a query — and exits non-zero if any of them
-# does not hold, so a green run is the demo working rather than merely
-# compiling.
+# signal, an event, a command and a query, the command and the query again
+# through the blocking client, and one value through the podbuf codec — and
+# exits non-zero if any of them does not hold, so a green run is the demo
+# working rather than merely compiling.
 #
 # `examples/cabin` is its own cargo workspace, outside this repository's. Its
 # `generated/`, `generated-corpus/` and `generated-shapes/` members are written

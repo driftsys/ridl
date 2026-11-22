@@ -11,12 +11,14 @@ intermediate representation (IR).
 
 This repository collects the language specifications, the cross-cutting design
 specs, the architecture decision records (ADRs), the implementation roadmap, and
-the compiler workspace. Two layers are built: the typl v0.1 preview toolchain
+the compiler workspace. These layers are built: the typl v0.1 preview toolchain
 (epic E1) — compiler, `ridl fmt`, an LSP server, and a VS Code extension — and
 the ridl interface layer over it (epic E2) — the five interaction kinds, timing,
 contracts, interfaces and services, a TypeScript backend beside the Rust one,
-and `ridl diff`. The three remaining description languages are sequenced in the
-roadmap.
+and `ridl diff` — rsdl's checks and its lowering to the IR, and the `ridl-rt`
+runtime library that generated Rust code links, with the in-process runtime
+`ridl-loopback`. The roadmap sequences what is not built, and `rmdl` has no
+implementation.
 
 The documentation is published as a book at <https://driftsys.github.io/ridl/>,
 rebuilt from `docs/book/` by CI on every push to `main`.

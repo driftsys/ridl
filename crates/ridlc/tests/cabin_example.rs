@@ -16,7 +16,7 @@
 //! against it, runs the program, and requires it to exit zero having
 //! completed one round trip of every interaction kind that carries a payload
 //! — a signal, an event, a command and a query — through the generated
-//! `Client`, `Publisher`, `Provider` and `dispatch` over `Loopback`.
+//! `Client`, `Publisher`, `Provider` and `serve` over `Loopback`.
 //!
 //! **What this does not establish.** The round trip is symmetric, so it
 //! cannot see an identity error: a wrong `InterfaceNo`, a wrong ordinal or a

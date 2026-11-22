@@ -196,10 +196,13 @@ nothing.
    packages that `ridl build --emit catalog` gives the catalog descriptor, so a
    region's hash equals the hash in its catalog's descriptor.
    `compile_workspace` (and so `ridl diff`) and the corpus runner lower through
-   `ridlc::lower_workspace_system`; the system write of `ridl build` lowers with
-   `lower_system` and embeds the hashes through the same helpers. It reuses the
-   `ridl.std` IR when a code emit already checked it, and checks `ridl.std`
-   itself when a package references it and no code emit ran.
+   `ridlc::lower_workspace_system`; `ridl build` lowers the system with
+   `lower_system` and embeds the hashes through the same helpers, whenever the
+   build runs a code emit or a plugin, is given `--deployment`, or writes a
+   system dump. It reuses the `ridl.std` IR when a code emit or a plugin already
+   checked it, and checks `ridl.std` itself when a package references it and
+   only a deployment or a system dump needs the system
+   (`crates/ridlc/src/lib.rs`, `wants_system` and `hash_std`).
 
 8. **`ridl build` writes every artifact when the only errors are RSDL-7xx, and
    still exits 1** (plan decision P-B8, confirmed by Sebastien on 2026-09-17).

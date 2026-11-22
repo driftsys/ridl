@@ -919,11 +919,10 @@ what it stands on are placeholders with a named replacement.
 | The transport under the in-process runtime the examples run against | driftsys/ridl#265 |
 | The contract-clause translator                                      | driftsys/ridl#704 |
 
-One further limit is not a placeholder but scope. A second, that
-`ridl --emit rust` did not emit the face at all, closed on 2026-09-21: the
-pipeline gained `generate_pipeline`, which emits the face and the descriptors
-beside the domain types and the codec, so a package built from the command line
-carries one. `generate` is unchanged and still emits neither.
+`ridl build --emit rust` has emitted the face since 2026-09-21: the pipeline
+gained `generate_pipeline`, which emits the face and the descriptors beside the
+domain types and the codec, so a package built from the command line carries
+one. `generate` is unchanged and still emits neither.
 
 **A call's argument type is the declared parameter's named type, or the argument
 struct the lowering induced for it.** A call with exactly one parameter of a
@@ -933,8 +932,10 @@ with one that is not a named type sends a struct named
 read the same way: a named type as it is, and a tuple reply as the induced
 `<Interface><Member>Reply`. Two shapes are still refused, and skip the whole
 interface: a parameter or reply with no declared type, and a fallible `T | E`
-reply. A call with a stream, in either position, gets its descriptor but no
-method on the face.
+reply. A call with one stream parameter or a stream reply gets face methods (see
+[the interaction face](../design/interaction-face.md)). A call with two or more
+stream parameters, or an upload with a byte or text reply stream, gets its
+descriptor but no method on the face.
 
 The clause translator is worth one extra sentence, because it fails loudly. The
 IR carries a contract clause only as canonical ridl text, not as an expression

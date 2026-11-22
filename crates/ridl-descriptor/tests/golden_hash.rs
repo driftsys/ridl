@@ -2,7 +2,7 @@
 // `std` feature carries.
 #![cfg(feature = "std")]
 
-//! The catalog hash of the corpus package is pinned (driver §4 answer 4).
+//! The catalog hash of the corpus package is pinned.
 //! A different value here means the reduced unit or the binary encoding
 //! changed; ADR-0014 decision 15 says when the pin may move.
 //!

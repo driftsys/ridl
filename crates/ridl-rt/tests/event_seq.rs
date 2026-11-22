@@ -72,7 +72,7 @@ fn interleaved_channels_of_one_interface_report_no_loss() {
     assert_eq!(tracker.observe(IFACE, SHIFT_DONE, 3), Ok(Continuity::Next));
 }
 
-/// Frame specification §3 and §6.2: a channel is one `(interface, ordinal)` in
+/// Frame specification §6.2: a channel is one `(interface, ordinal)` in
 /// the session's catalog, so one ordinal in two interfaces is two channels.
 #[test]
 fn one_ordinal_in_two_interfaces_is_two_channels() {

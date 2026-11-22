@@ -931,9 +931,11 @@ are the specification, and the names in their override column are the shape
 planned for them, not an API.
 
 `Watermark`'s generation counter field is named `generation`, not `gen`: `gen`
-is a reserved keyword in the 2024 edition, so the field name the crate's earlier
-working spec used does not compile, and `generation` also matches the name of
-`ScannableSignals::generation`, the method that returns the same counter.
+is a reserved keyword in the 2024 edition. The crate is edition 2021, but
+`just compat-check` also builds and tests it as edition 2024, so the field name
+the crate's earlier working spec used would fail there, and `generation` also
+matches the name of `ScannableSignals::generation`, the method that returns the
+same counter.
 
 Semantics each implementation presents:
 

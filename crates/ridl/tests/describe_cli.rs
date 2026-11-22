@@ -121,9 +121,8 @@ fn build_emits_the_same_bytes_twice() {
     assert_eq!(a, b);
 }
 
-/// driftsys/ridl#275's criterion, as driver §4 answer 11 gives it to #378:
-/// the hash — and the whole descriptor — is the same whether a build emits
-/// proto3, FlatBuffers or both beside the catalog.
+/// driftsys/ridl#275's criterion: the hash — and the whole descriptor — is the
+/// same whether a build emits proto3, FlatBuffers or both beside the catalog.
 #[test]
 fn build_writes_the_same_descriptor_whatever_else_it_emits() {
     let mut descriptors = Vec::new();

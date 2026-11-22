@@ -4,7 +4,7 @@ use proc_macro2::{Literal, TokenStream};
 use quote::quote;
 use ridl_ir::step::{FloatLattice, FloatStepPlan, prepare_float_step};
 
-/// Clears the IEEE-754 sign bit using operations available in core on Rust 1.83.
+/// Clears the IEEE-754 sign bit using operations available in core on Rust 1.88.
 fn absolute(value: &TokenStream, wire_f32: bool) -> TokenStream {
     if wire_f32 {
         quote! { ::core::primitive::f32::from_bits((#value).to_bits() & 0x7fff_ffffu32) }
