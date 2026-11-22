@@ -18,11 +18,12 @@ commit `36790a04`.
   failures with a rubric score of 0.0.
 
 **These numbers are provisional.** The runs used `ridl` 0.20.0 from `PATH` as
-the agents' MCP server and as the scorer, while the workspace was at 0.21.0. The
-result files do not record the version; the evidence is that the binary on
-`PATH` was 0.20.0, and that its errors on the two start workspaces below match
-the failures the result files record. ridl 0.20.0 rejects the start workspaces
-of evolve-0003 and design-0004 with 5 errors. As a result:
+the agents' MCP server, as the `ridl` an agent ran from its shell, and as the
+scorer, while the workspace was at 0.21.0. The result files do not record the
+version; the evidence is that the binary on `PATH` was 0.20.0, and that its
+errors on the two start workspaces below match the failures the result files
+record. ridl 0.20.0 rejects the start workspaces of evolve-0003 and design-0004
+with 5 errors. As a result:
 
 - evolve-0003 fails `diff_matches` on all 12 runs, whatever the agent did.
 - design-0004 fails `no_error` on all 6 Codex runs. The 6 Copilot runs pass only
