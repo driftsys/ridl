@@ -3316,3 +3316,63 @@ fn match_clause_vin_uses_a_whole_value_unicode_regexp() {
     );
     assert!(source.contains("value, '/[A-Z]{17}/'"), "{source}");
 }
+
+/// A constant of the package `veh.common` typed by `reference`, a scalar of
+/// another package.
+fn foreign_typed_const(name: &str, reference: &str, value: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::ConstDef(v2::ConstDef {
+            type_ref: Some(reference.to_string()),
+            value: value.to_string(),
+            regex: None,
+        }),
+    )
+}
+
+/// A constant typed by a named scalar of another package is emitted when the
+/// model holds the declaring package. Three scalars are declared there, and
+/// each constant names a different one, so a lookup that takes the wrong
+/// foreign declaration renders the wrong literal: a float (`Speed`), a 64-bit
+/// integer (`Odometer`, a `bigint`) and a 16-bit integer (`Counter`, a
+/// `number`).
+#[test]
+fn a_constant_typed_by_a_scalar_of_another_package_is_emitted() {
+    let other = package(
+        "other.pkg",
+        vec![speed_decl(), odometer_decl(), counter_decl()],
+    );
+    let local = package(
+        "veh.common",
+        vec![
+            foreign_typed_const("LIMIT", "other.pkg.Speed", "50.5"),
+            foreign_typed_const("TOTAL", "other.pkg.Odometer", "9007199254740993"),
+            foreign_typed_const("COUNT", "other.pkg.Counter", "7"),
+        ],
+    );
+    let model = ridl_ir::codegen::lower(&local, &[&other]);
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(
+        source.contains("export const LIMIT = 50.5;"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains("export const TOTAL = 9007199254740993n;"),
+        "got:\n{source}"
+    );
+    assert!(source.contains("export const COUNT = 7;"), "got:\n{source}");
+}
+
+/// Without the package that declares the scalar, the model cannot resolve the
+/// constant's type, so the constant is not emitted.
+#[test]
+fn a_constant_typed_by_a_scalar_of_a_package_not_given_is_not_emitted() {
+    let local = package(
+        "veh.common",
+        vec![foreign_typed_const("LIMIT", "other.pkg.Speed", "50.5")],
+    );
+    let source = generate(&local).expect("generation succeeds").source;
+    assert!(!source.contains("LIMIT"), "got:\n{source}");
+}

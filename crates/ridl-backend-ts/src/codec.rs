@@ -2848,7 +2848,7 @@ impl<'a> Codec<'a> {
                 .filter(|d| {
                     self.has_domain_types()
                         && d.visibility() != v1::Visibility::Internal
-                        && crate::foreign_module_emits(self.model, self.package, d)
+                        && crate::foreign_module_emits(self.model, d)
                 })
                 .map(|d| declared_name(d).to_string())
                 .collect(),

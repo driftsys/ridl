@@ -741,9 +741,10 @@ fn scalar_constructor(ctx: &Ctx, decl: &v2::Decl, td: &v2::TypeDef) -> Option<St
 
 /// A constant becomes an `export const` with an inferred literal type
 /// (`as const` for strings, so the literal type is kept). A constant whose
-/// backing cannot be resolved here (a cross-package type) or has no literal
-/// form (bytes) is skipped rather than mis-typed, mirroring the Rust
-/// backend.
+/// backing cannot be resolved (a type the model does not hold) or has no
+/// literal form (bytes) is skipped rather than mis-typed, mirroring the Rust
+/// backend. The type of a constant is never written, so a scalar of another
+/// package needs no import.
 fn emit_const(
     ctx: &Ctx,
     decl: &v2::Decl,
@@ -768,7 +769,7 @@ fn emit_const(
         return Ok(None);
     };
 
-    let value = if let Some((backing, wide)) = same_package_scalar_backing(ctx, type_ref) {
+    let value = if let Some((backing, wide)) = scalar_backing_of(ctx, type_ref) {
         match backing {
             ScalarBacking::Float => float_literal(&cd.value),
             ScalarBacking::Integer if wide => bigint_literal(name, &cd.value)?,
@@ -807,8 +808,9 @@ fn emit_const(
             v2::PrimitiveType::Bytes | v2::PrimitiveType::Unspecified => return Ok(None),
         }
     } else {
-        // A cross-package or unresolved constant type: the backing is unknown
-        // here, so the constant is skipped rather than mis-typed.
+        // An unresolved constant type, or a cross-package one whose package
+        // the model does not hold: the backing is unknown here, so the
+        // constant is skipped rather than mis-typed.
         return Ok(None);
     };
 
@@ -1186,6 +1188,41 @@ fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<(ScalarBack
         Some(v2::decl::Kind::TypeDef(td)) => Some((backing_scalar(td), is_wide(td))),
         _ => None,
     }
+}
+
+/// The backing class and 64-bit-width flag of a named scalar type, or `None`
+/// when the reference does not name a scalar. A bare reference is read from
+/// this package's declarations, and a `pkg.Name` reference from the
+/// declarations of that package in the model, which holds it only when the
+/// package was given to the lowering.
+fn scalar_backing_of(ctx: &Ctx, reference: &str) -> Option<(ScalarBacking, bool)> {
+    if let Some(found) = same_package_scalar_backing(ctx, reference) {
+        return Some(found);
+    }
+    let (package, name) = reference.rsplit_once('.')?;
+    let scalar = ctx.model.foreign.iter().find_map(|foreign| {
+        let declaration = foreign.declaration.as_ref()?;
+        if foreign.package != package || declared(declaration.name.as_ref()) != name {
+            return None;
+        }
+        match &declaration.kind {
+            Some(v1::declaration::Kind::Scalar(scalar)) => Some(scalar),
+            _ => None,
+        }
+    })?;
+    let backing = match scalar.class() {
+        v1::ScalarClass::Integer => ScalarBacking::Integer,
+        v1::ScalarClass::Boolean => ScalarBacking::Boolean,
+        v1::ScalarClass::String => ScalarBacking::String,
+        v1::ScalarClass::Bytes | v1::ScalarClass::Unspecified => ScalarBacking::Bytes,
+        v1::ScalarClass::Float => ScalarBacking::Float,
+    };
+    let wide = matches!(
+        scalar.width,
+        Some(v1::scalar::Width::IntWidth(w))
+            if matches!(v1::IntWidth::try_from(w), Ok(v1::IntWidth::U64 | v1::IntWidth::I64))
+    );
+    Some((backing, wide))
 }
 
 /// Maps a typl primitive keyword written as a type reference to its
@@ -1828,7 +1865,7 @@ fn ts_link(
             return None;
         }
         let in_output = match &alias {
-            Some(_) => output.imports.contains(owner) && foreign_module_emits(model, owner, decl),
+            Some(_) => output.imports.contains(owner) && foreign_module_emits(model, decl),
             None => output.emitted.contains(name),
         };
         if !in_output {
@@ -1848,9 +1885,9 @@ fn ts_link(
 /// Whether the module of the package `owner` emits its declaration `decl`,
 /// by the rule `emit_const` applies: every kind but a constant is emitted,
 /// and a constant is emitted when it is a regex, a primitive other than
-/// `bytes`, or of a named scalar of its own package that is not backed by
+/// `bytes`, or of a named scalar of any package that is not backed by
 /// `bytes`. A named scalar this model does not hold gives `false`.
-fn foreign_module_emits(model: &v1::Model, owner: &str, decl: &v1::Declaration) -> bool {
+fn foreign_module_emits(model: &v1::Model, decl: &v1::Declaration) -> bool {
     let Some(v1::declaration::Kind::Constant(constant)) = decl.kind.as_ref() else {
         return true;
     };
@@ -1861,7 +1898,7 @@ fn foreign_module_emits(model: &v1::Model, owner: &str, decl: &v1::Declaration) 
             Ok(v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified) | Err(_)
         ),
         Some(v1::constant::Typed::Named(named)) => {
-            if !named.resolved || named.package != owner {
+            if !named.resolved {
                 return false;
             }
             let target = if named.foreign {
