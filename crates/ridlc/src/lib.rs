@@ -2058,7 +2058,7 @@ fn write_crate_files(
     // does not start with the generated marker is not one ridlc wrote, and is
     // left as it is.
     let wasm_path = out_dir.join(WASM_FILE);
-    if wasm.is_none() && wasm_path.is_file() {
+    if wasm.is_none() && ridl_core::fs_probe::is_file(&wasm_path)? {
         let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
         if std::fs::read_to_string(&wasm_path)?.starts_with(&marker) {
             std::fs::remove_file(&wasm_path)?;
@@ -2076,7 +2076,7 @@ fn write_crate_files(
     // The same rule for the `instances` module: a build without a system
     // removes the file an earlier build with one wrote.
     let instances_path = out_dir.join(INSTANCES_FILE);
-    if instances.is_none() && instances_path.is_file() {
+    if instances.is_none() && ridl_core::fs_probe::is_file(&instances_path)? {
         let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
         if std::fs::read_to_string(&instances_path)?.starts_with(&marker) {
             std::fs::remove_file(&instances_path)?;
@@ -2474,7 +2474,7 @@ fn write_typescript_instances(
                 ));
             }
         }
-    } else if path.is_file() {
+    } else if ridl_core::fs_probe::is_file(&path)? {
         let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
         if std::fs::read_to_string(&path)?.starts_with(&marker) {
             std::fs::remove_file(path)?;
@@ -4261,5 +4261,49 @@ mod backend_options_tests {
                 .iter()
                 .any(|(key, _)| key == "transcode")
         );
+    }
+}
+
+/// Probes of generated files report a failure instead of treating the file as
+/// absent (driftsys/ridl#1320). A symbolic link loop makes the metadata of a
+/// path fail without any permission change, so these tests also run as root.
+#[cfg(all(test, unix))]
+mod unreadable_probe_tests {
+    use super::*;
+
+    /// A directory holding a symbolic link `name` that points at itself.
+    fn directory_with_loop(name: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink(name, dir.path().join(name)).unwrap();
+        dir
+    }
+
+    #[test]
+    fn the_overwrite_gate_reports_a_file_whose_type_cannot_be_read() {
+        let dir = directory_with_loop("lib.rs");
+        let result = refuse_overwrite(&dir.path().join("lib.rs"), "//", None);
+        assert!(result.is_err(), "{result:?}");
+    }
+
+    #[test]
+    fn a_stale_wasm_module_that_cannot_be_inspected_is_reported() {
+        let dir = directory_with_loop(WASM_FILE);
+        let result = write_crate_files(dir.path(), "c", None, &[], None, &[], None, None, &[]);
+        assert!(result.is_err(), "{result:?}");
+    }
+
+    #[test]
+    fn a_stale_instances_module_that_cannot_be_inspected_is_reported() {
+        let dir = directory_with_loop(INSTANCES_FILE);
+        let result = write_crate_files(dir.path(), "c", None, &[], None, &[], None, None, &[]);
+        assert!(result.is_err(), "{result:?}");
+    }
+
+    #[test]
+    fn a_stale_typescript_instances_file_that_cannot_be_inspected_is_reported() {
+        let dir = directory_with_loop(TS_INSTANCES_FILE);
+        let mut diagnostics = Vec::new();
+        let result = write_typescript_instances(dir.path(), None, None, None, &mut diagnostics);
+        assert!(result.is_err(), "{result:?}");
     }
 }

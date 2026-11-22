@@ -442,12 +442,16 @@ pub fn first_nested_snapshot_dir(dir: &Path) -> Result<Option<PathBuf>, DiffSide
         path: path.to_path_buf(),
         error,
     };
-    let mut subdirectories: Vec<PathBuf> = std::fs::read_dir(dir)
+    let mut subdirectories: Vec<PathBuf> = Vec::new();
+    for entry in std::fs::read_dir(dir)
         .map_err(|e| unreadable(dir, e))?
         .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_dir())
-        .collect();
+    {
+        let path = entry.path();
+        if ridl_core::fs_probe::is_dir(&path).map_err(|e| unreadable(&path, e))? {
+            subdirectories.push(path);
+        }
+    }
     subdirectories.sort();
     for subdirectory in subdirectories {
         if !ir_json_files(&subdirectory)
@@ -851,6 +855,29 @@ mod tests {
         assert_eq!(
             error.to_string(),
             format!("cannot read {}: {io}", nested.display())
+        );
+    }
+
+    /// A directory that can be listed but not searched holds entries whose
+    /// type cannot be read; the scan for nested snapshots reports one.
+    #[cfg(unix)]
+    #[test]
+    fn the_nested_snapshot_scan_reports_an_entry_whose_type_cannot_be_read() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("sub")).unwrap();
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o444)).unwrap();
+        let listable = fs::read_dir(dir.path()).is_ok();
+        let searchable = fs::metadata(dir.path().join("sub")).is_ok();
+        let result = first_nested_snapshot_dir(dir.path());
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
+        if searchable || !listable {
+            eprintln!("skipped: the process is not bound by directory permissions");
+            return;
+        }
+        assert!(
+            matches!(&result, Err(DiffSideError::NestedRead { .. })),
+            "{result:?}"
         );
     }
 }

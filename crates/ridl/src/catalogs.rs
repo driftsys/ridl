@@ -368,6 +368,17 @@ mod tests {
     use super::*;
     use ridl_ir::v2::{Backing, PrimitiveType, TypeDef, backing, decl};
 
+    /// A directory whose type cannot be read (a symbolic link loop) is an
+    /// error, not a directory with no history (driftsys/ridl#1320).
+    #[cfg(unix)]
+    #[test]
+    fn a_directory_whose_type_cannot_be_read_is_an_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let link = dir.path().join("loop");
+        std::os::unix::fs::symlink("loop", &link).unwrap();
+        assert!(holds_history_and_snapshot(&link).is_err());
+    }
+
     #[test]
     fn a_proved_type_only_break_requires_preserving_prior_artifacts() {
         let root = std::env::temp_dir().join(format!(

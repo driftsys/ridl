@@ -326,7 +326,9 @@ a `ridl.toml`, or a `.typl`, `.ridl` or `.rsdl` file, directly inside it — sin
 publishing a baseline there would write snapshots next to the sources.
 Auto-discovery asserts nothing about a baseline being present, so a
 `.ridl/baseline/` directory found this way, empty or absent, keeps the silent
-skip the two paragraphs above do not touch.
+skip the two paragraphs above do not touch. A `.ridl/baseline/` whose type
+cannot be read — a permission error, or a symbolic link loop — is not absent:
+`ridl check` names it with the operating system cause and exits 2.
 
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares the

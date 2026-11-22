@@ -3448,7 +3448,9 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
 /// "absent" or "unreadable" any other way, and treating those as zero files
 /// is what let `ridl fmt` report success over a tree it never read.
 fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::Error)> {
-    if ridl_core::fs_probe::is_file(path).map_err(|err| (path.to_path_buf(), err))? {
+    // A failed type probe of `path` itself is not hidden by `is_file`: the
+    // `read_dir` below fails on the same path and reports it.
+    if path.is_file() {
         return Ok(vec![path.to_path_buf()]);
     }
     let mut files = Vec::new();
@@ -3486,6 +3488,19 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A published directory whose type cannot be read (a symbolic link loop)
+    /// is an error, not an empty published set (driftsys/ridl#1320).
+    #[cfg(unix)]
+    #[test]
+    fn the_publication_sets_report_an_output_directory_that_cannot_be_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out");
+        std::os::unix::fs::symlink("out", &out).unwrap();
+        let staging = dir.path().join("staging");
+        std::fs::create_dir(&staging).unwrap();
+        assert!(PublicationSets::load(&out, &staging).is_err());
+    }
 
     /// Historical IR can hold two shapes under one name even though current
     /// source declarations cannot. Search both for the retired interaction.

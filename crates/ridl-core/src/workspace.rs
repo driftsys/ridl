@@ -1491,7 +1491,7 @@ impl Loader {
         union: &ImportUnion,
     ) -> io::Result<Option<String>> {
         let manifest_path = unit.dir.join("ridl.toml");
-        if !manifest_path.is_file() {
+        if !crate::fs_probe::is_file(&manifest_path).map_err(|e| cannot_read(&manifest_path, e))? {
             self.diagnostics.push(detached(
                 DiagCode::MANI_105,
                 format!(
@@ -4206,6 +4206,55 @@ service:veh.common.Climate 2
         );
         assert!(message.contains("Permission denied"), "{message}");
         assert!(!message.contains("does not exist"), "{message}");
+    }
+
+    /// A `ridl.toml` that cannot be inspected inside a unit's tree (a symbolic
+    /// link loop) is reported with its path and the cause, not skipped as if
+    /// the subdirectory held no manifest (driftsys/ridl#1320).
+    #[cfg(unix)]
+    #[test]
+    fn a_nested_manifest_that_cannot_be_inspected_is_reported() {
+        let dir = TempDir::new("nested-manifest-loop");
+        dir.write("ridl.toml", PACKAGE_A);
+        dir.write("a.ridl", "package a\n");
+        let sub = dir.path().join("sub");
+        fs::create_dir(&sub).unwrap();
+        std::os::unix::fs::symlink("ridl.toml", sub.join("ridl.toml")).unwrap();
+        let nested = nested_manifest_of(&sub);
+        assert!(nested.is_err(), "{nested:?}");
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        assert!(result.is_err(), "the load reports the manifest");
+        let message = result.err().unwrap().to_string();
+        assert!(
+            message.contains(&format!(
+                "cannot read `{}`",
+                sub.join("ridl.toml").display()
+            )),
+            "{message}"
+        );
+    }
+
+    /// A subdirectory that can be listed but not searched holds entries whose
+    /// type cannot be read; the load reports one instead of skipping it.
+    #[cfg(unix)]
+    #[test]
+    fn an_unsearchable_source_subdirectory_is_reported() {
+        use std::os::unix::fs::PermissionsExt;
+        if skip_as_root() {
+            return;
+        }
+        let dir = TempDir::new("unsearchable-source-subdirectory");
+        dir.write("ridl.toml", PACKAGE_A);
+        dir.write("a.ridl", "package a\n");
+        dir.write("sub/deep/b.ridl", "package a\n");
+        let sub = dir.path().join("sub");
+        fs::set_permissions(&sub, fs::Permissions::from_mode(0o444)).unwrap();
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        fs::set_permissions(&sub, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(result.is_err(), "the load reports the subdirectory");
+        let message = result.err().unwrap().to_string();
+        assert!(message.contains("Permission denied"), "{message}");
+        assert!(message.contains(&sub.display().to_string()), "{message}");
     }
 
     /// An absolute entry is normalised lexically before its ancestors are

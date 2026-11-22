@@ -1,5 +1,7 @@
 //! A path that cannot be read is reported with the operating system's cause
-//! and the path that failed (driftsys/ridl#196). The exit code stays 2.
+//! and the path that failed (driftsys/ridl#196, driftsys/ridl#1320). The exit
+//! code stays 2. A path whose type cannot be read is never reported as absent;
+//! the probes that decide this are `ridl_core::fs_probe`.
 //!
 //! Unix only: the fixtures use `chmod 000`, which does not bind the root user,
 //! so every test that uses it returns early when it runs as root. Tests that
@@ -307,6 +309,26 @@ fn an_explicit_baseline_below_an_unreadable_directory_is_not_reported_missing() 
     );
     assert!(stderr.contains("Permission denied"), "the cause: {stderr}");
     assert!(!stderr.contains("does not exist"), "not absent: {stderr}");
+}
+
+/// An auto-discovered `.ridl/baseline` whose type cannot be read (a symbolic
+/// link loop) is an error, not a missing baseline that `ridl check` skips
+/// (driftsys/ridl#1320). The exit code was 0 before.
+#[test]
+fn an_auto_discovered_baseline_that_cannot_be_read_is_an_error() {
+    let fixture = Fixture::new("baseline-auto");
+    std::fs::write(fixture.root.join("ridl.toml"), MANIFEST).unwrap();
+    std::fs::write(fixture.root.join("a.ridl"), SOURCE).unwrap();
+    let ridl_dir = fixture.root.join(".ridl");
+    std::fs::create_dir(&ridl_dir).unwrap();
+    let baseline = ridl_dir.join("baseline");
+    std::os::unix::fs::symlink("baseline", &baseline).unwrap();
+    let (code, stderr) = run(RIDL, &["check"], &fixture.root);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(
+        stderr.contains(&format!("cannot read `{}`", baseline.display())),
+        "names the baseline directory: {stderr}"
+    );
 }
 
 /// `ridl vendor` over a path below an unreadable directory names the
