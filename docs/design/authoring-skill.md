@@ -100,7 +100,7 @@ on the starting workspace of each selected task. If either check fails, the eval
 stops before any run. Each result file records the version line as
 `ridl_version`. When `RIDL_EVAL_RIDL` names a path, its directory is put first
 on the agent's `PATH`, so an agent that runs `ridl` from its shell gets the same
-binary.
+binary, provided the file is named `ridl`. A relative path is made absolute.
 
 A run goes through these steps:
 

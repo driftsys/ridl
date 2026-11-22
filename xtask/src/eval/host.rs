@@ -146,9 +146,16 @@ pub struct RunDirs {
 }
 
 /// The `ridl` binary the MCP server and the scoring use. A test replaces it
-/// with `RIDL_EVAL_RIDL`.
+/// with `RIDL_EVAL_RIDL`. A relative path is made absolute, because a host
+/// starts the MCP server in the run's workspace, not in the eval's directory.
 pub fn ridl_binary() -> String {
-    std::env::var("RIDL_EVAL_RIDL").unwrap_or_else(|_| "ridl".to_owned())
+    match std::env::var("RIDL_EVAL_RIDL") {
+        Ok(v) if v.contains('/') => std::path::absolute(&v)
+            .map(|p| p.display().to_string())
+            .unwrap_or(v),
+        Ok(v) => v,
+        Err(_) => "ridl".to_owned(),
+    }
 }
 
 /// The version of the `ridl` binary that `ridl_binary` names, checked
@@ -1401,6 +1408,10 @@ mod tests {
             Some("/opt/r/target/debug:/usr/bin:/bin".to_owned())
         );
         assert_eq!(agent_path("/opt/r/ridl", None), Some("/opt/r".to_owned()));
+        assert_eq!(
+            agent_path("/opt/r/ridl", Some("")),
+            Some("/opt/r".to_owned())
+        );
         assert_eq!(agent_path("ridl", Some("/usr/bin")), None);
         let relative = agent_path("target/debug/ridl", Some("/bin")).unwrap();
         assert!(relative.starts_with('/') && relative.ends_with("target/debug:/bin"));
