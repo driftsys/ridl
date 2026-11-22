@@ -94,7 +94,7 @@ each run, and writes the results:
 ```sh
 cargo xtask eval [--task <id>]... [--host claude|codex|copilot]... [--runs <n>] \
   [--skill with|without|both] [--out <dir>] [--append] [--claude-handoff] \
-  [--timeout <seconds>]
+  [--anthropic-judge claude|copilot] [--timeout <seconds>]
 ```
 
 With no option, every task runs once on Claude and Codex, with and without the
@@ -110,8 +110,17 @@ lints match `expect.lints`, an evolve task's `ridl diff` verdict matches
 `expect.diff`, and the agent checked its work with the `ridl_check` MCP tool or
 a shell `ridl check`); a run that passes is then judged against its rubric by
 the model of the other vendor: Claude and Copilot both pin an Anthropic model,
-so a run on either is judged by Codex; a Codex run is judged by Claude. Copilot
-is never a judge. `runner.toml` pins the model of each host.
+so a run on either is judged by Codex. A Codex run is judged by an Anthropic
+model on the Claude CLI or on the Copilot CLI, as the `[judge]` table of
+`runner.toml` says (`anthropic = "claude"` or `"copilot"`, committed as
+`"copilot"`); `--anthropic-judge claude|copilot` overrides it for one
+invocation. The judge host runs its own pinned model. A host never judges its
+own vendor's run, so Copilot judges only Codex runs, never a Claude or a Copilot
+run. `runner.toml` pins the model of each host, and each result records the
+judge host and model in `judge_host` and `judge_model`. The Copilot judge has no
+output schema, so it is asked for JSON in the prompt, and a reply that is not
+the expected JSON is a judge error, as for any host. It runs with no tool
+permission and no MCP server.
 
 A run that cannot be scored is recorded with a `setup_error` and no score, and
 the batch goes on: a "with" run that shows no evidence of loading the skill, or
@@ -127,11 +136,15 @@ selected or judges a selected one needs its login found before any command runs:
   `$CODEX_HOME` or in `~/.codex`. Each Codex run gets a copy of that file only,
   and a token that the run refreshed is copied back.
 - Claude reads `CLAUDE_CODE_OAUTH_TOKEN`, which `claude setup-token` prints, or
-  `ANTHROPIC_API_KEY`.
+  `ANTHROPIC_API_KEY`. It is needed only when a Claude run is selected or the
+  Claude CLI judges a Codex run, so a run with the Copilot judge and no Claude
+  host needs no Claude token. The Claude CLI login in the macOS Keychain does
+  not reach a run, whose `CLAUDE_CONFIG_DIR` is empty.
 - Copilot uses the login `copilot login` writes to `config.json` in
-  `$COPILOT_HOME` or in `~/.copilot`. Each Copilot run gets a `config.json` with
-  only the keys `copilotTokens`, `loggedInUsers` and `lastLoggedInUser`, with
-  mode 0600; nothing else of the real home is read. No API key is read for it.
+  `$COPILOT_HOME` or in `~/.copilot`. Each Copilot run and each Copilot
+  judgement gets a `config.json` with only the keys `copilotTokens`,
+  `loggedInUsers` and `lastLoggedInUser`, with mode 0600; nothing else of the
+  real home is read. No API key is read for it.
 
 A host command inherits only `PATH`, `HOME`, `TMPDIR` and `LANG` from the eval's
 environment, plus `CLAUDE_CODE_OAUTH_TOKEN` and `ANTHROPIC_API_KEY` for Claude,

@@ -110,7 +110,9 @@ A run goes through these steps:
    that does not start, and a run that exceeds the timeout are recorded with a
    `setup_error`, and `report.rs` leaves them out of both sides.
 5. A run that passes the mechanical checks goes to `judge.rs`, which asks a host
-   of the other vendor to mark each rubric item met or not met. A judge reply
+   of the other vendor to mark each rubric item met or not met: Codex for a
+   Claude or Copilot run, and the Claude CLI or the Copilot CLI, as the
+   `[judge]` table of `evals/runner.toml` says, for a Codex run. A judge reply
    that skips an item, repeats one, or is not JSON is an error, not a partial
    score.
 6. `report.rs` writes one result file per run and `summary.md`, which holds the
@@ -118,8 +120,9 @@ A run goes through these steps:
 
 Three hosts exist: Claude Code, Codex and the Copilot CLI. A run with no
 `--host` option uses Claude Code and Codex; the Copilot CLI runs only when
-selected, and it is never a judge. `--claude-handoff` replaces each Claude
-command with a request file that an operator runs by hand.
+selected, and it judges only Codex runs, never a Claude or a Copilot run.
+`--claude-handoff` replaces each Claude command with a request file that an
+operator runs by hand.
 
 `cargo xtask eval sample --from <dir>` writes the sample of 20 judged runs for
 the maintainer to label, and `cargo xtask eval agreement <labels.toml>` writes

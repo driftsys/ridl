@@ -30,8 +30,9 @@ fn script(dir: &Path, name: &str, body: &str) -> PathBuf {
 /// the fake Codex judge sleeps for 60 seconds. The fake `ridl diff` prints nothing and exits 3 unless its third and
 /// fourth arguments are the task's starting workspace and the run's workspace.
 /// The fake Copilot agent writes a `skill.invoked` event only when
-/// `.github/skills/ridl-authoring/SKILL.md` exists in its workspace; it is
-/// never a judge, so it has no `--output-schema`/`--json-schema` branch.
+/// `.github/skills/ridl-authoring/SKILL.md` exists in its workspace. A fake
+/// Copilot call without `--additional-mcp-config` is a judge: it replies with
+/// a verdict in a code fence.
 /// The directory is removed when the value is dropped.
 struct Fakes {
     dir: PathBuf,
@@ -125,6 +126,14 @@ echo '{{"type":"item.completed","item":{{"type":"mcp_tool_call","server":"ridl",
         &format!(
             r#"echo "copilot $*" >> '{d}/calls.log'
 [ "$1" = --version ] && {{ echo "GitHub Copilot CLI fake-1.0."; exit 0; }}
+case "$*" in *--additional-mcp-config*) ;; *)
+  env > '{d}/copilot-judge.env'
+  {JUDGE_ITEMS}
+  printf '%s' "$prompt" > '{d}/copilot-judge-prompt.txt'
+  reply=$(printf '%s' "{{\"items\":[$items]}}" | sed 's/"/\\"/g')
+  printf '%s\n' "{{\"type\":\"assistant.message\",\"data\":{{\"content\":\"\`\`\`json\n$reply\n\`\`\`\"}}}}"
+  exit 0;;
+esac
 env > '{d}/copilot-agent.env'
 [ -f ridl.toml ] || printf '[package]\n' > ridl.toml
 if [ -f .github/skills/ridl-authoring/SKILL.md ]; then
@@ -163,6 +172,8 @@ esac"#
 enum Logins {
     Both,
     CodexOnly,
+    /// The Codex and Copilot logins, and no Claude token.
+    CodexAndCopilot,
     None,
 }
 
@@ -170,8 +181,13 @@ fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
     let stored = fakes.dir.join("auth.json");
     let copilot_stored = fakes.dir.join("copilot-config.json");
     let mut command = Command::new(env!("CARGO_BIN_EXE_xtask"));
+    command.arg("eval");
+    // The tests that read the Claude judge's records name it, whatever
+    // `evals/runner.toml` pins; a later `--anthropic-judge` in `args` wins.
+    if !matches!(args.first(), Some(&("sample" | "agreement"))) {
+        command.args(["--anthropic-judge", "claude"]);
+    }
     command
-        .arg("eval")
         .args(args)
         .env("RIDL_EVAL_CLAUDE", &fakes.claude)
         .env("RIDL_EVAL_CODEX", &fakes.codex)
@@ -187,6 +203,10 @@ fn command(fakes: &Fakes, args: &[&str], logins: Logins) -> Command {
             std::fs::write(&stored, "{}").unwrap();
             std::fs::write(&copilot_stored, COPILOT_FAKE_LOGIN).unwrap();
             command.env("CLAUDE_CODE_OAUTH_TOKEN", "fake");
+        }
+        Logins::CodexAndCopilot => {
+            std::fs::write(&stored, "{}").unwrap();
+            std::fs::write(&copilot_stored, COPILOT_FAKE_LOGIN).unwrap();
         }
         Logins::CodexOnly => std::fs::write(&stored, "{}").unwrap(),
         Logins::None => {}
@@ -296,6 +316,123 @@ fn a_copilot_run_copies_its_transcript_and_is_judged_by_codex() {
         Some(pinned_model("copilot").as_str())
     );
     assert!(fakes.calls().contains("copilot -p"), "{}", fakes.calls());
+}
+
+#[test]
+fn a_codex_run_is_judged_by_copilot_and_needs_no_claude_token() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let output = command(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "copilot",
+            "--host",
+            "codex",
+            "--skill",
+            "without",
+            "--anthropic-judge",
+            "copilot",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        Logins::CodexAndCopilot,
+    )
+    .output()
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let codex = result(&out, "design-0001", "codex-without-1");
+    assert_eq!(codex["rubric"]["judge_host"].as_str(), Some("copilot"));
+    assert_eq!(
+        codex["rubric"]["judge_model"].as_str(),
+        Some(pinned_model("copilot").as_str())
+    );
+    assert_eq!(codex["rubric"]["handoff"].as_bool(), Some(false));
+    assert_eq!(codex["rubric"]["score"].as_float(), Some(1.0));
+    // A Copilot run is judged by Codex, never by Copilot.
+    let copilot = result(&out, "design-0001", "copilot-without-1");
+    assert_eq!(copilot["rubric"]["judge_host"].as_str(), Some("codex"));
+    assert_eq!(
+        copilot["rubric"]["judge_model"].as_str(),
+        Some(pinned_model("codex").as_str())
+    );
+    let calls = fakes.calls();
+    assert!(
+        !calls.lines().any(|l| l.starts_with("claude")),
+        "no Claude command runs:\n{calls}"
+    );
+    // The prompt spans lines in the log, so the judge call is found by the
+    // arguments after the model, which an agent call does not have.
+    assert!(
+        calls.contains(&format!(
+            "--model {} --no-ask-user",
+            pinned_model("copilot")
+        )),
+        "no Copilot judge call:\n{calls}"
+    );
+    assert!(fakes.dir.join("copilot-judge-prompt.txt").is_file());
+}
+
+#[test]
+fn a_claude_run_is_judged_by_codex_even_with_the_copilot_judge() {
+    let fakes = fakes_with(None);
+    let out = fakes.dir.join("results");
+    let output = command(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "claude",
+            "--skill",
+            "without",
+            "--anthropic-judge",
+            "copilot",
+            "--out",
+            out.to_str().unwrap(),
+        ],
+        Logins::Both,
+    )
+    .output()
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let claude = result(&out, "design-0001", "claude-without-1");
+    assert_eq!(claude["rubric"]["judge_host"].as_str(), Some("codex"));
+    assert!(!fakes.calls().contains("copilot -p"), "{}", fakes.calls());
+}
+
+#[test]
+fn a_missing_copilot_login_stops_a_run_judged_by_copilot() {
+    let fakes = fakes_with(None);
+    let output = command(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "codex",
+            "--anthropic-judge",
+            "copilot",
+            "--out",
+            fakes.dir.join("results").to_str().unwrap(),
+        ],
+        Logins::CodexOnly,
+    )
+    .output()
+    .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("copilot login"));
+    assert_eq!(fakes.calls(), "");
 }
 
 #[test]
