@@ -21,7 +21,7 @@ written and then removed. A pilot eval, run on the Copilot CLI host with
 claude-sonnet-5.5 and one run per task, did not show that the references help,
 and one run per task is too few to separate a gain from noise. The pilot results
 are not committed; the commit that removed the references records the reason.
-The rules file holds 19 rules, within the ten to twenty that §2 asks for. A
+The rules file holds 20 rules, within the ten to twenty that §2 asks for. A
 per-language reference is reopened when an eval with several runs per task shows
 that it improves the result. The reference prose, the "common-mistakes table"
 and the "three to four complete `.rxdl` worked examples" of §2 are not part of
