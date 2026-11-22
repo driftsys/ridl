@@ -151,7 +151,9 @@ states the encoding it carries through the new `port::Encoded`. This is a
 breaking change under decision 10, to be released with the workspace in
 `ridl-rt` 0.9.0 (the next minor release after 0.8.0). The change is tracked as
 driftsys/ridl#801; the as-built record is
-[the `ridl-rt` design record](../design/ridl-rt.md).
+[the `ridl-rt` design record](../design/ridl-rt.md). A second break of the same
+work, the generated face's `Encoded` bound and `ridl-loopback`'s new type
+parameter (decision 11's 2026-10-10 amendment), ships in 0.10.0.
 
 Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the public API
 of `ridl-rt` and the minimum Rust version of decision 10 are frozen surfaces
@@ -668,6 +670,10 @@ with no `unsafe` and no second verification pass.
       an implementor: a generated codec.
     - `port::Encoded` is added.
 
+    The generated face's `port::Encoded` bound and the type parameter of
+    `ridl-loopback`'s `Loopback` and role handles are a second break of this
+    change, and they ship in 0.10.0.
+
     `face::Bind`, `face::Events`, `face::Timeout`, `face::Publish`, the existing
     `port` traits, `MAX_SIZE`, `View`, the three marker types, the cargo
     features and `rust-version = "1.83"` do not change.
@@ -790,7 +796,17 @@ with no `unsafe` and no second verification pass.
     traits and their implementations do not change. The generated face does not
     use `Encoded` yet; the part that makes the face read its encoding from the
     port is later work, and until it lands no port in this workspace implements
-    the trait.
+    the trait. _Superseded by the note below._
+
+    **Note (2026-11-22) — the face requires `Encoded`.** The generated face
+    requires `::ridl_rt::port::Encoded` of its port and reads its payload
+    encoding as `P::Encoding` (`crates/ridl-backend-rust/src/face.rs`).
+    `ridl-loopback` implements `Encoded` on `Loopback<E>` and on its six role
+    handles. The sentences above that say the face does not use `Encoded` and
+    that no port implements it describe 0.9.0 and are no longer true. The
+    generated face's new bound and the new type parameter of `Loopback` and the
+    role handles are a breaking change under decision 10 that ships in `ridl-rt`
+    0.10.0.
 
     **Amendment (2026-10-12) — `port::Encoded` forwards for `&P`.**
     `ridl_rt::port` also gains `impl<P: Encoded + ?Sized> Encoded for &P`, in
@@ -1074,6 +1090,8 @@ with no `unsafe` and no second verification pass.
     **Amendment (2026-10-10).** `Bind` is unchanged. The generated face reads
     its buffer sizes from `Payload::BUFFER` and `Sizes<FlatBuffers>`, and will
     read its encoding from its port through `port::Encoded` in later work.
+    _Superseded: from 0.10.0 the face reads its encoding from its port through
+    `port::Encoded` (decision 11's 2026-11-22 note)._
 
 20. **Amendment (2026-09-29) — `payload::View<'a>`: the trait a generated view
     implements, and the 0.5.0 release that carries it.**

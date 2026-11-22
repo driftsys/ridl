@@ -818,7 +818,8 @@ pub struct Watermark {
     /// The interface.
     pub iface: InterfaceNo,
     /// The generation last scanned. Named `generation`, not `gen`, because
-    /// `gen` is a reserved keyword in the 2024 edition.
+    /// `gen` is a reserved keyword in the 2024 edition, and the crate is also
+    /// built and tested as edition 2024.
     pub generation: u64,
 }
 
