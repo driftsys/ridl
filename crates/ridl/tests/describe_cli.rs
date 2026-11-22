@@ -608,3 +608,22 @@ fn describe_exits_2_when_the_stdout_reader_has_gone() {
     let cause = std::io::Error::from_raw_os_error(32);
     assert_eq!(stderr, format!("error: {}: {cause}\n", catalog.display()));
 }
+
+/// A closed stdout descriptor (`1>&-`) is not a broken pipe: std treats it as
+/// a sink, so the write succeeds and the exit is 0.
+#[cfg(unix)]
+#[test]
+fn describe_exits_0_when_stdout_descriptor_is_closed() {
+    let out = TempDir::new("describe-closed-stdout");
+    let file = build_catalog(out.path());
+    let output = Command::new("sh")
+        .args(["-c", "exec \"$0\" \"$@\" 1>&-"])
+        .arg(env!("CARGO_BIN_EXE_ridl"))
+        .arg("describe")
+        .arg(&file)
+        .output()
+        .expect("run ridl with stdout closed");
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert!(output.stdout.is_empty(), "{output:?}");
+    assert!(output.stderr.is_empty(), "{output:?}");
+}

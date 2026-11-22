@@ -193,7 +193,7 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
     // drew no values would report every sampled clause as unsatisfied and call
     // that a finding, which is worse than refusing the flag.
     if samples == 0 {
-        eprintln!("error: `--samples` must be at least 1");
+        errprintln!("error: `--samples` must be at least 1");
         return ExitCode::from(2);
     }
 
@@ -201,7 +201,7 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
     let mut output = match ridlc::compile_workspace(&mut db, path) {
         Ok(output) => output,
         Err(err) => {
-            eprintln!("error: {}: {err}", path.display());
+            errprintln!("error: {}: {err}", path.display());
             return ExitCode::from(2);
         }
     };
@@ -213,7 +213,7 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
         .iter()
         .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error)
     {
-        eprint!(
+        errprint!(
             "{}",
             ridl_core::diag::render(&output.diagnostics, &output.sources)
         );

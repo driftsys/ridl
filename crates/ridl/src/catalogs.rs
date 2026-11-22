@@ -54,11 +54,11 @@ pub(crate) fn compatible_catalogs(
         let unknown_side = judgment.unknown_side(unit, &published_scope, &scope);
         if let Some(side) = unknown_side {
             if side == ridl_diff::ContextSide::New {
-                eprintln!(
+                errprintln!(
                     "warning: cannot establish compatibility for unit `{unit}`: the current workspace's remote evidence is missing or unusable; omitting its compatible catalogs. Restore usable current remote evidence before building."
                 );
             } else {
-                eprintln!(
+                errprintln!(
                     "warning: cannot establish compatibility for unit `{unit}`: historical remote context is missing or unusable; omitting its compatible catalogs. Repair the baseline from the exact historical source and verified pins with `ridl baseline HISTORICAL_SOURCE --repair-context`, or preserve it and start a new history with `ridl baseline CURRENT_SOURCE --reset-history`."
                 );
             }
@@ -83,7 +83,7 @@ pub(crate) fn compatible_catalogs(
         );
     }
     if names_imports && !compatible.is_empty() {
-        eprintln!(
+        errprintln!(
             "note: the workspace names `[imports]`; a remote unit's catalog is published by its owner, so a unit's list covers the workspace's own packages only"
         );
     }
@@ -122,12 +122,12 @@ pub(crate) fn write_catalog_histories(
     for unit in &published_units {
         if let Some(side) = judgment.unknown_side(unit, &published_scope, &scope) {
             if side == ridl_diff::ContextSide::New {
-                eprintln!(
+                errprintln!(
                     "error: cannot publish unit `{unit}`: the current workspace's remote evidence is missing or unusable; the prior baseline is unchanged. Restore usable current remote evidence before publishing."
                 );
                 return Err(ExitCode::from(2));
             }
-            eprintln!(
+            errprintln!(
                 "error: cannot publish unit `{unit}`: historical remote context is missing or unusable; the prior baseline is unchanged. Repair with `ridl baseline HISTORICAL_SOURCE --repair-context --out {}` using exact historical local snapshots and verified remote pins, or start a new history with `ridl baseline CURRENT_SOURCE --reset-history --out {}`.",
                 published.display(),
                 published.display()
@@ -293,7 +293,7 @@ fn holds_history_and_snapshot(dir: &Path) -> Result<bool, ExitCode> {
         return Ok(false);
     }
     let entries = ridlc::diff_side::files_matching_strict(dir, |_| true).map_err(|err| {
-        eprintln!("error: cannot read {}: {err}", dir.display());
+        errprintln!("error: cannot read {}: {err}", dir.display());
         ExitCode::from(2)
     })?;
     Ok(entries.iter().any(|path| has_history_name(path))
@@ -327,12 +327,12 @@ fn read_history_if_present(
         Ok(text) => text,
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(err) => {
-            eprintln!("error: cannot read {}: {err}", path.display());
+            errprintln!("error: cannot read {}: {err}", path.display());
             return Err(ExitCode::from(2));
         }
     };
     parse(&text).map(Some).map_err(|err| {
-        eprintln!(
+        errprintln!(
             "error: {}: {err}; repair the file, or remove it to start the unit's chain again",
             path.display()
         );
@@ -354,7 +354,7 @@ fn shaped_units<'a>(
 fn write_history(staging: &Path, unit: &str, history: &CatalogHistory) -> Result<(), ExitCode> {
     let path = staging.join(format!("{unit}{FILE_SUFFIX}"));
     std::fs::write(&path, history.render()).map_err(|err| {
-        eprintln!("error: cannot write {}: {err}", path.display());
+        errprintln!("error: cannot write {}: {err}", path.display());
         ExitCode::from(2)
     })
 }

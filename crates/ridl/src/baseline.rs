@@ -8,7 +8,7 @@ pub(crate) fn read_context(
     own: &[ridl_ir::v2::Package],
 ) -> Result<Option<BaselineContext>, ExitCode> {
     read(dir, own).map_err(|err| {
-        eprintln!("error: {err}");
+        errprintln!("error: {err}");
         ExitCode::from(2)
     })
 }
@@ -20,7 +20,7 @@ pub(crate) fn stage_context(
     context: &BaselineContext,
 ) -> Result<(), ExitCode> {
     write_context(staging, context).map_err(|err| {
-        eprintln!("error: {err}");
+        errprintln!("error: {err}");
         ExitCode::from(2)
     })?;
     read_context(staging, own)?;
@@ -90,12 +90,12 @@ fn finish_backup_with(
     remove: impl FnOnce(&Path) -> std::io::Result<()>,
 ) {
     if preserve {
-        eprintln!(
+        errprintln!(
             "note: preserved the prior managed baseline at {}",
             backup.display()
         );
     } else if let Err(err) = remove(backup) {
-        eprintln!(
+        errprintln!(
             "warning: baseline published, but cannot remove transaction backup {}: {err}; cleanup incomplete, inspect remaining files",
             backup.display()
         );
@@ -217,7 +217,7 @@ fn replace_with(
         |from, to| std::fs::hard_link(from, to),
         std::io::Write::write_all,
         |path| std::fs::remove_file(path),
-        |message| eprintln!("{message}"),
+        |message| errprintln!("{message}"),
     )
 }
 
@@ -332,7 +332,7 @@ fn replace_with_io(
         }
         if recovery_errors.is_empty() {
             if let Err(err) = std::fs::remove_dir(&backup) {
-                eprintln!(
+                errprintln!(
                     "warning: prior baseline restored, but cannot remove empty recovery directory {}: {err}",
                     backup.display()
                 );
@@ -357,7 +357,7 @@ fn replace_with_io(
         ));
     }
     if let Err(err) = std::fs::remove_dir(staging) {
-        eprintln!(
+        errprintln!(
             "warning: baseline published, but cannot remove staging directory {}: {err}",
             staging.display()
         );
