@@ -1,5 +1,155 @@
 # Changelog
 
+## [0.22.0] (2026-11-22)
+
+### Bug Fixes
+
+- **ridl:** report an unreadable path instead of treating it as absent ([#1472])
+  ([da2c0c3]), refs [#1320]
+- **ridl:** ignore a failed write to stderr so exit codes survive a closed pipe
+  ([#1471]) ([8448fb8]), refs [#697], [#697]
+- **xtask:** record a host that fails before an agent turn as a setup error
+  ([#1469]) ([8d71d4b]), closes [#1468]
+- **skills:** rename the authoring skill rules file to RULES.md ([#1465])
+  ([4b2dba9])
+- **xtask:** put the eval ridl first on an agent's PATH ([#1462]) ([5eac37c])
+- **ci:** make story-id-check catch a bare epic name ([#1459]) ([7cefb7b])
+- **xtask:** check the ridl binary before an eval runs ([#1458]) ([21843d6])
+- **ridl-backend-ts:** emit a constant typed by a scalar of another package
+  ([#1456]) ([6909ab5]), closes [#1438]
+- **xtask:** spread the judge-check sample across tasks ([#1452]) ([58154bd])
+- **skills:** split the reorder rule so each rule cites what enforces it
+  ([#1450]) ([1c164b3])
+- **ts-transport-ws:** start the e2e browser once more when it writes no port
+  ([#1446]) ([340b25d])
+- **ridl-backend-rust:** emit a constant typed by a scalar of another package
+  ([#1437]) ([d1686e2])
+- **ridl-ir:** name the missing-package cause of a cross-package clause refusal
+  ([#1430]) ([a53bd55]), refs [#1414]
+- **ridl-sem:** drop the TYPL-226 cascade after a parse error, add match tests
+  ([#1435]) ([b8644a0]), closes [#1433]
+- **ridl-backend-rust:** translate a clause on a foreign scalar parameter
+  ([#1432]) ([7c12d38])
+- **ridl-ir:** judge a cross-package member when attributing a missing
+  FlatBuffers bound ([#1434]) ([a4ca340]), closes [#1383]
+- **ridl-sem:** report a match clause that cannot apply as TYPL-226 ([#1429])
+  ([65bd855]), closes [#1418]
+
+### Documentation
+
+- **docs:** replace the skill eval record with a re-run on ridl 0.21.0 ([#1467])
+  ([7f1832f]), closes [#1460]
+- **docs:** correct statements that no longer match the code ([#1464])
+  ([5a98ee7]), refs [#1294], [#526], [#354], [#730], [#602]
+- **docs:** mark the skill eval record numbers as provisional ([#1461])
+  ([3c02e11]), refs [#1460], [#1460], [#1460]
+- **roadmap:** close Epic 8 ([#1455]) ([097db91])
+- **roadmap:** state the skill eval record in Epic 8 ([#1454]) ([93d8f7b])
+- **docs:** commit the skill eval release record of 2026-11-22 ([#1453])
+  ([d8f4403])
+- **roadmap:** state E8.2 and E8.3 as closed as not planned and cite [#963] for
+  the skill ([#1449]) ([28a96ed])
+- **docs:** record the closed authoring skill issues in the backlog ([#1448])
+  ([c21b77f])
+- **docs:** archive the ridl-authoring skill outline and repoint its citations
+  ([#1444]) ([00fce28])
+- **docs:** accept ADR-0005 and ADR-0035 ([#1441]) ([7654da9])
+- **ridl-ir:** state the foreign declaration level in the model proto bound
+  ([#1436]) ([97cf742]), refs [#1417]
+- **docs:** state the codegen request depth for a declaration of another package
+  ([#1431]) ([3209c94]), closes [#1417]
+
+### Features
+
+- **xtask:** judge Codex eval runs on the Copilot CLI ([#1447]) ([36790a0])
+
+### BREAKING CHANGES
+
+- a build that passed with a withheld codec and a note now
+fails when a member from another package of the build has no finite
+FlatBuffers bound, with the same error the single-package case gives.
+- `ridl check` now exits 2 when the auto-discovered `.ridl/baseline` directory
+  cannot be read; it was skipped before. Other commands that probe a path now
+  report a path they cannot read instead of treating it as absent ([#1472]).
+
+[0.22.0]: https://github.com/driftsys/ridl/compare/v0.21.0...v0.22.0
+[da2c0c3]: https://github.com/driftsys/ridl/commit/da2c0c3
+[#1472]: https://github.com/driftsys/ridl/issues/1472
+[#1320]: https://github.com/driftsys/ridl/issues/1320
+[8448fb8]: https://github.com/driftsys/ridl/commit/8448fb8
+[#1471]: https://github.com/driftsys/ridl/issues/1471
+[#697]: https://github.com/driftsys/ridl/issues/697
+[8d71d4b]: https://github.com/driftsys/ridl/commit/8d71d4b
+[#1469]: https://github.com/driftsys/ridl/issues/1469
+[#1468]: https://github.com/driftsys/ridl/issues/1468
+[4b2dba9]: https://github.com/driftsys/ridl/commit/4b2dba9
+[#1465]: https://github.com/driftsys/ridl/issues/1465
+[5eac37c]: https://github.com/driftsys/ridl/commit/5eac37c
+[#1462]: https://github.com/driftsys/ridl/issues/1462
+[7cefb7b]: https://github.com/driftsys/ridl/commit/7cefb7b
+[#1459]: https://github.com/driftsys/ridl/issues/1459
+[21843d6]: https://github.com/driftsys/ridl/commit/21843d6
+[#1458]: https://github.com/driftsys/ridl/issues/1458
+[6909ab5]: https://github.com/driftsys/ridl/commit/6909ab5
+[#1456]: https://github.com/driftsys/ridl/issues/1456
+[#1438]: https://github.com/driftsys/ridl/issues/1438
+[58154bd]: https://github.com/driftsys/ridl/commit/58154bd
+[#1452]: https://github.com/driftsys/ridl/issues/1452
+[1c164b3]: https://github.com/driftsys/ridl/commit/1c164b3
+[#1450]: https://github.com/driftsys/ridl/issues/1450
+[340b25d]: https://github.com/driftsys/ridl/commit/340b25d
+[#1446]: https://github.com/driftsys/ridl/issues/1446
+[d1686e2]: https://github.com/driftsys/ridl/commit/d1686e2
+[#1437]: https://github.com/driftsys/ridl/issues/1437
+[a53bd55]: https://github.com/driftsys/ridl/commit/a53bd55
+[#1430]: https://github.com/driftsys/ridl/issues/1430
+[#1414]: https://github.com/driftsys/ridl/issues/1414
+[b8644a0]: https://github.com/driftsys/ridl/commit/b8644a0
+[#1435]: https://github.com/driftsys/ridl/issues/1435
+[#1433]: https://github.com/driftsys/ridl/issues/1433
+[7c12d38]: https://github.com/driftsys/ridl/commit/7c12d38
+[#1432]: https://github.com/driftsys/ridl/issues/1432
+[a4ca340]: https://github.com/driftsys/ridl/commit/a4ca340
+[#1434]: https://github.com/driftsys/ridl/issues/1434
+[#1383]: https://github.com/driftsys/ridl/issues/1383
+[65bd855]: https://github.com/driftsys/ridl/commit/65bd855
+[#1429]: https://github.com/driftsys/ridl/issues/1429
+[#1418]: https://github.com/driftsys/ridl/issues/1418
+[7f1832f]: https://github.com/driftsys/ridl/commit/7f1832f
+[#1467]: https://github.com/driftsys/ridl/issues/1467
+[#1460]: https://github.com/driftsys/ridl/issues/1460
+[5a98ee7]: https://github.com/driftsys/ridl/commit/5a98ee7
+[#1464]: https://github.com/driftsys/ridl/issues/1464
+[#1294]: https://github.com/driftsys/ridl/issues/1294
+[#526]: https://github.com/driftsys/ridl/issues/526
+[#354]: https://github.com/driftsys/ridl/issues/354
+[#730]: https://github.com/driftsys/ridl/issues/730
+[#602]: https://github.com/driftsys/ridl/issues/602
+[3c02e11]: https://github.com/driftsys/ridl/commit/3c02e11
+[#1461]: https://github.com/driftsys/ridl/issues/1461
+[097db91]: https://github.com/driftsys/ridl/commit/097db91
+[#1455]: https://github.com/driftsys/ridl/issues/1455
+[93d8f7b]: https://github.com/driftsys/ridl/commit/93d8f7b
+[#1454]: https://github.com/driftsys/ridl/issues/1454
+[d8f4403]: https://github.com/driftsys/ridl/commit/d8f4403
+[#1453]: https://github.com/driftsys/ridl/issues/1453
+[28a96ed]: https://github.com/driftsys/ridl/commit/28a96ed
+[#963]: https://github.com/driftsys/ridl/issues/963
+[#1449]: https://github.com/driftsys/ridl/issues/1449
+[c21b77f]: https://github.com/driftsys/ridl/commit/c21b77f
+[#1448]: https://github.com/driftsys/ridl/issues/1448
+[00fce28]: https://github.com/driftsys/ridl/commit/00fce28
+[#1444]: https://github.com/driftsys/ridl/issues/1444
+[7654da9]: https://github.com/driftsys/ridl/commit/7654da9
+[#1441]: https://github.com/driftsys/ridl/issues/1441
+[97cf742]: https://github.com/driftsys/ridl/commit/97cf742
+[#1436]: https://github.com/driftsys/ridl/issues/1436
+[#1417]: https://github.com/driftsys/ridl/issues/1417
+[3209c94]: https://github.com/driftsys/ridl/commit/3209c94
+[#1431]: https://github.com/driftsys/ridl/issues/1431
+[36790a0]: https://github.com/driftsys/ridl/commit/36790a0
+[#1447]: https://github.com/driftsys/ridl/issues/1447
+
 ## [0.21.0] (2026-11-20)
 
 ### Bug Fixes

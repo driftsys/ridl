@@ -1098,28 +1098,28 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
 name = "ridl-backend-flatbuffers"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "ridl-ir",
 ]
 
 [[package]]
 name = "ridl-backend-podbuf"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "ridl-ir",
 ]
 
 [[package]]
 name = "ridl-backend-proto"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "ridl-ir",
 ]
 
 [[package]]
 name = "ridl-backend-rust"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "num-bigint",
  "num-rational",
@@ -1135,14 +1135,14 @@ dependencies = [
 
 [[package]]
 name = "ridl-backend-ts"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "ridl-ir",
 ]
 
 [[package]]
 name = "ridl-core"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "codespan-reporting",
  "ridl-ir",
@@ -1158,7 +1158,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-descriptor"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "planus",
  "ridl-ir",
@@ -1182,7 +1182,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-ir"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "num-bigint",
  "num-rational",
@@ -1200,11 +1200,11 @@ dependencies = [
 
 [[package]]
 name = "ridl-rt"
-version = "0.21.0"
+version = "0.22.0"
 
 [[package]]
 name = "ridl-sem"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "num-bigint",
  "num-rational",
@@ -1220,7 +1220,7 @@ dependencies = [
 
 [[package]]
 name = "ridl-syntax"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "logos 0.16.1",
  "rowan",
@@ -1228,14 +1228,14 @@ dependencies = [
 
 [[package]]
 name = "ridl-transport-ws"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "ridl-rt",
 ]
 
 [[package]]
 name = "ridlc"
-version = "0.21.0"
+version = "0.22.0"
 dependencies = [
  "clap",
  "ridl-backend-flatbuffers",
