@@ -109,15 +109,6 @@ fn names_the_skill_directory(command: &str) -> bool {
     command.contains("skills/ridl-authoring") || command.contains("ridl-authoring/")
 }
 
-/// Whether the transcript shows that the host made the skill available.
-/// Claude: the `init` line lists `ridl-authoring` among its skills, the
-/// agent called the `Skill` tool on it, read its `SKILL.md`, or ran a
-/// command on its directory. A handed-off run, whose transcript has no
-/// `init` line, shows only the last two. Codex: the agent read a file of the
-/// skill's directory with a command. Copilot: a `skill.invoked` event names
-/// it or its `SKILL.md` path, or a `tool.execution_start` event calls the
-/// `skill` tool on it (a real run records the second form). Text that only
-/// mentions the skill does not count.
 /// Whether the transcript shows the agent ran at least one turn: an
 /// assistant message for Claude, a completed item for Codex, an assistant
 /// turn for Copilot. A host that fails while it starts writes only its
@@ -128,13 +119,19 @@ pub fn agent_turn_ran(host: Host, transcript: &str) -> bool {
         Host::Codex => "item.completed",
         Host::Copilot => "assistant.turn_start",
     };
-    json_lines(transcript).any(|line| str_field_top(&line) == Some(kind))
+    json_lines(transcript)
+        .any(|line| line.as_object().and_then(|map| str_field(map, "type")) == Some(kind))
 }
 
-fn str_field_top(line: &serde_json::Value) -> Option<&str> {
-    line.get("type").and_then(serde_json::Value::as_str)
-}
-
+/// Whether the transcript shows that the host made the skill available.
+/// Claude: the `init` line lists `ridl-authoring` among its skills, the
+/// agent called the `Skill` tool on it, read its `SKILL.md`, or ran a
+/// command on its directory. A handed-off run, whose transcript has no
+/// `init` line, shows only the last two. Codex: the agent read a file of the
+/// skill's directory with a command. Copilot: a `skill.invoked` event names
+/// it or its `SKILL.md` path, or a `tool.execution_start` event calls the
+/// `skill` tool on it (a real run records the second form). Text that only
+/// mentions the skill does not count.
 pub fn skill_was_loaded(host: Host, transcript: &str) -> bool {
     json_lines(transcript).any(|line| {
         objects(&line).into_iter().any(|map| match host {
