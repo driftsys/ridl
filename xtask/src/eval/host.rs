@@ -151,6 +151,66 @@ pub fn ridl_binary() -> String {
     std::env::var("RIDL_EVAL_RIDL").unwrap_or_else(|_| "ridl".to_owned())
 }
 
+/// The version of the `ridl` binary that `ridl_binary` names, checked
+/// before any run: it must equal the workspace version in the root
+/// `Cargo.toml`, and `ridl check` must pass on each task's starting
+/// workspace. A stale binary on `PATH` otherwise scores every run against
+/// an older language. Returns the line `ridl --version` printed.
+pub fn preflight(root: &Path, tasks: &[Task]) -> Result<String, String> {
+    let ridl = ridl_binary();
+    let out = Command::new(&ridl)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("{ridl} --version: {e}"))?;
+    let line = String::from_utf8_lossy(&out.stdout).trim().to_owned();
+    let manifest = std::fs::read_to_string(root.join("Cargo.toml")).map_err(|e| e.to_string())?;
+    let expected = manifest
+        .parse::<toml::Table>()
+        .map_err(|e| e.to_string())?
+        .get("workspace")
+        .and_then(|w| w.get("package"))
+        .and_then(|p| p.get("version"))
+        .and_then(toml::Value::as_str)
+        .ok_or("Cargo.toml has no workspace.package.version")?
+        .to_owned();
+    if version_of(&line) != Some(expected.as_str()) {
+        return Err(format!(
+            "{ridl} prints \"{line}\", not version {expected}; build it from this commit and set RIDL_EVAL_RIDL=target/debug/ridl"
+        ));
+    }
+    for task in tasks {
+        let Some(start) = &task.start else { continue };
+        let check = Command::new(&ridl)
+            .args(["check", "--frozen"])
+            .arg(start)
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("{ridl} check: {e}"))?;
+        if !check.status.success() {
+            return Err(format!(
+                "{}: ridl check fails on the starting workspace {}:\n{}",
+                task.id,
+                start.display(),
+                String::from_utf8_lossy(&check.stderr)
+            ));
+        }
+    }
+    Ok(line)
+}
+
+/// The version in a `ridl --version` line: its last word, without a tag
+/// prefix `editor-v` or `v` (`ridl 0.21.0` and `ridl editor-v0.21.0` both
+/// give `0.21.0`).
+fn version_of(line: &str) -> Option<&str> {
+    let word = line.split_whitespace().last()?;
+    Some(
+        word.strip_prefix("editor-v")
+            .or_else(|| word.strip_prefix('v'))
+            .unwrap_or(word),
+    )
+}
+
 /// Creates `<base>/home` and `<base>/ws`, copies the task's starting workspace
 /// into `ws`, writes the host's MCP configuration, and for a "with" run copies
 /// the skill to the host's skill directory.
@@ -1300,5 +1360,17 @@ mod tests {
         let outcome = run(&invocation, &dir.join("out"), Duration::from_millis(300)).unwrap();
         assert_eq!(outcome, Outcome::TimedOut);
         assert!(start.elapsed() < Duration::from_secs(10));
+    }
+
+    #[test]
+    fn the_version_is_the_last_word_without_a_tag_prefix() {
+        assert_eq!(version_of("ridl 0.21.0"), Some("0.21.0"));
+        assert_eq!(version_of("ridl editor-v0.20.0"), Some("0.20.0"));
+        assert_eq!(version_of("ridl 0.22.0-dev"), Some("0.22.0-dev"));
+        assert_eq!(
+            version_of("ridl v0.22.0-preview.1"),
+            Some("0.22.0-preview.1")
+        );
+        assert_eq!(version_of(""), None);
     }
 }

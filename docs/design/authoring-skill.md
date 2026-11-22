@@ -93,6 +93,13 @@ absent from `freeze/diagnostics.txt`, so the second test also rejects it.
 `host.rs` starts a host, `score.rs` scores the transcript, `judge.rs` marks the
 rubric, and `report.rs` writes the summary and the gate.
 
+Before the first run, `host.rs` checks the `ridl` binary that the MCP server and
+the scoring use (`RIDL_EVAL_RIDL`, else `ridl` on `PATH`). `ridl --version` must
+print the workspace version of the root `Cargo.toml`, and `ridl check` must pass
+on the starting workspace of each selected task. If either check fails, the eval
+stops before any run. Each result file records the version line as
+`ridl_version`.
+
 A run goes through these steps:
 
 1. `task.rs` loads a task directory (`task.toml`, `prompt.md`, `rubric.md`, and
