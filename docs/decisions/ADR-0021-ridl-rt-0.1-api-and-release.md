@@ -230,6 +230,11 @@ answers open item 4. A note on decision 17 extends its zero-bytes rule to every
 `Invalid(_)` cause. It records the approved API and generated-crate break for
 driftsys/ridl#526.
 
+**Amendment (2026-11-22) — decisions 10, 11 and 19** mark the 2026-10-10 text
+that says no port implements `Encoded` as superseded, and record the second
+break of that change: the generated face's `Encoded` bound and the type
+parameter of `ridl-loopback`, shipped in 0.10.0.
+
 ## Context
 
 `ridl-rt` 0.1 is the first crate a generated ridl package links and a runtime

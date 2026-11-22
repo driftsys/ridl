@@ -369,14 +369,17 @@ other entry below is Accepted.
   amendment, on decisions 10, 11, 17 and 19, moves the sizes a generated crate
   holds to the per-encoding table `contract::Sizes<E>`, gives each payload its
   own buffer and adds `port::Encoded`; a breaking change that ships in `ridl-rt`
-  0.9.0, the next release. Its 2026-10-12 amendment, on decision 11, adds the
-  forwarding impl of `Encoded` for `&P`, a breaking change for a crate that
-  implemented `Encoded` for a shared reference to a type that itself implements
-  `Encoded` (driftsys/ridl#855). Its 2026-10-20 amendment, on decisions 8 and 10
-  and open item 3, records the proto3 codec's additive items: the `proto3`
-  module and the `Malformed` variants `Varint`, `WireType` and `Duplicate`; the
-  proto3 view is the verified bytes, and a proto3 type with no finite size bound
-  is refused, so `Payload` and `Sizes` do not change.
+  0.9.0, the next release; a 2026-11-22 note records that the generated face now
+  requires `Encoded` and that this bound and the new type parameter of
+  `ridl-loopback` are a second break, shipped in 0.10.0. Its 2026-10-12
+  amendment, on decision 11, adds the forwarding impl of `Encoded` for `&P`, a
+  breaking change for a crate that implemented `Encoded` for a shared reference
+  to a type that itself implements `Encoded` (driftsys/ridl#855). Its 2026-10-20
+  amendment, on decisions 8 and 10 and open item 3, records the proto3 codec's
+  additive items: the `proto3` module and the `Malformed` variants `Varint`,
+  `WireType` and `Duplicate`; the proto3 view is the verified bytes, and a
+  proto3 type with no finite size bound is refused, so `Payload` and `Sizes` do
+  not change.
 
 - **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
   and what carries it: a `System` message in `system.proto`, its own artifact
