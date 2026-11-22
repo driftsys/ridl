@@ -877,13 +877,15 @@ guide for a plugin author, and its "Reading order" section is the reading list.
    named scalar of another package when the caller hands it the package that
    declares the scalar: an integer, float or boolean constant as a value of that
    scalar's type, through its constructor, a string-backed constant as a `&str`
-   literal, and a bytes-backed constant not at all. The TypeScript backend still
-   skips such a constant (**Open:** driftsys/ridl#1438). A contract clause on a
-   parameter or a reply of a foreign scalar type is translated by the Rust
-   backend, and the interface keeps its face, when the caller hands the backend
-   the package that declares the scalar (`generate_pipeline` with `others`, as
-   `ridl build` does); otherwise the clause is refused with a note that names
-   that cause (driftsys/ridl#1414).
+   literal, and a bytes-backed constant not at all. The TypeScript backend emits
+   such a constant under the same condition: an integer or float constant as a
+   `number`, a 64-bit integer constant as a `bigint`, a boolean constant as a
+   `boolean`, a string-backed constant as a string literal, and a bytes-backed
+   constant not at all. A contract clause on a parameter or a reply of a foreign
+   scalar type is translated by the Rust backend, and the interface keeps its
+   face, when the caller hands the backend the package that declares the scalar
+   (`generate_pipeline` with `others`, as `ridl build` does); otherwise the
+   clause is refused with a note that names that cause (driftsys/ridl#1414).
 7. **The model's unbounded-member facts are computed over the scope the codec is
    handed.** Resolved: a cross-package aggregate that exceeds the FlatBuffers
    ceiling is an error, as the same shape in one package is, and the attribution

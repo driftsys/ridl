@@ -2118,6 +2118,79 @@ fn tsdoc_link_to_a_foreign_constant_the_foreign_module_skips_is_a_code_span() {
     );
 }
 
+/// Two packages declare a scalar of the same name with different backings, a
+/// float in `a.pkg` and a 64-bit integer in `b.pkg`. Each constant takes the
+/// backing of the package its type names.
+#[test]
+fn a_foreign_constant_takes_the_backing_of_its_own_package() {
+    let b_speed = v2::Decl {
+        name: "Speed".to_string(),
+        ..odometer_decl()
+    };
+    let a = package("a.pkg", vec![speed_decl()]);
+    let b = package("b.pkg", vec![b_speed]);
+    let local = package(
+        "veh.common",
+        vec![
+            foreign_typed_const("FROM_A", "a.pkg.Speed", "50.5"),
+            foreign_typed_const("FROM_B", "b.pkg.Speed", "7"),
+        ],
+    );
+    let model = ridl_ir::codegen::lower(&local, &[&a, &b]);
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(
+        source.contains("export const FROM_A = 50.5;"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains("export const FROM_B = 7n;"),
+        "got:\n{source}"
+    );
+}
+
+/// A doc link to a constant of another package, typed by a scalar, renders as
+/// a link: the rule that decides whether the foreign module emits the
+/// constant agrees with `emit_const`.
+#[test]
+fn tsdoc_link_to_a_foreign_constant_typed_by_a_scalar_is_a_link() {
+    let other = package(
+        "other.pkg",
+        vec![
+            speed_decl(),
+            foreign_typed_const("LIMIT", "other.pkg.Speed", "50.5"),
+        ],
+    );
+    let doc = "Bounded by [other.pkg.LIMIT].";
+    let holder = v2::StructDef {
+        members: vec![field_member(named_field(
+            "limit",
+            1,
+            "other.pkg.LIMIT",
+            false,
+            init_value(false, None),
+        ))],
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![v2::Decl {
+            doc: doc.to_string(),
+            links: vec![doc_link(doc, "[other.pkg.LIMIT]", "other.pkg.LIMIT")],
+            ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+        }],
+    );
+    let model = ridl_ir::codegen::lower(&local, &[&other]);
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(
+        source.contains("Bounded by {@link other_pkg.LIMIT}."),
+        "got:\n{source}"
+    );
+}
+
 /// The packages of the contract tests: `other.pkg` declares a public `Thing`
 /// and a ranged scalar `Speed`; `veh.common` holds a field of each type, and
 /// a doc that links `Thing`.
@@ -3315,4 +3388,64 @@ fn match_clause_vin_uses_a_whole_value_unicode_regexp() {
         "{source}"
     );
     assert!(source.contains("value, '/[A-Z]{17}/'"), "{source}");
+}
+
+/// A constant of the package `veh.common` typed by `reference`, a scalar of
+/// another package.
+fn foreign_typed_const(name: &str, reference: &str, value: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::ConstDef(v2::ConstDef {
+            type_ref: Some(reference.to_string()),
+            value: value.to_string(),
+            regex: None,
+        }),
+    )
+}
+
+/// A constant typed by a named scalar of another package is emitted when the
+/// model holds the declaring package. Three scalars are declared there, and
+/// each constant names a different one, so a lookup that takes the wrong
+/// foreign declaration renders the wrong literal: a float (`Speed`), a 64-bit
+/// integer (`Odometer`, a `bigint`) and a 16-bit integer (`Counter`, a
+/// `number`).
+#[test]
+fn a_constant_typed_by_a_scalar_of_another_package_is_emitted() {
+    let other = package(
+        "other.pkg",
+        vec![speed_decl(), odometer_decl(), counter_decl()],
+    );
+    let local = package(
+        "veh.common",
+        vec![
+            foreign_typed_const("LIMIT", "other.pkg.Speed", "50.5"),
+            foreign_typed_const("TOTAL", "other.pkg.Odometer", "9007199254740993"),
+            foreign_typed_const("COUNT", "other.pkg.Counter", "7"),
+        ],
+    );
+    let model = ridl_ir::codegen::lower(&local, &[&other]);
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(
+        source.contains("export const LIMIT = 50.5;"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains("export const TOTAL = 9007199254740993n;"),
+        "got:\n{source}"
+    );
+    assert!(source.contains("export const COUNT = 7;"), "got:\n{source}");
+}
+
+/// Without the package that declares the scalar, the model cannot resolve the
+/// constant's type, so the constant is not emitted.
+#[test]
+fn a_constant_typed_by_a_scalar_of_a_package_not_given_is_not_emitted() {
+    let local = package(
+        "veh.common",
+        vec![foreign_typed_const("LIMIT", "other.pkg.Speed", "50.5")],
+    );
+    let source = generate(&local).expect("generation succeeds").source;
+    assert!(!source.contains("LIMIT"), "got:\n{source}");
 }
