@@ -166,39 +166,69 @@ pub fn gate(out: &Path) -> Result<Vec<HostGate>, String> {
         .collect())
 }
 
-/// Up to `size` runs, spread across hosts and skill arms: the runs are
-/// grouped by the host and the arm their label names (`<host>-<arm>-<n>`),
-/// the groups and the runs in each group are sorted, and the sample takes
-/// one run from each group in turn until `size` are taken or every group is
-/// empty. Deterministic, so a reviewer can reproduce the sample.
+/// Up to `size` runs, spread across tasks, hosts and skill arms. The key of a
+/// run is `<task>/<host>-<arm>-<n>`. The runs are grouped by task, and within
+/// a task by cell, a cell being a host and arm pair; the tasks, the cells and
+/// the runs of a cell are sorted. Round `r` visits the tasks in order and takes
+/// from each task one run of the cell at position `(task index + r)` modulo the
+/// number of cells, or of the next cell after it that still has a run, so that
+/// the first round covers every task and the cells stay balanced. The sample
+/// stops at `size` runs or when no run is left. Deterministic, so a reviewer
+/// can reproduce the sample.
 pub fn sample(runs: &[String], size: usize) -> Vec<String> {
-    let mut groups: BTreeMap<(String, String), Vec<String>> = BTreeMap::new();
-    for key in runs {
-        let label = key.split_once('/').map_or(key.as_str(), |(_, l)| l);
+    let cell = |key: &str| {
+        let label = key.split_once('/').map_or(key, |(_, l)| l);
         let mut parts = label.split('-');
         let host = parts.next().unwrap_or_default().to_owned();
         let arm = parts.next().unwrap_or_default().to_owned();
-        groups.entry((host, arm)).or_default().push(key.clone());
+        (host, arm)
+    };
+    let cells: Vec<(String, String)> = runs
+        .iter()
+        .map(|k| cell(k))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    let mut tasks: BTreeMap<&str, Vec<Vec<&String>>> = BTreeMap::new();
+    for key in runs {
+        let task = key.split_once('/').map_or("", |(t, _)| t);
+        let index = cells.binary_search(&cell(key)).unwrap_or_default();
+        tasks
+            .entry(task)
+            .or_insert_with(|| vec![Vec::new(); cells.len()])[index]
+            .push(key);
     }
-    let mut groups: Vec<std::vec::IntoIter<String>> = groups
+    let mut tasks: Vec<Vec<std::vec::IntoIter<&String>>> = tasks
         .into_values()
-        .map(|mut g| {
-            g.sort();
-            g.into_iter()
+        .map(|task| {
+            task.into_iter()
+                .map(|mut c| {
+                    c.sort();
+                    c.into_iter()
+                })
+                .collect()
         })
         .collect();
     let mut picked = Vec::new();
+    let mut round = 0;
     while picked.len() < size {
         let before = picked.len();
-        for group in &mut groups {
+        for (t, task) in tasks.iter_mut().enumerate() {
             if picked.len() == size {
                 break;
             }
-            picked.extend(group.next());
+            for k in 0..cells.len() {
+                let i = (t + round + k) % cells.len();
+                if let Some(key) = task[i].next() {
+                    picked.push(key.clone());
+                    break;
+                }
+            }
         }
         if picked.len() == before {
             break;
         }
+        round += 1;
     }
     picked
 }
@@ -451,11 +481,12 @@ mod tests {
                 "{label} missing from {picked:?}"
             );
         }
-        // Deterministic, and in group order on the first round.
+        // Deterministic, and one task per pick on the first round, with the
+        // cell rotating from task to task.
         assert_eq!(sample(&runs, 6), picked);
         assert_eq!(picked[0], "design-0001/claude-with-1");
-        assert_eq!(picked[1], "design-0001/claude-without-1");
-        assert_eq!(picked[4], "design-0002/claude-with-1");
+        assert_eq!(picked[1], "design-0002/claude-without-1");
+        assert_eq!(picked[4], "design-0005/claude-with-1");
     }
 
     #[test]
@@ -467,9 +498,9 @@ mod tests {
             picked,
             [
                 "design-0001/claude-with-1",
-                "design-0001/claude-without-1",
-                "design-0001/codex-with-1",
-                "design-0001/codex-without-1"
+                "design-0002/claude-without-1",
+                "design-0003/codex-with-1",
+                "design-0004/codex-without-1"
             ]
         );
     }
@@ -486,6 +517,62 @@ mod tests {
         .unwrap();
         assert!(!has_results(&out).unwrap());
         assert!(!has_results(&out.join("missing")).unwrap());
+    }
+
+    #[test]
+    fn the_sample_of_a_full_record_covers_every_task_and_balances_hosts_and_arms() {
+        let out = out("full-record");
+        for t in 1..=12 {
+            for label in [
+                "claude-with",
+                "claude-without",
+                "codex-with",
+                "codex-without",
+            ] {
+                for n in 1..=3 {
+                    write(
+                        &out,
+                        &format!("task-{t:04}"),
+                        &format!("{label}-{n}"),
+                        true,
+                        true,
+                        Some(1.0),
+                    );
+                }
+            }
+        }
+        let judged = judged_runs(&out).unwrap();
+        assert_eq!(judged.len(), 144);
+        let picked = sample(&judged, 20);
+        assert_eq!(picked.len(), 20);
+        for t in 1..=12 {
+            let prefix = format!("task-{t:04}/");
+            assert!(
+                picked.iter().any(|k| k.starts_with(&prefix)),
+                "{prefix} missing from {picked:?}"
+            );
+        }
+        for label in [
+            "claude-with",
+            "claude-without",
+            "codex-with",
+            "codex-without",
+        ] {
+            let n = picked
+                .iter()
+                .filter(|k| k.contains(&format!("/{label}-")))
+                .count();
+            assert_eq!(n, 5, "{label} count in {picked:?}");
+        }
+        assert_eq!(sample(&judged, 20), picked);
+    }
+
+    #[test]
+    fn the_sample_skips_an_empty_cell_of_a_task() {
+        let runs: Vec<String> = ["a/claude-with-1", "b/codex-with-1", "b/codex-with-2"]
+            .map(String::from)
+            .into();
+        assert_eq!(sample(&runs, 3).len(), 3);
     }
 
     #[test]
