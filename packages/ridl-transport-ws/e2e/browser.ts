@@ -59,12 +59,16 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** The browser kept running but wrote no DevTools port in time. */
+class PortTimeout extends Error {}
+
 /**
  * Reads the DevTools port the browser writes to its profile directory, for
  * up to 30 s. The browser does not write the file atomically, so the port is
  * taken only once its line ends with a newline. When the browser exits or
  * the time runs out, the error names the exit status and ends with the last
- * lines the browser wrote to its standard error.
+ * lines the browser wrote to its standard error. A run-out of the time throws
+ * a `PortTimeout`.
  */
 async function devToolsPort(
   profile: string,
@@ -99,7 +103,7 @@ async function devToolsPort(
     }
     await delay(100);
   }
-  throw new Error(
+  throw new PortTimeout(
     `the browser wrote no port to ${file} within 30 s${output()}`,
   );
 }
@@ -228,9 +232,24 @@ class Connection {
   }
 }
 
-/** Starts the browser headless with a new temporary profile. */
+/**
+ * Starts the browser headless with a new temporary profile. On a CI runner
+ * the browser sometimes keeps running without writing its DevTools port, so
+ * a start that times out is stopped and tried once more with a new profile.
+ * A browser that exits before it writes a port is not tried again.
+ */
 export async function launch(): Promise<Browser> {
   const path = await findBrowser();
+  try {
+    return await launchOnce(path);
+  } catch (e) {
+    if (!(e instanceof PortTimeout)) throw e;
+    console.error(`${e.message}\nstarting the browser once more`);
+    return await launchOnce(path);
+  }
+}
+
+async function launchOnce(path: string): Promise<Browser> {
   const profile = await Deno.makeTempDir({ prefix: "ridl-browser-" });
   const args = [
     "--headless=new",
