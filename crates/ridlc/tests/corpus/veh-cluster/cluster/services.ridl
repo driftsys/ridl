@@ -65,9 +65,9 @@ const FAN_LIMIT   : FanLevel = FAN_CEILING
 // *silently*: the referring constant lowered as the literal text of the name it
 // referred to, and both backends emitted that as the value. A compile proof
 // cannot see a wrong value, so `const_chains_lower_as_values_not_names` asserts
-// it directly. The backing type is declared here rather than imported because a
-// backend skips a constant whose type is cross-package — the backing is unknown
-// to it — so an imported one would emit nothing to assert on.
+// it directly. The backing type is declared here rather than imported because
+// the TypeScript backend skips a constant whose type is declared in another
+// package, so an imported one would emit nothing to assert on there.
 
 /// The label a cabin fan reports itself under.
 type FanTag : string [1..32] = "unset"

@@ -168,8 +168,10 @@ pub fn generate_face_with(
 /// what lets [`generate_pipeline`] size and encode one: without it a type
 /// reaching another package carries no `Payload<FlatBuffers>` implementation
 /// and a note saying so (driftsys/ridl#467); with it, such a type is emitted
-/// like any other. This entry point emits the domain types only, so the
-/// difference shows in the pipeline's output rather than here.
+/// like any other. This entry point emits the domain types only, so for a
+/// type the difference shows in the pipeline's output. A constant typed by a
+/// named scalar of another package is emitted here only when `others` holds
+/// the package that declares the scalar.
 pub fn generate_with(
     package: &v2::Package,
     others: &[&v2::Package],
@@ -1772,14 +1774,13 @@ fn scalar_getter(sc: &v1::Scalar, vis: TokenStream, inner: TokenStream) -> Token
     }
 }
 
-/// Whether the generated module of package `owner` holds an item for its
-/// declaration `decl`, by the rule [`emit_const`] applies: every kind but a
-/// constant is emitted, and a constant is emitted when it is a regex, a
-/// primitive other than `bytes`, or of a named scalar of its own package
-/// that is not backed by `bytes`. `owner` is the model's own package for a
-/// local declaration and the declaring package for a foreign one, whose
-/// type references index the same model.
-pub(crate) fn declaration_emitted(model: &v1::Model, owner: &str, decl: &v1::Declaration) -> bool {
+/// Whether the generated module of the package that declares `decl` holds an
+/// item for it, by the rule [`emit_const`] applies: every kind but a constant
+/// is emitted, and a constant is emitted when it is a regex, a primitive
+/// other than `bytes`, or of a named scalar of any package that is
+/// not backed by `bytes`. The type references of a foreign declaration index
+/// the same model as those of a local one.
+pub(crate) fn declaration_emitted(model: &v1::Model, decl: &v1::Declaration) -> bool {
     let Some(v1::declaration::Kind::Constant(constant)) = decl.kind.as_ref() else {
         return true;
     };
@@ -1790,9 +1791,8 @@ pub(crate) fn declaration_emitted(model: &v1::Model, owner: &str, decl: &v1::Dec
             Ok(v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified) | Err(_)
         ),
         Some(v1::constant::Typed::Named(named)) => {
-            if !named.resolved || named.package != owner {
-                return false;
-            }
+            // The lowering builds `Named` only for a resolved reference, and
+            // `Unresolved` for every other one.
             let target = if named.foreign {
                 model
                     .foreign
@@ -1831,13 +1831,23 @@ fn emit_const(ctx: &Ctx, decl: &v1::Declaration, cd: &v1::Constant) -> TokenStre
         Some(v1::constant::Typed::RegexBody(pattern)) => {
             quote! { #attrs #vis const #name: &::core::primitive::str = #pattern; }
         }
-        // A named-type constant resolves through the type's backing. Only a
-        // same-package named scalar is emitted: a reference into another
-        // package is skipped rather than mis-typed, which is the conservative
-        // rule the model's resolution leaves to the printer (design note
-        // §3.5).
+        // A named-type constant resolves through the type's backing. A named
+        // scalar of this package is read from the model's declarations, and
+        // one of another package from the model's foreign declarations, the
+        // same resolution the codec and the contract clauses use. The type
+        // path is the dotted reference, which `type_path` renders as a path
+        // into the other package's module. A reference with no declaration
+        // at its index is skipped rather than mis-typed.
         Some(v1::constant::Typed::Named(reference)) => {
-            let Some(target) = ctx.local(reference) else {
+            let target = if reference.foreign {
+                ctx.model
+                    .foreign
+                    .get(reference.index as usize)
+                    .and_then(|foreign| foreign.declaration.as_ref())
+            } else {
+                ctx.local(reference)
+            };
+            let Some(target) = target else {
                 return quote! {};
             };
             let Some(v1::declaration::Kind::Scalar(sc)) = target.kind.as_ref() else {

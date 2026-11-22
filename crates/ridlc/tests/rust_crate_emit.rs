@@ -1968,9 +1968,8 @@ fn packages_named_self_and_self_underscore_both_reach_the_crate_tree() {
 /// shape of X-18, `docs/technotes/rust-backend-name-collisions.md`
 /// (driftsys/ridl#416). Package `veh.common` names the type `veh.common`
 /// two ways: as a struct field, and as an interface's signal payload, so the
-/// codec, the descriptors and the face name it too. A constant of that type
-/// is not used: `emit_const` emits no constant whose type is another
-/// package's named type, so it would name the type nowhere.
+/// codec, the descriptors and the face name it too. The fixture declares no
+/// constant of that type.
 fn write_type_named_like_child_package(dir: &Path) -> PathBuf {
     let root = dir.join("veh");
     std::fs::create_dir_all(root.join("common")).expect("the common directory is created");
@@ -2420,6 +2419,62 @@ fn a_parent_package_with_no_public_item_compiles_denying_warnings() {
         "the fixture must exercise the parent re-export; lib.rs was:\n{lib}"
     );
     compile_crate_root_denying_warnings(out.path());
+}
+
+/// A constant of package `pb` typed by a named scalar of package `pa` is
+/// emitted in `pb.rs` and compiles. `pa` declares four scalars, an integer, a
+/// float, a boolean and a string, so a lookup that always takes the first
+/// foreign declaration renders a constant of the wrong type and fails to
+/// compile.
+#[test]
+fn a_constant_typed_by_a_scalar_of_another_package_compiles_in_the_emitted_crate() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let root = dir.path().join("workspace");
+    for (member, package, source) in [
+        (
+            "member-pa",
+            "pa",
+            "package pa\n\ntype Level: integer [0..100] = 7\n\n\
+             type Ratio: float [0.0..1.0] = 0.0\n\ntype On: boolean = false\n\n\
+             type Name: string = \"\"\n",
+        ),
+        (
+            "member-pb",
+            "pb",
+            "package pb\n\nimport pa.Level\nimport pa.Ratio\nimport pa.On\n\
+             import pa.Name\n\nconst MAX: Level = 50\n\nconst HALF: Ratio = 0.5\n\n\
+             const ENABLED: On = true\n\nconst LABEL: Name = \"cabin\"\n",
+        ),
+    ] {
+        std::fs::create_dir_all(root.join(member)).expect("the member directory");
+        std::fs::write(
+            root.join(member).join("ridl.toml"),
+            format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        )
+        .expect("the member manifest is written");
+        std::fs::write(root.join(member).join(format!("{package}.ridl")), source)
+            .expect("the member source is written");
+    }
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[workspace]\nmembers = [\"member-pa\", \"member-pb\"]\n",
+    )
+    .expect("the workspace manifest is written");
+    let out = tempfile::tempdir().expect("temp dir");
+    let run = ridlc::run_build(&root, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+    let pb = std::fs::read_to_string(out.path().join("pb.rs")).expect("the build writes pb.rs");
+    for constant in ["const MAX", "const HALF", "const ENABLED", "const LABEL"] {
+        assert!(
+            pb.contains(constant),
+            "{constant} must be emitted, or this proof compiles nothing:\n{pb}"
+        );
+    }
+    compile_crate_root(out.path());
 }
 
 /// A contract clause on a parameter and on a reply whose named scalar is
