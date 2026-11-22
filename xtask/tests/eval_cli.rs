@@ -145,13 +145,16 @@ echo '{{"type":"tool.execution_start","data":{{"toolCallId":"c1","toolName":"rid
 echo '{{"type":"assistant.message","data":{{"messageId":"m1","content":"The Copilot final answer."}}}}'"#
         ),
     );
+    // xtask takes the workspace version, which the preflight expects.
+    let v = env!("CARGO_PKG_VERSION");
     let ridl = script(
         &dir,
         "ridl",
         &format!(
             r#"echo "ridl $*" >> '{d}/calls.log'
 case "$1" in
-check) if [ -f "$4/ridl.toml" ]; then if [ -f '{d}/check.json' ]; then cat '{d}/check.json'; else echo '[]'; fi; else echo "error: no ridl.toml in $4" >&2; exit 2; fi;;
+--version) echo "ridl {v}";;
+check) [ $# -eq 2 ] && exit 0; if [ -f "$4/ridl.toml" ]; then if [ -f '{d}/check.json' ]; then cat '{d}/check.json'; else echo '[]'; fi; else echo "error: no ridl.toml in $4" >&2; exit 2; fi;;
 diff)
   case "$4" in */evals/corpus/*|*/start) ;; *) exit 3;; esac
   case "$5" in */ws) ;; *) exit 3;; esac

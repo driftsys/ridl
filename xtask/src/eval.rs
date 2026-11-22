@@ -6,6 +6,11 @@
 //! [--runs <n>] [--skill with|without|both] [--out <dir>] [--append]
 //! [--claude-handoff] [--anthropic-judge claude|copilot] [--timeout <seconds>]`
 //!
+//! Before any run, the `ridl` binary (`RIDL_EVAL_RIDL`, else `ridl` on
+//! `PATH`) must print the workspace version, and `ridl check` must pass on
+//! each selected task's starting workspace; otherwise the eval stops. Each
+//! result records the binary's version line as `ridl_version`.
+//!
 //! A run that cannot be scored is recorded with a `setup_error` and no
 //! score, and the batch goes on: a "with" run that shows no evidence of
 //! loading the skill, or a host that did not run (it could not be started,
@@ -167,6 +172,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             out.display()
         ));
     }
+    let ridl_version = host::preflight(&root, &tasks)?;
     let skill = root.join("skills/ridl-authoring");
     let versions: Vec<(Host, String)> = options
         .hosts
@@ -218,6 +224,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                         .map(|(_, v)| v.clone())
                         .unwrap_or_default();
                     result.insert("host_version".into(), version.into());
+                    result.insert("ridl_version".into(), ridl_version.clone().into());
                     result.insert("skill".into(), with_skill.into());
                     result.insert("run".into(), i64::from(n).into());
                     result.insert("agent_exit".into(), i64::from(code.unwrap_or(-1)).into());
