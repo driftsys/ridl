@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 1
+skill = false
+task = "review-0005"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [false, false, false, true, false, false]
+reasons = [
+  "Observation 7 notes eight station packages and repeated payload types, but never states that FanSpeed, Temperature and AirDistribution are repeated or explains the cost of changing them consistently.",
+  "No shared station vocabulary redesign is discussed, and the frozen one-package-per-branch rule is not named as the reason for repetition.",
+  "The answer identifies the 0..100 range and percent kept only in comments, but never says that adding a unit directly would change the representation.",
+  "Observation 4 says the three upstream string names became integer enum codes 0, 1, 2 and need an explicit name/code adapter.",
+  "Observation 2 says setters have no result, error model or declared link to a later signal, but does not say the matching signal cannot be correlated to a particular request.",
+  "The answer reports compiler-applied timing defaults and initial values and labels them as having no upstream basis, but it also invents claims such as the temperature semantics and float width without grounding in the selected definitions.",
+]
+score = 0.16666666666666666

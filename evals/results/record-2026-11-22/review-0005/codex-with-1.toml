@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 1
+skill = true
+task = "review-0005"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [false, false, true, true, false, false]
+reasons = [
+  "It mentions separate station packages repeating payload types and added maintenance work, but does not identify the eight packages repeating all three declarations or explain the cost of changing them consistently.",
+  "It recommends considering a shared station vocabulary but does not tie the repetition to the frozen one-package-per-branch rule or discuss preserving separate addressed instances.",
+  "It states FanSpeed keeps the 0..100 integer domain, percent exists only in comments, and integer-backed unit types are unavailable.",
+  "It says upstream allows strings UP, MIDDLE, DOWN while the port uses integer enum codes 0, 1, 2 requiring a name/code adapter.",
+  "It says there is no rejection reporting and ambiguity between requested and achieved state, but does not state that the matching signal fails to correlate with a particular request or that no applied value is reported.",
+  "It asserts default timing annotations of @[100ms..1s] and @[..1s] and Cel as float64 without clear support from the shown workspace, so it appears to introduce unsupported specifics.",
+]
+score = 0.3333333333333333

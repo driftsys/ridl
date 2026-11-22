@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 2
+skill = false
+task = "evolve-0002"
+
+[mechanical]
+diff_matches = true
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, true, true, true, true]
+reasons = [
+  "The query has the required name, Uint8 target parameters, Int16 index parameter, and ParamValue return type in common.ParameterProtocol.",
+  "The query is appended after the five existing interactions, preserving ordinals 1 through 5 and assigning it ordinal 6.",
+  "The require contract paramIndex >= 0 rejects negative values and accepts the full nonnegative Int16 domain of 0 through 32767.",
+  "The supplied workspace and sole appended-interaction diff preserve existing signatures, declarations, payload fields and types, wire numbers, packages, and imports.",
+  "The explanation maps supplied targets and index to the existing ParamRequestRead and correctly explains that -1 selects paramId while a nonnegative index makes paramId irrelevant.",
+  "The answer reports a successful check with zero errors and supplies the actual JSON diff verdict compatible containing only interaction_appended.",
+  "The answer explicitly identifies a local convenience with no new upstream message, leaves value encoding unchanged, and describes rather than implements an adapter.",
+]
+score = 1.0

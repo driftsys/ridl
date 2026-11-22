@@ -1,0 +1,34 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 3
+skill = true
+task = "design-0004"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, true, true, true, true, true, false]
+reasons = [
+  "A new SeatHeating interface contains the seat heating interactions.",
+  "The reached levels are modeled as driverLevel and passengerLevel signals, and heater failure as a fault event.",
+  "The setHeating command takes both seat and level parameters.",
+  "The new SeatHeater component offers veh.cabin.seatheat, a service for SeatHeating.",
+  "SeatHeater is listed in the Vehicle system.",
+  "SeatHeater is deployed on Bench's Hpc machine alongside Climate.",
+  "Panel includes requires SeatHeating.",
+  "HeatLevel is an integer type constrained to 0–3, and Seat is an enum.",
+  "The answer explicitly reports renaming the existing Control service to veh.cabin.control and changing Climate's offers reference, which violates the preservation requirement.",
+]
+score = 0.8823529411764706

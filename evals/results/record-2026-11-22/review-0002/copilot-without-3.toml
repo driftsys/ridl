@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 3
+skill = false
+task = "review-0002"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, false, false, true, false, false]
+reasons = [
+  "The answer identifies mixed responsibilities and proposes separate navigation, map, and administration interfaces covering lifecycle management.",
+  "The answer does not identify the seven independent isPathValid parameters or explain that their request-struct defaults are absent from the call signature.",
+  "The answer identifies missing result interactions and unavailable outcomes but does not explain that this follows the frozen kind rule.",
+  "The separate proposal adds goal identity and a terminal result event for observable, correlated outcomes without claiming compiler support for ROS action execution.",
+  "The answer does not explicitly identify loadMap and saveMap as state-affecting queries produced mechanically by the service rule or distinguish that mapping from redesign recommendations.",
+  "Although it preserves the workspace, describing results as lost and proposing to reinstate them presents their absence as a porting omission rather than a consequence of the frozen rule.",
+]
+score = 0.2727272727272727

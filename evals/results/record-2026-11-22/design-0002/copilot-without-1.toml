@@ -1,0 +1,20 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 1
+skill = false
+task = "design-0002"
+
+[mechanical]
+lints_match = false
+no_error = true
+notes = ['design lints {"duplicate-shape"}, expected {}']
+passed = false
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+score = 0.0
+skipped = "mechanical checks failed"

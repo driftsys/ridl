@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 1
+skill = true
+task = "review-0005"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [false, false, true, true, false, false]
+reasons = [
+  "It recognizes eight station copies of the three declarations but does not explain the maintenance cost of keeping changes consistent across those packages.",
+  "It proposes shared types and a parameterised station but does not explicitly preserve separate addressed instances or explain the frozen one-package-per-branch rule.",
+  "It identifies FanSpeed's integer range 0..100, percent metadata in comments, and the representation change caused by float-backed unit types.",
+  "It identifies the preserved UP/MIDDLE/DOWN names, their integer codes, and the required adapter mapping to upstream strings.",
+  "It notes that application and errors are unreported but does not explain that the matching signal lacks correlation with a particular setter request.",
+  "It asserts default command acknowledgement bounds and acceptance semantics that are absent from the supplied definitions.",
+]
+score = 0.3333333333333333

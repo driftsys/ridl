@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 1
+skill = true
+task = "review-0004"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, false, true, true, true, true, true]
+reasons = [
+  "States paramType does not determine encoding mode, that the guide allows bytewise and cast encoding, and that guessing from the numeric value is unsafe.",
+  "It notes that exactly 16-character names have no terminator and warns against truncation, but never explains how replacing the array with a null-terminated string changes which identifiers are accepted.",
+  "Says paramSet completion does not prove the change, that PARAM_VALUE is broadcast with no transaction id, and that paramValue is an event that may be a read reply, list entry, write acknowledgment or unrelated change.",
+  "Says the list has no end marker and that the adapter must track indices and counts to detect missing entries, and that silence cannot distinguish an empty component from packet loss.",
+  "Recommends explicit adapter policy for encoding capability and supported type/mode combinations, and for timeout, retry and completion rules, rather than guessing from values.",
+  "Does not assume floating-point storage, and says a matching PARAM_VALUE is needed and that a failed write also broadcasts the unchanged value.",
+  "Says Float32 is backed by unconstrained float, inferred as float64, with no guaranteed binary32 or NaN-payload preservation, and that the adapter needs an explicit wire codec preserving raw 32-bit payloads.",
+]
+score = 0.8461538461538461

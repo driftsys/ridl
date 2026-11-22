@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 2
+skill = false
+task = "design-0001"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, true, true, true, true]
+reasons = [
+  "The RIDL declares both identity fields and all requested announcement metadata, with a periodic announce event.",
+  "ComponentKey separates identity from ComponentType, which the monitor infers from announcement metadata.",
+  "ComponentStatus associates a full system/component key with an explicit connected or disconnected value.",
+  "The answer explicitly leaves the announcement interval and missed-announcement limit to deployment and distinguishes the timing envelope from protocol values.",
+  "The answer explains runtime scheduling, operational and fault-state checks, last-seen tracking, and timer-based disconnect detection.",
+  "The Announcer and Monitor interfaces focus exclusively on presence discovery and connection reporting.",
+  "The answer explicitly states that runtime behavior implements the tracking rules and does not claim that types or timing annotations implement them.",
+]
+score = 1.0

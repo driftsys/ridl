@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = false
+task = "review-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [false, true, false, true, true, true]
+reasons = [
+  "The answer mentions answering legacy MISSION_REQUEST with MISSION_ITEM_INT but never notes that missionRequest returns MissionItemInt rather than MissionItem or explains it as a documented adaptation.",
+  "It says declarations don't enforce a transfer transaction, and calls for state machines covering retransmission, ACK completion and correlation, and that RIDL acceptance isn't plan transfer.",
+  "It cites MissionItemInt's sequence and plan type and correlation by plan type and sequence, but never explains missionType and seq as necessary distinctions for independently stored plans and ordered transfer.",
+  "It recommends documenting state machines and correlation of requests, items and ACKs alongside the port.",
+  "It does not recommend removing target, sequence or missionType fields; it recommends preserving them for correlation.",
+  "It explicitly says the RIDL timing defaults must not be presented as MAVLink guarantees and cites the pinned guide's 1500 ms/250 ms/5-retry values separately.",
+]
+score = 0.6363636363636364

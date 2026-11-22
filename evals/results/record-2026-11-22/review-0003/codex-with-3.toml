@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = true
+task = "review-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, false, true, true, true]
+reasons = [
+  "Item 5 says the legacy request's MissionItemInt return deliberately resolves conflicting description text and should be documented, though it does not explicitly name both missionRequest and missionRequestInt or the MissionItem pairing.",
+  "The answer says signatures do not define a transfer state machine, and that count, request, item and ACK sequencing, timeout re-request and ACK completion stay procedural, including the 1500 ms timeout, 250 ms item timeout and five retries.",
+  "The answer mentions plan type, expected sequence and separate caches per plan type, and MavMissionType and MissionItemInt appear, but it does not name missionType or seq fields as necessary distinctions.",
+  "It recommends publishing a companion client procedure and documenting transaction ownership, matching of traffic to expected sequence and phase, and ACK correlation.",
+  "The answer does not recommend removing target or sequence or missionType fields; it says payload addressing alone cannot establish matching.",
+  "It cites the guide's recommended timeouts and retries as procedure and never claims RIDL timing defaults implement retry.",
+]
+score = 0.8181818181818182

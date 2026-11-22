@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = true
+task = "design-0001"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, true, true, true]
+reasons = [
+  "Declares SystemId, ComponentId, ComponentKey, Announcement metadata, and a Presence interface with an `announced` event for repeated announcements.",
+  "ComponentId is separate from ComponentType, and docs state type is never inferred from componentId; type is carried in Announcement metadata.",
+  "ConnectionReport pairs lastAnnouncement (containing key) with ConnectionState CONNECTED/DISCONNECTED; discover and report queries return these.",
+  "TrackingPolicy has deployment-selected intervalMs and missedAnnouncementLimit with no defaults, and docs say the API supplies no default values.",
+  "Final message and README (per the message) say runtime code must enforce periodic sending while idle, fault-aware sender synchronization, timers and disconnect thresholds; RIDL does not execute these.",
+  "Presence and ConnectionMonitor interfaces are focused on discovery with no mission or parameter operations.",
+  "The answer states RIDL validates the contract but does not execute behaviors, and schema comments say timing is delivery TTL, not cadence, so it makes no such claim.",
+]
+score = 1.0

@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 3
+skill = true
+task = "design-0001"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, true, true, true, true]
+reasons = [
+  "The RIDL declares system/component identity and all announcement metadata, with an announce event representing repeated presence announcements.",
+  "ComponentId and ComponentType are distinct, and the monitor obtains type from announcement metadata.",
+  "ComponentStatus associates each system/component identity with an explicit CONNECTED or DISCONNECTED result.",
+  "TrackingConfig makes the interval and missed-announcement limit explicit deployment choices without claiming universal timeout values.",
+  "The answer explicitly identifies operational scheduling, fault suppression including separate-thread checks, and disconnect detection as runtime responsibilities.",
+  "The Announcer and Monitor interfaces focus exclusively on presence discovery and connection tracking.",
+  "The answer explicitly states that the contract cannot enforce the runtime rules and does not claim generated types or timing annotations implement discovery.",
+]
+score = 1.0

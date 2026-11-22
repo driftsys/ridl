@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = false
+task = "review-0002"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [false, true, true, true, true, false]
+reasons = [
+  "The answer never says the single Nav2MsgsInteractions interface mixes map, lifecycle and navigation responsibilities, and it does not discuss splitting it into separate interfaces.",
+  "It notes IsPathValidRequest keeps seven fields with explicit defaults while the query requires all seven arguments, so callers must reproduce the defaults by hand.",
+  "It states the action interactions have commands and feedback but no result interaction, so NavigateToPoseResult is never delivered and completion and failure are unobservable.",
+  "The proposal gives actions stable operation IDs, correlated feedback, terminal status with typed results, and cancellation, as a separate facade, without claiming the compiler implements ROS actions.",
+  "It says the service-to-query rule explains why mutating operations such as loadMap and saveMap are queries, but that does not make them read-only, and it recommends explicit effect contracts in a redesign.",
+  "It says the omission is intentional and does not change the workspace, but it also calls the missing result interaction a blocker and says the structs are left as data only, which comes close to treating it as a gap in the port.",
+]
+score = 0.6363636363636364

@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 2
+skill = true
+task = "review-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [false, true, false, true, true, true]
+reasons = [
+  "It notes the legacy MissionItemInt mapping but does not explicitly identify both query return types or explain the historical MissionRequest–MissionItem pairing.",
+  "It explains that query signatures omit transfer sequencing, timeout retries, and missionAck completion, requiring client procedures and a state machine.",
+  "It names missionType and plan types but does not explain independent plan storage or tie ordered transfer to named seq declarations in the port.",
+  "It recommends a companion procedure document and client state machine covering transitions and acknowledgement correlation.",
+  "It does not recommend removing addressing, sequence, or missionType fields as redundant.",
+  "It assigns retries to client code and does not claim RIDL timing defaults implement upstream retry procedures.",
+]
+score = 0.6363636363636364

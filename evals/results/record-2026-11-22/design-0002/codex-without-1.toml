@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 1
+skill = false
+task = "design-0002"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, false, false, false, true, true]
+reasons = [
+  "PlanKind, Participant, TransferId, ItemCount, ItemIndex and ItemData are all declared in the RIDL.",
+  "Count, ItemRequest, PlanItem and TransferResult are carried by events in ReceiverIngress and SenderIngress, covering both directions.",
+  "The README procedure is not shown, so separate storage per plan type can only be inferred from RIDL comments, which describe independent namespaces and Busy per namespace.",
+  "The README is not shown, so the procedure for advancing and re-requesting cannot be verified.",
+  "The README is not shown, so the timeout and retry procedure cannot be verified, though the RIDL comments hint at it.",
+  "A single focused planupload package holds the types and interfaces, and the RIDL docs carry correlation and lifecycle comments with the procedure in the README.",
+  "The RIDL comments state there is no implicit transport reliability and put retransmission in the procedure, not in the bounds.",
+]
+score = 0.5384615384615384

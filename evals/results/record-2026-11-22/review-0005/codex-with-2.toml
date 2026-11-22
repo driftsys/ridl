@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = true
+task = "review-0005"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [false, false, false, true, false, true]
+reasons = [
+  "The answer notes that each concrete station repeats three locally defined payload types across eight Driver/Passenger interfaces, but it never discusses the maintenance cost of keeping the definitions consistent.",
+  "It recommends considering shared station types, but it does not tie the repetition to the frozen one-package-per-branch rule or discuss preserving separate addressed station instances.",
+  "It says percent survives only in comments because integer-backed unit types are unavailable, but it does not say that adding a unit directly would change the representation.",
+  "It says AirDistribution keeps the three upstream names as enum codes 0, 1, 2 rather than upstream strings, and that an adapter must map names to codes explicitly.",
+  "It says setters have no explicit result or error and that completion is not tied to observed state, but it does not say that the matching signal cannot be correlated with a particular request.",
+  "It says upstream supplies no timing, bounds, or default values, and it labels the compiler's default timing and initial values as compiler behavior, so it invents none.",
+]
+score = 0.3333333333333333

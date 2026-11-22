@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 1
+skill = true
+task = "review-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [false, true, false, true, true, true]
+reasons = [
+  "The answer mentions only that a legacy request should receive MISSION_ITEM_INT as the port's deliberate resolution, but never states that missionRequest and missionRequestInt both return MissionItemInt or that the deprecated request historically pairs with MissionItem.",
+  "It says the signatures do not enforce ordering, routing, correlation, or completion, and lists the re-request, retry, and ACK behaviors as rules that are absent from the signatures.",
+  "It mentions sequence numbers, plan types and MavMissionType.FENCE/RALLY in general terms, but never explains missionType and seq as necessary distinctions for independently stored plans and ordered item transfer.",
+  "It recommends documenting transaction ownership and ACK matching, recovery and a companion transfer procedure with state and correlation rules alongside the port.",
+  "The answer does not recommend removing target, sequence, or missionType fields.",
+  "The answer says retry settings are behavioral requirements absent from the signatures and does not claim that RIDL timing defaults implement the retry procedure.",
+]
+score = 0.6363636363636364

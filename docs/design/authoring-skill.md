@@ -23,10 +23,10 @@ repeated here.
   check from the plan on 2026-11-19 (driftsys/ridl#1401, closed). On 2026-11-22
   the maintainer accepted ADR-0035 and deferred decisions 11 and 12
   (driftsys/ridl#1440).
-- No release record exists: `evals/results/` is absent, and the skill's effect
-  on an agent's result is not measured.
-- The model ids in `evals/runner.toml` are pinned but not confirmed for a
-  release record.
+- The release record exists:
+  [`evals/results/record-2026-11-22/`](../../evals/results/record-2026-11-22/README.md)
+  holds the runs of 2026-11-22, and the gate holds on Copilot and Codex. The
+  maintainer waived the judge check for it, so its rubric scores are unverified.
 
 ## The skill
 

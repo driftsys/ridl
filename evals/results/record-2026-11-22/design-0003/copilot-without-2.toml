@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 2
+skill = false
+task = "design-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, true, false, false, true, true]
+reasons = [
+  "ParamName uses bytes [0..16] and explicitly allows all 16 bytes without a terminator.",
+  "ParamValue provides typed numeric alternatives, so each value carries its numeric type.",
+  "Separate read, readAll and write operations exist, with updated events reporting the stored value after applied or unapplied writes.",
+  "Reports include count and index, and completeness requires receiving every index from zero through count minus one.",
+  "Errors and updates are separate and parameters are identified, but the supplied material does not explain association with the intended remote component.",
+  "The answer mentions byte-wise versus converted encoding but does not explain how an adapter selects between them, and the referenced README contents are not supplied.",
+  "Index selection and readAll avoid advance name knowledge, and write acceptance explicitly does not establish that the requested value was applied.",
+  "The read operation accepts an explicit Index selector without requiring prior name discovery.",
+]
+score = 0.75

@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = true
+task = "evolve-0002"
+
+[mechanical]
+diff_matches = true
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, true, true, true]
+reasons = [
+  "The query is added to common.ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, and return type ParamValue.",
+  "It is appended after paramError, the fifth interaction, so it takes ordinal 6 and the existing ones keep 1–5.",
+  "The contract `require paramIndex >= 0` rejects negative values and leaves the nonnegative Int16 range accepted.",
+  "The final workspace shows existing interactions, payload structs, packages and imports unchanged; only the one query was added.",
+  "The explanation says an adapter sends ParamRequestRead with the supplied targets and index, and that a nonnegative index makes paramId ignored (name selection applies only at -1).",
+  "The answer reports 0 errors and shows a JSON diff with verdict compatible and a single interaction_appended change.",
+  "The answer states it adds no upstream message, changes no encoding, and implements no adapter.",
+]
+score = 1.0

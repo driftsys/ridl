@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 3
+skill = true
+task = "review-0005"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, false, false, true, true, false]
+reasons = [
+  "It identifies all eight row{1..4}.{driver,passenger} packages, discusses their repeated station types, and explains that changes require eight coordinated edits.",
+  "It proposes shared station types or a parameterized interface but does not recognize that the frozen one-package-per-branch rule explains the repetition.",
+  "It identifies the enforced integer range and comment-only percent unit but does not explain that adding a unit directly would change the representation.",
+  "It identifies UP, MIDDLE and DOWN as integer enum codes replacing upstream strings and explicitly requires bridging clients to map them.",
+  "It explains that setters have no result or error outcome and that clients have no specified link between a command and its matching signal.",
+  "It asserts an unsupported default signal timing of @[100ms..1s] and unsupported target-versus-actual semantics for commands and signals.",
+]
+score = 0.5
