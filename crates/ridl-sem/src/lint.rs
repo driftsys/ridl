@@ -411,6 +411,70 @@ mod tests {
     use ridl_core::package::{Package, PackageOrigin, Workspace};
     use ridl_core::std_lib::std_package;
     use std::collections::BTreeMap;
+    use std::collections::BTreeSet;
+
+    /// The `| <code> |` row of the diagnostic table in §16.4 of the ridl
+    /// language reference.
+    fn reference_row(code: &str) -> String {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/specification/ridl-language-reference.md");
+        let text = std::fs::read_to_string(&path).expect("the ridl language reference is readable");
+        let prefix = format!("| {code} |");
+        text.lines()
+            .find(|line| line.starts_with(&prefix))
+            .unwrap_or_else(|| panic!("§16.4 has no row for {code}"))
+            .to_string()
+    }
+
+    /// The backticked words of `row`, as a set.
+    fn backticked(row: &str) -> BTreeSet<String> {
+        row.split('`')
+            .skip(1)
+            .step_by(2)
+            .map(str::to_string)
+            .collect()
+    }
+
+    // The three tests below compare values a reader acts on, not prose: an
+    // integer, and two sets of words. A rewording of a row passes them.
+
+    #[test]
+    fn the_reference_states_the_shared_error_threshold() {
+        let row = reference_row("RIDL-405");
+        let stated: usize = row
+            .split(" or more interaction scopes")
+            .next()
+            .and_then(|head| head.split_whitespace().last())
+            .and_then(|number| number.parse().ok())
+            .unwrap_or_else(|| panic!("the RIDL-405 row states no threshold: {row}"));
+        assert_eq!(
+            stated, SHARED_ERROR_INTERFACE_THRESHOLD,
+            "§16.4 and SHARED_ERROR_INTERFACE_THRESHOLD disagree"
+        );
+    }
+
+    #[test]
+    fn the_reference_names_every_mutation_verb() {
+        // A word with an upper-case letter is an example name (`setGear`),
+        // not a verb.
+        let stated: BTreeSet<String> = backticked(&reference_row("RIDL-404"))
+            .into_iter()
+            .filter(|word| !word.chars().any(char::is_uppercase))
+            .collect();
+        let verbs: BTreeSet<String> = MUTATION_VERBS.iter().map(|v| v.to_string()).collect();
+        assert_eq!(stated, verbs, "§16.4 and MUTATION_VERBS disagree");
+    }
+
+    #[test]
+    fn the_reference_names_every_envelope_field() {
+        // `signal` and `event` name the declaration kinds the lint applies to.
+        let stated: BTreeSet<String> = backticked(&reference_row("RIDL-406"))
+            .into_iter()
+            .filter(|word| word != "signal" && word != "event")
+            .collect();
+        let fields: BTreeSet<String> = ENVELOPE_FIELDS.iter().map(|f| f.to_string()).collect();
+        assert_eq!(stated, fields, "§16.4 and ENVELOPE_FIELDS disagree");
+    }
 
     /// Checks a single-file `.ridl` package and returns its diagnostics.
     fn check_ridl(text: &str) -> CheckedPackage {
