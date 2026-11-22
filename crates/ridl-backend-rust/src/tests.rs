@@ -8365,3 +8365,38 @@ fn a_constant_typed_by_a_scalar_of_a_package_not_given_is_not_emitted() {
     assert!(!source.contains("const LIMIT"), "got:\n{source}");
     assert!(source.contains("See `veh.common.LIMIT`."), "got:\n{source}");
 }
+
+/// A constant whose scalar's package is not given is not emitted, even when
+/// the model holds a foreign declaration at index 0. The lowering builds such
+/// a reference with index 0, and only the lowering's `resolved` guard keeps
+/// it from being typed by that unrelated declaration.
+#[test]
+fn a_constant_of_a_package_not_given_is_not_typed_by_another_foreign_declaration() {
+    let third = package(
+        "third.pkg",
+        vec![public_decl(
+            "Flag",
+            primitive_type(
+                v2::PrimitiveType::Boolean,
+                init_value(true, Some("false")),
+                None,
+            ),
+        )],
+    );
+    let local = package(
+        "veh.common",
+        vec![
+            const_decl("ON", "third.pkg.Flag", "true"),
+            const_decl("LIMIT", "other.pkg.Speed", "50.5"),
+        ],
+    );
+    let source = generate_pipeline(&local, &[], false, &[&third])
+        .expect("the package generates against the build")
+        .rust_source;
+    let flat: String = source.split_whitespace().collect();
+    assert!(
+        flat.contains("pubconstON:crate::third::pkg::Flag="),
+        "got:\n{source}"
+    );
+    assert!(!source.contains("const LIMIT"), "got:\n{source}");
+}
