@@ -3094,6 +3094,44 @@ mod tests {
     }
 
     #[test]
+    fn inline_service_preserves_only_the_colliding_member() {
+        for width in [100, 60, 40] {
+            for annotation in ["// attribute", "/// attribute"] {
+                for trailing in ["// member", "/* member */", "/* member\nmore */"] {
+                    let colliding =
+                        format!("  query  q():T [persist] {annotation}\n  @ 10ms {trailing}\n");
+                    for (before, after) in [
+                        ("  signal  s : T\n", "  signal s: T\n"),
+                        ("  signal  s : T // note\n", "  signal s: T // note\n"),
+                    ] {
+                        for (input_members, expected_members) in [
+                            (
+                                format!("{colliding}{before}"),
+                                format!("{colliding}{after}"),
+                            ),
+                            (
+                                format!("{before}{colliding}"),
+                                format!("{after}{colliding}"),
+                            ),
+                        ] {
+                            assert_profile_format(
+                                &format!("package p\nservice veh.control {{\n{input_members}}}\n"),
+                                &format!(
+                                    "package p\n\nservice veh.control {{\n{expected_members}}}\n"
+                                ),
+                                Profile::Ridl,
+                                &FormatOptions {
+                                    max_line_length: Some(width),
+                                },
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn review_inline_service_noncolliding_comments_still_normalize() {
         for width in [100, 60, 40] {
             for comment in ["/* attribute */", "/** attribute */"] {
