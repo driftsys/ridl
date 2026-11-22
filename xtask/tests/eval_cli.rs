@@ -1143,6 +1143,27 @@ fn a_host_that_fails_with_no_transcript_is_a_setup_error() {
 }
 
 #[test]
+fn a_host_that_fails_after_its_startup_events_is_a_setup_error() {
+    let fakes = fakes_with(Some(r#"echo '{"type":"system","subtype":"init"}'; exit 1"#));
+    let result = claude_run(&fakes, &[]);
+    assert_eq!(
+        result.get("setup_error").and_then(toml::Value::as_str),
+        Some("the host exited with Some(1) before the agent ran a turn")
+    );
+    assert!(result.get("mechanical").is_none());
+}
+
+#[test]
+fn a_host_that_fails_after_an_agent_turn_is_scored() {
+    let fakes = fakes_with(Some(
+        r#"echo '{"type":"assistant","message":{"content":[]}}'; exit 1"#,
+    ));
+    let result = claude_run(&fakes, &[]);
+    assert!(result.get("setup_error").is_none(), "{result}");
+    assert!(result.get("mechanical").is_some());
+}
+
+#[test]
 fn a_host_that_cannot_be_started_is_a_setup_error() {
     let fakes = fakes_with(None);
     let out = fakes.dir.join("results");
