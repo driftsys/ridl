@@ -757,9 +757,9 @@ enum ContractKind {
 
 // One require/ensure clause (ridl §13), lowered as an observer stub
 // (the checker validates the clause against the guaranteed subset, and the
-// lowering stores its canonical text; a clause that reads live state is not
-// evaluated, and `ridl test` evaluates the rest). source is the canonical expr
-// text;
+// lowering stores its canonical text; `ridl test` evaluates a clause it can,
+// and reports a clause that reads live state, among others, as skipped). source
+// is the canonical expr text;
 // driftsys/ridl#704 tracks replacing it with a structured expr tree.
 message Contract {
   ContractKind kind = 1;
