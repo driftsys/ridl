@@ -1073,3 +1073,12 @@ provenance. Nothing here is normative — the current references live in
   `evals/runner.toml` and to approve the spend. Task 13 is this gardening. The
   plan's code listings are not a description of the as-built code, which is
   described in [the design record](../design/authoring-skill.md).
+- **skill-ridl-authoring-outline.md** — the outline of the `ridl-authoring`
+  skill, the distilled table of contents that ADR-0005 Layer A refers to.
+  Archived verbatim on 2026-11-22 from `docs/wip/`, with its status banner
+  updated. It is background only: the skill that shipped is written by hand,
+  with no per-language reference files, and the statements that the skill is
+  generated from the reference docs describe the first plan. The durable records
+  are [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md),
+  [the authoring skill design record](../design/authoring-skill.md) and the
+  amended [ADR-0005](../decisions/ADR-0005-agent-enablement.md).

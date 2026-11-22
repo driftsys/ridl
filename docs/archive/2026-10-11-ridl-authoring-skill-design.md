@@ -12,7 +12,7 @@ skill), #87 (rsdl skill profile); ADR-0005 §2 (Layer A) and §5 (evals).
 [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md),
 [ADR-0027](../decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md),
 [ADR-0029](../decisions/ADR-0029-stability-policy.md),
-[the skill outline](../wip/skill-ridl-authoring-outline.md), `evals/`.
+[the skill outline](skill-ridl-authoring-outline.md), `evals/`.
 
 ## 1. Goal
 
