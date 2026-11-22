@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed.
+Accepted — 2026-11-22.
 
 Amended 2026-10-03 by the workspace-aware MCP tools (piece 1a,
 [ADR-0025](ADR-0025-workspace-aware-mcp-tools.md)): the tools take a workspace
@@ -44,9 +44,9 @@ records the decisions taken when the skill and its evals were built:
 - §8's table is not rewritten. ADR-0012 retired `uxdl`, so the "Phase 4-5" row
   applies to `rsdl` alone.
 
-The status of this record stays Proposed. The maintainer ruled before the design
-of 2026-10-11 that it moves to Accepted; that change is not made here, because
-`AGENTS.md` still names the record as proposed.
+Accepted 2026-11-22 by the maintainer. The acceptance leaves the judge check and
+the release record of ADR-0035 decisions 11 and 12 deferred; ADR-0035's status
+gives the conditions.
 
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept
@@ -329,7 +329,8 @@ Agent enablement is not a separate program; it rides the existing phases:
   _Resolved (2026-11-19)._ A run is scored mechanically, and a run that passes
   is marked against a rubric by a judge model of the other vendor
   ([ADR-0035](ADR-0035-authoring-skill-and-evals.md) decision 10). The judge is
-  checked once against the maintainer's labels; that check has not been run.
+  checked once against the maintainer's labels; that check is deferred (ADR-0035
+  status, driftsys/ridl#1440).
 - **Rules-file portability.** One canonical rules text, N host formats — define
   the generator (or hand-maintain until a second host actually demands it).
 

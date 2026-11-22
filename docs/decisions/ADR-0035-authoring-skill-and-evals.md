@@ -2,18 +2,22 @@
 
 ## Status
 
-Proposed — 2026-11-19, recorded when the design and plan of 2026-10-11 were
-gardened. The maintainer made four rulings before the design was written
-(because [ADR-0005](ADR-0005-agent-enablement.md) conflicted with the work) and
-agreed decisions 1 to 9 of the design in the brainstorming session of
-2026-10-11. The record as gardened is not yet accepted by the maintainer. The
-skill, its gates, its distribution and the eval runner were built in
-driftsys/ridl#893 and simplified in #963.
+Accepted — 2026-11-22. The record was written on 2026-11-19, when the design and
+plan of 2026-10-11 were gardened. The maintainer made four rulings before the
+design was written (because [ADR-0005](ADR-0005-agent-enablement.md) conflicted
+with the work) and agreed decisions 1 to 9 of the design in the brainstorming
+session of 2026-10-11. The skill, its gates, its distribution and the eval
+runner were built in driftsys/ridl#893 and simplified in #963.
 
-Two parts of decisions 8 and 9 are decided but not done: the judge check and the
-release record have not been run. They need the maintainer to confirm the model
-ids in `evals/runner.toml` and to approve about 144 agent runs and up to 144
-judge calls. driftsys/ridl#1401 tracks them as optional work. Nothing in this
+Amended 2026-11-22, when the maintainer accepted this record: decisions 11 (the
+judge check) and 12 (the release record or gate) are deferred. The tooling
+exists: `cargo xtask eval sample` and `cargo xtask eval agreement` (in
+`xtask/src/eval.rs`), and the gate that `cargo xtask eval` writes in
+`summary.md` (`xtask/src/eval/report.rs`). Neither is to be run until the
+maintainer confirms the model ids in `evals/runner.toml` and approves the runs:
+about 144 agent runs and up to 144 judge calls. driftsys/ridl#1440 tracks them.
+The owner had dropped the optional plan task for them on 2026-11-19, and
+driftsys/ridl#1401, which held that task, was closed that day. Nothing in this
 repository states a measured gain from the skill.
 
 Scope: what the `ridl-authoring` skill is made of, how it is kept consistent
@@ -198,4 +202,5 @@ Source material, archived verbatim:
 [the design](../archive/2026-10-11-ridl-authoring-skill-design.md) and
 [the plan](../archive/2026-10-11-ridl-authoring-skill-plan.md).
 
-Tracking: driftsys/ridl#1401 (the judge check and the release record).
+Tracking: driftsys/ridl#1440 (the judge check and the release record). The
+earlier issue driftsys/ridl#1401 was closed on 2026-11-19.

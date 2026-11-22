@@ -25,14 +25,15 @@ other entry below is Accepted.
   splits into a language half and a compute-runtime half, and the V1/V2 split
   becomes V1/V2/V3. Amended 2026-09-12: §1's sequencing and the V1/V2 release
   definitions are superseded by the roadmap's two steps.
-- **ADR-0005 — Agent enablement.** _Proposed._ Enabling AI agents to author and
-  evolve RIDL. Amended 2026-10-03 by the workspace-aware MCP tools (ADR-0025):
-  the minimum tool table names workspace paths and adds `ridl_references` and
-  `ridl_dependencies`, and §7 adds the MCP tool surface as a fourth contract
-  surface. Amended 2026-11-11: the skill is `SKILL.md` and `rules.md` only,
-  because a pilot eval did not show that per-language references help. Amended
-  2026-11-19 by ADR-0035: the skill is written by hand, the unit an agent writes
-  is a workspace, and the evals run on demand, not in CI.
+- **ADR-0005 — Agent enablement.** _Accepted 2026-11-22._ Enabling AI agents to
+  author and evolve RIDL. Amended 2026-10-03 by the workspace-aware MCP tools
+  (ADR-0025): the minimum tool table names workspace paths and adds
+  `ridl_references` and `ridl_dependencies`, and §7 adds the MCP tool surface as
+  a fourth contract surface. Amended 2026-11-11: the skill is `SKILL.md` and
+  `rules.md` only, because a pilot eval did not show that per-language
+  references help. Amended 2026-11-19 by ADR-0035: the skill is written by hand,
+  the unit an agent writes is a workspace, and the evals run on demand, not in
+  CI.
 - **ADR-0006 — Walking-skeleton execution.** E0-scoped execution decisions
   (workspace layout, protox, deferred crates.io reservation).
 - **ADR-0007 — Epic E1 execution.** E1-scoped execution decisions (ungrammar
@@ -732,13 +733,14 @@ other entry below is Accepted.
   and 16, and adds dated notes to ADR-0008, ADR-0016, ADR-0022 and ADR-0002.
 
 - **ADR-0035 — The authoring skill, its gates, its distribution and its evals.**
-  _Proposed._ The `ridl-authoring` skill is `SKILL.md` and `rules.md`, written
-  by hand; three tests keep it consistent with the compiler; the editor release
-  and the VS Code extension (which needs VS Code 1.109) distribute it; and
-  `cargo xtask eval` compares an agent with and without it, scored mechanically
-  and then against a rubric by a judge of the other vendor. The judge check and
-  the release record are decided but not run (driftsys/ridl#1401). Amends
-  ADR-0005 §2, §5 and §7 and adds a dated amendment to ADR-0027.
+  _Accepted 2026-11-22._ The `ridl-authoring` skill is `SKILL.md` and
+  `rules.md`, written by hand; three tests keep it consistent with the compiler;
+  the editor release and the VS Code extension (which needs VS Code 1.109)
+  distribute it; and `cargo xtask eval` compares an agent with and without it,
+  scored mechanically and then against a rubric by a judge of the other vendor.
+  The judge check and the release record are decided but deferred
+  (driftsys/ridl#1440). Amends ADR-0005 §2, §5 and §7 and adds a dated amendment
+  to ADR-0027.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
