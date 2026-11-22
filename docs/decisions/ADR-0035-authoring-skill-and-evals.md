@@ -20,6 +20,15 @@ The owner had dropped the optional plan task for them on 2026-11-19, and
 driftsys/ridl#1401, which held that task, was closed that day. Nothing in this
 repository states a measured gain from the skill.
 
+Amended 2026-11-22, the same day: the Anthropic-side judge of a Codex run may
+run on the Copilot CLI with the pinned Copilot model (an Anthropic model)
+instead of the Claude CLI, because the maintainer signs in to the CLIs only and
+holds no Claude token. The `[judge]` table of `evals/runner.toml` names it, and
+`--anthropic-judge` overrides it. Decision 10's rule that a judge is of the
+other vendor still holds: Copilot judges only Codex runs, never a Claude or a
+Copilot run. The two hosts of a record may therefore be Copilot and Codex, each
+judged by the other. The pin of the Codex model changed to `gpt-6.1-sol`.
+
 Scope: what the `ridl-authoring` skill is made of, how it is kept consistent
 with the compiler, how it reaches each agent host, and how its effect is
 measured. It binds every change to `skills/`, to the editor packaging of the
@@ -120,7 +129,8 @@ numbering.
     not** items weigh 2 and **should** items weigh 1. The judge sees the prompt,
     the rubric, the final workspace and the agent's final message, and nothing
     that says whether the skill was loaded. Claude and Copilot runs are judged
-    by Codex, and Codex runs by Claude.
+    by Codex, and Codex runs by Claude or, since the amendment of 2026-11-22, by
+    the Copilot CLI running an Anthropic model.
 11. **The judge is checked once against the maintainer's labels, and a release
     record is made only if it agrees.** The maintainer labels the rubric items
     of a sample of 20 judged runs; agreement per item below 80% blocks the
@@ -177,9 +187,10 @@ numbering.
 - The skill's version moves with every release, so each release changes
   `SKILL.md` and the editor release attaches a new archive.
 - The Copilot CLI is a third eval host that a run selects with `--host copilot`;
-  it is outside the default host list, and it is never a judge. The first design
-  left Copilot out of the measured comparison and kept a smoke check by hand.
-  The smoke check by hand is not recorded.
+  it is outside the default host list, and it judges only Codex runs, never a
+  Claude or a Copilot run (the amendment of 2026-11-22). The first design left
+  Copilot out of the measured comparison and kept a smoke check by hand. The
+  smoke check by hand is not recorded.
 - A VS Code fork older than 1.109 cannot install the extension (decision 7).
 
 ## Documents amended

@@ -161,8 +161,8 @@ pub fn write_schema(dir: &Path) -> Result<(), String> {
 
 /// The judge runs with no MCP server, in `dir`, an empty directory with its
 /// own host home. The Claude judge has no tool; the Codex judge keeps its
-/// shell tool in a read-only sandbox (`-s read-only`). Copilot is never a
-/// judge: `Host::judge` never returns it.
+/// shell tool in a read-only sandbox (`-s read-only`); the Copilot judge gets
+/// `--available-tools=none`, so it has no tool, and no MCP server. `Host::judge` returns Copilot only for a Codex run.
 pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> host::Invocation {
     let s = |v: &str| v.to_owned();
     let path = |p: PathBuf| p.display().to_string();
@@ -200,7 +200,30 @@ pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> h
             ],
             vec![(s("CODEX_HOME"), path(dir.join("home")))],
         ),
-        Host::Copilot => unreachable!("Host::judge never selects Copilot as a judge"),
+        Host::Copilot => (
+            vec![
+                s("-p"),
+                s(prompt),
+                s("--model"),
+                s(model),
+                s("--no-ask-user"),
+                s("--no-custom-instructions"),
+                s("--no-auto-update"),
+                s("--no-color"),
+                s("--disable-builtin-mcps"),
+                // No tool is named `none`, so the judge has no tool at all.
+                // An empty list does not restrict, and a read tool needs no
+                // permission, so the absence of allow flags is not enough.
+                s("--available-tools=none"),
+                s("--output-format"),
+                s("json"),
+                s("-C"),
+                path(dir.to_owned()),
+                s("--log-dir"),
+                path(dir.join("home/logs")),
+            ],
+            vec![(s("COPILOT_HOME"), path(dir.join("home")))],
+        ),
     };
     host::Invocation {
         program: judge.binary(),
@@ -224,6 +247,27 @@ pub fn claude_reply(stdout: &str) -> Result<String, String> {
         .as_str()
         .map(str::to_owned)
         .ok_or_else(|| "the Claude judge printed no result".to_owned())
+}
+
+/// The verdict a Copilot judge printed:
+/// the content of its last `assistant.message` event, without the Markdown
+/// code fence a model may put around JSON. Copilot has no output schema, so
+/// `parse_verdict` checks the shape.
+pub fn copilot_reply(stdout: &str) -> Result<String, String> {
+    let message = copilot_final_message(stdout);
+    if message.is_empty() {
+        return Err("the Copilot judge printed no message".to_owned());
+    }
+    let text = message.trim();
+    let unfenced = text
+        .strip_prefix("```")
+        .and_then(|rest| rest.strip_suffix("```"))
+        .map(|body| {
+            let tag = body.get(..4).filter(|t| t.eq_ignore_ascii_case("json"));
+            tag.map_or(body, |_| &body[4..])
+        })
+        .unwrap_or(text);
+    Ok(unfenced.trim().to_owned())
 }
 
 /// The final message of a Claude run: the `result` of its last `result` line.
@@ -440,9 +484,47 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "never selects Copilot")]
-    fn copilot_is_never_invoked_as_a_judge() {
-        judge_invocation(Host::Copilot, "m", Path::new("/j"), "p");
+    fn a_codex_run_can_be_judged_by_copilot_with_no_tool_and_no_mcp_server() {
+        let inv = judge_invocation(Host::Copilot, "m", Path::new("/j"), "p");
+        assert_eq!(inv.program, Host::Copilot.binary());
+        assert!(inv.args.windows(2).any(|w| w == ["-p", "p"]));
+        assert!(inv.args.windows(2).any(|w| w == ["--model", "m"]));
+        assert!(inv.args.windows(2).any(|w| w == ["-C", "/j"]));
+        assert!(
+            inv.args
+                .windows(2)
+                .any(|w| w == ["--output-format", "json"])
+        );
+        assert!(inv.args.contains(&"--no-custom-instructions".to_owned()));
+        assert!(inv.args.contains(&"--disable-builtin-mcps".to_owned()));
+        // The judge has no tool at all, and no MCP server is added.
+        assert!(inv.args.contains(&"--available-tools=none".to_owned()));
+        for flag in ["--allow-all-tools", "--allow-all-paths", "--allow-all"] {
+            assert!(!inv.args.contains(&flag.to_owned()), "{flag}");
+        }
+        assert!(!inv.args.contains(&"--additional-mcp-config".to_owned()));
+        assert!(
+            inv.env
+                .contains(&("COPILOT_HOME".to_owned(), "/j/home".to_owned()))
+        );
+        assert_eq!(inv.inherit, Host::Copilot.inherited_env());
+    }
+
+    #[test]
+    fn the_copilot_reply_is_the_last_message_without_a_code_fence() {
+        let events = concat!(
+            r#"{"type":"assistant.message","data":{"content":"first"}}"#,
+            "\n",
+            r#"{"type":"assistant.message","data":{"content":"```json\n{\"items\":[]}\n```"}}"#,
+            "\n",
+        );
+        assert_eq!(copilot_reply(events).unwrap(), r#"{"items":[]}"#);
+        let plain = r#"{"type":"assistant.message","data":{"content":"{\"items\":[]}"}}"#;
+        assert_eq!(copilot_reply(plain).unwrap(), r#"{"items":[]}"#);
+        let upper =
+            r#"{"type":"assistant.message","data":{"content":"```JSON\n{\"items\":[]}\n```"}}"#;
+        assert_eq!(copilot_reply(upper).unwrap(), r#"{"items":[]}"#);
+        assert!(copilot_reply("{\"type\":\"result\"}").is_err());
     }
 
     #[test]

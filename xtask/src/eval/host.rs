@@ -17,7 +17,8 @@ pub enum Host {
 
 /// The vendor whose model a host pins. Claude and Copilot both pin an
 /// Anthropic model, so a run on either is judged by Codex, the only host of the
-/// OpenAI vendor; a Codex run is judged by Claude.
+/// OpenAI vendor; a Codex run is judged by Claude or by Copilot, as the
+/// `[judge]` table of `evals/runner.toml` says.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Vendor {
     Anthropic,
@@ -41,13 +42,14 @@ impl Host {
         }
     }
 
-    /// The host whose model judges a run on this host: the other vendor's
-    /// host. Copilot is never a judge, since Claude already covers the
-    /// Anthropic vendor.
-    pub fn judge(self) -> Host {
+    /// The host whose model judges a run on this host: a host of the other
+    /// vendor. A run on an Anthropic host is judged by Codex. A Codex run is
+    /// judged by `anthropic_judge`, which is Claude or Copilot. Copilot judges
+    /// only Codex runs, never a Claude or a Copilot run.
+    pub fn judge(self, anthropic_judge: Host) -> Host {
         match self.vendor() {
             Vendor::Anthropic => Host::Codex,
-            Vendor::OpenAi => Host::Claude,
+            Vendor::OpenAi => anthropic_judge,
         }
     }
 
@@ -97,6 +99,8 @@ pub struct Models {
     pub claude: String,
     pub codex: String,
     pub copilot: String,
+    /// The host that judges Codex runs: Claude or Copilot.
+    pub anthropic_judge: Host,
 }
 
 pub fn load_models(root: &Path) -> Result<Models, String> {
@@ -116,6 +120,20 @@ pub fn load_models(root: &Path) -> Result<Models, String> {
         claude: model("claude")?,
         codex: model("codex")?,
         copilot: model("copilot")?,
+        anthropic_judge: match value
+            .get("judge")
+            .and_then(|t| t.get("anthropic"))
+            .map(toml::Value::as_str)
+        {
+            None => Host::Claude,
+            Some(Some("claude")) => Host::Claude,
+            Some(Some("copilot")) => Host::Copilot,
+            Some(_) => {
+                return Err(
+                    "evals/runner.toml: judge.anthropic is \"claude\" or \"copilot\"".to_owned(),
+                );
+            }
+        },
     })
 }
 
@@ -803,9 +821,51 @@ mod tests {
         assert_eq!(Host::Claude.vendor(), Vendor::Anthropic);
         assert_eq!(Host::Copilot.vendor(), Vendor::Anthropic);
         assert_eq!(Host::Codex.vendor(), Vendor::OpenAi);
-        assert_eq!(Host::Claude.judge(), Host::Codex);
-        assert_eq!(Host::Copilot.judge(), Host::Codex);
-        assert_eq!(Host::Codex.judge(), Host::Claude);
+        for anthropic in [Host::Claude, Host::Copilot] {
+            // A run on an Anthropic host, Copilot included, is never judged
+            // by an Anthropic host.
+            assert_eq!(Host::Claude.judge(anthropic), Host::Codex);
+            assert_eq!(Host::Copilot.judge(anthropic), Host::Codex);
+            // A Codex run is judged by the configured Anthropic-side host.
+            assert_eq!(Host::Codex.judge(anthropic), anthropic);
+        }
+    }
+
+    #[test]
+    fn the_committed_runner_pins_the_codex_model_and_the_copilot_judge() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let models = load_models(root).unwrap();
+        assert_eq!(models.codex, "gpt-6.1-sol");
+        assert_eq!(models.anthropic_judge, Host::Copilot);
+    }
+
+    fn runner_with(judge_table: &str) -> PathBuf {
+        let root = scratch("runner");
+        std::fs::create_dir_all(root.join("evals")).unwrap();
+        std::fs::write(
+            root.join("evals/runner.toml"),
+            format!(
+                "[claude]\nmodel = \"c\"\n[codex]\nmodel = \"x\"\n[copilot]\nmodel = \"p\"\n{judge_table}"
+            ),
+        )
+        .unwrap();
+        root
+    }
+
+    #[test]
+    fn the_judge_table_names_the_anthropic_side_judge_host() {
+        let absent = load_models(&runner_with("")).unwrap();
+        assert_eq!(absent.anthropic_judge, Host::Claude);
+        let claude = load_models(&runner_with("[judge]\nanthropic = \"claude\"\n")).unwrap();
+        assert_eq!(claude.anthropic_judge, Host::Claude);
+        let copilot = load_models(&runner_with("[judge]\nanthropic = \"copilot\"\n")).unwrap();
+        assert_eq!(copilot.anthropic_judge, Host::Copilot);
+        for bad in ["codex", "gemini"] {
+            let error = load_models(&runner_with(&format!("[judge]\nanthropic = \"{bad}\"\n")))
+                .err()
+                .expect("an Anthropic-side judge is claude or copilot");
+            assert!(error.contains("judge.anthropic"), "{error}");
+        }
     }
 
     fn scratch(label: &str) -> PathBuf {
