@@ -165,8 +165,8 @@ provenance. Nothing here is normative — the current references live in
   parked blocks, and the observation that reopens each, are carried into the
   roadmap's own parked table.
 - **roadmap-landed-record.md** — the delivery narratives and story tables for
-  Epics 0, 1, 2 and 9, extracted from `docs/ROADMAP.md` by the same rewrite so
-  that the roadmap holds the forward plan alone. History, not a plan.
+  Epics 0, 1, 2, 8 and 9, extracted from `docs/ROADMAP.md` by the same rewrite
+  so that the roadmap holds the forward plan alone. History, not a plan.
 - **2026-09-13-baseline-gate-design.md** and
   **2026-09-13-baseline-gate-plan.md** — the disposition of three filed defects:
   `ridl baseline` refuses to publish an interaction removed with no `reserved`
