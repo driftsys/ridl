@@ -329,7 +329,8 @@ Agent enablement is not a separate program; it rides the existing phases:
   _Resolved (2026-11-19)._ A run is scored mechanically, and a run that passes
   is marked against a rubric by a judge model of the other vendor
   ([ADR-0035](ADR-0035-authoring-skill-and-evals.md) decision 10). The judge is
-  checked once against the maintainer's labels; that check has not been run.
+  checked once against the maintainer's labels; that check is deferred (ADR-0035
+  status, driftsys/ridl#1401).
 - **Rules-file portability.** One canonical rules text, N host formats — define
   the generator (or hand-maintain until a second host actually demands it).
 
