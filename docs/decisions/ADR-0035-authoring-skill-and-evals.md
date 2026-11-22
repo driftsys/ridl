@@ -36,7 +36,9 @@ per combination, 144 agent runs in all. It is committed as
 The gate holds on both hosts. The maintainer waived the judge check of decision
 11 for this record: no labels were made, so the rubric scores rest on a judge
 that was not checked against the maintainer. The mechanical pass rates do not
-depend on the judge. Decision 11 still applies to a later record.
+depend on the judge. Decision 11 still applies to a later record. The record's
+numbers are provisional: its runs used `ridl` 0.20.0 instead of the workspace's
+0.21.0, and the record is to be re-run (driftsys/ridl#1460).
 
 Scope: what the `ridl-authoring` skill is made of, how it is kept consistent
 with the compiler, how it reaches each agent host, and how its effect is

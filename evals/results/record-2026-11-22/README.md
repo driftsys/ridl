@@ -17,6 +17,13 @@ commit `36790a04`.
   neither called `ridl_check` nor ran `ridl check`), so they count as mechanical
   failures with a rubric score of 0.0.
 
+**These numbers are provisional.** Every run used `ridl` 0.20.0 from `PATH` as
+the agents' MCP server and as the scorer, while the workspace was at 0.21.0.
+ridl 0.20.0 rejects the start workspaces of evolve-0003 and design-0004, so
+evolve-0003 fails `diff_matches` on all 12 runs and design-0004 fails `no_error`
+on all 6 Codex runs, whatever the agent did. The record is to be re-run with
+ridl 0.21.0 (driftsys/ridl#1460).
+
 The gate holds on both hosts:
 
 | Host    | Pass rate with | Pass rate without | Rubric with | Rubric without |
