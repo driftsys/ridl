@@ -119,8 +119,9 @@ own vendor's run, so Copilot judges only Codex runs, never a Claude or a Copilot
 run. `runner.toml` pins the model of each host, and each result records the
 judge host and model in `judge_host` and `judge_model`. The Copilot judge has no
 output schema, so it is asked for JSON in the prompt, and a reply that is not
-the expected JSON is a judge error, as for any host. It runs with no tool
-permission and no MCP server.
+the expected JSON is a judge error, as for any host. It runs with
+`--available-tools=none`, so it has no tool, with `--disable-builtin-mcps` and
+no MCP server, and in an empty directory.
 
 A run that cannot be scored is recorded with a `setup_error` and no score, and
 the batch goes on: a "with" run that shows no evidence of loading the skill, or

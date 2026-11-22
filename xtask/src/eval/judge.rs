@@ -162,8 +162,7 @@ pub fn write_schema(dir: &Path) -> Result<(), String> {
 /// The judge runs with no MCP server, in `dir`, an empty directory with its
 /// own host home. The Claude judge has no tool; the Codex judge keeps its
 /// shell tool in a read-only sandbox (`-s read-only`); the Copilot judge gets
-/// no allow flag, so its non-interactive session denies every tool, and no MCP
-/// server. `Host::judge` returns Copilot only for a Codex run.
+/// `--available-tools=none`, so it has no tool, and no MCP server. `Host::judge` returns Copilot only for a Codex run.
 pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> host::Invocation {
     let s = |v: &str| v.to_owned();
     let path = |p: PathBuf| p.display().to_string();
@@ -212,6 +211,10 @@ pub fn judge_invocation(judge: Host, model: &str, dir: &Path, prompt: &str) -> h
                 s("--no-auto-update"),
                 s("--no-color"),
                 s("--disable-builtin-mcps"),
+                // No tool is named `none`, so the judge has no tool at all.
+                // An empty list does not restrict, and a read tool needs no
+                // permission, so the absence of allow flags is not enough.
+                s("--available-tools=none"),
                 s("--output-format"),
                 s("json"),
                 s("-C"),
@@ -259,7 +262,10 @@ pub fn copilot_reply(stdout: &str) -> Result<String, String> {
     let unfenced = text
         .strip_prefix("```")
         .and_then(|rest| rest.strip_suffix("```"))
-        .map(|body| body.strip_prefix("json").unwrap_or(body))
+        .map(|body| {
+            let tag = body.get(..4).filter(|t| t.eq_ignore_ascii_case("json"));
+            tag.map_or(body, |_| &body[4..])
+        })
         .unwrap_or(text);
     Ok(unfenced.trim().to_owned())
 }
@@ -491,8 +497,8 @@ mod tests {
         );
         assert!(inv.args.contains(&"--no-custom-instructions".to_owned()));
         assert!(inv.args.contains(&"--disable-builtin-mcps".to_owned()));
-        // No allow flag, so a non-interactive session denies every tool, and
-        // no MCP server is added.
+        // The judge has no tool at all, and no MCP server is added.
+        assert!(inv.args.contains(&"--available-tools=none".to_owned()));
         for flag in ["--allow-all-tools", "--allow-all-paths", "--allow-all"] {
             assert!(!inv.args.contains(&flag.to_owned()), "{flag}");
         }
@@ -515,6 +521,9 @@ mod tests {
         assert_eq!(copilot_reply(events).unwrap(), r#"{"items":[]}"#);
         let plain = r#"{"type":"assistant.message","data":{"content":"{\"items\":[]}"}}"#;
         assert_eq!(copilot_reply(plain).unwrap(), r#"{"items":[]}"#);
+        let upper =
+            r#"{"type":"assistant.message","data":{"content":"```JSON\n{\"items\":[]}\n```"}}"#;
+        assert_eq!(copilot_reply(upper).unwrap(), r#"{"items":[]}"#);
         assert!(copilot_reply("{\"type\":\"result\"}").is_err());
     }
 

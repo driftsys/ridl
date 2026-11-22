@@ -129,6 +129,8 @@ echo '{{"type":"item.completed","item":{{"type":"mcp_tool_call","server":"ridl",
 case "$*" in *--additional-mcp-config*) ;; *)
   env > '{d}/copilot-judge.env'
   {JUDGE_ITEMS}
+  [ -f "$COPILOT_HOME/config.json" ] || {{ echo "no Copilot login in $COPILOT_HOME" >&2; exit 1; }}
+  [ -f '{d}/refresh' ] && echo '{{"copilotTokens":{{"https://github.com:u":"refreshed-by-judge"}},"loggedInUsers":[{{"host":"https://github.com","login":"u"}}],"lastLoggedInUser":{{"host":"https://github.com","login":"u"}}}}' > "$COPILOT_HOME/config.json"
   printf '%s' "$prompt" > '{d}/copilot-judge-prompt.txt'
   reply=$(printf '%s' "{{\"items\":[$items]}}" | sed 's/"/\\"/g')
   printf '%s\n' "{{\"type\":\"assistant.message\",\"data\":{{\"content\":\"\`\`\`json\n$reply\n\`\`\`\"}}}}"
@@ -377,6 +379,55 @@ fn a_codex_run_is_judged_by_copilot_and_needs_no_claude_token() {
         "no Copilot judge call:\n{calls}"
     );
     assert!(fakes.dir.join("copilot-judge-prompt.txt").is_file());
+    // The judge got a login copy and the restricted environment.
+    let env = std::fs::read_to_string(fakes.dir.join("copilot-judge.env")).unwrap();
+    let vars: std::collections::BTreeMap<&str, &str> =
+        env.lines().filter_map(|l| l.split_once('=')).collect();
+    let home = vars.get("COPILOT_HOME").expect("COPILOT_HOME is set");
+    assert!(home.ends_with("-judge/home"), "{home}");
+    for name in [
+        "ANTHROPIC_API_KEY",
+        "CLAUDE_CODE_OAUTH_TOKEN",
+        "CLAUDE_CONFIG_DIR",
+    ] {
+        assert!(!vars.contains_key(name), "{name} reached the judge");
+    }
+}
+
+#[test]
+fn a_login_refreshed_by_a_copilot_judge_is_returned() {
+    let fakes = fakes_with(None);
+    std::fs::write(fakes.dir.join("refresh"), "").unwrap();
+    let output = command(
+        &fakes,
+        &[
+            "--task",
+            "design-0001",
+            "--host",
+            "codex",
+            "--skill",
+            "without",
+            "--anthropic-judge",
+            "copilot",
+            "--out",
+            fakes.dir.join("results").to_str().unwrap(),
+        ],
+        Logins::CodexAndCopilot,
+    )
+    .output()
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stored = std::fs::read_to_string(fakes.dir.join("copilot-config.json")).unwrap();
+    assert!(stored.contains("refreshed-by-judge"), "{stored}");
+    // Only the login keys are replaced; other settings stay.
+    assert!(stored.contains("trustedFolders"), "{stored}");
+    let codex = result(&fakes.dir.join("results"), "design-0001", "codex-without-1");
+    assert_eq!(codex["rubric"]["judge_host"].as_str(), Some("copilot"));
+    assert_eq!(codex["rubric"]["score"].as_float(), Some(1.0));
 }
 
 #[test]
@@ -1479,7 +1530,8 @@ fn sample_reports_a_result_without_marks_as_an_error() {
 fn a_host_inherits_only_its_allowed_variables() {
     let fakes = fakes_with(None);
     // Each host runs as the agent once and as the judge of the other one
-    // (Codex also judges Copilot, which is never itself a judge).
+    // (Codex judges the Claude and Copilot runs, and Copilot never judges an
+    // Anthropic run).
     for host in ["claude", "codex", "copilot"] {
         let out = fakes.dir.join(format!("results-{host}"));
         let output = command(
