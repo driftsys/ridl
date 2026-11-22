@@ -948,6 +948,16 @@ runs per task shows that a per-language reference improves the result. E8.2 and
 E8.3 were closed as not planned on the same date, for the same reason; a minimal
 `SKILL.md` shipped instead. E8.1, E8.5, E8.6 and E8.7 landed.
 
+The skill's effect was measured by the release record of 2026-11-22 (ADR-0035
+decision 12 and its Status): with the skill, the mechanical pass rate is 0.81 on
+Codex and on Copilot, against 0.67 and 0.58 without it. The maintainer waived
+the judge check of decision 11 for that record, so its rubric scores rest on an
+unchecked judge. Every story in this table has landed or been closed, and the
+rest of the epic is parked, so the first exit criterion (skill and rules author
+valid typl/ridl) holds as built and measured, and the second holds through the
+tools of E8.5 to E8.7. This page does not close the epic; its status is the
+maintainer's to set.
+
 | ID   | Story                                                                                                                                                                                                                                     | Rides | Done when                                                                                                                                                                                                                                                                                                    | Size |
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
 | E8.1 | Rules file — 10–20 always-on "never/always" constraints, distilled from doctrines + the _error_ diagnostics (no semicolons, named-typl payloads, errors-as-data, command≠query, no inheritance, no upward refs, append-only + `reserved`) | E1    | **landed** (driftsys/ridl#963; driftsys/ridl#73 closed as completed) — `skills/ridl-authoring/rules.md`, 20 rules written by hand ([ADR-0035](decisions/ADR-0035-authoring-skill-and-evals.md) decision 1)                                                                                                   | S    |
