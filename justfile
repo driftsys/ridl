@@ -1313,7 +1313,7 @@ book-check root="":
     # The fixture. It builds books of its own and runs this recipe over each
     # as a child process, given a root, which is the form that runs the gate
     # and nothing else. It runs no git command, so the git environment a hook
-    # exports does not reach it. Twelve cases:
+    # exports does not reach it. Fifteen cases:
     #
     # 1. A whole book, whose chapters all exist. The gate has to pass.
     # 2. A chapter that includes a file that does not exist. mdBook logs an
@@ -1358,6 +1358,16 @@ book-check root="":
     #     `.ridl` source under examples/. The gate has to pass: a line range
     #     and a whole-file include name no anchor, and the copy carries the
     #     `.ridl` source.
+    # 13. The book from case 1, built with a stand-in `mdbook` that creates a
+    #     file that is not Markdown under the copy's docs/ and then runs the
+    #     real mdbook. The gate has to fail and name the file, which pins that
+    #     check 3 compares every file and not only `.md` files.
+    # 14. Cases 2 and 3 again, with their detail lines asserted: the gate has
+    #     to print mdBook's own log of the broken include, and the text of the
+    #     surviving directive, and not only its fixed summary line.
+    # 15. The book from case 1, built with a stand-in `mdbook` that logs an
+    #     `ERROR` line other than the include-update one and exits 0. The gate
+    #     has to fail, which pins that check 1 reads every `ERROR` line.
     fixtures() (
         work="$(mktemp -d)"
         trap 'rm -rf "$work"' EXIT
@@ -1391,6 +1401,12 @@ book-check root="":
             cat "$run" >&2
             exit 1
         fi
+        # Case 14, first half: the log itself is printed, not only the summary.
+        if ! grep -q 'missing-target.md' "$run"; then
+            echo "book-check: the gate did not print mdBook's log of the broken include:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
 
         # Case 3: a chapter carrying a directive mdBook does not recognise.
         # mdBook logs no `ERROR` for this one, so it pins check 2 on its own.
@@ -1411,6 +1427,12 @@ book-check root="":
         fi
         if ! grep -q 'directive survived into the rendered output' "$run"; then
             echo "book-check: the gate did not report the surviving directive:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        # Case 14, second half: the directive's own text is listed.
+        if ! grep -q 'nosuchdirective foo' "$run"; then
+            echo "book-check: the gate did not list the text of the surviving directive:" >&2
             cat "$run" >&2
             exit 1
         fi
@@ -1567,6 +1589,45 @@ book-check root="":
             cat "$run" >&2
             exit 1
         fi
+
+        # Cases 13 and 15: a stand-in `mdbook`, placed first on PATH, adds to
+        # the build and then runs the real mdbook. $2 is the directory given
+        # to `mdbook build`, which is the gate's copy of the book.
+        for variant in file error; do
+            standin_book="$work/standin-$variant"
+            mkdir -p "$standin_book/docs/book"
+            printf '%s\n' '[book]' 'title = "standin"' 'src = "docs/book"' > "$standin_book/book.toml"
+            printf '%s\n' '# Summary' '' '- [Present](present.md)' > "$standin_book/docs/book/SUMMARY.md"
+            printf '%s\n' '# Present' > "$standin_book/docs/book/present.md"
+            standin_bin="$work/bin-$variant"
+            mkdir -p "$standin_bin"
+            if [ "$variant" = file ]; then
+                action='touch "$2/docs/created-by-mdbook.txt"'
+            else
+                action='echo "ERROR a failure that is not an include update" >&2'
+            fi
+            printf '%s\n' \
+                '#!/usr/bin/env bash' \
+                "$action" \
+                "exec '$real_mdbook' \"\$@\"" \
+                > "$standin_bin/mdbook"
+            chmod +x "$standin_bin/mdbook"
+            if PATH="$standin_bin:$PATH" "{{just_executable()}}" book-check "$standin_book" >"$run" 2>&1; then
+                echo "book-check: the gate returned 0 over a build that added a $variant case:" >&2
+                cat "$run" >&2
+                exit 1
+            fi
+            if [ "$variant" = file ]; then
+                expected_report="$d/created-by-mdbook.txt"
+            else
+                expected_report="mdBook reported the error above"
+            fi
+            if ! grep -q -- "$expected_report" "$run"; then
+                echo "book-check: the gate did not report the $variant case with '$expected_report':" >&2
+                cat "$run" >&2
+                exit 1
+            fi
+        done
     )
     # One call site, so the fixture above and the real run take the same line.
     root=.
@@ -1974,29 +2035,45 @@ doc-path-check root="":
     # it is not read for paths, so whatever it cites goes unchecked, and a gate
     # that loses coverage has to say where.
     scan_paths() {
-        local root="$1" broken=0 file target targets test_op
+        local root="$1" broken=0 file target targets tracked_files tracked_dirs
+        # A path resolves when a tracked file or a directory holding a tracked
+        # file has that name, not when it exists on disk: CI checks out only
+        # tracked files, and an ignored file left in a removed directory would
+        # keep a dead citation passing on a contributor's machine. The
+        # listing has to succeed, so a root that is not a repository fails
+        # instead of reporting every path as broken.
+        tracked_files="$(mktemp)"
+        tracked_dirs="$(mktemp)"
+        trap 'rm -f "$tracked_files" "$tracked_dirs"' EXIT INT TERM
+        if ! list_files "$root" >"$tracked_files"; then
+            rm -f "$tracked_files" "$tracked_dirs"
+            echo "doc-path-check: git ls-files failed in '$root'; the tracked tree cannot be read." >&2
+            return 1
+        fi
+        # Every directory above a tracked file, spelled with a trailing slash.
+        awk '{ n = split($0, seg, "/"); path = ""; for (i = 1; i < n; i++) { path = path seg[i] "/"; print path } }' \
+            "$tracked_files" | sort -u >"$tracked_dirs"
         while IFS= read -r file; do
             if ! targets="$(extract_paths "$root/$file")"; then
                 echo "doc-path-check: cannot read '$file'." >&2
+                rm -f "$tracked_files" "$tracked_dirs"
                 return 1
             fi
             if [ -n "$targets" ]; then
                 while IFS= read -r target; do
-                    # A directory path has to name a directory; a file
-                    # path has to name anything that exists. While the
-                    # trailing slash is kept, `-e` on a directory path is
-                    # already false for a file, so `-d` gives the same
-                    # result; it is written out so that the rule does not
-                    # rest on how the system resolves `file/`.
+                    # A directory path has to name a tracked directory; a file
+                    # path has to name a tracked file or a tracked directory.
+                    # A directory is matched only through the form with a
+                    # trailing slash, so the rule does not rest on how the
+                    # system resolves `file/`.
                     if [ "${target%/}" != "$target" ]; then
-                        test_op=-d
+                        grep -qxF -- "$target" "$tracked_dirs" && continue
                     else
-                        test_op=-e
+                        grep -qxF -- "$target" "$tracked_files" && continue
+                        grep -qxF -- "$target/" "$tracked_dirs" && continue
                     fi
-                    if [ ! "$test_op" "$root/$target" ]; then
-                        echo "doc-path-check: $file -> $target" >&2
-                        broken=$((broken + 1))
-                    fi
+                    echo "doc-path-check: $file -> $target" >&2
+                    broken=$((broken + 1))
                 done <<<"$targets"
             elif [ -s "$root/$file" ] && ! grep -Iq -e '' "$root/$file"; then
                 # Nothing came back from a file that is not empty. `-e ''`
@@ -2007,9 +2084,10 @@ doc-path-check root="":
                 echo "doc-path-check: not text, so not scanned: $file" >&2
             fi
         done
+        rm -f "$tracked_files" "$tracked_dirs"
         if [ "$broken" -ne 0 ]; then
             echo "doc-path-check: $broken docs/ path(s) above do not resolve." >&2
-            echo "doc-path-check: a path with an extension has to exist; a path ending with '/' has to be a directory." >&2
+            echo "doc-path-check: a path with an extension has to be a tracked file; a path ending with '/' has to be a directory." >&2
             echo "doc-path-check: a path with no extension and no trailing slash has to be a file or a directory." >&2
             echo "doc-path-check: $skip_archive, $skip_wip and $skip_changelog are not scanned; a path" >&2
             echo "doc-path-check: belonging to another repository should be written as a URL." >&2
@@ -2170,6 +2248,13 @@ doc-path-check root="":
             "//! $d/design/cc-gone.md" > "$root/src/a.rs"
         printf '%s\n' "// $d/design/dd-gone.md" "// $d/design/" "// $d/design/ff-gone/" \
             "// $d/design/ee-file/" "// $d/design/aa-present.md/" > "$root/src/b.ridl"
+        # The scan resolves paths against the tracked tree, so each fixture
+        # root is a repository holding its files.
+        track() {
+            git_at "$1" -c init.defaultBranch=main -c init.templateDir= init -q
+            git_at "$1" -c core.excludesFile=/dev/null add -A
+        }
+        track "$root"
         report="$work/report"
         if printf '%s\n' src/a.rs src/b.ridl | scan_paths "$root" 2>"$report"; then
             echo "doc-path-check: the scan returned 0 over a fixture citing six paths that do not resolve:" >&2
@@ -2196,6 +2281,7 @@ doc-path-check root="":
         : > "$slashless/$d/design/ee-file"
         printf '%s\n' "// $d/design" "// $d/design." "// $d/design/ee-file" \
             "// $d/design/ee-file." "// $d/design/gone-dir" "// $d/design/gone-dir." > "$slashless/src/c.rs"
+        track "$slashless"
         if printf '%s\n' src/c.rs | scan_paths "$slashless" 2>"$report"; then
             echo "doc-path-check: the scan returned 0 over a fixture citing a missing path with no extension:" >&2
             cat "$report" >&2
@@ -2328,6 +2414,29 @@ doc-path-check root="":
             || ! grep -q -- "src/CHANGELOG.md -> $d/design/jj-gone.md" "$run" \
             || ! grep -q -- "^doc-path-check: $skip_archive, $skip_wip and $skip_changelog are not scanned" "$run"; then
             echo "doc-path-check: the gate did not report the broken paths in its fixture:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        # A path counts only when it is tracked. A directory and a file that
+        # exist on disk but are not tracked, which is what an ignored file
+        # left in a removed directory looks like, are cited from a tracked
+        # file, and the gate has to report both.
+        rm "$gate/src/broken.rs" "$gate/src/CHANGELOG.md"
+        git_at "$gate" -c core.excludesFile=/dev/null add -A
+        mkdir -p "$gate/$d/ghost"
+        : > "$gate/$d/ghost/leftover.md"
+        : > "$gate/$d/design/untracked.md"
+        printf '%s\n' "//! $d/ghost/ and $d/design/untracked.md" > "$gate/src/ghost.rs"
+        git_at "$gate" -c core.excludesFile=/dev/null add src/ghost.rs
+        if "{{just_executable()}}" doc-path-check "$gate" >"$run" 2>&1; then
+            echo "doc-path-check: the gate returned 0 over citations of paths that are on disk but not tracked:" >&2
+            cat "$run" >&2
+            exit 1
+        fi
+        if ! grep -q -- "src/ghost.rs -> $d/ghost/\$" "$run" \
+            || ! grep -q -- "src/ghost.rs -> $d/design/untracked.md" "$run" \
+            || ! grep -q -- "^doc-path-check: 2 docs/ path" "$run"; then
+            echo "doc-path-check: the gate did not report the untracked paths in its fixture:" >&2
             cat "$run" >&2
             exit 1
         fi
@@ -2466,10 +2575,11 @@ story-id-check root="":
         # epic id), a bare number, a letter directly before the word or after
         # the name, and the `E<n> task` form with no space, a missing or
         # non-digit number, a missing epic number, a plural word, or a letter
-        # glued to the epic id or to the task number.
-        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx, task 9, E2 task, e2 task 9, E2 task x, xE2 task 9, E2 tasks 9, E2 task9, E task 9, 2 task 9, E2 task 9bc"
+        # glued to the epic id or to the task number, a missing `E`, a doubled space
+        # on either side of the word, or an upper-case suffix letter.
+        plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx, task 9, E2 task, e2 task 9, E2 task x, xE2 task 9, E2 tasks 9, E2 task9, E task 9, 2 task 9, E2 task 9bc, E2task 9, E2  task 9, E2 task  9, E2 task 9B"
         # Phrases that are a plan name, in the cases the pattern states.
-        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's" "E2 task 9" "E2 task 11b" "(E2 task 9)" "E16 task 3" "E2 Task 9")
+        plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's" "E2 task 9" "E2 task 11b" "(E2 task 9)" "E16 task 3" "E2 Task 9" "E2 TASK 9")
         root="$work/fixture"
         report="$work/report"
         clean_tree() {
