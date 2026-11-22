@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 2
+skill = true
+task = "review-0005"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [false, false, true, true, false, true]
+reasons = [
+  "The answer mentions eight duplicated packages but does not identify the row/occupant packages or explain the maintenance cost of keeping their definitions consistent.",
+  "It proposes shared types but does not recognize the frozen one-package-per-branch rule as the reason for repetition.",
+  "It identifies the enforced integer range 0..100, comment-only percent metadata, and float-backed unit types that would change the integer representation.",
+  "It identifies UP, MIDDLE and DOWN as preserved names encoded as integer codes 0, 1 and 2, requiring an adapter code-to-name mapping.",
+  "It notes missing responses and failure paths but does not explicitly identify the absence of an applied value or explain that a matching signal cannot correlate an update with a particular request.",
+  "It invents no upstream timing, temperature bounds, acknowledgement guarantees or defaults, and clearly labels proposed constraints as recommendations.",
+]
+score = 0.5

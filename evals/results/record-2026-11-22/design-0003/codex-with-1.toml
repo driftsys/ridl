@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 1
+skill = true
+task = "design-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, false, false, true, true]
+reasons = [
+  "Name is bytes [1..16], a byte bound admitting 16-byte names with no terminator.",
+  "NumericValue union has typed arms whose tag is the numeric type.",
+  "requestOne, requestAll, write commands plus valueReported event for post-write storage reports.",
+  "Entry has count and index, and the final message says README covers list completeness; the workspace comments reference determining completeness from indices and counts.",
+  "Failure is separate from ValueReport, but the shown material does not explain how replies are associated with the remote component and parameter; only a service binding comment and request token appear, and the README is not shown.",
+  "The README content is not shown, so there is no visible explanation of byte-wise versus numeric-cast encoding selection.",
+  "Selector allows index reads without names, and comments state reports are not proof that a write was applied.",
+  "Selector union includes an index arm for name-independent single reads.",
+]
+score = 0.75

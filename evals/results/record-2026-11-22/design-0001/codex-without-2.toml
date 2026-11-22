@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = false
+task = "design-0001"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, true, true, true]
+reasons = [
+  "Declares SystemId, ComponentId, ComponentKey, Announcement structs and an Announcer interface with an announcement event for repeated presence.",
+  "ComponentId and ComponentType are separate types, with comments stating componentType is never inferred from componentId.",
+  "ConnectionReport pairs ConnectionState (CONNECTED/DISCONNECTED) with lastAnnouncement containing the composite key.",
+  "TrackingPolicy has intervalMs and missedLimit as deployment-supplied with no defaults, and the schema does not assert a universal timeout.",
+  "The final message says runtime code must enforce fault-aware periodic sending, per-component deadlines and disconnection, and RIDL cannot enforce these; the README also covers it.",
+  "The presence package contains only the discovery-focused Announcer and Monitor interfaces, with no mission or parameter operations.",
+  "The answer explicitly says RIDL validates structure and cannot enforce the behaviors, and the toml comments say timing does not schedule sends.",
+]
+score = 1.0

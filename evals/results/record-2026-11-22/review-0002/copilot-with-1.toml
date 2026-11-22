@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 1
+skill = true
+task = "review-0002"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [false, true, true, true, false, true]
+reasons = [
+  "The proposed split separates maps and navigation but does not identify lifecycle management as a distinct responsibility requiring its own interface.",
+  "The answer explains that isPathValid requires all seven flattened parameters even though IsPathValidRequest groups them and preserves explicit upstream defaults.",
+  "The answer identifies goal commands and feedback events, explains that result structs have no carrying interaction under the deliberate fixed rule, and describes the resulting lack of outcome delivery.",
+  "The separate proposal adds result events and goal IDs for result and feedback correlation without claiming that the compiler implements ROS action execution.",
+  "The answer does not explain that loadMap and saveMap affect state yet become queries through the mechanical service rule or distinguish that mapping from redesigned API semantics.",
+  "The answer explicitly calls the missing result interaction a deliberate port rule and keeps proposed additions separate from the unchanged evidence port.",
+]
+score = 0.6363636363636364

@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = true
+task = "evolve-0001"
+
+[mechanical]
+diff_matches = true
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, true]
+reasons = [
+  "`///` doc comments were added directly above `struct Point` and `struct Vector3`; the answer reports a clean check and a doc_only diff, which indicates they were exported.",
+  "The Point doc says it is a position affected by rotation and translation. The Vector3 doc says it is anchored at the origin and only rotation applies.",
+  "The workspace shows only the added `///` lines, with all fields, types, imports and original `//` comments intact.",
+  "The answer reports 0 errors and a compatible verdict with doc_only entries, and explains that only exported documentation changed.",
+  "Point and Vector3 remain separate, and no unit or range constraints were added.",
+]
+score = 1.0

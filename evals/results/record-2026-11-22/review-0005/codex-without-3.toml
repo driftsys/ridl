@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = false
+task = "review-0005"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [false, false, false, true, false, true]
+reasons = [
+  "The answer notes every concrete station has its own payload declarations but never identifies the eight packages repeating the three types or explains the maintenance cost of changing them consistently.",
+  "It only mentions consolidating packages or shared station types in passing under compatibility baselines, without discussing a shared vocabulary design or the frozen one-package-per-branch rule as the cause of repetition.",
+  "It identifies the integer 0..100 domain and percent surviving only in comments due to unavailable integer-backed unit types, but not that adding a unit directly would change the representation.",
+  "It states that the strings UP, MIDDLE and DOWN become enum codes 0, 1 and 2 and that VSS integration needs an explicit string/code adapter.",
+  "It notes that there is no explicit result or completion event, but does not say the matching signal fails to specify correlation with a particular request.",
+  "It claims the upstream specifies no timing, and says no upstream defaults or temperature bounds exist; the stated checker timing defaults are attributed to RIDL, not invented as upstream.",
+]
+score = 0.3333333333333333

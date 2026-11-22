@@ -1,0 +1,21 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 2
+skill = true
+task = "evolve-0003"
+
+[mechanical]
+diff_matches = false
+lints_match = true
+no_error = true
+notes = ['diff verdict None, expected Some("compatible")']
+passed = false
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+score = 0.0
+skipped = "mechanical checks failed"

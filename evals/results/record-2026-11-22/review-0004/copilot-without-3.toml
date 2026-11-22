@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 3
+skill = false
+task = "review-0004"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, true, true, true, false]
+reasons = [
+  "The answer explains that the float-backed parameter value depends on paramType and bytewise versus numeric-cast encoding, including re-encoding for ParamSet.",
+  "The answer identifies the fixed 16-byte representation and explains that requiring a NUL would exclude valid names using all 16 bytes.",
+  "The answer identifies paramSet as a command without a result and explains event-based read-back comparison, correlation, timeouts, and retries.",
+  "The answer explains that the list stream lacks a completion signal and requires tracking indices against paramCount and requesting missing entries.",
+  "The answer explicitly assigns capability-based encoding selection, retries, deduplication, and completeness tracking to the adapter.",
+  "The answer treats parameter types as potentially integral and warns that unsolicited paramValue events and other clients' writes require correlation and comparison.",
+  "The answer warns against normalizing raw bytewise values but never identifies Float32 lowering to float64 or explains that the RIDL scalar does not guarantee preservation of binary32 payload bits.",
+]
+score = 0.8461538461538461

@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = true
+task = "review-0004"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, false, true, true, true, true, true]
+reasons = [
+  "Says Float32 doesn't preserve bytes, the guide distinguishes bytewise from C-style numeric conversion, and ordinary numeric conversion can corrupt bytewise-encoded integer values.",
+  "It says exactly 16 chars need no terminator and a native string needs a 17th byte, but never explains how a null-terminated string replacement would change which identifiers are accepted.",
+  "States paramSet command acceptance is not write success, paramValue is an event carrying many kinds of observations, and a matching PARAM_VALUE must be awaited and compared, with correlation ambiguity.",
+  "Says the list stream has no end marker and the adapter must compare received coverage with paramCount, deduplicate indices and re-request missing entries, with timeout versus partial results distinguished.",
+  "Recommends explicit adapter state, retry, timeout and completeness handling, and that encoding mode be discovered or known rather than inferred from the type.",
+  "Does not assume parameters are floats and says command acceptance or any broadcast value does not confirm a particular write.",
+  "Says Float32 infers float64 with no guarantee of binary32 payload preservation, and that the adapter must implement an explicit wire codec.",
+]
+score = 0.8461538461538461

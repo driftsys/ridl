@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = false
+task = "evolve-0001"
+
+[mechanical]
+diff_matches = true
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, true]
+reasons = [
+  "Uses `///` doc comments directly attached to struct Point and struct Vector3, and the diff verdict shows doc_only changes, so they lower to exported docs.",
+  "Point is described as a position affected by rotation and translation; Vector3 is described as anchored at the origin with translation ignored (only R applied).",
+  "Only the doc lines were added; all declarations, fields, numbers, imports and interactions are unchanged and the upstream `//` comments remain.",
+  "Reports that ridl check passed with only warnings and that ridl diff yields a compatible verdict with doc_only entries, explaining that only exported documentation changed.",
+  "Point and Vector3 stay separate and no unit or range constraints were added.",
+]
+score = 1.0

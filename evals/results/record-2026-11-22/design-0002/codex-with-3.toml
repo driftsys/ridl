@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = true
+task = "design-0002"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, false, false, false, false, true]
+reasons = [
+  "PlanType, Participant/ParticipantId, ItemCount, ItemIndex, TransferId and PlanItem payload are all declared in RIDL.",
+  "UploadSender has announce and supply events, UploadReceiver has request and complete, with Completion carrying success or failure codes.",
+  "The RIDL shows planType in the envelope and separate stores in comments, but the README procedure is not visible in the provided material, so separation in the procedure cannot be confirmed.",
+  "The README is not shown and the RIDL does not describe advancing only on the expected item or re-requesting after an unexpected sequence number.",
+  "The RIDL events carry @[..1s] bounds but no retry procedure is visible; the README is not provided, though Completion is noted as independent of link delivery.",
+  "The lifecycle and correlation are documented in a separate README rather than in the RIDL interface, and the README content is not visible.",
+  "Nothing in the visible material claims that stream signatures or response bounds provide loss recovery or ordering.",
+]
+score = 0.46153846153846156

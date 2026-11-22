@@ -1,0 +1,22 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = false
+task = "review-0002"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+error = "the judge reply is not JSON"
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"

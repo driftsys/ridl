@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 2
+skill = false
+task = "evolve-0001"
+
+[mechanical]
+diff_matches = true
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, true, true]
+reasons = [
+  "Valid /// documentation comments are attached to both structs, and the reported doc_only diff confirms they reach exported documentation.",
+  "The added documentation describes Point as a position affected by rotation and translation and Vector3 as anchored at the origin and affected only by rotation.",
+  "The patch only adds documentation and retains existing declarations, fields, types, numbers, packages, imports, interactions, and upstream comments.",
+  "The answer reports ridl check without errors and explains the compatible verdict with doc_only changes for both types.",
+  "Point and Vector3 remain separate structs with no added unit or range constraints.",
+]
+score = 1.0

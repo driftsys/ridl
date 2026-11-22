@@ -17,8 +17,8 @@ exists: `cargo xtask eval sample` and `cargo xtask eval agreement` (in
 maintainer confirms the model ids in `evals/runner.toml` and approves the runs:
 about 144 agent runs and up to 144 judge calls. driftsys/ridl#1440 tracks them.
 The owner had dropped the optional plan task for them on 2026-11-19, and
-driftsys/ridl#1401, which held that task, was closed that day. Nothing in this
-repository states a measured gain from the skill.
+driftsys/ridl#1401, which held that task, was closed that day. At that date
+nothing in this repository stated a measured gain from the skill.
 
 Amended 2026-11-22, the same day: the Anthropic-side judge of a Codex run may
 run on the Copilot CLI with the pinned Copilot model (an Anthropic model)
@@ -28,6 +28,15 @@ holds no Claude token. The `[judge]` table of `evals/runner.toml` names it, and
 other vendor still holds: Copilot judges only Codex runs, never a Claude or a
 Copilot run. The two hosts of a record may therefore be Copilot and Codex, each
 judged by the other. The pin of the Codex model changed to `gpt-6.1-sol`.
+
+Amended 2026-11-22, after the record run: the release record of decision 12 was
+made on Copilot (`claude-sonnet-5.5`) and Codex (`gpt-6.1-sol`), with three runs
+per combination, 144 agent runs in all. It is committed as
+[`evals/results/record-2026-11-22/`](../../evals/results/record-2026-11-22/README.md).
+The gate holds on both hosts. The maintainer waived the judge check of decision
+11 for this record: no labels were made, so the rubric scores rest on a judge
+that was not checked against the maintainer. The mechanical pass rates do not
+depend on the judge. Decision 11 still applies to a later record.
 
 Scope: what the `ridl-authoring` skill is made of, how it is kept consistent
 with the compiler, how it reaches each agent host, and how its effect is

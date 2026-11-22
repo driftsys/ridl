@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = false
+task = "evolve-0002"
+
+[mechanical]
+diff_matches = true
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, true, true, true]
+reasons = [
+  "The workspace adds query paramRequestReadByIndex in ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, returning ParamValue.",
+  "The query is appended after paramError, so the existing ordinals stay 1-5 and the new query gets 6; the diff reports interaction_appended.",
+  "The contract `require paramIndex >= 0` rejects negative indices and accepts the nonnegative Int16 domain.",
+  "Only interactions.ridl changed, by appending one query; existing interactions, payloads, packages, and imports are unchanged.",
+  "The explanation says the adapter sends the existing ParamRequestRead with the target IDs and index, and that a non-negative index makes paramId ignored (only -1 selects by name).",
+  "The answer reports a check with 0 errors and a JSON diff with verdict compatible and a single interaction_appended change.",
+  "The answer states that this is a local convenience query with no new upstream message, and it changes no encoding and implements no adapter.",
+]
+score = 1.0

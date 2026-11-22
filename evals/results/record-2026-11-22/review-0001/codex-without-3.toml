@@ -1,0 +1,20 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = false
+task = "review-0001"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = ["the agent neither called ridl_check nor ran `ridl check`"]
+passed = false
+verify_loop = false
+verify_via = "none"
+
+[rubric]
+score = 0.0
+skipped = "mechanical checks failed"

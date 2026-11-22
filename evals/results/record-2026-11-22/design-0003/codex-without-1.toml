@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 1
+skill = false
+task = "design-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, false, false, true, true]
+reasons = [
+  "Name is bytes [1..16], a byte-based bound that admits 16-byte names with no terminator required.",
+  "NumericValue is a union whose tag is the numeric type, with exact-bit payloads of matching width.",
+  "readOne, readAll and write commands are distinct, and valueReported is the channel reporting the stored value after a write.",
+  "ValueReport carries count and index, and ListComplete and LIST_INCOMPLETE exist; the README, which is not shown, reportedly covers coverage verification and recovery.",
+  "Errors are separate (operationFailed), and requestId correlates replies, but the schema has no remote system/component or parameter association; the single-provider comment and the unseen README are insufficient evidence.",
+  "The README is not shown; the schema only says numeric bits and has no byte-wise vs numeric-cast MAVLink encoding selection explanation.",
+  "Reading is possible by index without prior names, and the write docs say a stored value is reported, not that the write was applied.",
+  "The Selector union offers an index alternative, so one parameter can be requested without knowing its name.",
+]
+score = 0.75

@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 3
+skill = true
+task = "design-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [false, true, true, true, false, false, true, true]
+reasons = [
+  "The string length bound is not explicitly byte-based, so the claim that it admits exactly 16 bytes is unsupported.",
+  "ParamValue provides distinct typed alternatives for integer and floating-point numeric values.",
+  "Distinct read, readAll and write operations are provided, with reported events carrying the current stored value after writes.",
+  "Entries include count and index, and the adapter rules require tracking all indices and requesting missing entries.",
+  "Errors are separate from value updates, but the answer does not explain remote-component association or how unqualified failed events identify the affected parameter.",
+  "The answer does not explain selecting MAVLink byte-wise versus numeric-cast value encoding.",
+  "Index reads and full enumeration avoid advance name knowledge, and write reports explicitly reflect stored values even when requests are not applied.",
+  "The read selector explicitly supports requesting one parameter by numeric index.",
+]
+score = 0.625

@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = true
+task = "review-0001"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, false, false, true, true]
+reasons = [
+  "Item 2 explains Point is a position, Vector3 is rotation-only, and collapsing would obscure whether clients apply translation.",
+  "Item 4 says RosFloat32 and RosFloat64 both resolve to float64, Point32 loses its advertised precision/storage distinction, and classifies it as a translation limitation.",
+  "Item 6 only says Inertia.com should be documented as a metre offset; it does not note the missing machine-readable unit on the general Vector3 or the risk of accepting a vector with another meaning.",
+  "The answer never proposes a separately typed centre-of-mass vector or discusses the schema change it would cause.",
+  "Item 3 explicitly avoids assigning one unit to Vector3 and notes it spans acceleration, force, torque and angular quantities, leaving units to context.",
+  "The answer explicitly says identical shapes do not justify consolidation and recommends keeping both declarations.",
+]
+score = 0.7272727272727273

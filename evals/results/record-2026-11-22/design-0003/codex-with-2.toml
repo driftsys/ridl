@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = true
+task = "design-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, false, false, false, true, true]
+reasons = [
+  "Name is bytes [1..16], a byte-based bound that admits 16-byte names with no terminator required.",
+  "Number pairs a NumericType kind with canonical bits, and the byte length is documented per type.",
+  "readOne, readAll and write are distinct commands, and write readback comes through the reported event.",
+  "Value carries count and index, but the README that describes missing-entry detection is not shown in the materials, so only the answer's summary claim supports this.",
+  "ErrorReport and the failed event are separate from value reports, but the explanation of component and parameter association rests on the unseen README and a deployment-bound service comment.",
+  "The README is not shown, and the RIDL only says the numeric type is independent of a transport's carrier field, so MAVLink byte-wise versus numeric-cast selection is not demonstrated.",
+  "Reads need no prior name knowledge, and the write doc says the current stored value is emitted even if rejected, so no claim is made that the requested value was applied.",
+  "The Selector union offers a zero-based index alternative that needs no prior name discovery.",
+]
+score = 0.625

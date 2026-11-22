@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "copilot"
+host_version = "GitHub Copilot CLI 1.0.112."
+model = "claude-sonnet-5.5"
+run = 1
+skill = false
+task = "design-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, true, false, false, true, true]
+reasons = [
+  "Name uses explicitly length-delimited bytes bounded to 16, allowing full-length names without a terminator.",
+  "Param carries a numeric type and a typed Number union whose arm must match that type.",
+  "Separate read, readAll and write commands provide valueUpdated reports of the stored value after writes.",
+  "Values include count and index, and the answer describes tracking all indices and rereading missing entries.",
+  "Errors and values are separate and identify parameters, but the supplied material does not explain association with the intended remote component.",
+  "The answer mentions type-tagged slots but does not explain selecting byte-wise versus numeric-cast MAVLink encoding.",
+  "Index selection and readAll avoid requiring known names, and write reports explicitly reflect the actual stored value even after refusal.",
+  "The read command accepts a ByIndex selector usable before any parameter name is known.",
+]
+score = 0.75

@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = false
+task = "design-0002"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "both"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, false, false, false, false, true]
+reasons = [
+  "RIDL declares PlanType, Participant/SystemId/ComponentId, ItemCount, ItemIndex, and PlanItem payload union.",
+  "PlanReceiver has announce and supply, PlanSender has requestItem and finish (success or error), covering both participants' messages.",
+  "The README is not shown in the materials, and the RIDL only keys plan type via Transfer and comments, so separate storage/procedure cannot be verified.",
+  "The README procedure is not shown in the workspace materials, so advancing only on the expected item and re-requesting cannot be verified.",
+  "Timeout and retry and the ack-versus-item-delivery distinction are not visible in the provided materials; only the final message mentions retries.",
+  "The lifecycle is documented in a README rather than together with the interface; the shown RIDL has only brief comments.",
+  "Nothing in the shown RIDL claims that the response bounds or signatures supply loss recovery; the comments describe lossy one-way messages.",
+]
+score = 0.46153846153846156

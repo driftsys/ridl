@@ -1,0 +1,32 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = true
+task = "review-0004"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, false, true, true, true, true, true]
+reasons = [
+  "Says the pinned guide permits bytewise or numeric-cast encoding and that Float32 does not preserve the wire representation, so the float alone doesn't determine the value.",
+  "It notes Char16 is exactly 16 bytes and that full-length names have no NUL, but never explains how a null-terminated string replacement would change accepted identifiers.",
+  "States paramSet has no application result, paramValue is a broadcast event that also serves queries, and writes need matching-observation correlation per the protocol.",
+  "Discusses paramCount and paramIndex with missing-index tracking, completion and retry policy, and says a timeout cannot establish a complete list.",
+  "Recommends explicit adapter policy for encoding selection, completion, retry and timeouts rather than inferring from the scalar type.",
+  "It does not assume parameters are intrinsically floats and says receipt or a PARAM_VALUE doesn't confirm a write without matching.",
+  "Says Float32 lowers to float64 with no guarantee of binary32 bits, and requires preserving the original four bytes before numeric conversion.",
+]
+score = 0.8461538461538461

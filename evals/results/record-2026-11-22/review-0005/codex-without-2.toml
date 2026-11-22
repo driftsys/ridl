@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = false
+task = "review-0005"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, false, false, true, false, false]
+reasons = [
+  "It identifies eight independently declared station vocabularies with repeated AirDistribution and says they must evolve consistently, though it only names AirDistribution explicitly and says little about maintenance cost.",
+  "It suggests considering a shared station vocabulary but never mentions the frozen one-package-per-branch rule as the cause of the repetition, and does not discuss preserving separate addressed instances.",
+  "It identifies the integer range and percent as comment metadata because integer-backed unit types are unavailable, but does not say that adding a unit directly would change the representation.",
+  "It states that the upstream strings UP, MIDDLE and DOWN become numeric enum codes 0, 1 and 2 and need an adapter.",
+  "It says setters lack completion and failure semantics but never says that the matching signal does not specify correlation with a particular request.",
+  "It asserts specific compiler-applied timing values (signal @[100ms..1s], command @[..1s]) and diagnostic counts that cannot be verified from the workspace and may be invented.",
+]
+score = 0.3333333333333333

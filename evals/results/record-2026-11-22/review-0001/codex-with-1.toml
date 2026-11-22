@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 1
+skill = true
+task = "review-0001"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "mcp"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, false, false, false, true, true]
+reasons = [
+  "Item 1 explains that Vector3 has rotation-only transformation semantics versus Point, and that merging would invite applying the wrong operation.",
+  "It says RosFloat32 and RosFloat64 both lower to float64 and classifies it as a translation limitation, but it never states that Point and Point32 have distinct upstream precision intentions, only that Point32 loses its float32 advantage.",
+  "It notes that com keeps metre information only in prose because it is a Vector3, but it does not explain the risk of accepting a vector with a different physical meaning.",
+  "It suggests specialized composites only generally and never proposes a separately typed centre-of-mass vector or notes that it would change the frozen schema.",
+  "It explicitly warns against assigning Vector3 one global unit.",
+  "It argues that the identical shapes do not justify consolidation and keeps both declarations.",
+]
+score = 0.5454545454545454

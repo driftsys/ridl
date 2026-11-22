@@ -1,0 +1,33 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 2
+skill = false
+task = "design-0003"
+
+[mechanical]
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, false, true, false, true, true]
+reasons = [
+  "Name is bytes [1..16] with a doc comment saying no terminator, so 16-byte names are admitted.",
+  "The Numeric union carries typed alternatives, and the discriminator is the numeric type.",
+  "readOne, readAll and write are separate commands, and the value event reports the stored value after a write.",
+  "ValueReport carries count and index, but the shown material has no description of detecting missing entries, and the README is not shown.",
+  "ErrorReport and the failed event are separate from ValueReport, and the request id plus selector and the bound-component comment explain association.",
+  "The schema says nothing on byte-wise versus numeric-cast MAVLink encoding, and the README that might is not shown.",
+  "Discovery by readAll and by index needs no prior names, and write is documented as emitting the current stored value even if rejected.",
+  "The Selector union offers an index alternative, so one parameter can be read without knowing its name.",
+]
+score = 0.75

@@ -1,0 +1,31 @@
+agent_exit = 0
+handoff = false
+host = "codex"
+host_version = "codex-cli 0.169.0"
+model = "gpt-6.1-sol"
+run = 3
+skill = false
+task = "evolve-0001"
+
+[mechanical]
+diff_matches = true
+lints_match = true
+no_error = true
+notes = []
+passed = true
+verify_loop = true
+verify_via = "cli"
+
+[rubric]
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, true]
+reasons = [
+  "Triple-slash doc comments are attached directly above struct Point and struct Vector3, and the answer's ridl diff reports doc_only changes, showing they lower to exported documentation.",
+  "Point is described as a position that receives rotation and translation, and Vector3 as anchored at the origin and affected only by rotation.",
+  "The workspace keeps all declarations, fields, numbers, imports and interactions, and retains the upstream comments, including the Vector3 note that it is anchored at the origin.",
+  "The answer reports that ridl check passed with only existing warnings, and that ridl diff yields a compatible verdict with doc_only entries.",
+  "Point and Vector3 remain separate structs, and no unit or range constraints were added.",
+]
+score = 1.0
