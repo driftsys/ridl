@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "review-0001"
@@ -19,13 +20,13 @@ verify_via = "cli"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, true, false, false, false, true]
+met = [false, false, false, false, true, true]
 reasons = [
-  "The answer identifies Point and Vector3 as sharing the x/y/z shape, explains their different transformation semantics, and warns that merging them would destroy useful nominal meaning.",
-  "The answer explains that both float helpers resolve to float64, losing Point32's intended precision and compactness relative to Point, and classifies this as a translation limitation.",
-  "The answer notes that Inertia.com retains metres only in a comment on Vector3 but does not explain the risk of accepting a vector with another physical meaning.",
-  "The answer does not propose a separately typed centre-of-mass vector or explain its effect on the frozen upstream-shaped schema.",
-  "The recommendation to optionally add a metre unit helper for Vector3 assigns a global length meaning despite its acceleration and angular uses.",
-  "The answer explicitly recommends retaining Point and Vector3 because their distinct semantics justify separate declarations despite identical shapes.",
+  "The answer notes identical structure and different anchoring but does not explain their different transformation behavior or why merging would erase useful nominal meaning.",
+  "It calls Point32's precision loss a documented translation limitation but does not identify Point's distinct precision intention or explicitly establish that RosFloat32 and RosFloat64 both lower to float64.",
+  "It identifies Inertia.com's comment-only metre unit and general Vector3 type but does not explain the risk of accepting a vector with another physical meaning.",
+  "It does not propose a separately typed centre-of-mass vector or explain the resulting change to the frozen upstream-shaped schema.",
+  "The answer does not assign a single physical unit globally to Vector3.",
+  "The answer explicitly recommends keeping both Point and Vector3 despite their identical structure.",
 ]
-score = 0.5454545454545454
+score = 0.36363636363636365

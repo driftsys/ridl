@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "review-0005"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, false, false, true, false, false]
+met = [false, false, true, true, true, false]
 reasons = [
-  "It identifies eight independently declared station vocabularies with repeated AirDistribution and says they must evolve consistently, though it only names AirDistribution explicitly and says little about maintenance cost.",
-  "It suggests considering a shared station vocabulary but never mentions the frozen one-package-per-branch rule as the cause of the repetition, and does not discuss preserving separate addressed instances.",
-  "It identifies the integer range and percent as comment metadata because integer-backed unit types are unavailable, but does not say that adding a unit directly would change the representation.",
-  "It states that the upstream strings UP, MIDDLE and DOWN become numeric enum codes 0, 1 and 2 and need an adapter.",
-  "It says setters lack completion and failure semantics but never says that the matching signal does not specify correlation with a particular request.",
-  "It asserts specific compiler-applied timing values (signal @[100ms..1s], command @[..1s]) and diagnostic counts that cannot be verified from the workspace and may be invented.",
+  "The answer notes repeated station types and eight Driver/Passenger interfaces, but never names the repeated FanSpeed/Temperature/AirDistribution declarations as a maintenance cost of keeping eight copies consistent.",
+  'It only says to "consider shared station vocabulary separately" because package/type identities affect clients; it does not say separate addressed instances would be preserved or that the one-package-per-branch rule explains the repetition.',
+  "It states FanSpeed is integer 0..100, percent survives only in comments because integer-backed unit types are unavailable, and a floating unit type would change the integer domain.",
+  "It says the upstream strings UP/MIDDLE/DOWN become enum codes 0, 1, 2 and that a VSS bridge needs explicit string/code conversion.",
+  "It says setters declare no execution result or error model, and acceptance cannot be treated as proof of convergence; clients cannot distinguish rejection or an overridden request.",
+  "It claims the compiler applies signal timing @[100ms..1s] and command bounds @[..1s] and gives derived defaults like false and 0; these are not in the selected definitions or the shown workspace, though it labels them as compiler-derived and not upstream.",
 ]
-score = 0.3333333333333333
+score = 0.5

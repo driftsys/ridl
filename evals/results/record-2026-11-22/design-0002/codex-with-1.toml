@@ -3,18 +3,31 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "design-0002"
 
 [mechanical]
-lints_match = false
+lints_match = true
 no_error = true
-notes = ['design lints {"duplicate-shape"}, expected {}']
-passed = false
+notes = []
+passed = true
 verify_loop = true
 verify_via = "both"
 
 [rubric]
-score = 0.0
-skipped = "mechanical checks failed"
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, false, false, false, false, true]
+reasons = [
+  "Types define PlanType, Participant/ParticipantId, ItemCount, ItemNumber, and item payload via PlanItem union in the declarations.",
+  "PlanReceiver has announce and supply; PlanSender has request and finish carrying ResultCode success/failure, covering both participants' messages.",
+  "The type declarations separate plan types, but the README procedure is not shown in the workspace material, so separation in the described storage and procedure cannot be verified (only types comments mention independent namespaces).",
+  "No procedure text is shown in the workspace; only the final message claims unexpected-item handling, so advancing only on the expected item and re-requesting cannot be confirmed.",
+  "The README is not shown; the only visible evidence is the REQUEST_TIMEOUT code and a comment that receipt does not imply acceptance, which is insufficient to confirm retry and timeout behavior.",
+  "The lifecycle and correlation are documented in a separate README rather than together with the interface, and the interface contains only brief comments.",
+  "Nothing in the visible material claims that stream signatures or response bounds supply loss recovery; the comments state delivery may be lost and that the result is explicit rather than a transport acknowledgement.",
+]
+score = 0.46153846153846156

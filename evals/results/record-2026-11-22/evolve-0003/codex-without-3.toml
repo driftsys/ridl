@@ -3,19 +3,32 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "evolve-0003"
 
 [mechanical]
-diff_matches = false
+diff_matches = true
 lints_match = true
 no_error = true
-notes = ['diff verdict None, expected Some("compatible")']
-passed = false
+notes = []
+passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "mcp"
 
 [rubric]
-score = 0.0
-skipped = "mechanical checks failed"
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, false, false, true, true, true]
+reasons = [
+  "Telemetry now has `requires Horn`.",
+  "`count` is appended after `active` in Horn with named type HornCount having range [0..9223372036854775807].",
+  "The workspace shows Panel gaining `requires Horn` and its doc comment changed, and the Telemetry/Panel changes go beyond allowed edits; also the Cabin/Control declarations may have been altered (the message says the original Control syntax was rejected).",
+  "The answer only summarizes that the diff reports compatible; it does not show the actual output of ridl diff.",
+  "The count is modeled as a signal.",
+  "It says a deployed consumer observes the appended count signal and that the Telemetry requirement changes deployment composition, not runtime wire (documentation has no effect).",
+  "No second Horn provider was added and no component was moved; Telemetry stays on Gateway.",
+]
+score = 0.6666666666666666

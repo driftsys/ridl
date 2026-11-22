@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "evolve-0001"
@@ -22,10 +23,10 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true]
 reasons = [
-  "The `///` doc comments sit directly above `struct Point` and `struct Vector3`, and `ridl diff` reported doc_only changes for both, so they lower to exported documentation.",
-  "The Point doc says it is a position and a transform applies both rotation and translation; the Vector3 doc says it is anchored at the origin and only rotation applies.",
-  "The visible workspace keeps all declarations, fields, numbers, imports and interactions, and the original `//` upstream comments remain on both structs.",
-  "The answer reports 0 errors from `ridl check` and a compatible verdict with doc_only changes for Point and Vector3.",
-  "Point and Vector3 remain separate structs, and no unit or range constraints were added.",
+  "Both structs have `///` doc comments directly above them, which is valid RIDL doc syntax, and the reported `doc_only` diff entries show they lower to exported documentation.",
+  "The Point doc says it is a position that receives rotation and translation, and the Vector3 doc says it is anchored at the origin and only rotation applies.",
+  "The workspace shows every declaration, field, type, import and interaction intact, with the original `//` comments retained.",
+  "The answer reports 0 errors from the check and a compatible verdict with doc_only changes for Point and Vector3.",
+  "Point and Vector3 remain separate structs and no unit or range constraints were added.",
 ]
 score = 1.0

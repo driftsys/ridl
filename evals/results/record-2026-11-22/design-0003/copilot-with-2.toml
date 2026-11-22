@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "design-0003"
@@ -19,15 +20,15 @@ verify_via = "cli"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, true, true, true, false, false, true, true]
+met = [false, true, true, true, false, false, true, true]
 reasons = [
-  "ParamName uses bytes [1..16] and explicitly permits a full 16-byte name without a terminator.",
-  "NumericValue represents numeric values with typed union alternatives.",
-  "Separate read, readAll and write commands are provided, with update events reporting the stored value after every write.",
-  "Values carry count and index information, and the adapter rules require detecting and re-requesting missing indices.",
-  "Errors and updates are separate and parameter matching is described, but association with the intended remote component is not explained.",
-  "The answer does not explain selecting byte-wise versus numeric-cast encoding and instead mandates conversion by value rather than bit pattern.",
-  "Index-based reads and discovery require no advance name knowledge, and write replies report the stored value even when the request was not applied.",
-  "The read command accepts a ByIndex selector without requiring prior name discovery.",
+  "ParamName uses a string-length bound rather than a byte-based bound, with ASCII stated only in a comment.",
+  "ParamValue provides typed alternatives whose selected arm identifies the numeric type.",
+  "Separate read, readAll and write commands are provided, and writes require a report of the current stored value.",
+  "Reports include count and index, and the adapter explanation requires tracking all indexes and requesting missing entries.",
+  "Errors and value reports are separate, but the answer does not explain remote-component association or how faults correlate with particular parameters or requests.",
+  "The adapter explanation does not describe selecting MAVLink byte-wise versus numeric-cast encoding.",
+  "Discovery and index-based reads require no advance name knowledge, and write reports explicitly reflect the stored value even when the request was not applied.",
+  "The read selector explicitly supports requesting a single parameter by numeric index.",
 ]
-score = 0.75
+score = 0.625

@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "review-0002"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, true, true, false, true]
+met = [true, true, true, false, false, true]
 reasons = [
-  "Finding 5 notes the interface combines lifecycle administration, map operations, path checking and motion actions, and the proposal separates navigation, map/costmap and lifecycle capabilities.",
-  "Finding 3 says IsPathValidRequest retains defaults while the query takes seven separate arguments without defaults, with a concrete example.",
-  "Finding 1 says seven goal commands and feedback events exist, result structs exist but no interaction delivers them, so completion is not observable, with a NavigateToPose example.",
-  "The proposal adds goal handles, acceptance, correlated feedback, terminal status with results and cancellation as a separate facade, and does not claim the compiler implements ROS action execution.",
-  "Finding 5 says several queries mutate state, including loading a map and saving a file, but it never ties this to the service-to-query mapping rule or contrasts it with a recommendation for a newly designed API.",
-  "The answer says the omission follows the provenance's explicit translation rule and is not accidental, and it left the workspace unchanged.",
+  "Point 5 notes the single interface groups navigation, teleoperation, map management and lifecycle administration, and the proposal separates navigation, costmap, map-storage and lifecycle capabilities.",
+  "Point 3 says isPathValid takes seven mandatory parameters and never consumes IsPathValidRequest, which preserves defaults, so callers must reproduce them.",
+  "Point 1 says goal commands and feedback exist but no interaction delivers the result structs, leaving completion and terminal outcome unobservable.",
+  "The proposal calls for goal IDs, correlated feedback and retrievable terminal results, but never states that the current compiler does not implement ROS action execution.",
+  "The answer says the service queries have side effects despite the query spelling, but it does not tie that to the mechanical service rule or separate it from a recommendation for a new RIDL design.",
+  "The answer says the missing result is the provenance's fixed translation rule rather than an accidental omission, and it leaves the workspace unchanged.",
 ]
-score = 0.8181818181818182
+score = 0.7272727272727273

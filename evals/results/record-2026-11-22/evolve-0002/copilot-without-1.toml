@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "evolve-0002"
@@ -14,7 +15,7 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "cli"
 
 [rubric]
 handoff = false
@@ -22,12 +23,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The query is declared in common.ParameterProtocol with the required Uint8, Uint8, and Int16 parameters and ParamValue return type.",
-  "The new query follows the five existing interactions, preserving ordinals 1 through 5 and receiving ordinal 6.",
-  "The require paramIndex >= 0 contract rejects negative values and accepts the full nonnegative Int16 domain of 0 through 32767.",
-  "The supplied patch and diff show only an appended interaction, with existing signatures, payloads, wire numbers, packages, and imports preserved.",
-  "The explanation maps the supplied targets and index into ParamRequestRead and correctly explains that -1 selects by name while a nonnegative index makes paramId irrelevant.",
-  "The answer reports a successful error-free workspace check and provides the JSON diff verdict compatible with only the interaction_appended change.",
-  "The answer identifies the query as a local convenience, preserves value encoding, and supplies no adapter implementation.",
+  "The query is added to common.ParameterProtocol with both Uint8 target parameters, an Int16 paramIndex, and a ParamValue return type.",
+  "The query follows the five existing interactions, preserving their ordinals 1 through 5 and receiving ordinal 6.",
+  "The require paramIndex >= 0 contract rejects negative values and accepts the full nonnegative Int16 domain.",
+  "The supplied patch and workspace preserve existing interactions, declarations, payload fields and types, wire numbers, packages, and imports.",
+  "The adapter explanation uses the existing read request with the supplied targets and index and explains that -1 selects by name while a nonnegative index ignores paramId.",
+  "The answer reports a successful workspace check without errors and supplies a compatible JSON diff containing only the appended interaction.",
+  "The answer identifies the query as a local extension, preserves parameter value encoding, and explains adapter use without implementing an adapter.",
 ]
 score = 1.0

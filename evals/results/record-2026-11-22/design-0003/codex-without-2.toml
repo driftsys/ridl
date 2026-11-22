@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "design-0003"
@@ -19,15 +20,15 @@ verify_via = "cli"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, true, false, true, false, true, true]
+met = [true, true, true, true, true, false, true, true]
 reasons = [
-  "Name is bytes [1..16] with a doc comment saying no terminator, so 16-byte names are admitted.",
-  "The Numeric union carries typed alternatives, and the discriminator is the numeric type.",
-  "readOne, readAll and write are separate commands, and the value event reports the stored value after a write.",
-  "ValueReport carries count and index, but the shown material has no description of detecting missing entries, and the README is not shown.",
-  "ErrorReport and the failed event are separate from ValueReport, and the request id plus selector and the bound-component comment explain association.",
-  "The schema says nothing on byte-wise versus numeric-cast MAVLink encoding, and the README that might is not shown.",
-  "Discovery by readAll and by index needs no prior names, and write is documented as emitting the current stored value even if rejected.",
-  "The Selector union offers an index alternative, so one parameter can be read without knowing its name.",
+  "ParameterName is bytes [16], a byte-based bound that admits all 16-byte names, and the doc comment says all 16 bytes may be used without a terminator.",
+  "NumericValue pairs a NumericType enum with exact-bits NumericBytes, and the doc comments document the encoding.",
+  "readOne, readAll and write are distinct commands, and valueReported provides the readback channel after a write.",
+  "ValueReport carries count and index, and the final message says the README covers list completeness and recovery rules.",
+  "ErrorReport and the errorReported event are separate from valueReported, requestId correlates replies, and the interface is bound to one component; the README is claimed to cover this.",
+  "The IDL has no MAVLink byte-wise versus numeric-cast selection, and the final message does not state that the README explains it.",
+  "Index selection and readAll need no prior names, and the write comment says it reports the current value rather than claiming the requested value was applied.",
+  "The Selector union has an index alternative that works without discovering a name.",
 ]
-score = 0.75
+score = 0.875

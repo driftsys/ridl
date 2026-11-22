@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "review-0003"
@@ -10,22 +11,11 @@ task = "review-0003"
 [mechanical]
 lints_match = true
 no_error = true
-notes = []
-passed = true
-verify_loop = true
-verify_via = "mcp"
+notes = ["the agent neither called ridl_check nor ran `ridl check`"]
+passed = false
+verify_loop = false
+verify_via = "none"
 
 [rubric]
-handoff = false
-judge_host = "copilot"
-judge_model = "claude-sonnet-5.5"
-met = [false, true, true, true, true, true]
-reasons = [
-  "The answer only vaguely mentions 'preserve the documented legacy-request response choice despite the contradictory retained legacy description' without clearly stating that missionRequest and missionRequestInt both return MissionItemInt while the deprecated request historically pairs with MissionItem.",
-  "It says signatures don't implement the transfer state machine and details sequencing, timeouts, retries, ACK completion and recovery as procedural obligations absent from the signatures.",
-  "It names MavMissionType (mission/fence/rally plans), sequence bounds, and cites MissionCount, MissionAck, MissionCurrent and item definitions with plan type and sequence.",
-  "It recommends a client transfer procedure, message-routing table, and a method for correlating ACKs to transfers, noting MissionAck has no transaction identifier.",
-  "It recommends no removal of target, sequence or missionType fields and explicitly keeps them as available data.",
-  "It does not claim RIDL timing defaults implement the upstream retry procedure; it attributes timeouts and retries to the pinned guide as procedural obligations absent from the signatures.",
-]
-score = 0.8181818181818182
+score = 0.0
+skipped = "mechanical checks failed"

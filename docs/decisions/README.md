@@ -742,9 +742,8 @@ other entry below is Accepted.
   distribute it; and `cargo xtask eval` compares an agent with and without it,
   scored mechanically and then against a rubric by a judge of the other vendor.
   The release record was made on 2026-11-22 with the judge check waived; the
-  judge check is deferred (driftsys/ridl#1440). The record's numbers are
-  provisional until it is re-run (driftsys/ridl#1460). Amends ADR-0005 §2, §5
-  and §7 and adds a dated amendment to ADR-0027.
+  judge check is deferred (driftsys/ridl#1440). Amends ADR-0005 §2, §5 and §7
+  and adds a dated amendment to ADR-0027.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "design-0003"
@@ -19,15 +20,15 @@ verify_via = "both"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, true, false, false, false, true, true]
+met = [true, true, true, true, true, false, true, true]
 reasons = [
-  "Name is bytes [1..16], a byte-based bound that admits 16-byte names with no terminator required.",
-  "Number pairs a NumericType kind with canonical bits, and the byte length is documented per type.",
-  "readOne, readAll and write are distinct commands, and write readback comes through the reported event.",
-  "Value carries count and index, but the README that describes missing-entry detection is not shown in the materials, so only the answer's summary claim supports this.",
-  "ErrorReport and the failed event are separate from value reports, but the explanation of component and parameter association rests on the unseen README and a deployment-bound service comment.",
-  "The README is not shown, and the RIDL only says the numeric type is independent of a transport's carrier field, so MAVLink byte-wise versus numeric-cast selection is not demonstrated.",
-  "Reads need no prior name knowledge, and the write doc says the current stored value is emitted even if rejected, so no claim is made that the requested value was applied.",
-  "The Selector union offers a zero-based index alternative that needs no prior name discovery.",
+  "ParameterName is bytes [1..16] with a comment saying there is no terminator and all 16 bytes may be used.",
+  "NumericValue pairs a NumericType enum with little-endian bits, and the type/width invariant is documented.",
+  "readOne, readAll and write are separate commands, and the valueReported event carries the stored value after a write.",
+  "ParameterValue and ListInfo carry count and index, and the final message says the README explains list completeness and recovery, though the README itself is not shown.",
+  "FailureReport is a separate error struct, and the requestId on every reply ties it to its request on the interface instance.",
+  "No visible material explains choosing byte-wise versus numeric-cast encoding for MAVLink; the final message only mentions 'numeric encoding' in the README.",
+  "Discovery by readAll and readOne by index needs no prior names, and the design reports the stored value after a write instead of claiming it was applied.",
+  "readOne selects a parameter by index without needing its name.",
 ]
-score = 0.625
+score = 0.875

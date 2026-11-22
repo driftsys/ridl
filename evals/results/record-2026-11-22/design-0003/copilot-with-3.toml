@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "design-0003"
@@ -19,15 +20,15 @@ verify_via = "cli"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [false, true, true, true, false, false, true, true]
+met = [true, true, true, true, false, false, true, true]
 reasons = [
-  "The string length bound is not explicitly byte-based, so the claim that it admits exactly 16 bytes is unsupported.",
-  "ParamValue provides distinct typed alternatives for integer and floating-point numeric values.",
-  "Distinct read, readAll and write operations are provided, with reported events carrying the current stored value after writes.",
-  "Entries include count and index, and the adapter rules require tracking all indices and requesting missing entries.",
-  "Errors are separate from value updates, but the answer does not explain remote-component association or how unqualified failed events identify the affected parameter.",
-  "The answer does not explain selecting MAVLink byte-wise versus numeric-cast value encoding.",
-  "Index reads and full enumeration avoid advance name knowledge, and write reports explicitly reflect stored values even when requests are not applied.",
-  "The read selector explicitly supports requesting one parameter by numeric index.",
+  "ParamName is a length-bearing bytes [0..16] type that explicitly permits 16-byte names without a terminator.",
+  "ParamEntry carries both a numeric value union and NumericKind identifying its numeric type and width.",
+  "Distinct read, readAll and write commands are provided, with value events reporting the current stored value after every write.",
+  "Entries include count and index, and the answer explains tracking received indexes and requesting missing entries.",
+  "Errors use a separate fault event, but the answer does not explain how events are associated with the intended remote component.",
+  "The answer does not explain selecting MAVLink byte-wise versus numeric-cast encoding.",
+  "Index reads and readAll require no prior name knowledge, and write reports explicitly reflect stored values even when requests were not applied.",
+  "The read command accepts an explicit byIndex selector that requires no prior discovery of the parameter name.",
 ]
-score = 0.625
+score = 0.75

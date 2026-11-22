@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "review-0005"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [false, false, false, true, true, true]
+met = [false, false, false, true, false, false]
 reasons = [
-  "It mentions repeated station vocabulary requiring coordinated maintenance but never identifies the eight row/occupant packages as repeating FanSpeed, Temperature and AirDistribution definitions, and the explanation of maintenance cost is thin.",
-  "It recommends considering a shared station vocabulary, but it does not state that separate addressed station instances should be preserved, nor that the frozen one-package-per-branch rule explains the repetition.",
-  "It says FanSpeed keeps the 0..100 range and the percent unit survives only in comments because integer-backed unit types are unavailable, but it does not note that adding a unit directly would change the representation.",
-  "It states that UP, MIDDLE, DOWN become enum codes 0, 1, 2 rather than upstream strings and that a VSS bridge needs explicit string/code conversion.",
-  "It says there are no application errors or completion guarantees and that command acknowledgment does not establish a matching signal update, so clients cannot distinguish rejection from delayed application.",
-  "It attributes the timing defaults to compiler behavior rather than upstream promises and states that no bounds or defaults are given upstream, so it does not invent any.",
+  "The answer notes eight stations declare identical vocabulary separately, but it never names the repeated FanSpeed/Temperature/AirDistribution set as eight packages, and it gives no maintenance cost of changing them consistently.",
+  "It recommends considering a shared station vocabulary and a reusable station interface, but it never mentions the frozen one-package-per-branch rule as the reason for the repetition and does not discuss keeping addressed instances separate.",
+  "It says percent exists only in comments because integer-backed unit types are unavailable, but it never says that adding a unit directly would change the representation.",
+  "It says the VSS strings UP, MIDDLE and DOWN become enum codes 0, 1 and 2, and that direct interoperability needs a name/code adapter.",
+  "It says setter acceptance does not establish completion and that there is no explicit outcome or failure model, but it never says the matching signal does not correlate with a specific request.",
+  "It asserts that the compiler applies RIDL default timing annotations to every signal and setter (`@[100ms..1s]` for signals, `@[..1s]` for commands); nothing in the shown workspace supports this, so it reads as invented timing.",
 ]
-score = 0.5
+score = 0.16666666666666666

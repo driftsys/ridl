@@ -3,30 +3,19 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "design-0001"
 
 [mechanical]
 lints_match = true
-no_error = true
-notes = []
-passed = true
+no_error = false
+notes = ["ridl check reported 1 error(s)"]
+passed = false
 verify_loop = true
 verify_via = "cli"
 
 [rubric]
-handoff = false
-judge_host = "copilot"
-judge_model = "claude-sonnet-5.5"
-met = [true, true, true, true, true, true, true]
-reasons = [
-  "Declares SystemId, ComponentId, ComponentKey, and Announcement metadata, plus a Presence interface with an announced event for repeated announcements.",
-  "ComponentKey holds the two ID fields while componentType is a separate metadata field, with comments stating type is never inferred from IDs.",
-  "ComponentReport pairs the latest announcement (with its identity key) with a ConnectionState enum of CONNECTED and DISCONNECTED, returned from Monitor.snapshot.",
-  "TrackingPolicy has deployment-supplied interval and miss limit with no defaults, and comments say there is no protocol default.",
-  "The final message says periodic sends, fault-aware suppression, and per-component deadlines require runtime implementation beyond RIDL declarations, and the README is said to cover runtime rules.",
-  "Presence and Monitor interfaces are focused on discovery with no mission or parameter operations.",
-  "The answer explicitly states that RIDL declarations alone cannot enforce the behavior, and makes no claim that the generated types or timing annotations implement discovery or disconnect detection.",
-]
-score = 1.0
+score = 0.0
+skipped = "mechanical checks failed"

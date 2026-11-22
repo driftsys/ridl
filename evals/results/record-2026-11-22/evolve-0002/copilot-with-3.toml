@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "evolve-0002"
@@ -22,12 +23,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The query is present in common.ParameterProtocol with both target parameters typed Uint8, paramIndex typed Int16, and return type ParamValue.",
-  "The query follows all five existing interactions, preserving their ordinals 1 through 5 and assigning the addition ordinal 6.",
-  "The require paramIndex >= 0 contract rejects negative indices and accepts the full nonnegative Int16 domain of 0 through 32767.",
-  "The supplied workspace and patch preserve existing interactions, payload declarations and fields, wire numbers, packages, and imports.",
-  "The explanation maps the query to existing ParamRequestRead with supplied targets and index and explains that only index -1 selects by name.",
-  "The answer reports a check with zero errors and provides an actual JSON diff verdict of compatible containing only interaction_appended.",
-  "The answer identifies the query as a local convenience, preserves parameter value encoding, and provides no adapter implementation.",
+  "The query has the requested name, Uint8 target parameters, Int16 index parameter, and ParamValue return type in common.ParameterProtocol.",
+  "The query follows the five existing interactions, preserving their ordinals 1 through 5 and receiving ordinal 6.",
+  "The require paramIndex >= 0 contract rejects negative values and accepts the full nonnegative Int16 domain.",
+  "The supplied patch only appends the query and leaves existing signatures, declarations, payloads, wire numbers, packages, and imports unchanged.",
+  "The explanation maps the supplied identities and index into ParamRequestRead and correctly states that paramId is used only for index -1 and ignored for nonnegative indices.",
+  "The answer reports a check without errors and supplies an actual JSON diff verdict of compatible containing only the appended interaction change.",
+  "The answer explicitly identifies the query as local, preserves parameter value encoding, and includes no adapter implementation.",
 ]
 score = 1.0

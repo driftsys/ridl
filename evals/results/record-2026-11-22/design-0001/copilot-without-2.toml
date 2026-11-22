@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "design-0001"
@@ -13,7 +14,7 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "cli"
 
 [rubric]
 handoff = false
@@ -21,12 +22,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The RIDL declares both identity fields and all requested announcement metadata, with a periodic announce event.",
-  "ComponentKey separates identity from ComponentType, which the monitor infers from announcement metadata.",
-  "ComponentStatus associates a full system/component key with an explicit connected or disconnected value.",
-  "The answer explicitly leaves the announcement interval and missed-announcement limit to deployment and distinguishes the timing envelope from protocol values.",
-  "The answer explains runtime scheduling, operational and fault-state checks, last-seen tracking, and timer-based disconnect detection.",
-  "The Announcer and Monitor interfaces focus exclusively on presence discovery and connection reporting.",
-  "The answer explicitly states that runtime behavior implements the tracking rules and does not claim that types or timing annotations implement them.",
+  "The RIDL defines both identity fields and all announcement metadata, with an announced event representing repeated presence announcements.",
+  "Component identity uses SystemId and ComponentId, while type is inferred separately from componentType and autopilot metadata.",
+  "ComponentStatus associates CONNECTED or DISCONNECTED with a ComponentRef containing both identity fields.",
+  "TrackingPolicy and configure explicitly make announcementInterval and missedLimit deployment choices without a universal timeout.",
+  "The contract requires periodic operational announcements including idle operation, and the explanation identifies runtime fault gating and interval-based disconnect tracking beyond RIDL.",
+  "The focused Announcer and Monitor interfaces contain discovery and connection-tracking operations without unrelated mission or parameter operations.",
+  "The answer explicitly assigns discovery and disconnect detection to runtime behavior rather than generated types or timing annotations.",
 ]
 score = 1.0

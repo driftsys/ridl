@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "evolve-0002"
@@ -22,12 +23,12 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The query is added to common.ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, and return type ParamValue.",
-  "It is appended after paramError, the fifth interaction, so it takes ordinal 6 and the existing ones keep 1–5.",
-  "The contract `require paramIndex >= 0` rejects negative values and leaves the nonnegative Int16 range accepted.",
-  "The final workspace shows existing interactions, payload structs, packages and imports unchanged; only the one query was added.",
-  "The explanation says an adapter sends ParamRequestRead with the supplied targets and index, and that a nonnegative index makes paramId ignored (name selection applies only at -1).",
-  "The answer reports 0 errors and shows a JSON diff with verdict compatible and a single interaction_appended change.",
-  "The answer states it adds no upstream message, changes no encoding, and implements no adapter.",
+  "The query is added to ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, and return type ParamValue.",
+  "It is appended after paramError, the fifth interaction, so it takes ordinal 6 and ordinals 1-5 are unchanged.",
+  "The contract `require paramIndex >= 0` rejects negative indices and accepts the nonnegative domain.",
+  "Only one interaction was added; the existing signatures, payloads, packages and imports are unchanged in the final workspace.",
+  "The answer says the adapter sends the existing ParamRequestRead with the supplied targets and index, and that paramId is ignored when the index is not -1.",
+  "The answer reports 0 errors on the check and shows a JSON diff with verdict compatible and a single interaction_appended change.",
+  "The answer says no new upstream message is introduced, does not change value encoding, and implements no adapter.",
 ]
 score = 1.0

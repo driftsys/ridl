@@ -3,30 +3,19 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "design-0002"
 
 [mechanical]
-lints_match = true
+lints_match = false
 no_error = true
-notes = []
-passed = true
+notes = ['design lints {"duplicate-shape"}, expected {}']
+passed = false
 verify_loop = true
-verify_via = "both"
+verify_via = "cli"
 
 [rubric]
-handoff = false
-judge_host = "codex"
-judge_model = "gpt-6.1-sol"
-met = [true, true, false, false, true, false, true]
-reasons = [
-  "The RIDL declarations represent plan type, source and target identities, item count, item index, and item payload.",
-  "Separate sender and receiver interfaces provide count announcements, numbered requests, item delivery, and success or failure notifications.",
-  "The answer separates plan types in transfers but does not describe separate storage for the different plan types.",
-  "The answer says unexpected indices do not advance the transfer but does not explicitly describe re-requesting the expected index after an unexpected item.",
-  "The answer describes retrying unanswered requests with a timeout and attempt cap, and distinguishes whole-plan completion from individual item delivery.",
-  "The focused interfaces reference PROCEDURE.md, but its contents are absent and transfer lifecycle and correlation are not documented together in the supplied material.",
-  "The answer does not claim that stream signatures or RIDL response bounds provide loss recovery or ordered-transfer state.",
-]
-score = 0.6153846153846154
+score = 0.0
+skipped = "mechanical checks failed"

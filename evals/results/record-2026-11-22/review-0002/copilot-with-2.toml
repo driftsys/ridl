@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "review-0002"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, true, true, true, false, true]
+met = [true, true, true, false, true, true]
 reasons = [
-  "The answer describes the interface as a package-level grab bag and proposes separate navigation, map, costmap, behavior, and lifecycle interfaces.",
-  "The answer identifies defaults retained in IsPathValidRequest and explains that flattening requires callers to supply all seven parameters without defaults.",
-  "The answer states the frozen goal-command, feedback-event, and result-struct rule and explains that final success or failure has no delivery interaction.",
-  "The redesign proposes a result query or event keyed by goal id and goal ids in feedback without claiming compiler support for ROS action execution.",
-  "Although the answer states the mechanical service-to-query rule and identifies saveMap as mutating, it never identifies loadMap as a state-changing query.",
-  "The answer attributes plain result structs to the fixed mapping rule and explicitly preserves the evidence port while separating redesign proposals.",
+  "The answer identifies mixed map, lifecycle, and navigation responsibilities and proposes separate interfaces for them.",
+  "The answer contrasts defaults in IsPathValidRequest with the flattened isPathValid signature that requires all seven arguments without defaults.",
+  "The answer explains the frozen goal-command and feedback-event mapping and identifies result structs without interactions, leaving completion and failure delivery unspecified.",
+  "The proposal offers a command result or feedback goal identifiers as alternatives without specifying both an explicit completion channel and goal/result correlation.",
+  "The answer attributes service queries to the provenance mapping, identifies loadMap and saveMap side effects, and separates redesign proposals from the evidence port.",
+  "The answer explicitly preserves the frozen no-result-interaction rule and states that the evidence port remains untouched.",
 ]
-score = 0.8181818181818182
+score = 0.9090909090909091

@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "review-0001"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, true, false, true, true]
+met = [true, true, false, false, true, true]
 reasons = [
-  "Item 2 explains Point vs Vector3 have different transform semantics (position vs rotation-only) and that collapsing them would remove useful distinctions.",
-  "Item 3 says RosFloat32 and RosFloat64 both resolve to float64, so Point32 loses precision/size, and labels it a documented translation limitation.",
-  "Item 6 notes Inertia.com uses Vector3 with metre unit only in prose and that generic vector treatment is inappropriate, though the risk of accepting a vector with another physical meaning is only loosely addressed.",
-  "It recommends documenting the field-specific meaning rather than replacing the type, and does not propose a separately typed centre-of-mass vector for a redesigned API.",
-  "The answer does not assign a single physical unit to Vector3; it even warns against one global unit for covariance.",
-  "It explicitly keeps both Point and Vector3 and does not argue identical shapes justify removing either.",
+  "Point 'represents a location' vs Vector3 'explicitly excludes translation when transformed'; merging would blur whether clients apply translation.",
+  "Says RosFloat32 and RosFloat64 both resolve to float64, so Point32 loses float32 precision/width semantics, and classifies it as a documented translation limitation.",
+  "Inertia.com is mentioned only as sharing Vector3 with no unit protection; the answer never states that its comment documents metres, nor explains the risk of accepting a vector with a different physical meaning.",
+  "It suggests quantity-specific composites in general and notes the migration cost, but does not propose a separately typed centre-of-mass vector.",
+  "Explicitly says 'Do not assign one global unit to Vector3'.",
+  "Recommends keeping Point and Vector3 separate on semantic grounds and does not treat identical fields as grounds for removal.",
 ]
-score = 0.9090909090909091
+score = 0.7272727272727273

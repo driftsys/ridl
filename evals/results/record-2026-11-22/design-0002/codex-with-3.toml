@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "design-0002"
@@ -19,14 +20,14 @@ verify_via = "both"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, false, false, false, false, true]
+met = [true, true, true, false, false, false, true]
 reasons = [
-  "PlanType, Participant/ParticipantId, ItemCount, ItemIndex, TransferId and PlanItem payload are all declared in RIDL.",
-  "UploadSender has announce and supply events, UploadReceiver has request and complete, with Completion carrying success or failure codes.",
-  "The RIDL shows planType in the envelope and separate stores in comments, but the README procedure is not visible in the provided material, so separation in the procedure cannot be confirmed.",
-  "The README is not shown and the RIDL does not describe advancing only on the expected item or re-requesting after an unexpected sequence number.",
-  "The RIDL events carry @[..1s] bounds but no retry procedure is visible; the README is not provided, though Completion is noted as independent of link delivery.",
-  "The lifecycle and correlation are documented in a separate README rather than in the RIDL interface, and the README content is not visible.",
-  "Nothing in the visible material claims that stream signatures or response bounds provide loss recovery or ordering.",
+  "PlanType, Participant/Header, ItemCount, ItemIndex and the PlanItem union are all declared in RIDL.",
+  "The announce, supply, request and finish commands are split across the receiver and sender interfaces.",
+  "RIDL comments say the plan stores are independent, and the header's planType must agree with the union arm.",
+  "The README is not in the shown workspace, and the RIDL does not describe advancing only on the expected item or re-requesting after an unexpected index.",
+  "Timeout and retry rules are not visible in the shown material; only comments such as the TIMEOUT code and the 'not a per-item acknowledgement' note touch on this.",
+  "The lifecycle and correlation procedure is in a separate README that is not shown, not alongside the interface.",
+  "Nothing in the shown material claims that stream signatures or response bounds provide loss recovery or ordered-transfer state.",
 ]
-score = 0.46153846153846156
+score = 0.6153846153846154

@@ -3,18 +3,33 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "design-0004"
 
 [mechanical]
 lints_match = true
-no_error = false
-notes = ["ridl check reported 5 error(s)"]
-passed = false
+no_error = true
+notes = []
+passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "mcp"
 
 [rubric]
-score = 0.0
-skipped = "mechanical checks failed"
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, true, true, true, true, true, true, true]
+reasons = [
+  "A new SeatHeating interface is defined in seat-heating.ridl, leaving Cabin and Horn untouched.",
+  "The reached levels are a signal carrying both seats' levels in one struct, and fault is an event carrying the seat.",
+  "setLevel is a command with seat and level parameters.",
+  "HeatingController offers SeatHeatingControl, which is the service for SeatHeating.",
+  "HeatingController is added to the Vehicle system.",
+  "HeatingController is placed on the Hpc machine.",
+  "Panel now has a requires SeatHeating line.",
+  "HeatingLevel is an integer with range [0..3] and the seat is the FrontSeat enum.",
+  "Existing declarations are unchanged, with additions appended only at the allowed places; the doc comments appear to be original.",
+]
+score = 1.0

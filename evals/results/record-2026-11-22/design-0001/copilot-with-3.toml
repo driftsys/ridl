@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "design-0001"
@@ -21,12 +22,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The RIDL declares system/component identity and all announcement metadata, with an announce event representing repeated presence announcements.",
-  "ComponentId and ComponentType are distinct, and the monitor obtains type from announcement metadata.",
-  "ComponentStatus associates each system/component identity with an explicit CONNECTED or DISCONNECTED result.",
-  "TrackingConfig makes the interval and missed-announcement limit explicit deployment choices without claiming universal timeout values.",
-  "The answer explicitly identifies operational scheduling, fault suppression including separate-thread checks, and disconnect detection as runtime responsibilities.",
-  "The Announcer and Monitor interfaces focus exclusively on presence discovery and connection tracking.",
-  "The answer explicitly states that the contract cannot enforce the runtime rules and does not claim generated types or timing annotations implement discovery.",
+  "RIDL declares both identity fields and all announcement metadata, with a Presence signal representing repeated announcements.",
+  "Identity is separate from ComponentKind, and type is taken from announcement metadata rather than the numeric component identifier.",
+  "ComponentReport associates each two-field identity with a CONNECTED or DISCONNECTED link status.",
+  "MonitorConfig explicitly exposes interval and missedLimit as deployment choices without prescribing a universal timeout.",
+  "The answer explicitly requires runtime scheduling, fault-state checks before sending, and timer-based disconnect detection.",
+  "Presence and Monitor focus on announcements and discovery without unrelated mission or parameter operations.",
+  "The answer states that runtime behavior is required and does not claim that generated types or timing annotations implement discovery or disconnect detection.",
 ]
 score = 1.0

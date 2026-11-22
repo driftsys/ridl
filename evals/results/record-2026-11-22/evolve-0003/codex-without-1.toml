@@ -3,19 +3,32 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = false
 task = "evolve-0003"
 
 [mechanical]
-diff_matches = false
+diff_matches = true
 lints_match = true
 no_error = true
-notes = ['diff verdict None, expected Some("compatible")']
-passed = false
+notes = []
+passed = true
 verify_loop = true
 verify_via = "both"
 
 [rubric]
-score = 0.0
-skipped = "mechanical checks failed"
+handoff = false
+judge_host = "copilot"
+judge_model = "claude-sonnet-5.5"
+met = [true, true, false, false, true, false, true]
+reasons = [
+  "Telemetry now has `requires Horn`.",
+  "honkCount is appended after active, typed with the named HonkCount type with range [0..9223372036854775807].",
+  "The workspace shows Panel also requires Horn, with a doc comment changed, and it is unclear that other declarations stayed unchanged; Panel's `requires Horn` may be a pre-existing line, but the Control service and Horn doc comments look changed, so the constraint can't be confirmed.",
+  "The answer only paraphrases that the diff reports compatible; it shows no actual output of ridl diff.",
+  "honkCount is declared as a signal.",
+  "The answer says consumers can observe the new signal and gateway routing, and does not state that the added requirement changes composition and not the wire.",
+  "No second Horn provider was added and no component was moved; the deployment is unchanged.",
+]
+score = 0.5833333333333334

@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "review-0004"
@@ -19,14 +20,14 @@ verify_via = "mcp"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, true, true, true, true, true, false]
+met = [true, false, true, true, true, true, true]
 reasons = [
-  "The answer explains that the float-backed parameter value depends on paramType and bytewise versus numeric-cast encoding, including re-encoding for ParamSet.",
-  "The answer identifies the fixed 16-byte representation and explains that requiring a NUL would exclude valid names using all 16 bytes.",
-  "The answer identifies paramSet as a command without a result and explains event-based read-back comparison, correlation, timeouts, and retries.",
-  "The answer explains that the list stream lacks a completion signal and requires tracking indices against paramCount and requesting missing entries.",
-  "The answer explicitly assigns capability-based encoding selection, retries, deduplication, and completeness tracking to the adapter.",
-  "The answer treats parameter types as potentially integral and warns that unsolicited paramValue events and other clients' writes require correlation and comparison.",
-  "The answer warns against normalizing raw bytewise values but never identifies Float32 lowering to float64 or explains that the RIDL scalar does not guarantee preservation of binary32 payload bits.",
+  "The answer identifies both float-backed fields and their paramType tags, and explains bytewise versus numeric-cast encoding and its ambiguity.",
+  "The answer identifies the 16-byte array but does not explain that full-length names require no trailing NUL or how a null-terminated string would change accepted identifiers.",
+  "The answer states that paramSet returns nothing and explains confirmation through shared PARAM_VALUE events, comparison, correlation, and retries.",
+  "The answer explains tracking paramIndex against paramCount, detecting missing rows, and why the stream has no sufficient completion guarantee.",
+  "The answer explicitly assigns encoding selection, retries, timeouts, and list-completeness tracking to the adapter.",
+  "The answer recognizes non-floating parameter types and warns that shared paramValue events may reflect other writers rather than a particular write.",
+  "The answer identifies Float32 lowering to float64, warns that binary32 payload bits can be corrupted, and requires exact binary32 bit handling for bytewise encoding.",
 ]
 score = 0.8461538461538461

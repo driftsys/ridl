@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "design-0001"
@@ -21,12 +22,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The RIDL declares both identity fields, announcement metadata, and an announcement event documented as recurring while operational.",
-  "Component identity is a separate structure, and component type comes from announcement metadata rather than the numeric component identifier.",
-  "Monitor events and query results associate CONNECTED or DISCONNECTED status with both system and component identity.",
-  "TrackingPolicy explicitly makes the interval and missed-announcement limit deployment-provisioned choices.",
-  "The answer explains runtime scheduling, operational and fault-state checks, and monitor state needed for disconnect detection.",
-  "Focused Announcer and Monitor interfaces contain presence and connection-tracking concerns without unrelated operations.",
-  "The answer explicitly states that the contract and timing annotations do not implement the required runtime tracking behavior.",
+  "The declarations define both identity fields and all requested metadata, with an announcement event representing repeated presence messages.",
+  "ComponentIdentity is separate from ComponentType, and the schema and runtime rules explicitly derive type from metadata rather than identity numbers.",
+  "ComponentStatus associates the system/component identity with an explicit CONNECTED or DISCONNECTED state.",
+  "TrackingConfig exposes the interval and missed limit as deployment choices without protocol defaults.",
+  "The answer explicitly assigns operational sending, fault-aware suppression, and silence-based disconnection to runtime state and scheduling.",
+  "Announcer and Monitor focus on presence, discovery, and connection tracking without unrelated operations.",
+  "The answer explicitly states that RIDL cannot enforce the listed runtime discovery and connection-tracking rules.",
 ]
 score = 1.0

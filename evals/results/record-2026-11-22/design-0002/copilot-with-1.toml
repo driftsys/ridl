@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "design-0002"
@@ -19,14 +20,14 @@ verify_via = "cli"
 handoff = false
 judge_host = "codex"
 judge_model = "gpt-6.1-sol"
-met = [true, true, true, true, true, true, true]
+met = [true, true, false, false, true, true, true]
 reasons = [
-  "The declarations represent plan kind, source and target participants, item count, item index and typed item payloads.",
-  "Separate sender and receiver interfaces provide count announcement, item request, item supply, completion and failure events.",
-  "Each plan kind has its own numbering, count and transfer state, and the procedure replaces only the stored plan of that kind.",
-  "Unexpected items are dropped without advancing, while the unchanged expected-item request repeats until a matching item arrives.",
-  "The answer specifies a 1500 ms response timeout and five retries, and distinguishes individual supplies from final transfer completion.",
-  "The focused upload declarations document opening, retries, completion and failure alongside envelopes that correlate messages by participants, plan kind and transfer ID.",
-  "Recovery and ordering are attributed to explicit retries and receiver state rather than to stream signatures or RIDL timing bounds alone.",
+  "The RIDL declarations represent plan types, participant endpoints, item counts, item numbers and typed item payloads.",
+  "Separate sender and receiver interfaces define count announcements, numbered requests, item supplies, completion and failure events.",
+  "The declarations distinguish plan types, but the supplied material does not describe separate storage and transfer handling for each type.",
+  "The answer says unexpected items do not advance the transfer, but does not describe advancement after an expected item or explicitly re-requesting it after an unexpected sequence.",
+  "The answer describes response timeouts and retries, while UploadComplete explicitly confirms acceptance of the entire plan rather than delivery of one item.",
+  "The focused boundary documents transfer correlation through Envelope and lifecycle behavior through announcement, request, completion and failure comments.",
+  "The answer does not claim that RIDL timing bounds or stream signatures independently provide recovery or ordered-transfer state.",
 ]
-score = 1.0
+score = 0.6923076923076923

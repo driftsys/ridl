@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "design-0003"
@@ -19,15 +20,15 @@ verify_via = "both"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, true, true, false, false, true, true]
+met = [true, true, true, true, true, false, true, true]
 reasons = [
-  "Name is bytes [1..16], a byte bound admitting 16-byte names with no terminator.",
-  "NumericValue union has typed arms whose tag is the numeric type.",
-  "requestOne, requestAll, write commands plus valueReported event for post-write storage reports.",
-  "Entry has count and index, and the final message says README covers list completeness; the workspace comments reference determining completeness from indices and counts.",
-  "Failure is separate from ValueReport, but the shown material does not explain how replies are associated with the remote component and parameter; only a service binding comment and request token appear, and the README is not shown.",
-  "The README content is not shown, so there is no visible explanation of byte-wise versus numeric-cast encoding selection.",
-  "Selector allows index reads without names, and comments state reports are not proof that a write was applied.",
-  "Selector union includes an index arm for name-independent single reads.",
+  "Name is bytes [1..16] with explicit length, admitting 16-byte names without a terminator.",
+  "NumericValue pairs a NumericType kind with 8-byte bits, documented as an encoded-value/type pair.",
+  "readOne, readAll and writeValue commands exist, with a valueReported event reporting stored values.",
+  "Entry carries count and index; the comments say to collect by count and index, and the README is stated to cover list-completeness and recovery rules.",
+  "RequestFailure is separate from ValueReport and request tokens correlate replies; the interface is per addressed component, though component association rests on the 'addressed component' comments and the README.",
+  "The RIDL shows no byte-wise vs numeric-cast selection explanation; the README is not shown, only its claimed transport encoding coverage, so this can't be confirmed.",
+  "Index selector requires no name knowledge and ValueReport is described as the current stored value, never a claim of the write being applied.",
+  "The Selector union offers an index option, so a client can read one parameter without knowing its name.",
 ]
-score = 0.75
+score = 0.875

@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "review-0005"
@@ -21,11 +22,11 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [false, false, false, true, false, true]
 reasons = [
-  "The answer notes every concrete station has its own payload declarations but never identifies the eight packages repeating the three types or explains the maintenance cost of changing them consistently.",
-  "It only mentions consolidating packages or shared station types in passing under compatibility baselines, without discussing a shared vocabulary design or the frozen one-package-per-branch rule as the cause of repetition.",
-  "It identifies the integer 0..100 domain and percent surviving only in comments due to unavailable integer-backed unit types, but not that adding a unit directly would change the representation.",
-  "It states that the strings UP, MIDDLE and DOWN become enum codes 0, 1 and 2 and that VSS integration needs an explicit string/code adapter.",
-  "It notes that there is no explicit result or completion event, but does not say the matching signal fails to specify correlation with a particular request.",
-  "It claims the upstream specifies no timing, and says no upstream defaults or temperature bounds exist; the stated checker timing defaults are attributed to RIDL, not invented as upstream.",
+  "It mentions repeated station types and maintenance drift risk, but never identifies the eight row/occupant packages or explains the cost of changing the repeated FanSpeed/Temperature/AirDistribution definitions consistently.",
+  "It recommends evaluating a shared station contract and vocabulary and preserving the frozen mapping, but it never says the frozen one-package-per-branch rule explains the repetition or that separate addressed instances stay.",
+  "It says FanSpeed is an integer 0..100 and that percent survives only in comments because integer-backed unit types are unavailable, but it never says that adding a unit directly would change the representation.",
+  "It says AirDistribution keeps the three values UP/MIDDLE/DOWN but source strings become integer codes 0, 1, 2, and that an explicit string/code adapter is needed.",
+  "It says commands have no explicit result or error model and that invoking one does not establish when or whether the signal reflects the request, but it never says the matching signal lacks request correlation.",
+  "It states that upstream has no timing, bounds or defaults and does not invent any.",
 ]
 score = 0.3333333333333333

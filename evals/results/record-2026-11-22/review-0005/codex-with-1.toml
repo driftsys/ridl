@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "review-0005"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [false, false, true, true, false, false]
+met = [false, false, false, true, false, false]
 reasons = [
-  "It mentions separate station packages repeating payload types and added maintenance work, but does not identify the eight packages repeating all three declarations or explain the cost of changing them consistently.",
-  "It recommends considering a shared station vocabulary but does not tie the repetition to the frozen one-package-per-branch rule or discuss preserving separate addressed instances.",
-  "It states FanSpeed keeps the 0..100 integer domain, percent exists only in comments, and integer-backed unit types are unavailable.",
-  "It says upstream allows strings UP, MIDDLE, DOWN while the port uses integer enum codes 0, 1, 2 requiring a name/code adapter.",
-  "It says there is no rejection reporting and ambiguity between requested and achieved state, but does not state that the matching signal fails to correlate with a particular request or that no applied value is reported.",
-  "It asserts default timing annotations of @[100ms..1s] and @[..1s] and Cel as float64 without clear support from the shown workspace, so it appears to introduce unsupported specifics.",
+  "It says each station repeats payload declarations and that repeated types require coordinated maintenance, but it does not name the eight packages with FanSpeed, Temperature and AirDistribution explicitly as a maintenance-cost discussion beyond a brief mention; it is partial and does not say what the cost entails.",
+  "It recommends considering a shared station vocabulary while retaining mapping to frozen paths, but does not recognize that the frozen one-package-per-branch rule explains the repetition, nor preserve separate addressed instances explicitly.",
+  "It identifies integer 0..100 and percent surviving only in comments due to unavailable integer-backed unit types, but does not state that adding a unit directly would change the representation.",
+  "It states the three allowed strings become integer enum codes 0,1,2 and that a bridge needs explicit string/code conversion.",
+  "It says acceptance within one second does not promise completed actuation and flags unclear confirmation semantics for temperature, but does not state that setters have no applied value or failure outcome or that the matching signal lacks request correlation.",
+  "It asserts RIDL default timing of signal @[100ms..1s] and command acceptance @[..1s] as compiler-applied defaults not shown in the workspace material, which is invented unsupported specifics.",
 ]
-score = 0.3333333333333333
+score = 0.16666666666666666

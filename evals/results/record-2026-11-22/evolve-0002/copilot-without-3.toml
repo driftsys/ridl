@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = false
 task = "evolve-0002"
@@ -14,7 +15,7 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "cli"
 
 [rubric]
 handoff = false
@@ -22,12 +23,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The final workspace adds the named query with Uint8 target identities, an Int16 index, and a ParamValue return type.",
-  "The query follows all five existing ParameterProtocol interactions, preserving ordinals 1 through 5 and receiving ordinal 6.",
-  "The require contract paramIndex >= 0 rejects negative values and accepts the full Int16 nonnegative domain of 0 through 32767.",
-  "The supplied patch and diff show only the appended query, preserving existing signatures, declarations, payload fields, wire numbers, packages, and imports.",
-  "The explanation maps the supplied identities and index into ParamRequestRead and correctly explains that only index -1 selects the name while nonnegative indices ignore it.",
-  "The answer reports a successful check without an Error and supplies a JSON diff verdict of compatible containing only the interaction_appended change.",
-  "The answer explicitly identifies the query as a local API extension, preserves value encoding, and does not implement an adapter.",
+  "The query has the requested name, Uint8 target parameters, Int16 index, and ParamValue return type in common.ParameterProtocol.",
+  "The query is appended after the five existing interactions, preserving ordinals 1 through 5 and receiving ordinal 6.",
+  "The require paramIndex >= 0 contract rejects negative values and accepts the full nonnegative Int16 domain.",
+  "The supplied patch changes only the appended query and preserves existing interactions, payload declarations, wire numbers, packages, and imports.",
+  "The explanation maps the supplied identities and index to the existing ParamRequestRead and states that paramId is ignored unless paramIndex is -1.",
+  "The answer reports a successful check with zero errors and provides a JSON diff verdict of compatible containing only interaction_appended.",
+  "The answer explicitly uses the existing upstream message, leaves value encoding unchanged, and provides no adapter implementation.",
 ]
 score = 1.0

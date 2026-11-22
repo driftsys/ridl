@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "design-0001"
@@ -21,12 +22,12 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "Declares identity and announcement metadata types and a PresenceSource interface with an announcement event representing repeated announcements.",
-  "ComponentId and ComponentType are separate types, and Announcement carries the type as its own field, not derived from the id.",
-  "ComponentReport pairs the Announcement (with its key) with ConnectionStatus CONNECTED/DISCONNECTED, and lookup is keyed by ComponentKey.",
-  "TrackingPolicy exposes deployment-selected intervalMs and missedAnnouncementLimit, documented as having no default or universal value.",
-  "The final message says runtime code must enforce idle announcements, fault-aware suppression, and timeout/disconnect transitions, and that RIDL does not implement them (README presumably details this).",
-  "Discovery is split into focused PresenceSource and PresenceMonitor interfaces with no mission or parameter operations.",
-  "The answer explicitly says RIDL validates structure and types only and does not implement the behaviors, and makes no such claim.",
+  "Declares SystemId, ComponentId, Announcement metadata, and an event announcement on the Presence interface representing repeated announcements.",
+  "ComponentKind is a separate type/field from ComponentId, and the doc says ComponentId is never a type discriminator.",
+  "ConnectionReport pairs the latest Announcement (with key) with a ConnectionState of CONNECTED/DISCONNECTED, and getConnection takes a ComponentKey.",
+  "TrackingPolicy has deployment-selected interval and missedLimit, with docs stating there is no protocol-wide interval or missed limit.",
+  "The final message says runtime code must enforce fault-aware sending, receipt tracking, and timeouts, and that RIDL compilation does not implement these behaviors.",
+  "Discovery is split into focused Presence and ConnectionMonitor interfaces with no mission or parameter operations.",
+  "The answer explicitly states that RIDL compilation validates the contract but does not implement the behaviors, so it makes no such claim.",
 ]
 score = 1.0

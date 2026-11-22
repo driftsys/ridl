@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "design-0002"
@@ -19,14 +20,14 @@ verify_via = "both"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, false, false, false, true, true]
+met = [true, true, true, true, true, false, true]
 reasons = [
-  "plan.typl defines PlanType, Participant identity, ItemCount, Sequence/itemIndex and ItemData payload.",
-  "UploadSender has announce and supply events; UploadReceiver has request and finish events covering the success/failure confirmation.",
-  "The types separate plan types via PlanType in the key, but the README (the storage and procedure description) is not shown, so separation there cannot be confirmed.",
-  "The README is not shown; only interface doc comments say to repeat requests without advancing, so unexpected-item handling is not verifiable.",
-  "Timeout and retry are only hinted in comments and the Outcome TIMEOUT; the README procedure is not shown, so the full description cannot be verified.",
-  "The interface docs reference the README state machine and keys/correlation sit with the interfaces in the same workspace.",
-  "The shown materials do not claim that stream signatures or response bounds supply loss recovery; the doc says publication does not imply delivery and the state machine is in the README.",
+  "Types declare PlanType, Participant/SystemId/ComponentId, ItemCount, ItemIndex and the PlanItem payload union.",
+  "PlanReceiver has announce and supply, and PlanSender has requestItem and complete (success or error status), so both sides send their required messages.",
+  "Header carries the plan type on every message, the enums and comments describe independent plan stores, and BUSY is per plan store.",
+  "The supply comment says only the currently requested index advances progress, and requestItem says the same entry is retried. The README is not shown, but the message says it covers unexpected items.",
+  "RETRY_EXHAUSTED and the 100ms bounds imply timeout and retry, and Completion is described as terminal and independent of transport delivery. The README, which would hold the procedure, is not shown.",
+  "The lifecycle and correlation procedure sits in a separate README rather than alongside the interface; the interface file has only brief comments.",
+  "Nothing shown claims that a signature or response bound alone provides loss recovery; the comments say calls may be lost or duplicated.",
 ]
-score = 0.5384615384615384
+score = 0.9230769230769231

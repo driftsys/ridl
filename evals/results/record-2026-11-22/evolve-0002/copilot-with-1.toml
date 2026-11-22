@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "evolve-0002"
@@ -14,7 +15,7 @@ no_error = true
 notes = []
 passed = true
 verify_loop = true
-verify_via = "mcp"
+verify_via = "both"
 
 [rubric]
 handoff = false
@@ -22,12 +23,12 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The query has the requested name, Uint8 target parameters, Int16 index, and ParamValue return type.",
-  "The query follows all five existing ParameterProtocol interactions, preserving ordinals 1 through 5 and receiving ordinal 6.",
-  "The require paramIndex >= 0 contract rejects negative values and accepts the Int16 range 0 through 32767.",
-  "The supplied workspace and diff show only an appended interaction, with existing signatures, payload declarations, wire numbers, packages, and imports preserved.",
-  "The answer explains copying the target identities and index into ParamRequestRead and that a nonnegative index causes paramId to be ignored.",
-  "The answer reports an error-free workspace check and provides a JSON diff with verdict compatible and only the interaction_appended change.",
-  "The answer explicitly identifies this as a local convenience query, preserves value encoding, and describes adapter behavior without implementing one.",
+  "The query is declared in common.ParameterProtocol with both target parameters typed Uint8, paramIndex typed Int16, and return type ParamValue.",
+  "The query follows all five existing interactions, preserving their ordinals 1 through 5 and receiving ordinal 6.",
+  "The require paramIndex >= 0 contract rejects negative values and accepts the existing Int16 domain from 0 through 32767.",
+  "The supplied patch only appends the query and preserves existing signatures, declarations, payload fields, types, wire numbers, packages, and imports.",
+  "The explanation constructs the existing ParamRequestRead with the supplied targets and index and explains that only index -1 selects the name while nonnegative indices ignore it.",
+  "The answer reports a successful check without Error diagnostics and supplies the actual JSON diff verdict compatible with only an interaction_appended change.",
+  "The answer explicitly identifies a local convenience query, preserves parameter value encoding, and describes adapter behavior without implementing an adapter.",
 ]
 score = 1.0

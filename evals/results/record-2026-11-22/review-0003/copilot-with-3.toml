@@ -3,6 +3,7 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "review-0003"
@@ -21,11 +22,11 @@ judge_host = "codex"
 judge_model = "gpt-6.1-sol"
 met = [false, true, false, true, true, true]
 reasons = [
-  "The answer never identifies that both missionRequest and missionRequestInt return MissionItemInt or explains the documented adaptation from the historical MissionItem pairing.",
-  "The answer explains that query signatures omit transfer sequencing, retry procedures and missionAck completion, so clients need a separate transfer state machine.",
-  "Although it describes independently stored mission types and mentions seq matching, it does not use named port declarations to explain sequence fields as necessary for ordered item transfer.",
-  "The answer recommends a separate client specification with sequence tables, state transitions, completion rules and procedures addressing the identified correlation gaps.",
-  "The answer does not remove or recommend removing addressing, sequence or missionType fields as redundant because of the single interface.",
-  "The answer explicitly distinguishes RIDL timing defaults from the upstream timeout and retry procedure and says the defaults are unsuitable.",
+  "It mentions the legacy integer-response mapping but does not explicitly identify both query return types or explain the historical MissionItem pairing and deliberate adaptation.",
+  "It explains that queries omit ordering, recovery, timeout retries and final missionAck completion, so signatures alone cannot define reliable transfer.",
+  "It names missionType, seq and relevant declarations but does not explain missionType as distinguishing independently stored mission, fence and rally plans.",
+  "It recommends client state machines and explicit correlation among requests, items and acknowledgements alongside the port.",
+  "It preserves the addressing, sequence and missionType fields and recommends using them for correlation.",
+  "It explicitly distinguishes RIDL timing defaults from upstream timeout and retry requirements.",
 ]
 score = 0.6363636363636364

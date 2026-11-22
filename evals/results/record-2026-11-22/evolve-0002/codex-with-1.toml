@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "evolve-0002"
@@ -22,12 +23,12 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, true, true]
 reasons = [
-  "The query is added to ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, and return type ParamValue.",
-  "It is appended after paramError, the fifth existing interaction, so it receives ordinal 6 and the earlier ordinals are unchanged. The answer also states that appending preserves the ordinals.",
-  "The query carries `require paramIndex >= 0`, which rejects negative indices and leaves the nonnegative Int16 domain accepted.",
-  "Only the new query was added; existing interactions, payload structs, packages and imports are unchanged in the final workspace.",
-  "The answer says the adapter sends ParamRequestRead with the supplied targets and index, and that a nonnegative index means paramId is ignored under the upstream selection rule.",
-  "The answer reports 0 errors on the check and shows a JSON diff with verdict compatible and a single interaction_appended change.",
-  "The doc comment and the explanation both say this is a local convenience query with no new upstream message. Parameter value encoding is untouched and no adapter was implemented.",
+  "The query is added to ParameterProtocol with targetSystem and targetComponent as Uint8, paramIndex as Int16, returning ParamValue.",
+  "It is appended after paramError, the last of the five existing interactions, so it gets ordinal 6 and the existing 1-5 are unchanged.",
+  "It uses `require paramIndex >= 0`, which rejects negatives and accepts the nonnegative Int16 range.",
+  "The workspace shows existing interactions, payloads, packages and imports unchanged, and the diff reports only the appended interaction.",
+  "The answer says the adapter sends ParamRequestRead with the supplied targets and index, and that a nonnegative index means paramId is ignored under the selection rule.",
+  "The check reports 0 errors and the JSON diff shows verdict compatible with only the interaction_appended change.",
+  "The answer says no new upstream message is added, leaves value encoding alone, and implements no adapter.",
 ]
 score = 1.0

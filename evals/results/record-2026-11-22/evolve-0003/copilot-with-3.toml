@@ -3,19 +3,32 @@ handoff = false
 host = "copilot"
 host_version = "GitHub Copilot CLI 1.0.112."
 model = "claude-sonnet-5.5"
+ridl_version = "ridl 0.21.0"
 run = 3
 skill = true
 task = "evolve-0003"
 
 [mechanical]
-diff_matches = false
+diff_matches = true
 lints_match = true
 no_error = true
-notes = ['diff verdict None, expected Some("compatible")']
-passed = false
+notes = []
+passed = true
 verify_loop = true
-verify_via = "both"
+verify_via = "mcp"
 
 [rubric]
-score = 0.0
-skipped = "mechanical checks failed"
+handoff = false
+judge_host = "codex"
+judge_model = "gpt-6.1-sol"
+met = [true, true, true, false, true, false, true]
+reasons = [
+  "Telemetry explicitly requires the Horn interface.",
+  "Horn appends soundCount after active with the named SoundCount type and explicit range [0..1000000].",
+  "The supplied workspace shows only the permitted new count type, appended Horn interaction, Telemetry requirement, and allowed documentation changes.",
+  "The answer claims a compatible verdict but does not show actual ridl diff or ridl_diff output.",
+  "The activation count is modeled as a signal.",
+  "The answer identifies the requirement as a composition change but incorrectly says the new type is not visible to a deployed consumer.",
+  "Climate remains the sole Horn provider and all components remain on their existing machines.",
+]
+score = 0.75

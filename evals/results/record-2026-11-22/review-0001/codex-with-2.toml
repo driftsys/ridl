@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = true
 task = "review-0001"
@@ -19,13 +20,13 @@ verify_via = "mcp"
 handoff = false
 judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
-met = [true, true, false, false, true, true]
+met = [true, true, false, true, true, true]
 reasons = [
-  "Item 2 explains Point is a position, Vector3 is rotation-only, and collapsing would obscure whether clients apply translation.",
-  "Item 4 says RosFloat32 and RosFloat64 both resolve to float64, Point32 loses its advertised precision/storage distinction, and classifies it as a translation limitation.",
-  "Item 6 only says Inertia.com should be documented as a metre offset; it does not note the missing machine-readable unit on the general Vector3 or the risk of accepting a vector with another meaning.",
-  "The answer never proposes a separately typed centre-of-mass vector or discusses the schema change it would cause.",
-  "Item 3 explicitly avoids assigning one unit to Vector3 and notes it spans acceleration, force, torque and angular quantities, leaving units to context.",
-  "The answer explicitly says identical shapes do not justify consolidation and recommends keeping both declarations.",
+  "Item 2 says Point is a location while Vector3 receives only rotation, and that consolidating them would erase useful intent.",
+  "Item 3 says RosFloat32 and RosFloat64 both resolve to float64, so Point32 loses its compact precision distinction, and labels it a documented translation limitation.",
+  "Item 5 notes that com stays a Vector3 with metres only in prose, but never explains the risk of accepting a vector with another physical meaning.",
+  "Item 5 proposes a metre-valued struct replacing com and says it would change the public type, justified only in a deliberate versioned dimensional API; it does not say a separate struct would break the frozen upstream-shaped schema, but the effect is close enough.",
+  "The answer explicitly says not to assign one physical unit globally to Vector3, citing its varied uses.",
+  "The answer keeps Point and Vector3 distinct because their meanings differ, not because of shape alone.",
 ]
-score = 0.7272727272727273
+score = 0.8181818181818182

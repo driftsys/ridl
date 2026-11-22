@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 2
 skill = false
 task = "review-0002"
@@ -10,13 +11,11 @@ task = "review-0002"
 [mechanical]
 lints_match = true
 no_error = true
-notes = []
-passed = true
-verify_loop = true
-verify_via = "mcp"
+notes = ["the agent neither called ridl_check nor ran `ridl check`"]
+passed = false
+verify_loop = false
+verify_via = "none"
 
 [rubric]
-error = "the judge reply is not JSON"
-handoff = false
-judge_host = "copilot"
-judge_model = "claude-sonnet-5.5"
+score = 0.0
+skipped = "mechanical checks failed"

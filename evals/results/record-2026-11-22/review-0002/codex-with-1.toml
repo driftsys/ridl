@@ -3,6 +3,7 @@ handoff = false
 host = "codex"
 host_version = "codex-cli 0.169.0"
 model = "gpt-6.1-sol"
+ridl_version = "ridl 0.21.0"
 run = 1
 skill = true
 task = "review-0002"
@@ -21,11 +22,11 @@ judge_host = "copilot"
 judge_model = "claude-sonnet-5.5"
 met = [true, true, true, true, true, true]
 reasons = [
-  "Section 6 notes one interface combines map operations, lifecycle administration, navigation and recovery, and the migration proposes separating navigation, maps/costmaps, lifecycle and recovery capabilities.",
-  'It notes IsPathValidRequest preserves defaults while the query takes seven separate arguments, and the caller must reproduce 254, false, "", etc., meaning the call parameters carry no defaults.',
-  "It states the interface exposes commands and feedback but no result interaction, so result structs exist but callers cannot receive completion or failure, tied to the provenance translation rule.",
-  "The proposal gives actions explicit acceptance, goal IDs, correlated feedback, terminal results and cancellation in a separate API, without claiming the compiler implements ROS action execution.",
-  "Section 4 says saveMap and loadMap are queries because every ROS service maps to a query, and the separate proposal addresses side-effect semantics for a new API.",
-  "It attributes the omission to the provenance's explicit translation rule rather than a porter mistake, and states the evidence port was left unchanged.",
+  "The v2 proposal groups capabilities around navigation, recovery, maps/costmaps, and lifecycle management, but the review never states that the single interface mixes these responsibilities.",
+  "It notes IsPathValidRequest retains defaults like maxCost=254, while the flattened query requires all seven arguments and does not carry those defaults.",
+  "It notes seven goal commands have feedback events but no result interaction, so callers cannot obtain terminal success or error info via this interface.",
+  "The v2 proposal adds goal IDs, correlated feedback, terminal results, cancellation and status recovery, and frames it as a separate façade without claiming the compiler executes ROS actions.",
+  "It says clearEntireCostmap, loadMap, manageLifecycleNodes and saveMap are queries because of mechanical mapping, and warns about caching and retry, while proposing a separate v2 design.",
+  "It states the omission follows the documented translation rule and is not accidental, and it left all files unchanged.",
 ]
 score = 1.0
