@@ -2578,3 +2578,83 @@ fn remote_pin_constraint_history(received: bool) {
         "only the remote pin changed"
     );
 }
+
+/// An open enum set whose highest flag is bit 7, held by the payload of the
+/// interface's signal: its FlatBuffers integer is one byte wide.
+const FLAGS_BIT_7: &str = "package veh.cluster
+open enumset Flags {
+  A = 0
+  B = 7
+}
+struct Status {
+  flags: Flags
+}
+interface Sensors {
+  signal status: Status @10ms
+}
+";
+
+/// `FLAGS_BIT_7` with a flag appended at bit 8: the FlatBuffers integer grows
+/// from one byte to two. The append is compatible under every other encoding.
+const FLAGS_BIT_8: &str = "package veh.cluster
+open enumset Flags {
+  A = 0
+  B = 7
+  C = 8
+}
+struct Status {
+  flags: Flags
+}
+interface Sensors {
+  signal status: Status @10ms
+}
+";
+
+/// Publishes `FLAGS_BIT_7` under `manifest`, appends the flag at bit 8, and
+/// returns `(baseline_hash, built_compatible, published_history, new_hash)`
+/// as `judge_edit` does.
+fn judge_flags_append(label: &str, manifest: &str) -> (String, Vec<String>, Vec<String>, String) {
+    let dir = TempDir::new(label);
+    let first = TempDir::new(&format!("{label}-first"));
+    let out = TempDir::new(&format!("{label}-out"));
+    let root = set_workspace(&dir, manifest, FLAGS_BIT_7);
+    publish(&root);
+    let baseline_hash = describe_hash(&root, first.path(), UNIT);
+    set_workspace(&dir, manifest, FLAGS_BIT_8);
+    build_catalog(&root, out.path());
+    let built = compatible_of(out.path(), UNIT);
+    let new_hash = hex_of_bytes(&describe(out.path(), UNIT)["hash"]);
+    assert_ne!(new_hash, baseline_hash, "the edit changes the catalog");
+    publish(&root);
+    (baseline_hash, built, history_lines(&root), new_hash)
+}
+
+/// Under `[backend.rust] encodings = ["flatbuffers"]`, an open enum set
+/// reachable from a unit that is appended from bit 7 to bit 8 widens the
+/// FlatBuffers integer, so `ridl build` lists no earlier catalog and
+/// `ridl baseline` restarts the chain.
+#[test]
+fn a_flatbuffers_width_change_ends_the_history_when_the_manifest_lists_flatbuffers() {
+    let (_, built, history, new_hash) =
+        judge_flags_append("flatbuffers-width", FLATBUFFERS_MANIFEST);
+    assert_eq!(built, Vec::<String>::new(), "ridl build lists nothing");
+    assert_eq!(history, vec![new_hash], "ridl baseline restarts the chain");
+}
+
+/// The same append with no backend table listing `flatbuffers` is
+/// compatible, so both commands carry the chain.
+#[test]
+fn the_same_enum_set_append_carries_the_history_without_flatbuffers() {
+    let (baseline_hash, built, history, new_hash) =
+        judge_flags_append("no-flatbuffers-width", MANIFEST);
+    assert_eq!(
+        built,
+        vec![baseline_hash.clone()],
+        "ridl build carries the chain"
+    );
+    assert_eq!(
+        history,
+        vec![new_hash, baseline_hash],
+        "ridl baseline carries the chain"
+    );
+}
