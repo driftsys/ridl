@@ -1656,6 +1656,13 @@ fn a_host_inherits_only_its_allowed_variables() {
         };
         assert!(has(&env, home), "{name} lacks {home}:\n{env}");
     }
+    // An agent that runs `ridl` from its shell finds the eval's binary first.
+    let dir = fakes.ridl.parent().unwrap().display().to_string();
+    for name in ["claude-agent.env", "codex-agent.env", "copilot-agent.env"] {
+        let env = read(name);
+        let path = env.lines().find_map(|l| l.strip_prefix("PATH=")).unwrap();
+        assert!(path.starts_with(&format!("{dir}:")), "{name}: PATH={path}");
+    }
 }
 
 #[test]

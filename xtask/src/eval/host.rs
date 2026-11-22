@@ -355,6 +355,10 @@ pub fn agent_invocation(host: Host, model: &str, dirs: &RunDirs, prompt: &str) -
             vec![(s("COPILOT_HOME"), path(&dirs.home))],
         ),
     };
+    let mut env = env;
+    if let Some(path) = agent_path(&ridl_binary(), std::env::var("PATH").ok().as_deref()) {
+        env.push((s("PATH"), path));
+    }
     Invocation {
         program: host.binary(),
         args,
@@ -363,6 +367,22 @@ pub fn agent_invocation(host: Host, model: &str, dirs: &RunDirs, prompt: &str) -
         cwd: dirs.workspace.clone(),
         stdin: prompt.to_owned(),
     }
+}
+
+/// The `PATH` of an agent run: the directory of the `ridl` binary that the
+/// MCP server and the scoring use, then the eval's own `PATH`, so that an
+/// agent that runs `ridl` from its shell gets the same binary and not an
+/// older one installed on `PATH`. `None` when `ridl` is a bare name, which
+/// `PATH` already resolves.
+fn agent_path(ridl: &str, path: Option<&str>) -> Option<String> {
+    let dir = Path::new(ridl)
+        .parent()
+        .filter(|d| !d.as_os_str().is_empty())?;
+    let dir = std::path::absolute(dir).ok()?;
+    Some(match path {
+        Some(p) if !p.is_empty() => format!("{}:{p}", dir.display()),
+        _ => dir.display().to_string(),
+    })
 }
 
 /// How a host command ended.
@@ -1372,5 +1392,17 @@ mod tests {
             Some("0.22.0-preview.1")
         );
         assert_eq!(version_of(""), None);
+    }
+
+    #[test]
+    fn an_agent_finds_the_eval_ridl_first_on_its_path() {
+        assert_eq!(
+            agent_path("/opt/r/target/debug/ridl", Some("/usr/bin:/bin")),
+            Some("/opt/r/target/debug:/usr/bin:/bin".to_owned())
+        );
+        assert_eq!(agent_path("/opt/r/ridl", None), Some("/opt/r".to_owned()));
+        assert_eq!(agent_path("ridl", Some("/usr/bin")), None);
+        let relative = agent_path("target/debug/ridl", Some("/bin")).unwrap();
+        assert!(relative.starts_with('/') && relative.ends_with("target/debug:/bin"));
     }
 }
