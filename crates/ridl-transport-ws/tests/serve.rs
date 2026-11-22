@@ -2989,19 +2989,23 @@ fn a_credit_adds_to_the_credit_left() {
     close(ws, handle);
 }
 
-/// A `stream_credit` restarts the abandon bound: credits every 100 ms keep a
-/// stream whose provider sends nothing open for twice the bound, and the
+/// A `stream_credit` restarts the abandon bound: credits every 250 ms keep a
+/// stream whose provider sends nothing open for more than the bound, and the
 /// stream is abandoned once they stop.
 ///
 /// Mutation: do not restart the bound on a credit.
 #[test]
 fn a_credit_restarts_the_abandon_bound() {
     let (mut config, notes) = recording();
-    config.call_abandon_after = Duration::from_millis(300);
+    config.call_abandon_after = Duration::from_millis(1000);
+    // The credits are 250 ms apart against a bound of 1000 ms, so a stall of
+    // 750 ms is needed to end the stream early. Six credits span 1500 ms,
+    // more than the bound, so a bound that a credit does not restart ends the
+    // stream before the last credit.
     let (mut ws, handle, _p) = stream_session(config, SUBPROTOCOL_V3, false);
     request(&mut ws, STREAM_QUERY, 1, &[64]);
     for _ in 0..6 {
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(250));
         grant(&mut ws, 1, 1);
         if let Some(m) = try_recv(&mut ws, Duration::from_millis(1)) {
             panic!("a frame while the credits flow: {:?}", decode(&m));
