@@ -8,7 +8,7 @@ and exit criteria; **Stories** are the work items under it. Sizing is rough (S �
 days, M ≈ 1–2 weeks, L ≈ 3–6 weeks) and relative, not a schedule.
 
 **This page is the forward plan.** What has already shipped — the delivery
-narratives for Epics 0, 1, 2 and 9 — is in
+narratives for Epics 0, 1, 2, 8 and 9 — is in
 [the landed record](archive/roadmap-landed-record.md). The dated
 [issue backlog](BACKLOG.md) records current triage priorities and remaining bugs
 and technical debt. The scope below was set by the re-scope of 2026-09-12,
@@ -275,7 +275,7 @@ E11.0 ridl-rt, landed ─┬─→ E11.1 frame spec ─→ (#801) ─→ E11.9 r
                        └─→ E11.15 ridl-loopback — no frame, no socket
 E11.13 interaction face MVP — deliberately out of sequence, before E11.1 and E11.9
       ─→ E11.14 the face and a codec reach ridl build — after E11.15 and one codec
-E3.1–E3.3 · E9.10 · E9.12 · E8 — a thread beside all of it
+E3.1–E3.3 · E9.10 · E9.12 — a thread beside all of it
 ```
 
 **The on-request encodings change runs first among the three codec and transport
@@ -932,117 +932,6 @@ removed. The projections themselves landed; see the landed record.
 | E9.10 | The **schema hash over the IR**, not over the emitted schema                                                                                                                                                                                                          | two targets of one IR agree on identity                  | M    |
 | E9.12 | Drift the design surfaced: general-form R5 puts `@timing` before attributes (maintainer decision D-4), and `family.ungram` and ridl Appendix C now match it; `InterfaceDef`/`ServiceDef` gain the `AttrBlock` the deferred `labels`/`deprecated` promotion also needs | R5 matches `family.ungram`; one grammar edit serves both | S    |
 
-## Epic 8 — agent enablement ([ADR-0005](decisions/ADR-0005-agent-enablement.md))
-
-**Milestone:** an agent authors valid typl and ridl and evolves it provably.
-**Exit criteria:** skill and rules author valid typl/ridl; the MCP's
-`ridl_check`/`ridl_explain`/`ridl_diff` and the IR-query tools back a
-verify/evolve loop.
-
-**Six stories here, not seventeen: four landed and two were closed.** E8.4 and
-E8.8 to E8.14 and E8.16 are parked. E8.15, the rsdl skill profile
-(driftsys/ridl#87), was closed as not planned on 2026-11-11: the per-language
-references were removed (decided 2026-10-14) because the eval did not show a
-gain (ADR-0005, driftsys/ridl#1343). The issue reopens when an eval with several
-runs per task shows that a per-language reference improves the result. E8.2 and
-E8.3 were closed as not planned on the same date, for the same reason; a minimal
-`SKILL.md` shipped instead. E8.1, E8.5, E8.6 and E8.7 landed.
-
-The skill's effect was measured by the release record of 2026-11-22 (ADR-0035
-decision 12 and its Status): with the skill, the mechanical pass rate is 0.81 on
-Codex and on Copilot, against 0.67 and 0.58 without it. The maintainer waived
-the judge check of decision 11 for that record, so its rubric scores rest on an
-unchecked judge. Every story in this table has landed or been closed, and the
-rest of the epic is parked, so the first exit criterion (skill and rules author
-valid typl/ridl) holds as built and measured, and the second holds through the
-tools of E8.5 to E8.7. This page does not close the epic; its status is the
-maintainer's to set.
-
-| ID   | Story                                                                                                                                                                                                                                     | Rides | Done when                                                                                                                                                                                                                                                                                                    | Size |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
-| E8.1 | Rules file — 10–20 always-on "never/always" constraints, distilled from doctrines + the _error_ diagnostics (no semicolons, named-typl payloads, errors-as-data, command≠query, no inheritance, no upward refs, append-only + `reserved`) | E1    | **landed** (driftsys/ridl#963; driftsys/ridl#73 closed as completed) — `skills/ridl-authoring/rules.md`, 20 rules written by hand ([ADR-0035](decisions/ADR-0035-authoring-skill-and-evals.md) decision 1)                                                                                                   | S    |
-| E8.2 | Skill v0 (typl) — dense decision tables + worked examples for types/ranges/units/evolution, per `docs/archive/skill-ridl-authoring-outline.md`                                                                                            | E1    | **closed as not planned** (driftsys/ridl#74) — the decision tables were dropped; a minimal `skills/ridl-authoring/SKILL.md` shipped instead (driftsys/ridl#963), with the check instructions, a first look and pointers to the docs ([ADR-0035](decisions/ADR-0035-authoring-skill-and-evals.md) decision 3) | M    |
-| E8.3 | Skill extended to the ridl `interact` core — 5-kind selection table, timing, errors-as-data / `T\|E`, common-mistakes table keyed to codes                                                                                                | E2    | **closed as not planned** (driftsys/ridl#75) — the per-language references were removed, as for E8.2; the same `SKILL.md` holds a short ridl sample and links to the ridl reference ([ADR-0035](decisions/ADR-0035-authoring-skill-and-evals.md) decision 3)                                                 | M    |
-| E8.5 | MCP server skeleton — thin binary over the shared salsa crates, sibling of the LSP, **no second parser**; stdio transport                                                                                                                 | E2    | **landed** (driftsys/ridl#327) — `ridl-mcp`, a stdio server over the compiler crates with no parser of its own                                                                                                                                                                                               | M    |
-| E8.6 | Verify/evolve tools — `ridl_check` (coded diagnostics + **fix-its verbatim**), `ridl_explain` (error index), `ridl_diff` (0/1/2 + breaking list)                                                                                          | E2    | **landed** (driftsys/ridl#668, #677) — the per-diagnostic structure is identical to the CLI's, because both go through one `ridl_core::diag::to_json`; the envelope and `span.path` differ by construction (amended — see note below)                                                                        | M    |
-| E8.7 | Grounding / IR-query tools — `ridl_describe_type`, `ridl_list_interactions`, `ridl_resolve`                                                                                                                                               | E2    | **landed** (driftsys/ridl#668, #677) — return real IR data; agent cites existing symbols, not hallucinated ones                                                                                                                                                                                              | M    |
-
-**E8.6's acceptance criterion was amended during implementation (the `ridl-mcp`
-v0 slice, 2026-09-13).** The original wording, "outputs are byte-identical to
-CLI/LSP," is not reachable by this design, and not only because of the envelope:
-`ridl_check` and `ridl check --format json` share one diagnostic serializer
-(`ridl_core::diag::to_json`), so each diagnostic object has the same shape, but
-the two run different front ends (the CLI resolves a workspace, the tool checks
-one standalone source), and the tool wraps its array in `{"diagnostics": [ … ]}`
-for MCP's structured-output requirement, and `span.path` differs by construction
-— the tool's input is a source string with no file, so it registers under the
-fixed synthetic name `input.typl`/`input.ridl` rather than a real path. The LSP
-side of the original wording was never a JSON comparison to begin with:
-`ridl-lsp` renders diagnostics through `lsp_types::Diagnostic`
-(`crates/ridl-lsp/src/convert.rs`), not `ridl_core::diag::to_json`, so there was
-no shared serializer for "byte-identical to ... LSP" to hold through. The row
-above states the reachable criterion; see `crates/ridl-mcp/README.md`, "What
-this tool shares with `ridl check --format json <file>`, and where it differs."
-
-**E8.6 and E8.7 landed as piece 1a of the devex and agent tracks**
-(driftsys/ridl#668, then the follow-up #677). `ridl mcp` serves eight read-only
-tools over a workspace on disk: `ridl_check` by path with unsaved overlays,
-`ridl_explain`, `ridl_resolve`, `ridl_describe_type`, `ridl_list_interactions`,
-`ridl_references`, `ridl_dependencies` and `ridl_diff`. `ridl_references` and
-`ridl_dependencies` are additions to the story rows, and both count rsdl
-component uses. The decisions are
-[ADR-0025](decisions/ADR-0025-workspace-aware-mcp-tools.md) and the amended
-[ADR-0005](decisions/ADR-0005-agent-enablement.md); the as-built description is
-[the design record](design/mcp-workspace-tools.md). The `Done when` of E8.6 is
-met in path mode with the differences the crate README lists. The long-form
-error index that `ridl_explain` would carry is story E4.2, not part of this
-work.
-
-**Spec 0 of the devex and agent tracks, the lint foundation, landed on
-2026-10-04** (driftsys/ridl#678; design and plan in driftsys/ridl#671). Every
-Warning and Info catalogue code is a named lint, a `[lints]` table in
-`ridl.toml` sets its level, `ridl check --format sarif` projects the
-diagnostics, and the language server and the MCP tool `ridl_check` apply the
-same levels. The decisions are
-[ADR-0024](decisions/ADR-0024-lint-registry-and-levels.md); the user-facing
-description is [the lints page of the book](book/lints.md). Its debt is #682,
-and #529 (a workspace member entered alone ignores the root's `[lints]`) stayed
-open until spec 2a.
-
-**Spec 2a of the devex and agent tracks, documentation in the source, landed on
-2026-10-04** (#703, closes #529). The checker reads the doc comment of every
-declaration and member, a parameter and every rsdl declaration and body line
-included, into the IR. `[Name]` doc links and `@see` targets resolve with the
-rules of a type reference, and the IR stores each resolved target. The tags are
-`@see`, `@since`, `@deprecated` and `@labels`. Six new doc lints join TYPL-404
-and TYPL-405, among them `missing-docs` and `doc-comment-style`, the first lint
-that is `allow` by default. `ridl_ir::rules` extracts the rules of an item, and
-the language server shows the doc and those rules on hover and in completion,
-and completes, follows and renames doc links. An entry inside a workspace member
-now loads its workspace in every entry point. The decisions are
-[ADR-0026](decisions/ADR-0026-doc-comments.md); the user-facing description is
-[the documenting chapter of the book](book/documenting.md). How generated code
-renders the docs is built, as
-[ADR-0028](decisions/ADR-0028-docs-in-generated-code.md) records.
-
-**Piece 1b of the devex and agent tracks, design lints and metrics, landed on
-2026-10-06** (design and plan in driftsys/ridl#694; corpus and eval seed in
-#707; checks and tool in #712; labelling and calibration in #738). Three subsets
-of public interface definitions — ROS 2, MAVLink and COVESA VSS — are ported
-into RIDL under `evals/`, with ten eval tasks seeded for piece 1c. Five
-candidate checks over the whole workspace were run on that corpus, and their 820
-findings were labelled blind by two labellers and adjudicated by Sebastien.
-Three ship as lints at `info`: `inconsistent-unit` (TYPL-222), `duplicate-shape`
-(TYPL-224) and `low-cohesion-interface` (RIDL-414); `inconsistent-abbreviation`
-and `package-fan-out` fell below the precision floor and did not ship. The MCP
-tool `ridl_metrics` reports package coupling and interface cohesion with no
-threshold, and a test pins the findings per lint per corpus workspace. The
-decisions are
-[ADR-0027](decisions/ADR-0027-design-lints-calibrated-on-a-corpus.md); the
-as-built description is [the design record](design/design-lints.md), and the
-user-facing description is
-[the lints page of the book](book/lints.md#how-the-design-lints-levels-were-set).
-
 ---
 
 # Step 2 — TypeScript and the plugin system
@@ -1588,68 +1477,69 @@ stories (unscheduled)" in
 and in its closed issue. Each block has one line saying what reopens it, so that
 reopening is an observation rather than an argument.
 
-| Parked                                   | Reopened by                                                                           |
-| ---------------------------------------- | ------------------------------------------------------------------------------------- |
-| E3.4–E3.6                                | a contract at the person or world boundary that must diff                             |
-| E4.1–E4.4                                | a second organisation adopting the language                                           |
-| E5 (rmdl implementation)                 | its draft finalised and rsdl shipped, or a consumer whose behaviour must be generated |
-| E7 (rxdl's ecosystem half and spellings) | rmdl — rxdl's backend and its domain spellings are reopened with it                   |
-| `ridl-engine`                            | rmdl — execution is its subject                                                       |
-| E12.3                                    | E4.5b, plus a contract-generic consumer                                               |
-| E12.6–E12.10                             | a test plane that needs that story                                                    |
-| E13 (the gateway)                        | a second consumer                                                                     |
-| E8 parked stories                        | a regression the four landed stories did not catch                                    |
-| The plugin protocol's wasm host          | the browser playground                                                                |
+| Parked                                      | Reopened by                                                                           |
+| ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| E3.4–E3.6                                   | a contract at the person or world boundary that must diff                             |
+| E4.1–E4.4                                   | a second organisation adopting the language                                           |
+| E5 (rmdl implementation)                    | its draft finalised and rsdl shipped, or a consumer whose behaviour must be generated |
+| E7 (rxdl's ecosystem half and spellings)    | rmdl — rxdl's backend and its domain spellings are reopened with it                   |
+| `ridl-engine`                               | rmdl — execution is its subject                                                       |
+| E12.3                                       | E4.5b, plus a contract-generic consumer                                               |
+| E12.6–E12.10                                | a test plane that needs that story                                                    |
+| E13 (the gateway)                           | a second consumer                                                                     |
+| E8 parked stories (E8.4, E8.8–E8.14, E8.16) | a regression the landed stories did not catch                                         |
+| E8.15 (the rsdl skill profile)              | an eval with several runs per task showing that a per-language reference helps        |
+| The plugin protocol's wasm host             | the browser playground                                                                |
 
 ---
 
 # Milestone summary
 
-| Epic | Milestone                       | Step                                                                               |
-| ---- | ------------------------------- | ---------------------------------------------------------------------------------- |
-| E0   | walking skeleton                | landed — internal                                                                  |
-| E1   | typl schema language            | landed — **v0.1 preview**                                                          |
-| E2   | ridl contract boundary          | landed — v0.x                                                                      |
-| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
-| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
-| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR             |
-| E17  | layout inputs for plugins       | **step 1**, landed                                                                 |
-| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
-| E11  | the runtime library             | **step 1** — generated code links a library                                        |
-| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |
-| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                               |
-| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                             |
-| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                          |
-| E8   | agent enablement                | **step 1** — threads alongside                                                     |
-| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                    |
-| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
-| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
-| none | Kotlin, the first plugin        | after step 2                                                                       |
-| none | the next breaking release       | after 0.14.0 — LIM3, E2.14 and E6.20                                               |
+| Epic | Milestone                       | Step                                                                                    |
+| ---- | ------------------------------- | --------------------------------------------------------------------------------------- |
+| E0   | walking skeleton                | landed — internal                                                                       |
+| E1   | typl schema language            | landed — **v0.1 preview**                                                               |
+| E2   | ridl contract boundary          | landed — v0.x                                                                           |
+| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed      |
+| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                           |
+| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR                  |
+| E17  | layout inputs for plugins       | **step 1**, landed                                                                      |
+| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                                |
+| E11  | the runtime library             | **step 1** — generated code links a library                                             |
+| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                           |
+| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                                    |
+| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                                  |
+| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                               |
+| E8   | agent enablement                | closed 2026-11-22 by the maintainer — a skill, rules and the MCP tools; the rest parked |
+| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                         |
+| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                            |
+| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                                   |
+| none | Kotlin, the first plugin        | after step 2                                                                            |
+| none | the next breaking release       | after 0.14.0 — LIM3, E2.14 and E6.20                                                    |
 
-| Epic   | Milestone                        | Step                                                                                   |
-| ------ | -------------------------------- | -------------------------------------------------------------------------------------- |
-| E0     | walking skeleton                 | landed — internal                                                                      |
-| E1     | typl schema language             | landed — **v0.1 preview**                                                              |
-| E2     | ridl contract boundary           | landed — v0.x                                                                          |
-| E9     | wire SSOT                        | **step 1** — the hash over the IR and the R5 drift removed; the projections landed     |
-| E15    | interface identity and the lock  | **step 1** — an interface's number is recorded in its package                          |
-| E16    | the catalog descriptor           | **step 1**, landed — an engine reads a catalog without decoding the IR                 |
-| E17    | layout inputs for plugins        | **step 1**, landed                                                                     |
-| E6     | rsdl, rewritten                  | **step 1** — a system is described and lowered to the IR                               |
-| E11    | the runtime library              | **step 1** — generated code links a library                                            |
-| E14    | typl and ridl finalization       | **step 1** — the references stop being drafts                                          |
-| E10    | typl value objects               | **step 1** — types that cannot hold an invalid value                                   |
-| none   | Rust codegen finalized           | **step 1** — the three payload codecs, byte-conformant                                 |
-| E3     | boundary model, core             | **step 1** — the attribute layer enforced                                              |
-| E8     | agent enablement                 | **step 1** — threads alongside                                                         |
-| E12    | the TypeScript framework         | **step 2** — a second language, and an emulator                                        |
-| E4.5   | the plugin protocol              | **step 2** — the extension seam every domain reaches through                           |
-| E7     | the `.rxdl` profile, trimmed     | **step 2** — types, interfaces and wiring in one file                                  |
-| none   | Kotlin, the first plugin         | after step 2                                                                           |
-| E18    | exact numerics                   | the next two breaking releases — the design and the policy, then the type and the wire |
-| E19    | deployment and instance identity | MVP 0 with #1179, then MVP 1 — production, then the debug socket                       |
-| E11.23 | the stream forget signal         | landed in #1298; ships in the next release, after 0.17.0                               |
+| Epic   | Milestone                        | Step                                                                                    |
+| ------ | -------------------------------- | --------------------------------------------------------------------------------------- |
+| E0     | walking skeleton                 | landed — internal                                                                       |
+| E1     | typl schema language             | landed — **v0.1 preview**                                                               |
+| E2     | ridl contract boundary           | landed — v0.x                                                                           |
+| E9     | wire SSOT                        | **step 1** — the hash over the IR and the R5 drift removed; the projections landed      |
+| E15    | interface identity and the lock  | **step 1** — an interface's number is recorded in its package                           |
+| E16    | the catalog descriptor           | **step 1**, landed — an engine reads a catalog without decoding the IR                  |
+| E17    | layout inputs for plugins        | **step 1**, landed                                                                      |
+| E6     | rsdl, rewritten                  | **step 1** — a system is described and lowered to the IR                                |
+| E11    | the runtime library              | **step 1** — generated code links a library                                             |
+| E14    | typl and ridl finalization       | **step 1** — the references stop being drafts                                           |
+| E10    | typl value objects               | **step 1** — types that cannot hold an invalid value                                    |
+| none   | Rust codegen finalized           | **step 1** — the three payload codecs, byte-conformant                                  |
+| E3     | boundary model, core             | **step 1** — the attribute layer enforced                                               |
+| E8     | agent enablement                 | closed 2026-11-22 by the maintainer — a skill, rules and the MCP tools; the rest parked |
+| E12    | the TypeScript framework         | **step 2** — a second language, and an emulator                                         |
+| E4.5   | the plugin protocol              | **step 2** — the extension seam every domain reaches through                            |
+| E7     | the `.rxdl` profile, trimmed     | **step 2** — types, interfaces and wiring in one file                                   |
+| none   | Kotlin, the first plugin         | after step 2                                                                            |
+| E18    | exact numerics                   | the next two breaking releases — the design and the policy, then the type and the wire  |
+| E19    | deployment and instance identity | MVP 0 with #1179, then MVP 1 — production, then the debug socket                        |
+| E11.23 | the stream forget signal         | landed in #1298; ships in the next release, after 0.17.0                                |
 
 Rows are in step order, not numeric order, except the last, which is a release
 rather than a step — the numbering is identity, as the tracker section above
