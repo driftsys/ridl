@@ -4783,9 +4783,9 @@ fn appendix_a() -> v2::Package {
 }
 
 /// The generated Rust for the full Appendix A package compiles with `rustc` —
-/// the compile proof of the interaction layer for the Rust half. A minimal prelude stands in
-/// for the `veh.common` and `ridl.std` types the package imports, declared in
-/// the module path the cross-package references map to.
+/// the compile proof of the interaction layer for the Rust half. A minimal
+/// prelude stands in for the `veh.common` and `ridl.std` types the package
+/// imports, declared in the module path the cross-package references map to.
 #[test]
 fn appendix_a_compiles_with_rustc() {
     let Generated { rust_source, .. } =

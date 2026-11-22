@@ -8,8 +8,8 @@ syntax = "proto3";
 // reference §3–§14): interfaces holding the five interaction kinds —
 // signal, event, command, query, fixed — plus services publishing them.
 // Every v1 message appears here verbatim with unchanged field numbers;
-// the interaction-layer additions take exactly the numbers v1 earmarked for them
-// (ADR-0008 decision 8). The IR remains the centre of gravity between the
+// the interaction-layer additions take exactly the numbers v1 earmarked for
+// them (ADR-0008 decision 8). The IR remains the centre of gravity between the
 // front end and every backend and ecosystem tool (concept note §8.2).
 //
 // Exactness rule (ADR-0007 decision 9, extended by ADR-0008 decision 12):
@@ -32,9 +32,10 @@ syntax = "proto3";
 // convenience (typl §3.2) and would make ridl-diff comparisons dishonest.
 //
 // Field numbering scheme: envelope and data fields start at 1; oneof
-// members start at 10. The gaps v1 earmarked for the interaction layer are allocated here;
-// the remaining gaps stay commented, not `reserved`, because `reserved`
-// means "never use" while these numbers are earmarked for later profiles.
+// members start at 10. The gaps v1 earmarked for the interaction layer are
+// allocated here; the remaining gaps stay commented, not `reserved`, because
+// `reserved` means "never use" while these numbers are earmarked for later
+// profiles.
 package ridl.ir.v2;
 
 // A checked package — the unit of visibility, cycle checking, and
@@ -111,8 +112,8 @@ message Decl {
   repeated string labels = 5;
   // @deprecated reason string; absent when not deprecated (typl §14.2).
   optional string deprecated = 6;
-  // Interaction layer (earmarked 7–9): the interaction ordinal — 1-based declaration
-  // order across all interactions of the enclosing interface, one
+  // Interaction layer (earmarked 7–9): the interaction ordinal — 1-based
+  // declaration order across all interactions of the enclosing interface, one
   // sequence regardless of kind, reserved tombstones counted (ridl §11).
   // 0 for package-level declarations.
   uint32 ordinal = 7;
@@ -451,8 +452,8 @@ message FieldType {
     TupleType tuple = 13;
     ArrayType array = 14;
     MapType map = 15;
-    // Interaction layer (earmarked 16–19): the ridl-owned stream container (ridl §12).
-    // 17–19 remain open for later profiles.
+    // Interaction layer (earmarked 16–19): the ridl-owned stream container
+    // (ridl §12). 17–19 remain open for later profiles.
     StreamType stream = 16;
   }
 }
@@ -755,7 +756,10 @@ enum ContractKind {
 }
 
 // One require/ensure clause (ridl §13), lowered as an observer stub
-// (the lowering does not check the expression's types or values). source is the canonical expr text;
+// (the checker validates the clause against the guaranteed subset, and the
+// lowering stores its canonical text; a clause that reads live state is not
+// evaluated, and `ridl test` evaluates the rest). source is the canonical expr
+// text;
 // driftsys/ridl#704 tracks replacing it with a structured expr tree.
 message Contract {
   ContractKind kind = 1;

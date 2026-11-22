@@ -514,9 +514,10 @@ fn a_composed_service_compiles_and_round_trips_through_the_ir() {
 }
 
 /// Every code the ridl profile defines (ridl reference §16, plus the shared
-/// FORM/MANI/TYPL codes the ridl profile added or folded in), paired with where the corpus
-/// provokes it. `Showcase` means the `ridl-diag-showcase` entry emits it; every
-/// other variant names the reason it cannot live there and where it does live.
+/// FORM/MANI/TYPL codes the ridl profile added or folded in), paired with where
+/// the corpus provokes it. `Showcase` means the `ridl-diag-showcase` entry
+/// emits it; every other variant names the reason it cannot live there and
+/// where it does live.
 ///
 /// This table is the machine-checked half of the diagnostic index: a code
 /// listed as `Showcase` that stops firing fails
@@ -2444,7 +2445,8 @@ fn veh_cluster_generated_typescript_type_checks() {
 /// The interaction boundary narrows the typl type surface: optional in any
 /// interaction position, a map in any position, and a collection in return
 /// position are all rejected. Function signatures and a registry
-/// built on the interaction layer would inherit that rule, and it had no corpus instance before `narrowing.ridl`.
+/// built on the interaction layer would inherit that rule, and it had no corpus
+/// instance before `narrowing.ridl`.
 ///
 /// Asserted on the messages, not the codes. These paths report FORM-101 and
 /// FORM-102, both of which the showcase raises from several other places, so

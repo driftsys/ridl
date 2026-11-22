@@ -20,8 +20,8 @@ folded into the diagnostics index.
 
 ## Codes NOT exercisable from this single package
 
-Each is either not emitted by any typl pass yet, or needs more than one package, a
-distinct/broken manifest, or the network. None is a defect in this corpus.
+Each is either not emitted by any typl pass yet, or needs more than one package,
+a distinct/broken manifest, or the network. None is a defect in this corpus.
 
 ### Cataloged but not emitted by any typl pass
 

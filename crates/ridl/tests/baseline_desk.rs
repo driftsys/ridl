@@ -2576,8 +2576,8 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
 /// from `source.interfaces()` only. An inline shape is an `Interface` stored
 /// under `Service.shape`, outside `Package.interfaces`, so the fallback found
 /// nothing and the diagnostic was emitted detached. That was the sixth
-/// instance of the inline-shape blind spot the veh-cluster corpus set out to look for
-/// (`crates/ridlc/tests/corpus/veh-cluster/NOTES`).
+/// instance of the inline-shape blind spot the veh-cluster corpus set out to
+/// look for (`crates/ridlc/tests/corpus/veh-cluster/NOTES`).
 ///
 /// `DeclIndex::build` now walks `SourceFile::shapes()`, which yields an
 /// `interface` declaration and a service's inline shape alike, so the fallback

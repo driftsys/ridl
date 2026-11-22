@@ -3,10 +3,11 @@
 //! `ridl_ir::v2::Package::interfaces` and `ridl_syntax::ast::SourceFile::
 //! interfaces()` are **not** the complete set of interface bodies: a `service`
 //! declared with an inline body carries a full interface that lives outside
-//! both. Six defects with that one cause were found independently in the interaction layer —
-//! observer-stub lowering, both backends' transport identity, `ridl test`'s
-//! report, the Rust backend's collision check, and the desk check's span index.
-//! `Package::shapes()` and `SourceFile::shapes()` are the walks that see both.
+//! both. Six defects with that one cause were found independently in the
+//! interaction layer — observer-stub lowering, both backends' transport
+//! identity, `ridl test`'s report, the Rust backend's collision check, and the
+//! desk check's span index. `Package::shapes()` and `SourceFile::shapes()` are
+//! the walks that see both.
 //!
 //! Two scans run here, over every `.rs` file in the workspace:
 //!

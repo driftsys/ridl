@@ -727,7 +727,8 @@ mod tests {
         assert_eq!(significant_kinds("Speed"), vec![SyntaxKind::Ident]);
     }
 
-    // Step (c): `0.0..250.0` lexes float–dotdot–float (extended from the typl lexer).
+    // Step (c): `0.0..250.0` lexes float–dotdot–float (extended from the typl
+    // lexer).
     #[test]
     fn float_range_lexes_as_float_dotdot_float() {
         assert_eq!(

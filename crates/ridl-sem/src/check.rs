@@ -1303,14 +1303,14 @@ impl Checker<'_> {
     /// `internal` one (typl §3.3, ridl §14.5). One pass over the file's
     /// top-level items, whatever their kind — which is the fix for issue #161.
     /// The rule used to be a step of the typl definition lowering, so the two
-    /// declaration kinds of the interaction layer, `interface` and `service`, were never
-    /// checked at all: a public interface could carry an `internal` payload
-    /// (the Rust backend then emits a `pub` trait over a `pub(crate)` type,
-    /// which fails any consumer build under `-D warnings`) and a public service
-    /// could publish an `internal` interface. Driving the pass off the syntax
-    /// tree's own top-level children rather than off a list of lowering calls
-    /// is what makes the omission unrepresentable: a declaration kind added
-    /// later inherits the check without being wired to it.
+    /// declaration kinds of the interaction layer, `interface` and `service`,
+    /// were never checked at all: a public interface could carry an `internal`
+    /// payload (the Rust backend then emits a `pub` trait over a `pub(crate)`
+    /// type, which fails any consumer build under `-D warnings`) and a public
+    /// service could publish an `internal` interface. Driving the pass off the
+    /// syntax tree's own top-level children rather than off a list of lowering
+    /// calls is what makes the omission unrepresentable: a declaration kind
+    /// added later inherits the check without being wired to it.
     ///
     /// `package` and `import` headers name no type and carry no constraint, so
     /// they contribute no exposure position and need no exclusion of their own.
@@ -4145,8 +4145,8 @@ impl Checker<'_> {
     }
 
     /// Lowers one surviving interface member to its interaction `Decl`
-    /// (ridl §14.1): the doc envelope (typl §14 through the typl doc scanner), the
-    /// §11 ordinal, and the kind. Visibility and `is_error` stay unset on
+    /// (ridl §14.1): the doc envelope (typl §14 through the typl doc scanner),
+    /// the §11 ordinal, and the kind. Visibility and `is_error` stay unset on
     /// interactions.
     fn lower_interaction(&mut self, member: &ast::InterfaceMember, ordinal: u32) -> v2::Decl {
         // The interaction name is half of the observer id its contracts carry
@@ -5219,8 +5219,8 @@ impl Checker<'_> {
     /// Every lowered clause is also an **observer stub**: the reads it
     /// resolves ([`expr::collect_refs`]) — signals as canonical
     /// `Interface.signalName`, parameters by name, `result` as a flag — plus
-    /// `observer_id`, the handle that observer tooling, which does not exist yet, is expected to
-    /// address a single clause by.
+    /// `observer_id`, the handle that observer tooling, which does not exist
+    /// yet, is expected to address a single clause by.
     ///
     /// The id is `"{Interface}.{interaction}.{require|ensure}[{i}]"`, and its
     /// guarantee is precisely **positional**: `i` counts the interaction's
@@ -10941,13 +10941,13 @@ mod tests {
     // --- TYPL-005 and RIDL-143 on the interaction layer (issue #161) -------
     //
     // The exposure rule used to be a step of the typl definition lowering, so
-    // the two declaration kinds of the interaction layer — `interface` and `service` — were
-    // never checked: a public interface over an `internal` payload compiled
-    // with zero diagnostics and then failed a consumer's `-D warnings` build,
-    // and a public service could publish an `internal` interface. Each test
-    // below pairs the refusal with the legal case it must leave alone; the
-    // rule is about a *public* item naming a package-private one, and
-    // rejecting `internal` over `internal` would be the worse failure.
+    // the two declaration kinds of the interaction layer — `interface` and
+    // `service` — were never checked: a public interface over an `internal`
+    // payload compiled with zero diagnostics and then failed a consumer's
+    // `-D warnings` build, and a public service could publish an `internal`
+    // interface. Each test below pairs the refusal with the legal case it must
+    // leave alone; the rule is about a *public* item naming a package-private
+    // one, and rejecting `internal` over `internal` would be the worse failure.
 
     /// Every ridl type position is an exposure position. The fixture names one
     /// `internal` type from each of them at once — a signal, event and fixed
@@ -14033,8 +14033,8 @@ interface I {\n\
 
     #[test]
     fn appending_a_clause_does_not_renumber_the_earlier_observer_ids() {
-        // The observer id is the handle that observer tooling, which does not exist
-        // yet, is expected to
+        // The observer id is the handle that observer tooling, which does not
+        // exist yet, is expected to
         // address a single clause by, so appending a clause must leave every
         // earlier id untouched — which is why `i` is scoped to the clause kind
         // rather than counted across kinds. (Removal is the known limitation,

@@ -778,9 +778,9 @@ pub mod v2 {
     /// shape list (the single `INLINE` slot, ADR-0015 decision 14), which
     /// lives outside `interfaces`; a consumer that walks `interfaces` alone
     /// silently misses it. Six defects of exactly that shape were found
-    /// independently in the interaction layer — observer-stub lowering, both backends'
-    /// transport identity, `ridl test`'s report, the Rust backend's collision
-    /// check, and the desk check's span index.
+    /// independently in the interaction layer — observer-stub lowering, both
+    /// backends' transport identity, `ridl test`'s report, the Rust backend's
+    /// collision check, and the desk check's span index.
     /// [`Package::shapes`] is the one walk that sees both, the way
     /// [`fallible_transport_identity`] is the one transport-identity
     /// derivation.

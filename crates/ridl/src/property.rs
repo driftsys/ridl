@@ -26,7 +26,8 @@
 //!    reading no parameter has nothing to vary and is evaluated once, reported
 //!    as constant rather than as a sample count it did not earn.
 //! 3. **`ensure` clauses.** Listed as observer stubs only. A postcondition needs
-//!    a `result`, which needs a provider; executing one needs a reference oracle, which this workspace does not have.
+//!    a `result`, which needs a provider; executing one needs a reference
+//!    oracle, which this workspace does not have.
 //!
 //! **What section 2 does not try.** Boundary values are zipped across
 //! parameters with wrapping, not combined exhaustively: every parameter reaches
@@ -418,7 +419,8 @@ fn run_contract(
     };
 
     // Section 3: an `ensure` is listed, never run. Without a provider there is
-    // no `result` to bind, so there is nothing to evaluate without a reference oracle.
+    // no `result` to bind, so there is nothing to evaluate without a reference
+    // oracle.
     if is_ensure {
         return report(ContractStatus::ObserverStub);
     }

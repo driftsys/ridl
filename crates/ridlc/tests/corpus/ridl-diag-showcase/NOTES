@@ -30,8 +30,8 @@ FORM-102, which the set-equality guard raises from several other places and so
 cannot tell apart, which is why
 `showcase_pins_the_interaction_boundary_narrowings` asserts each *message*
 individually. The rule would be inherited by function signatures and a registry
-built on the interaction layer, so a position that quietly started accepting one of these would
-otherwise go unnoticed.
+built on the interaction layer, so a position that quietly started accepting one
+of these would otherwise go unnoticed.
 
 `main/inline_shape.ridl` is the exception to "one file per family": it re-provokes
 RIDL-201, RIDL-301, RIDL-302 and RIDL-308 from inside a service's *inline* shape.

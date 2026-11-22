@@ -193,9 +193,9 @@ const RUST_BACKEND_DEV_ONLY: &[&str] = &[
     "ridl-backend-proto",
 ];
 
-/// The packages under the stronger boundary of the catalog descriptor: none of them may reach any of [`PLANUS_CRATES`] or
-/// [`PROST_CRATES`] through any kind of dependency edge, dev included,
-/// because a generated package links them.
+/// The packages under the stronger boundary of the catalog descriptor: none of
+/// them may reach any of [`PLANUS_CRATES`] or [`PROST_CRATES`] through any kind
+/// of dependency edge, dev included, because a generated package links them.
 const RUNTIME_PACKAGES: &[&str] = &["ridl-rt"];
 
 /// Every package reachable from `package` by NORMAL dependency edges only,
@@ -315,8 +315,8 @@ fn the_runtime_reaches_no_planus_crate() {
                  \n\
                  `{package}` is the crate every generated package links, so it \
                  must not depend on planus in any way, not even as a \
-                 dev-dependency. The \
-                 toolchain may reach planus through `ridl-descriptor` instead.\n",
+                 dev-dependency. \
+                 The toolchain may reach planus through `ridl-descriptor` instead.\n",
                 path = path.unwrap_or_default(),
             );
         }
@@ -471,8 +471,8 @@ fn the_generated_crate_reaches_no_planus_crate() {
                  `examples/cabin`, the workspace of the crate `ridl build` \
                  generates: {path}\n\
                  \n\
-                 A generated package must not depend on planus in any way \
-                 : look for the edge in \
+                 A generated package must not depend on planus in any way. \
+                 Look for the edge in \
                  the generated manifest, in `ridl-rt`, or in `ridl-loopback`. \
                  `examples/cabin/server` is not checked: it reads the catalog \
                  descriptor through `ridl-transport-ws`'s `descriptor` \
