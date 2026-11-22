@@ -2118,6 +2118,79 @@ fn tsdoc_link_to_a_foreign_constant_the_foreign_module_skips_is_a_code_span() {
     );
 }
 
+/// Two packages declare a scalar of the same name with different backings, a
+/// float in `a.pkg` and a 64-bit integer in `b.pkg`. Each constant takes the
+/// backing of the package its type names.
+#[test]
+fn a_foreign_constant_takes_the_backing_of_its_own_package() {
+    let b_speed = v2::Decl {
+        name: "Speed".to_string(),
+        ..odometer_decl()
+    };
+    let a = package("a.pkg", vec![speed_decl()]);
+    let b = package("b.pkg", vec![b_speed]);
+    let local = package(
+        "veh.common",
+        vec![
+            foreign_typed_const("FROM_A", "a.pkg.Speed", "50.5"),
+            foreign_typed_const("FROM_B", "b.pkg.Speed", "7"),
+        ],
+    );
+    let model = ridl_ir::codegen::lower(&local, &[&a, &b]);
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(
+        source.contains("export const FROM_A = 50.5;"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains("export const FROM_B = 7n;"),
+        "got:\n{source}"
+    );
+}
+
+/// A doc link to a constant of another package, typed by a scalar, renders as
+/// a link: the rule that decides whether the foreign module emits the
+/// constant agrees with `emit_const`.
+#[test]
+fn tsdoc_link_to_a_foreign_constant_typed_by_a_scalar_is_a_link() {
+    let other = package(
+        "other.pkg",
+        vec![
+            speed_decl(),
+            foreign_typed_const("LIMIT", "other.pkg.Speed", "50.5"),
+        ],
+    );
+    let doc = "Bounded by [other.pkg.LIMIT].";
+    let holder = v2::StructDef {
+        members: vec![field_member(named_field(
+            "limit",
+            1,
+            "other.pkg.LIMIT",
+            false,
+            init_value(false, None),
+        ))],
+        fixed_layout: false,
+    };
+    let local = package(
+        "veh.common",
+        vec![v2::Decl {
+            doc: doc.to_string(),
+            links: vec![doc_link(doc, "[other.pkg.LIMIT]", "other.pkg.LIMIT")],
+            ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+        }],
+    );
+    let model = ridl_ir::codegen::lower(&local, &[&other]);
+    let source = super::generate_with(&local, &model)
+        .expect("generation succeeds")
+        .source;
+    assert!(
+        source.contains("Bounded by {@link other_pkg.LIMIT}."),
+        "got:\n{source}"
+    );
+}
+
 /// The packages of the contract tests: `other.pkg` declares a public `Thing`
 /// and a ranged scalar `Speed`; `veh.common` holds a field of each type, and
 /// a doc that links `Thing`.
