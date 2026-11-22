@@ -302,6 +302,7 @@ macro_rules! suite {
             calls::two_callers_on_one_provider_are_two_claims_under_one_seq,
             calls::a_caller_sequence_number_counts_that_caller_calls,
             calls::a_settled_outcome_reports_the_contract_error_the_provider_settled,
+            calls::a_settled_invalid_value_reaches_the_caller_with_its_violation,
             calls::a_claim_is_presented_once_and_settled_once,
             calls::an_oversized_claim_is_reported_with_its_id_and_is_not_consumed,
             calls::an_unread_claim_is_settled_by_its_id,

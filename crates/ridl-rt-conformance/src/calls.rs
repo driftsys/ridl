@@ -8,6 +8,7 @@
 
 use ridl_rt::contract::InterfaceNo;
 use ridl_rt::error::{CallError, Contract, Transport};
+use ridl_rt::payload::{Rule, Violation};
 use ridl_rt::port::{Caller, ClaimId, Handler, ReadError, SendError, SettleError};
 use ridl_rt::trace::TraceContext;
 
@@ -175,6 +176,32 @@ pub fn a_settled_outcome_reports_the_contract_error_the_provider_settled<F: Fact
     assert_eq!(
         rt.ack(correlation),
         Some(Err(CallError::Contract(Contract::PreconditionFailed)))
+    );
+}
+
+/// A `contract(InvalidValue)` outcome the provider settles reaches the caller
+/// by value: the violation keeps the type name and the rule the provider
+/// passed. A runtime that delivers calls in process does not drop the type
+/// name, which only a frame leaves out (`Violation::type_name`).
+pub fn a_settled_invalid_value_reaches_the_caller_with_its_violation<F: Factory>() {
+    let violation = Violation {
+        type_name: Some("Level"),
+        rule: Rule::Range,
+    };
+    let mut rt = runtime::<F>();
+    rt.serve(IFACE, &[ORD]).expect("serve");
+    let correlation = rt.command(IFACE, ORD, &[1], None).expect("send");
+    let mut buf = [0u8; 8];
+    let claim = rt.next_claim(&mut buf).expect("read").expect("waiting");
+    rt.settle(
+        claim.id,
+        Err(CallError::Contract(Contract::InvalidValue(violation))),
+    )
+    .expect("settle");
+
+    assert_eq!(
+        rt.ack(correlation),
+        Some(Err(CallError::Contract(Contract::InvalidValue(violation))))
     );
 }
 
