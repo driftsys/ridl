@@ -813,7 +813,7 @@ fn signature(qualified: &str, decl: &v2::Decl) -> String {
         Some(v2::decl::Kind::EnumSetDef(_)) => format!("{modifiers}enumset {qualified}"),
         Some(v2::decl::Kind::UnionDef(_)) => format!("{modifiers}union {qualified}"),
         // Interaction kinds ride `Interface.interactions`, never a package
-        // decl; interaction hovers land with the E2 LSP tasks.
+        // decl; an interaction hover shows the qualified name only.
         Some(_) | None => qualified.to_string(),
     }
 }

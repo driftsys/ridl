@@ -4,11 +4,12 @@ Explanatory, informative notes. Nothing here is normative and nothing depends on
 it — for decisions that bind downstream work, see
 [`../decisions/`](../decisions/).
 
-- **walking-skeleton-architecture.md** — the RIDL toolchain as built by epics E1
-  and E2: the workspace map, the end-to-end pipeline contract, and the LSP
-  overlay design the next profile's implementer needs, as they actually landed
-  in the merged code. (The filename keeps its E0 origin; the E0 and E1-only
-  versions are in git history.)
+- **walking-skeleton-architecture.md** — the RIDL toolchain as built for typl
+  and the ridl interface layer: the workspace map, the end-to-end pipeline
+  contract, and the LSP overlay design the next profile's implementer needs, as
+  they actually landed in the merged code. (The filename keeps the origin of the
+  first version, which described the walking skeleton; the earlier versions are
+  in git history.)
 - **toolchain-distribution.md** — how the `ridl` binary and the VS Code
   extension reach a machine: the two release trains and their disjoint tag
   namespaces, where the reported version comes from, the extension's three-tier

@@ -20,10 +20,10 @@ folded into the diagnostics index.
 
 ## Codes NOT exercisable from this single package
 
-Each is either not emitted by any E1 pass yet, or needs more than one package, a
+Each is either not emitted by any typl pass yet, or needs more than one package, a
 distinct/broken manifest, or the network. None is a defect in this corpus.
 
-### Cataloged but not emitted by any E1 pass
+### Cataloged but not emitted by any typl pass
 
 - **FORM-001** (invalid character), **FORM-002** (unterminated string),
   **FORM-003** (unterminated regex), **FORM-004** (unterminated block comment).
@@ -31,7 +31,7 @@ distinct/broken manifest, or the network. None is a defect in this corpus.
   as FORM-101/FORM-102 rather than the specific lexical code; an unterminated
   block comment likewise surfaces as FORM-102. The codes exist in
   `ridl_core::diag::FORM_CATALOG` for the error index but no pass emits
-  them in E1. Recorded so the gap is visible.
+  them. Recorded so the gap is visible.
 
 ### Need more than one package (resolver / cross-package)
 
@@ -62,11 +62,11 @@ distinct/broken manifest, or the network. None is a defect in this corpus.
 
 ## Deferred codes (ADR-0007 decision 10)
 
-TYPL-107, TYPL-205, and TYPL-402/403 are deferred in E1 and are not
+TYPL-107, TYPL-205, and TYPL-402/403 are deferred and are not
 implemented, so they are absent by design. TYPL-401 (`broken-doc-link`) is
 implemented under ADR-0026; the showcase has no unresolved doc link.
 
 - **TYPL-301, TYPL-303, TYPL-304** — the other profile-boundary codes. They
-  reject constructs the E2 family grammar must first parse, so they are deferred
-  with it; only TYPL-302 (duration or timing in a typl context) ships in E1,
+  reject constructs the family grammar must first parse, so they are deferred
+  with it; only TYPL-302 (duration or timing in a typl context) ships,
   because the family lexer already produces the tokens.

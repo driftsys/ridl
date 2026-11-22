@@ -1234,8 +1234,7 @@ pub fn category_from_word(word: &str) -> Option<Category> {
 }
 
 /// The rule row for a category: the classification table of ADR-0008 decision
-/// 14 as text. This is the CI-facing documentation of record until the E4 error
-/// index publishes it.
+/// 14 as text. This is the CI-facing documentation of record.
 // A new variant must be given a real arm here, not swept into a
 // catch-all: rustc forces *an* arm, and the arm its `help:` text
 // proposes is `_ =>`, which classifies the new variant silently. The

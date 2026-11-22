@@ -6,8 +6,8 @@
 //! (ridl language reference §3–§14) with exact decimal values — every numeric
 //! value is a canonical decimal string, never a floating-point field (ADR-0007
 //! decision 9, ADR-0008 decision 12). The v1 schema was removed when its last
-//! consumer moved to v2 (task 6 of the E2 plan), mirroring the E1 v0→v1
-//! retirement.
+//! consumer moved to v2, and the v0 schema was removed in the same way before
+//! it.
 
 pub mod v2 {
     //! IR v2 — the typl surface plus the ridl interaction layer (ridl
@@ -778,7 +778,7 @@ pub mod v2 {
     /// shape list (the single `INLINE` slot, ADR-0015 decision 14), which
     /// lives outside `interfaces`; a consumer that walks `interfaces` alone
     /// silently misses it. Six defects of exactly that shape were found
-    /// independently across E2 — observer-stub lowering, both backends'
+    /// independently in the interaction layer — observer-stub lowering, both backends'
     /// transport identity, `ridl test`'s report, the Rust backend's collision
     /// check, and the desk check's span index.
     /// [`Package::shapes`] is the one walk that sees both, the way
@@ -2136,7 +2136,7 @@ mod v2_round_trip {
     /// shapes of the services — and each shape carries the name it is known by
     /// OUTSIDE the package. The fixture's inline shape has `Interface.name ==
     /// ""` by construction, so a walk that yielded the interface bare would
-    /// hand every consumer the empty string; two of the six E2 defects were
+    /// hand every consumer the empty string; two of the six defects were
     /// exactly that.
     #[test]
     fn shapes_walks_named_interfaces_and_inline_service_shapes() {

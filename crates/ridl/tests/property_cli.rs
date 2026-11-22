@@ -148,7 +148,7 @@ fn a_signal_reading_require_is_skipped_with_the_live_state_reason() {
         .find(|line| line.contains("Cruise.guard.require[0]"))
         .unwrap_or_else(|| panic!("the guard clause is reported: {stdout}"));
     assert!(
-        line.contains("skipped: reads live state — observer territory (E5)"),
+        line.contains("skipped: reads live state — observer territory"),
         "the skip names the reason: {line}"
     );
 }

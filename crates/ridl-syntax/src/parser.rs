@@ -1271,8 +1271,8 @@ impl<'a> Parser<'a> {
     /// whose FORM-102 points at it directly. A trailing comma stays optional.
     fn service_shape_list(&mut self) {
         // One shape: an interface reference. A primitive keyword still parses
-        // as a path segment and the checker rejects it (RIDL-141), the E1
-        // lenient-parser discipline. `reserved` is not a shape: a service's
+        // as a path segment and the checker rejects it (RIDL-141), the
+        // lenient-parser discipline of the typl parser. `reserved` is not a shape: a service's
         // list is a set with no slot to retire (lock design §9), so the list
         // ends before it and the top-level loop reports the stray keyword.
         self.path_type();

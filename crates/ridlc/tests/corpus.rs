@@ -16,7 +16,7 @@
 //! one-line note and the diagnostics snapshot is that entry's artifact of
 //! record.
 //!
-//! The entries stake out the surface. The typl layer (E1):
+//! The entries stake out the surface. The typl layer:
 //!
 //! - `veh-common/` — the typl reference Appendix B example as a real package;
 //!   it compiles clean, so its snapshots are the end-to-end golden for a
@@ -31,7 +31,7 @@
 //! - `workspace-two-members/` — a two-member workspace with a cross-member
 //!   import, exercising the resolver's workspace-member resolution path.
 //!
-//! The ridl interaction layer (E2):
+//! The ridl interaction layer:
 //!
 //! - `veh-cluster/` — the ridl reference Appendix A (one bound lowered), plus authored
 //!   §14.5 services. The golden `.ridl` package: both service forms, all five
@@ -45,7 +45,7 @@
 //!   cross-package service path, including an inline shape whose whole
 //!   vocabulary is imported. See `services-workspace/NOTES`.
 //!
-//! The rsdl system layer (E6):
+//! The rsdl system layer:
 //!
 //! - `rsdl-diag-showcase/` — the rsdl counterpart of `ridl-diag-showcase`: a
 //!   package emitting one instance of every implemented rsdl-profile
@@ -514,7 +514,7 @@ fn a_composed_service_compiles_and_round_trips_through_the_ir() {
 }
 
 /// Every code the ridl profile defines (ridl reference §16, plus the shared
-/// FORM/MANI/TYPL codes E2 added or folded in), paired with where the corpus
+/// FORM/MANI/TYPL codes the ridl profile added or folded in), paired with where the corpus
 /// provokes it. `Showcase` means the `ridl-diag-showcase` entry emits it; every
 /// other variant names the reason it cannot live there and where it does live.
 ///
@@ -746,7 +746,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      in `crates/ridl-core/src/workspace.rs`",
         },
     ),
-    // The shared codes E2 added or folded into the ridl profile.
+    // The shared codes the ridl profile added or folded in.
     ("TYPL-005", Showcase),
     ("TYPL-106", Showcase),
     ("FORM-106", Showcase),
@@ -766,7 +766,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
         Elsewhere {
             fixture: "crates/ridlc/tests/corpus/diag-showcase/profile_boundary.typl",
             reason: "a duration literal or timing annotation in a typl context — already \
-                     the artifact of record in the E1 `diag-showcase` entry, and repeating \
+                     the artifact of record in the `diag-showcase` entry, and repeating \
                      it here would duplicate the index entry rather than add one",
         },
     ),
@@ -851,7 +851,7 @@ fn showcase_provokes_exactly_the_expected_codes() {
 /// while still passing.
 ///
 /// Only the `RIDL-` namespace is compared. The list also carries the shared
-/// FORM, MANI, and TYPL codes E2 added or folded into the ridl profile, and
+/// FORM, MANI, and TYPL codes the ridl profile added or folded in, and
 /// those catalogues hold many codes the profile does not claim, so equality
 /// over them would assert something untrue. Membership is all this checks —
 /// where each code is provoked stays hand-written (issue #172).
@@ -2183,9 +2183,9 @@ fn build_writes_the_standard_package_exactly_when_the_generated_rust_names_it() 
 // ==========================================================================
 // The TypeScript half of the compile proof.
 //
-// The E2 exit criterion is IR neutrality demonstrated by two backends, so a
+// The IR must stay neutral between backends, demonstrated by two of them, so a
 // corpus that compiles one backend's output and only text-compares the other
-// is weakest exactly where the criterion rests. These proofs close that gap.
+// is weakest exactly where that requirement rests. These proofs close that gap.
 // ==========================================================================
 
 /// The checked IR of the package named `package` in the entry rooted at
@@ -2443,8 +2443,8 @@ fn veh_cluster_generated_typescript_type_checks() {
 
 /// The interaction boundary narrows the typl type surface: optional in any
 /// interaction position, a map in any position, and a collection in return
-/// position are all rejected. E5's function signatures and E7's registry
-/// inherit that rule, and it had no corpus instance before `narrowing.ridl`.
+/// position are all rejected. Function signatures and a registry
+/// built on the interaction layer would inherit that rule, and it had no corpus instance before `narrowing.ridl`.
 ///
 /// Asserted on the messages, not the codes. These paths report FORM-101 and
 /// FORM-102, both of which the showcase raises from several other places, so

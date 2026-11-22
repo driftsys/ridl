@@ -4730,8 +4730,8 @@ fn generate_reports_an_empty_named_decl_instead_of_panicking() {
 /// lowering that feeds it cannot drift: there is one artifact, and a change in
 /// lowering reaches this test the moment that golden is regenerated. A
 /// hand-built copy could not do that — it would keep compiling happily while
-/// describing an IR the compiler no longer produces, which for the E2 exit
-/// criterion's compile proof would make the proof about the fixture rather
+/// describing an IR the compiler no longer produces, which for the compile
+/// proof of the interaction layer would make the proof about the fixture rather
 /// than about the pipeline.
 ///
 /// Cross-package references to `veh.common` and `ridl.std` stay fully
@@ -4783,7 +4783,7 @@ fn appendix_a() -> v2::Package {
 }
 
 /// The generated Rust for the full Appendix A package compiles with `rustc` —
-/// the E2 exit criterion's proof for the Rust half. A minimal prelude stands in
+/// the compile proof of the interaction layer for the Rust half. A minimal prelude stands in
 /// for the `veh.common` and `ridl.std` types the package imports, declared in
 /// the module path the cross-package references map to.
 #[test]

@@ -29,8 +29,8 @@ in any position, a collection in return position. They report FORM-101 and
 FORM-102, which the set-equality guard raises from several other places and so
 cannot tell apart, which is why
 `showcase_pins_the_interaction_boundary_narrowings` asserts each *message*
-individually. The rule is inherited by E5's function signatures and E7's
-registry, so a position that quietly started accepting one of these would
+individually. The rule would be inherited by function signatures and a registry
+built on the interaction layer, so a position that quietly started accepting one of these would
 otherwise go unnoticed.
 
 `main/inline_shape.ridl` is the exception to "one file per family": it re-provokes
@@ -91,7 +91,7 @@ review caught and no single-clause fixture could have. Keep both clauses.
   `main/enumset_positions.typl`), 220 (nested counted repetitions over the
   compiled-size limit in an inline `match` pattern, from
   `main/regex_patterns.typl`), 301, 303, 304 (the profile boundary, folded
-  in from the E1 debt list).
+  in from an earlier debt list).
 
 The list above is not prose: `crates/ridlc/tests/corpus.rs` holds it as
 `RIDL_PROFILE_CODES` and asserts the showcase emits **exactly** that set —
@@ -109,9 +109,9 @@ against the reference §16 classification.
   `.ridl/baseline/corpus.baseline.ir.json` — driven by
   `check_reports_ordinal_drift_against_the_committed_baseline`.
 - **TYPL-302** (duration literal or timing annotation in a typl context). The
-  E1 `diag-showcase` entry is already its artifact of record; repeating it here
+  `diag-showcase` entry is already its artifact of record; repeating it here
   would duplicate an index entry rather than add one.
-- The typl, FORM parse, and MANI codes E1 covers keep their home in
+- The typl, FORM parse, and MANI codes the typl corpus covers keep their home in
   `diag-showcase/NOTES`, including the ones that entry records as not
   exercisable.
 

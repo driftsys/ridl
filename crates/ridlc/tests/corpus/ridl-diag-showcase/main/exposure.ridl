@@ -3,7 +3,7 @@
 // `service`.
 //
 // Both escaped the checker entirely until issue #161. TYPL-005 was a step of
-// the typl definition lowering, so the two declaration kinds E2 added —
+// the typl definition lowering, so the two declaration kinds of the interaction layer —
 // `interface` and `service` — were never checked at all, and a program that
 // crosses the visibility boundary compiled with zero diagnostics. The payload
 // half is the sharper one: the Rust backend then emits a `pub` trait over a

@@ -3347,14 +3347,14 @@ mod tests {
 
     /// (g) Single-file mode: a bare `.typl` file with no manifest up the tree
     /// loads as one synthetic package named from its declared package, exempt
-    /// from TYPL-002. The E0 walking-skeleton fixture is the contract input.
+    /// from TYPL-002. The walking-skeleton fixture is the contract input.
     #[test]
     fn single_file_mode_loads_the_e0_fixture() {
         let fixture = concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../ridl-syntax/fixtures/walking_skeleton.typl",
         );
-        let text = fs::read_to_string(fixture).expect("the E0 fixture exists");
+        let text = fs::read_to_string(fixture).expect("the walking-skeleton fixture exists");
         assert!(
             text.contains("package fixtures"),
             "the fixture declares `package fixtures`",

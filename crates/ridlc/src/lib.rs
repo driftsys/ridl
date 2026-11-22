@@ -1079,7 +1079,7 @@ pub fn run_check_unlevelled(entry: &Path, frozen: Frozen) -> std::io::Result<(Cl
 /// name ([`Emit::system_dump_suffix`]).
 ///
 /// The artifact base name is the file stem in single-file mode (preserving the
-/// E0 `<input-stem>.rs` contract) and the full dotted package name otherwise, so
+/// `<input-stem>.rs` contract) and the full dotted package name otherwise, so
 /// a workspace build writing several packages into one directory never has two
 /// packages collide on a file name. Each package is generated on its own; a
 /// cross-package derivable `Default` therefore needs the referenced package's

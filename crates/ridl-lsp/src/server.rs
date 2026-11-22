@@ -148,7 +148,7 @@ pub fn run_with_version(
 /// quick-fix code actions, hover, goto-definition, and find-references,
 /// completion and rename, and inlay hints. Rename
 /// advertises `prepareProvider` so the client validates the cursor and the new
-/// name before applying an edit. Inlay hints close the E1 LSP feature set.
+/// name before applying an edit.
 /// Whole-document formatting runs the `ridl fmt` engine.
 fn server_capabilities() -> lt::ServerCapabilities {
     lt::ServerCapabilities {

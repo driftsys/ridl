@@ -18,8 +18,8 @@
 //! | RIDL-308 | named result union in return position (general form §6.1) | warning  |
 //!
 //! The roadmap also lists an "alias not required" lint. It needs no work
-//! here: TYPL-008 (an import alias without an actual collision, warning) has
-//! shipped from the resolver since E1, so the row is already covered.
+//! here: TYPL-008 (an import alias without an actual collision, warning) is
+//! emitted by the resolver, so the row is already covered.
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;

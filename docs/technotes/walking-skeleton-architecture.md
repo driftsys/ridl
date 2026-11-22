@@ -5,19 +5,21 @@ choices, see [ADR-0008](../decisions/ADR-0008-e2-execution.md),
 [ADR-0007](../decisions/ADR-0007-e1-execution.md),
 [ADR-0004](../decisions/ADR-0004-implementation-sequencing-and-stack.md), and
 [ADR-0002](../decisions/ADR-0002-module-system.md); for the requirements, see
-[the landed record](../archive/roadmap-landed-record.md), epics E1 and E2. This
-note exists for whoever picks up the next epic: it records the workspace map,
-the end-to-end pipeline, and the seams a newcomer or the E3 implementer needs to
-know about — as they actually landed in the merged code (E1 as PRs #107–#133, E2
-as PRs #136–#181), not as planned. Where it disagrees with an ADR or the
-roadmap, the ADR/roadmap is normative and this note is stale.
+[the landed record](../archive/roadmap-landed-record.md), for the typl toolchain
+and the ridl interface layer. This note exists for whoever picks up the next
+piece of work: it records the workspace map, the end-to-end pipeline, and the
+seams a newcomer or the boundary-model implementer needs to know about — as they
+actually landed in the merged code (the typl toolchain as PRs #107–#133, the
+interface layer as PRs #136–#181), not as planned. Where it disagrees with an
+ADR or the roadmap, the ADR/roadmap is normative and this note is stale.
 
-The file has been rewritten as-built at each epic close. The first version
-described the E0 walking skeleton, which the filename still carries; E1 rebuilt
-every part that version named, and E2 added the interaction layer over it. The
-earlier versions remain in git history, and the section
-[What E1 closed from the E0 note](#what-e1-closed-from-the-e0-note) records what
-happened to the E0 open items.
+The file has been rewritten as-built each time a layer landed. The first version
+described the walking skeleton, which the filename still carries; the typl
+toolchain rebuilt every part that version named, and the interface layer added
+the interaction layer over it. The earlier versions remain in git history, and
+the section
+[What the typl toolchain closed from the first note](#what-the-typl-toolchain-closed-from-the-first-note)
+records what happened to the open items of the first version.
 
 ## The workspace map
 
@@ -31,11 +33,12 @@ with its directory named after it, and the `xtask` automation member at the root
 the `calibrate` and `freeze` commands. The VS Code extension (`editors/vscode`)
 is TypeScript and is not a workspace member.
 
-The crates below arrived in three waves: seven from the E1 spine, grown in place
-through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
-`ridl-mcp`, most recently. `ridl-rt`, `ridl-loopback`, `ridl-rt-conformance` and
-`ridl-transport-ws` landed after those three waves, from the runtime-library
-work rather than from E1 or E2, and are listed with the others because a
+The crates below arrived in three waves: seven from the typl spine, grown in
+place by the interface layer; two more from the interface layer —
+`ridl-backend-ts` and `ridl-diff`; and `ridl-mcp`, most recently. `ridl-rt`,
+`ridl-loopback`, `ridl-rt-conformance` and `ridl-transport-ws` landed after
+those three waves, from the runtime-library work rather than from the typl
+toolchain or the interface layer, and are listed with the others because a
 newcomer will look for them here. This list is not a standing count of every
 crate the workspace holds — see `AGENTS.md` for that.
 
@@ -48,13 +51,14 @@ crate the workspace holds — see `AGENTS.md` for that.
   `SyntaxError` carries a message, a stable code tag, and a `TextRange`;
   `ridl-core` maps it into the coded diagnostic model.
 
-  E2 made lexing and parsing take a `Profile` (`keywords.rs`): `Profile::Typl`
-  behaves exactly as the E1 toolchain did, and `Profile::Ridl` additionally
-  activates nine keywords — `interface`, `service`, `signal`, `event`,
-  `command`, `query`, `fixed`, `require`, `ensure`. The grammar grew the
-  interaction productions, the single general-form attribute block, and the
-  guaranteed-subset expression grammar, all in the same `family.ungram` (renamed
-  from `typl.ungram`) and all reaching the typed AST through the same generator.
+  The interface layer made lexing and parsing take a `Profile` (`keywords.rs`):
+  `Profile::Typl` behaves exactly as the typl-only toolchain did, and
+  `Profile::Ridl` additionally activates nine keywords — `interface`, `service`,
+  `signal`, `event`, `command`, `query`, `fixed`, `require`, `ensure`. The
+  grammar grew the interaction productions, the single general-form attribute
+  block, and the guaranteed-subset expression grammar, all in the same
+  `family.ungram` (renamed from `typl.ungram`) and all reaching the typed AST
+  through the same generator.
 
   Two invariants hold for **both** profiles, and are what the next profile
   inherits: `parse(text, profile).syntax().text() == text` for every input,
@@ -106,35 +110,35 @@ crate the workspace holds — see `AGENTS.md` for that.
   tool `ridl_check` — and not inside `ridl-sem`.
 
 - **`crates/ridl-sem`** — the semantic passes, carved out of `ridl-core` at the
-  start of E1 (ADR-0007 decision 4). `resolve` implements the ADR-0002 §5
-  reference order (workspace member → the package's own `[imports]` → the
-  workspace `[imports]` → error; a package of a remote unit resolves through
-  step 1, which sees the consumer's members and its own unit's packages, then
-  its own `[imports]`, never the workspace `[imports]`; a qualified reference
-  and a doc link apply the same visibility as an import) plus cycle detection,
-  and applies the first-wins duplicate tiebreak — every later duplicate is
-  TYPL-009 (ADR-0007 decision 6). A `service` declared with one `CamelCase` name
-  is a symbol of its package, so it takes part in that tiebreak; its global
-  name, the package name followed by the declared name, is the key of the
-  workspace service catalog (`service_catalog` in `ridl-core`), which reports
-  nothing, and the dotted form is RIDL-142 (ADR-0034). `check` lowers each
-  resolved package to IR v2, lowering only the resolver's first-wins winner.
-  Supporting modules: `scalar` (exact `BigRational` arithmetic for ranges,
-  steps, and wire-width derivation — no `f32`/`f64` anywhere), `ucum` (the UCUM
-  term grammar over a curated atom table, ADR-0007 decision 8), `init`
+  start of the typl toolchain (ADR-0007 decision 4). `resolve` implements the
+  ADR-0002 §5 reference order (workspace member → the package's own `[imports]`
+  → the workspace `[imports]` → error; a package of a remote unit resolves
+  through step 1, which sees the consumer's members and its own unit's packages,
+  then its own `[imports]`, never the workspace `[imports]`; a qualified
+  reference and a doc link apply the same visibility as an import) plus cycle
+  detection, and applies the first-wins duplicate tiebreak — every later
+  duplicate is TYPL-009 (ADR-0007 decision 6). A `service` declared with one
+  `CamelCase` name is a symbol of its package, so it takes part in that
+  tiebreak; its global name, the package name followed by the declared name, is
+  the key of the workspace service catalog (`service_catalog` in `ridl-core`),
+  which reports nothing, and the dotted form is RIDL-142 (ADR-0034). `check`
+  lowers each resolved package to IR v2, lowering only the resolver's first-wins
+  winner. Supporting modules: `scalar` (exact `BigRational` arithmetic for
+  ranges, steps, and wire-width derivation — no `f32`/`f64` anywhere), `ucum`
+  (the UCUM term grammar over a curated atom table, ADR-0007 decision 8), `init`
   (init-value derivation), `docs` (doc-comment handling), and `testgen`
   (proptest strategies and boundary/violation corpora derived from checked
   ranges, behind the `testgen` feature).
 
-  E2 added four modules here and grew `check` and `resolve` to the interaction
-  surface. `timing` resolves every signal and event to concrete microsecond
-  bounds plus a mode and a default-applied flag, so "untimed" does not exist
-  beyond the parser (ADR-0008 decision 12); its duration atoms are `us`, `ms`,
-  `s`, `min`, `h` (ADR-0008 decision 16). `expr` type-checks a
+  The interface layer added four modules here and grew `check` and `resolve` to
+  the interaction surface. `timing` resolves every signal and event to concrete
+  microsecond bounds plus a mode and a default-applied flag, so "untimed" does
+  not exist beyond the parser (ADR-0008 decision 12); its duration atoms are
+  `us`, `ms`, `s`, `min`, `h` (ADR-0008 decision 16). `expr` type-checks a
   `require`/`ensure` clause against the guaranteed subset and rejects anything
   outside it with RIDL-306. `expr_eval` evaluates the same subset totally and
   exactly over arbitrary-precision rationals, with division by zero as the
-  single defined fault — it is the engine behind `ridl test` today and the E5
+  single defined fault — it is the engine behind `ridl test` today and a
   reference oracle later. `lint` is four advisory codes (RIDL-404, RIDL-405,
   RIDL-406, RIDL-308) run from `check_package` once lowering has finished, on
   the ordinary diagnostic channel. Each emits at its catalogue severity; a
@@ -142,37 +146,38 @@ crate the workspace holds — see `AGENTS.md` for that.
   `ridl_core::lint` applies after the check.
 
 - **`crates/ridl-ir`** — the IR schema, compiled by `build.rs` with `protox` +
-  `prost-build` (no system `protoc`). `proto/ridl/ir/` holds **`v2` alone**: E2
-  landed the v2 lowering and removed the v1 schema with it (ADR-0008 decision
-  8), so the pre-cut field reservations v1 carried are visible only in v2's
-  numbering. Range bounds, steps, init values, and timing bounds are canonical
-  decimal strings — the schema has no float or double field — and derived wire
-  widths ride alongside as enums (ADR-0007 decision 9). The crate renders three
-  encodings of that schema — canonical protobuf JSON, prototext, and protobuf
-  binary (ADR-0014). JSON goes through `pbjson`-generated serde impls; prototext
-  goes through `prost-reflect` over a descriptor pool that `build.rs` writes to
-  `OUT_DIR` and `lib.rs` embeds, from the same compilation that generates the
-  types; binary needs neither. JSON is the form `ridl baseline` writes and
-  `ridl diff` reads; `v2::load_ir_json` reads such a snapshot from a file, the
-  only file I/O in the crate's library (ADR-0008 decision 9). `ridl_ir::zero`
-  holds the one definition of whether the value 0 is legal for a type, which the
-  Rust backend's FlatBuffers codec, the proto3 model projection and
-  `ridl-diff`'s classifier call (driftsys/ridl#598). `ridl_ir::catalog_hash`
-  computes the catalog hash: SHA-256 over the protobuf binary of a reduced unit
-  that holds the interfaces, their numbers and the types they reach (ADR-0014
-  decision 15). It is in this crate because three artifacts carry the hash — the
-  codegen model's `Catalog.hash`, which the Rust backend writes into every
-  generated `Interface::CATALOG`; the catalog descriptor, whose crate
-  `ridl-descriptor` depends on `ridl-ir` when its own `std` feature is on (the
-  default), wraps the hash as `ridl_descriptor::hash`, and copies the interface
-  numbers from the IR in `ridl_descriptor::number`; and each `Region` of the
-  lowered rsdl system, where `ridlc` embeds it (`embed_catalog_hashes`).
-  `ridl_ir::codegen` holds the codegen request's deployment section:
-  `lower_deployment` in `codegen/deployment.rs` is an emitter over the lowered
-  system IR, and `codegen/bindings.rs` holds the table of transport binding
-  overheads, whose one row is the `websocket` binding of the frame specification
-  §11.1 ([the codegen plugin design](../design/codegen-plugins.md), "The
-  deployment section").
+  `prost-build` (no system `protoc`). `proto/ridl/ir/` holds **`v2` alone**: the
+  v2 lowering landed together with the removal of the v1 schema (ADR-0008
+  decision 8), so the pre-cut field reservations v1 carried are visible only in
+  v2's numbering. Range bounds, steps, init values, and timing bounds are
+  canonical decimal strings — the schema has no float or double field — and
+  derived wire widths ride alongside as enums (ADR-0007 decision 9). The crate
+  renders three encodings of that schema — canonical protobuf JSON, prototext,
+  and protobuf binary (ADR-0014). JSON goes through `pbjson`-generated serde
+  impls; prototext goes through `prost-reflect` over a descriptor pool that
+  `build.rs` writes to `OUT_DIR` and `lib.rs` embeds, from the same compilation
+  that generates the types; binary needs neither. JSON is the form
+  `ridl baseline` writes and `ridl diff` reads; `v2::load_ir_json` reads such a
+  snapshot from a file, the only file I/O in the crate's library (ADR-0008
+  decision 9). `ridl_ir::zero` holds the one definition of whether the value 0
+  is legal for a type, which the Rust backend's FlatBuffers codec, the proto3
+  model projection and `ridl-diff`'s classifier call (driftsys/ridl#598).
+  `ridl_ir::catalog_hash` computes the catalog hash: SHA-256 over the protobuf
+  binary of a reduced unit that holds the interfaces, their numbers and the
+  types they reach (ADR-0014 decision 15). It is in this crate because three
+  artifacts carry the hash — the codegen model's `Catalog.hash`, which the Rust
+  backend writes into every generated `Interface::CATALOG`; the catalog
+  descriptor, whose crate `ridl-descriptor` depends on `ridl-ir` when its own
+  `std` feature is on (the default), wraps the hash as `ridl_descriptor::hash`,
+  and copies the interface numbers from the IR in `ridl_descriptor::number`; and
+  each `Region` of the lowered rsdl system, where `ridlc` embeds it
+  (`embed_catalog_hashes`). `ridl_ir::codegen` holds the codegen request's
+  deployment section: `lower_deployment` in `codegen/deployment.rs` is an
+  emitter over the lowered system IR, and `codegen/bindings.rs` holds the table
+  of transport binding overheads, whose one row is the `websocket` binding of
+  the frame specification §11.1
+  ([the codegen plugin design](../design/codegen-plugins.md), "The deployment
+  section").
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source }`. Rust is built as a `quote` token stream and
@@ -183,7 +188,7 @@ crate the workspace holds — see `AGENTS.md` for that.
   its encoding from its port: each generated type and function bounds its port
   parameter on `ridl_rt::port::Encoded` and takes every size through
   `P::Encoding`, so the face names no encoding itself. Codegen is total —
-  failures return `GenerateError`, never panic. E2's `interact.rs` and the
+  failures return `GenerateError`, never panic. The former `interact.rs` and the
   extern-C header are gone:
   [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
   decisions 15 and 6 retract the interaction layer, restoring it in a second
@@ -248,10 +253,10 @@ crate the workspace holds — see `AGENTS.md` for that.
   compile for baseline/history callbacks; existing callback APIs remain.
   `run_build` also writes the selected artifacts: `<base>.rs`, `<base>.h`,
   `<base>.ir.json`, `<base>.ir.txtpb`, `<base>.ir.binpb`, and `<base>.ts`. The
-  binary exposes `ridlc check` and `ridlc build`. E2 widened `WorkspaceOutput`
-  with the checker's `resolutions` and the lowered `std_ir`, so a workflow crate
-  does not have to restate the compiler's load-and-resolve loop (ADR-0008
-  decision 15). Both backends are ordinary dependencies here:
+  binary exposes `ridlc check` and `ridlc build`. The interface layer widened
+  `WorkspaceOutput` with the checker's `resolutions` and the lowered `std_ir`,
+  so a workflow crate does not have to restate the compiler's load-and-resolve
+  loop (ADR-0008 decision 15). Both backends are ordinary dependencies here:
   `ridlc build --emit` offers `rust`, the three IR encodings of ADR-0014
   decision 4 (`ir-json`, `ir-text`, `ir-binary`), `typescript` and `proto`, so
   the second backend over one IR is reachable from the command line and not only
@@ -276,14 +281,15 @@ crate the workspace holds — see `AGENTS.md` for that.
   and `ridl init` and `ridl new` (the scaffolding in `src/scaffold.rs`), driving
   the `ridlc` command drivers, the `ridl-fmt` engine, the `ridl-diff` engine,
   the `ridl-lsp`/`ridl-mcp` libraries, and the `ridl-descriptor` verifier and
-  JSON view (the plumbing/porcelain split of concept note §8.1). Everything E2
-  added to the CLI landed here rather than in `ridlc`, because `ridlc` stays a
-  pure source→IR function — the minimal ISO 26262 tool-qualification boundary
-  (ADR-0008 decision 9). `ridl baseline` publishes one `<pkg-name>.ir.json` per
-  package and one `<unit>.catalogs` file per unit with an interface into
-  `.ridl/baseline/`, plus separate `context.json` evidence. `baseline.rs`
-  validates historical repair and manages staged publication, backups and
-  rollback; `--reset-history` explicitly starts fresh history. The
+  JSON view (the plumbing/porcelain split of concept note §8.1). Everything the
+  interface layer added to the CLI landed here rather than in `ridlc`, because
+  `ridlc` stays a pure source→IR function — the minimal ISO 26262
+  tool-qualification boundary (ADR-0008 decision 9). `ridl baseline` publishes
+  one `<pkg-name>.ir.json` per package and one `<unit>.catalogs` file per unit
+  with an interface into `.ridl/baseline/`, plus separate `context.json`
+  evidence. `baseline.rs` validates historical repair and manages staged
+  publication, backups and rollback; `--reset-history` explicitly starts fresh
+  history. The
   [CLI reference](../book/cli-reference.md#baseline-publication-and-recovery)
   owns retention and failure limits. `ridl build` reads those files to write
   each unit's list of compatible catalogs into its descriptor and codegen model
@@ -526,29 +532,29 @@ file belongs to.
 positions), via a per-file `LineIndex`. Features shipped: published diagnostics,
 quick-fix code actions derived from diagnostic fix-its, hover (units and
 ranges), goto-definition, find-references, completion, rename with prepare
-support, and inlay hints (field ordinals and unit expansion). E2 taught all of
-them `.ridl` — interaction hovers, resolved timing, and interaction ordinals in
-the inlay hints. Whole-document formatting runs the `ridl-fmt` engine on the
-open buffer: one edit that replaces the document, no edit when the buffer is
-already canonical, and a `null` result when it has parse errors. In an `.rsdl`
-file, hover, goto-definition, find-references, prepare-rename and rename
-dispatch to `rsdl.rs`, which reads what a reference names from the checked
-system model rather than from a typl symbol lookup, and completion offers the
-rsdl slots. Three cases still take the typl path there: a doc link, an import
-line, and a declared interface, whose references and rename are the ridl ones
-once `rsdl.rs` has found its symbol.
+support, and inlay hints (field ordinals and unit expansion). The interface
+layer taught all of them `.ridl` — interaction hovers, resolved timing, and
+interaction ordinals in the inlay hints. Whole-document formatting runs the
+`ridl-fmt` engine on the open buffer: one edit that replaces the document, no
+edit when the buffer is already canonical, and a `null` result when it has parse
+errors. In an `.rsdl` file, hover, goto-definition, find-references,
+prepare-rename and rename dispatch to `rsdl.rs`, which reads what a reference
+names from the checked system model rather than from a typl symbol lookup, and
+completion offers the rsdl slots. Three cases still take the typl path there: a
+doc link, an import line, and a declared interface, whose references and rename
+are the ridl ones once `rsdl.rs` has found its symbol.
 
-## What E1 closed from the E0 note
+## What the typl toolchain closed from the first note
 
-The E0 version of this note named cross-seam facts for E1 to handle
-deliberately. All are closed:
+The first version of this note named cross-seam facts for the typl toolchain to
+handle deliberately. All are closed:
 
 1. **The `ridl-sem` split is done.** The resolver and checker moved out of
    `ridl-core` into `crates/ridl-sem` (ADR-0007 decision 4).
 2. **The `SourceFile` name collision is resolved by rename.** The salsa input is
    `InputFile`; the only public `SourceFile` is the AST root
    `ridl_syntax::ast::SourceFile` (ADR-0007 decision 4).
-3. **The coded `Diagnostic` model replaced the plain error structs.** The E0
+3. **The coded `Diagnostic` model replaced the plain error structs.** The old
    `ResolveError`/`CheckError` types and the string-flattened offsets are gone;
    every diagnostic carries its code and span end to end (ADR-0007 decision 2).
 4. **The duplicate-declaration tiebreak is first-wins everywhere.** The resolver
@@ -557,10 +563,10 @@ deliberately. All are closed:
 
 ## References
 
-- [ADR-0008](../decisions/ADR-0008-e2-execution.md) — the E2 execution decisions
-  this note assumes.
-- [ADR-0007](../decisions/ADR-0007-e1-execution.md) — the E1 execution decisions
-  this note assumes.
+- [ADR-0008](../decisions/ADR-0008-e2-execution.md) — the interface-layer
+  execution decisions this note assumes.
+- [ADR-0007](../decisions/ADR-0007-e1-execution.md) — the typl execution
+  decisions this note assumes.
 - [ADR-0004](../decisions/ADR-0004-implementation-sequencing-and-stack.md) — the
   stack these choices refine.
 - [ADR-0002](../decisions/ADR-0002-module-system.md) — the module semantics the

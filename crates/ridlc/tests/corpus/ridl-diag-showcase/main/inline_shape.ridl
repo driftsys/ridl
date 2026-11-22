@@ -2,7 +2,7 @@
 //
 // Every other file in this showcase provokes its diagnostics from a named
 // `interface`. An inline shape is a second `Interface`, stored under
-// `Service.shape` and outside `Package.interfaces`, and five separate E2
+// `Service.shape` and outside `Package.interfaces`, and five separate
 // defects came from consumers that walked `Package.interfaces` alone. The
 // codes below are already covered from a named interface; provoking them again
 // from inside an inline shape is what makes that coverage structural rather

@@ -2,8 +2,8 @@
 //!
 //! Rename produces a workspace-wide edit that rewrites a type-level declaration
 //! (`type`, `const`, `struct`, `enum`, `enumset`, `union`) and every reference
-//! to it. Member names — fields, enum values, union arms — are **out of scope**
-//! for E1: the resolver exposes only top-level symbols, so [`nav::symbol_at`]
+//! to it. Member names — fields, enum values, union arms — are **out of scope**:
+//! the resolver exposes only top-level symbols, so [`nav::symbol_at`]
 //! does not resolve a member, and a member rename would need its own resolution
 //! pass.
 //!

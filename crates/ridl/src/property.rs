@@ -26,7 +26,7 @@
 //!    reading no parameter has nothing to vary and is evaluated once, reported
 //!    as constant rather than as a sample count it did not earn.
 //! 3. **`ensure` clauses.** Listed as observer stubs only. A postcondition needs
-//!    a `result`, which needs a provider; executing one is the E5 oracle's job.
+//!    a `result`, which needs a provider; executing one needs a reference oracle, which this workspace does not have.
 //!
 //! **What section 2 does not try.** Boundary values are zipped across
 //! parameters with wrapping, not combined exhaustively: every parameter reaches
@@ -71,8 +71,8 @@ pub enum TestFormat {
 
 /// The reason a `require` reading the enclosing interface's own signals is not
 /// sampled. A signal is live state: it has no value at desk time, and observing
-/// one is the E5 observer's job.
-const LIVE_STATE_SKIP: &str = "skipped: reads live state — observer territory (E5)";
+/// one needs an observer, which this workspace does not have.
+const LIVE_STATE_SKIP: &str = "skipped: reads live state — observer territory";
 
 /// The finding raised when no drawn input satisfies a precondition.
 const SUSPECT: &str = "suspect: no sampled input satisfies this precondition";
@@ -418,7 +418,7 @@ fn run_contract(
     };
 
     // Section 3: an `ensure` is listed, never run. Without a provider there is
-    // no `result` to bind, so there is nothing to evaluate (E5's oracle).
+    // no `result` to bind, so there is nothing to evaluate without a reference oracle.
     if is_ensure {
         return report(ContractStatus::ObserverStub);
     }

@@ -214,7 +214,7 @@ struct Raw {
 /// [`SyntaxKind::Error`] tokens rather than aborting the lex.
 ///
 /// The profile decides only which registry words are active keywords: under
-/// [`Profile::Typl`] the stream is identical to the E1 lexer's; under
+/// [`Profile::Typl`] the stream has only the typl keywords; under
 /// [`Profile::Ridl`] the nine ridl words lex to their keyword variants; under
 /// [`Profile::Rsdl`] the eight rsdl words do.
 /// Everything else — durations, `@`, the expr operators — is a family token
@@ -703,7 +703,7 @@ mod tests {
     }
 
     /// The kinds of the significant (non-trivia) tokens under `Profile::Typl`,
-    /// in order — the E1 tests below all pin the typl profile's behavior.
+    /// in order — the tests below all pin the typl profile's behavior.
     fn significant_kinds(input: &str) -> Vec<SyntaxKind> {
         kinds_in(Profile::Typl, input)
     }
@@ -727,7 +727,7 @@ mod tests {
         assert_eq!(significant_kinds("Speed"), vec![SyntaxKind::Ident]);
     }
 
-    // Step (c): `0.0..250.0` lexes float–dotdot–float (kept from E0, extended).
+    // Step (c): `0.0..250.0` lexes float–dotdot–float (extended from the typl lexer).
     #[test]
     fn float_range_lexes_as_float_dotdot_float() {
         assert_eq!(

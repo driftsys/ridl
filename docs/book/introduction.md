@@ -94,8 +94,8 @@ repository:
 - **Decisions** — `docs/decisions/`: the architecture decision records —
   ADR-0002 (module system), ADR-0004 (implementation sequencing and stack),
   ADR-0005 (agent enablement), ADR-0006 (walking-skeleton execution), ADR-0007
-  (E1 execution), ADR-0008 (E2 execution), and ADR-0009 (toolchain and gate
-  parity).
+  (typl execution), ADR-0008 (ridl interface layer execution), and ADR-0009
+  (toolchain and gate parity).
 - **Technotes** — `docs/technotes/`: informative architecture notes, which bind
   nothing.
 - **Roadmap** — `docs/ROADMAP.md`: the forward plan — the two steps the
