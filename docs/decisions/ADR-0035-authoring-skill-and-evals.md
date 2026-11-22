@@ -76,9 +76,9 @@ numbering.
    `ridl.toml` and its `.typl`, `.ridl` and `.rsdl` files. This replaces the
    `.rxdl` bullet of ADR-0005 §7 (design R-S-2).
 3. **There is one skill, `ridl-authoring`, in `skills/ridl-authoring/`, and its
-   files are `SKILL.md` and `rules.md`.** `SKILL.md` holds the family in a few
+   files are `SKILL.md` and `RULES.md`.** `SKILL.md` holds the family in a few
    lines, the verify loop, three short compiled samples and links to the
-   published book. `rules.md` holds the always-on constraints, each citing a
+   published book. `RULES.md` holds the always-on constraints, each citing a
    diagnostic code. The per-language references of the first design (`typl.md`,
    `ridl.md`, `rsdl.md`) were built and removed; ADR-0005's amendment of
    2026-11-11 records why and what reopens them (design D-1).
@@ -109,7 +109,7 @@ numbering.
    `just package-skill`, for Claude Code (`~/.claude/skills/` or a project's
    `.claude/skills/`) and Codex (`~/.codex/skills/`). The VS Code extension
    packages the directory and contributes `SKILL.md` as a `chatSkills` entry and
-   `rules.md` as a `chatInstructions` entry, for GitHub Copilot.
+   `RULES.md` as a `chatInstructions` entry, for GitHub Copilot.
    `metadata.version` in the frontmatter of `SKILL.md` is a `[[version_files]]`
    entry of `.git-std.toml`, so `just release` writes it.
 7. **The extension needs VS Code 1.109.** `chatSkills` is not in the published

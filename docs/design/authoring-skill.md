@@ -35,7 +35,7 @@ repeated here.
 ```text
 skills/ridl-authoring/
   SKILL.md   frontmatter, the family, the verify loop, three samples, links
-  rules.md   20 always-on rules, each citing a diagnostic code
+  RULES.md   20 always-on rules, each citing a diagnostic code
 ```
 
 `SKILL.md` has the frontmatter that Claude Code, Codex and Copilot read: `name`
@@ -47,7 +47,7 @@ published book). Every link names the published book at
 `https://driftsys.github.io/ridl/`, because a relative link resolves nowhere the
 skill is installed.
 
-`rules.md` has `applyTo` frontmatter that limits it to `.typl`, `.ridl`, `.rsdl`
+`RULES.md` has `applyTo` frontmatter that limits it to `.typl`, `.ridl`, `.rsdl`
 and `ridl.toml` files, so a host with an always-on instructions file loads it
 for those files only.
 
@@ -72,7 +72,7 @@ absent from `freeze/diagnostics.txt`, so the second test also rejects it.
 | ----------- | ------------------------------------------------------------------------------------------------------------ |
 | Claude Code | `ridl-authoring-<version>.zip`, attached to each editor release, unpacked into a `.claude/skills/` directory |
 | Codex       | the same archive, unpacked into `~/.codex/skills/`                                                           |
-| Copilot     | the VS Code extension, which contributes `SKILL.md` as `chatSkills` and `rules.md` as `chatInstructions`     |
+| Copilot     | the VS Code extension, which contributes `SKILL.md` as `chatSkills` and `RULES.md` as `chatInstructions`     |
 
 - `just package-skill <out>` writes the archive. Its top-level directory is
   `ridl-authoring/`, and its name takes the version from `metadata.version` of

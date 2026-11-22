@@ -30,7 +30,7 @@ other entry below is Accepted.
   (ADR-0025): the minimum tool table names workspace paths and adds
   `ridl_references` and `ridl_dependencies`, and §7 adds the MCP tool surface as
   a fourth contract surface. Amended 2026-11-11: the skill is `SKILL.md` and
-  `rules.md` only, because a pilot eval did not show that per-language
+  `RULES.md` only, because a pilot eval did not show that per-language
   references help. Amended 2026-11-19 by ADR-0035: the skill is written by hand,
   the unit an agent writes is a workspace, and the evals run on demand, not in
   CI.
@@ -737,7 +737,7 @@ other entry below is Accepted.
 
 - **ADR-0035 — The authoring skill, its gates, its distribution and its evals.**
   _Accepted 2026-11-22._ The `ridl-authoring` skill is `SKILL.md` and
-  `rules.md`, written by hand; three tests keep it consistent with the compiler;
+  `RULES.md`, written by hand; three tests keep it consistent with the compiler;
   the editor release and the VS Code extension (which needs VS Code 1.109)
   distribute it; and `cargo xtask eval` compares an agent with and without it,
   scored mechanically and then against a rubric by a judge of the other vendor.

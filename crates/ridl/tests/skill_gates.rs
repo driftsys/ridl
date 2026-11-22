@@ -261,7 +261,7 @@ fn a_link_before_the_first_section_is_checked() {
 
 #[test]
 fn every_relative_link_form_is_rejected() {
-    let file = skill_dir().join("rules.md");
+    let file = skill_dir().join("RULES.md");
     for target in [
         "./typl.md",
         "typl.md",

@@ -15,7 +15,7 @@ surfaces from 0.10.0, checked by `just freeze-check`. ADR-0029 decision 3 states
 what it says of `ridl diff` and the `ridl-diff` categories.
 
 Amended 2026-11-11, recording the decision of 2026-10-14: the skill of §2 is
-`skills/ridl-authoring/SKILL.md` and `skills/ridl-authoring/rules.md`, and
+`skills/ridl-authoring/SKILL.md` and `skills/ridl-authoring/RULES.md`, and
 nothing else. Per-language references (`typl.md`, `ridl.md`, `rsdl.md`) were
 written and then removed. A pilot eval, run on the Copilot CLI host with
 claude-sonnet-5.5 and one run per task, did not show that the references help,
@@ -335,7 +335,7 @@ Agent enablement is not a separate program; it rides the existing phases:
 - **Rules-file portability.** One canonical rules text, N host formats — define
   the generator (or hand-maintain until a second host actually demands it).
 
-  _Resolved (2026-11-19)._ Hand-maintained. `rules.md` is one file; the VS Code
+  _Resolved (2026-11-19)._ Hand-maintained. `RULES.md` is one file; the VS Code
   extension contributes it as a `chatInstructions` entry, and the release
   archive carries it for the other hosts
   ([ADR-0035](ADR-0035-authoring-skill-and-evals.md) decision 6).
