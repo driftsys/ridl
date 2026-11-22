@@ -2044,6 +2044,7 @@ doc-path-check root="":
         # instead of reporting every path as broken.
         tracked_files="$(mktemp)"
         tracked_dirs="$(mktemp)"
+        trap 'rm -f "$tracked_files" "$tracked_dirs"' EXIT INT TERM
         if ! list_files "$root" >"$tracked_files"; then
             rm -f "$tracked_files" "$tracked_dirs"
             echo "doc-path-check: git ls-files failed in '$root'; the tracked tree cannot be read." >&2
@@ -2086,7 +2087,7 @@ doc-path-check root="":
         rm -f "$tracked_files" "$tracked_dirs"
         if [ "$broken" -ne 0 ]; then
             echo "doc-path-check: $broken docs/ path(s) above do not resolve." >&2
-            echo "doc-path-check: a path with an extension has to exist; a path ending with '/' has to be a directory." >&2
+            echo "doc-path-check: a path with an extension has to be a tracked file; a path ending with '/' has to be a directory." >&2
             echo "doc-path-check: a path with no extension and no trailing slash has to be a file or a directory." >&2
             echo "doc-path-check: $skip_archive, $skip_wip and $skip_changelog are not scanned; a path" >&2
             echo "doc-path-check: belonging to another repository should be written as a URL." >&2
