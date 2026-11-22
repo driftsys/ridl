@@ -246,6 +246,54 @@ Deno.test("queryStream_receives_64_elements_over_loopback_server", async () => {
   }
 });
 
+Deno.test("queryStream_transfers_more_bytes_than_the_query_ceiling_in_one_stream", async () => {
+  // The default payload ceiling of a query is 16,128 bytes (CALL_CEILING in
+  // crates/ridl-rt/src/contract.rs, ADR-0030 decision 16). The request asks
+  // for 254 chunks of ELEMENT_LEN (1,024) bytes (the argument 255 makes the
+  // provider interrupt the stream), so one transfer carries 260,096 bytes,
+  // which is more than 16 times that ceiling.
+  const queryCeiling = 16_128;
+  const elements = 254;
+  const total = elements * catalog.ELEMENT_LEN;
+  assert.ok(
+    total > queryCeiling,
+    `the transfer of ${total} bytes must exceed the query ceiling ${queryCeiling}`,
+  );
+  const server = await startServer();
+  const notes: Note[] = [];
+  try {
+    const session = await connect(`ws://127.0.0.1:${server.port}`, {
+      catalog: { name: catalog.NAME, hash: catalog.HASH },
+      encoding: catalog.ENCODING,
+      onNote(note) {
+        notes.push(note);
+      },
+    });
+    const received = await catalog.readAll(session.queryStream(
+      catalog.IFACE,
+      catalog.STREAM_QUERY,
+      Uint8Array.of(elements),
+      { bound: 5000 },
+    ));
+    assert.equal(received.length, total);
+    // Chunk i is ELEMENT_LEN bytes of value i, so byte j has value
+    // floor(j / ELEMENT_LEN).
+    assert.deepEqual(
+      received,
+      Uint8Array.from(
+        { length: total },
+        (_, j) => Math.floor(j / catalog.ELEMENT_LEN),
+      ),
+    );
+    session.close();
+    const ended = await session.closed;
+    assert.equal(ended.code, 1000);
+    assert.deepEqual(notes, []);
+  } finally {
+    await server.stop();
+  }
+});
+
 /** Runs one upload scenario with a time limit and closes its session on failure. */
 async function withUploadSession(
   run: (session: Session) => Promise<void>,
