@@ -47,8 +47,8 @@
 //! unspent. The planus rule of the next paragraph rests on ADR-0020 decision
 //! 5 as amended 2026-10-03, which excludes planus from that permission.
 //!
-//! Lane E16 (the catalog descriptor) added a second kind of boundary, a
-//! stronger one (lane E16 driver, section 4, answer 8). The toolchain may now
+//! The catalog descriptor added a second kind of boundary, a
+//! stronger one. The toolchain may now
 //! depend on planus: `ridl-descriptor` on its runtime, `xtask` on its schema
 //! compiler and code generator, and `ridlc` and `ridl` may depend on it
 //! through `ridl-descriptor`. `ridl-rt` and every package `ridl build` generates must
@@ -193,10 +193,9 @@ const RUST_BACKEND_DEV_ONLY: &[&str] = &[
     "ridl-backend-proto",
 ];
 
-/// The packages under the stronger boundary of lane E16 (driver section 4,
-/// answer 8): none of them may reach any of [`PLANUS_CRATES`] or
-/// [`PROST_CRATES`] through any kind of dependency edge, dev included,
-/// because a generated package links them.
+/// The packages under the stronger boundary of the catalog descriptor: none of
+/// them may reach any of [`PLANUS_CRATES`] or [`PROST_CRATES`] through any kind
+/// of dependency edge, dev included, because a generated package links them.
 const RUNTIME_PACKAGES: &[&str] = &["ridl-rt"];
 
 /// Every package reachable from `package` by NORMAL dependency edges only,
@@ -295,8 +294,7 @@ fn schema_compilers_stay_dev_dependencies() {
 }
 
 /// Every package in [`RUNTIME_PACKAGES`] holds: no crate of [`PLANUS_CRATES`]
-/// is reachable from it through any dependency edge, dev included (lane E16 driver,
-/// section 4, answer 8).
+/// is reachable from it through any dependency edge, dev included.
 ///
 /// The graph is resolved with `--all-features`. A user's generated package
 /// can turn on any `ridl-rt` feature, so a planus crate behind a feature that
@@ -317,8 +315,8 @@ fn the_runtime_reaches_no_planus_crate() {
                  \n\
                  `{package}` is the crate every generated package links, so it \
                  must not depend on planus in any way, not even as a \
-                 dev-dependency (lane E16 driver, section 4, answer 8). The \
-                 toolchain may reach planus through `ridl-descriptor` instead.\n",
+                 dev-dependency. \
+                 The toolchain may reach planus through `ridl-descriptor` instead.\n",
                 path = path.unwrap_or_default(),
             );
         }
@@ -424,8 +422,7 @@ const PLANUS_EXEMPT_MEMBER: &str = "server";
 /// No planus crate is in the dependency closure of any workspace member of
 /// `examples/cabin` except [`PLANUS_EXEMPT_MEMBER`]: the generated crates
 /// (`veh_cabin`, the veh-cluster corpus crate and `lint_shapes`) and their
-/// consumer (lane E16
-/// driver, section 4, answer 8). Every member is checked by default, so a new
+/// consumer. Every member is checked by default, so a new
 /// member is covered without a change here.
 ///
 /// `examples/cabin/generated/`, `examples/cabin/generated-corpus/` and
@@ -474,8 +471,8 @@ fn the_generated_crate_reaches_no_planus_crate() {
                  `examples/cabin`, the workspace of the crate `ridl build` \
                  generates: {path}\n\
                  \n\
-                 A generated package must not depend on planus in any way \
-                 (lane E16 driver, section 4, answer 8): look for the edge in \
+                 A generated package must not depend on planus in any way. \
+                 Look for the edge in \
                  the generated manifest, in `ridl-rt`, or in `ridl-loopback`. \
                  `examples/cabin/server` is not checked: it reads the catalog \
                  descriptor through `ridl-transport-ws`'s `descriptor` \

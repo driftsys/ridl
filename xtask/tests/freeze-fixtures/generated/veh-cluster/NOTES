@@ -24,8 +24,8 @@ and §14.5 needs both service forms exercised.
 - **The inline shape carries the whole surface.** A service's inline shape is
   an `Interface` stored under `Service.shape`, outside `Package.interfaces`, so
   a consumer that walks `package.interfaces` alone skips it silently — the
-  shape of five separate E2 defects. `veh.cluster.HvacCabin` therefore holds all five
-  interaction kinds, every timing mode, contracts including one that reads
+  shape of five separate defects. `veh.cluster.HvacCabin` therefore holds all
+  five interaction kinds, every timing mode, contracts including one that reads
   `result`, an inline `T | E` fallible return, streams in both positions, a
   `reserved` tombstone, a deprecated member, and both `fixed` forms. The IR,
   Rust and TypeScript snapshots record what each consumer made of them.
@@ -87,8 +87,8 @@ and §14.5 needs both service forms exercised.
   `veh_cluster_generated_typescript_type_checks` runs the emitted modules
   through `tsc --noEmit --strict` alongside the generated `ridl.std` module.
   Both snapshots are therefore proofs rather than transcripts, which is what the
-  E2 exit criterion — IR neutrality demonstrated by two backends — actually
-  asks for. The tsc proof skips with a printed notice when no tsc is
+  requirement that the IR stay neutral between backends, demonstrated by two
+  backends, actually asks for. The tsc proof skips with a printed notice when no tsc is
   discoverable (the convention `crates/ridl-backend-ts` set), so Node stays
   optional for `cargo test`; the generated-source markers are asserted either
   way, so it never passes by type-checking nothing.
@@ -114,8 +114,8 @@ warnings, both of them true statements about the source:
 wrote `query getFaultPage(filter: DiagFilter): FaultPageResult` over a named
 `union FaultPageResult`, which drew the lint. General form §6.1 made the inline
 `FaultPage | DiagError` spelling canonical in return position after the appendix
-was written, and the E2 close-out adopted it in the reference text (ADR-0008
-decisions 1 and 19); the appendix now writes the inline form and the union
+was written, and the interaction layer adopted it in the reference text
+(ADR-0008 decisions 1 and 19); the appendix now writes the inline form and the union
 declaration is deleted with it, because adopting the inline return leaves the
 union unreferenced and no pass reports an unused declaration — TYPL-007 covers
 unused imports only. RIDL-308 keeps a living example in `ridl-diag-showcase`,

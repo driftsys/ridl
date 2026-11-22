@@ -1303,14 +1303,14 @@ impl Checker<'_> {
     /// `internal` one (typl §3.3, ridl §14.5). One pass over the file's
     /// top-level items, whatever their kind — which is the fix for issue #161.
     /// The rule used to be a step of the typl definition lowering, so the two
-    /// declaration kinds E2 added, `interface` and `service`, were never
-    /// checked at all: a public interface could carry an `internal` payload
-    /// (the Rust backend then emits a `pub` trait over a `pub(crate)` type,
-    /// which fails any consumer build under `-D warnings`) and a public service
-    /// could publish an `internal` interface. Driving the pass off the syntax
-    /// tree's own top-level children rather than off a list of lowering calls
-    /// is what makes the omission unrepresentable: a declaration kind added
-    /// later inherits the check without being wired to it.
+    /// declaration kinds of the interaction layer, `interface` and `service`,
+    /// were never checked at all: a public interface could carry an `internal`
+    /// payload (the Rust backend then emits a `pub` trait over a `pub(crate)`
+    /// type, which fails any consumer build under `-D warnings`) and a public
+    /// service could publish an `internal` interface. Driving the pass off the
+    /// syntax tree's own top-level children rather than off a list of lowering
+    /// calls is what makes the omission unrepresentable: a declaration kind
+    /// added later inherits the check without being wired to it.
     ///
     /// `package` and `import` headers name no type and carry no constraint, so
     /// they contribute no exposure position and need no exclusion of their own.
@@ -4145,8 +4145,8 @@ impl Checker<'_> {
     }
 
     /// Lowers one surviving interface member to its interaction `Decl`
-    /// (ridl §14.1): the doc envelope (typl §14 through the E1 scanner), the
-    /// §11 ordinal, and the kind. Visibility and `is_error` stay unset on
+    /// (ridl §14.1): the doc envelope (typl §14 through the typl doc scanner),
+    /// the §11 ordinal, and the kind. Visibility and `is_error` stay unset on
     /// interactions.
     fn lower_interaction(&mut self, member: &ast::InterfaceMember, ordinal: u32) -> v2::Decl {
         // The interaction name is half of the observer id its contracts carry
@@ -4892,7 +4892,7 @@ impl Checker<'_> {
                     }
                 }
                 // Unresolved: already reported; the written text is carried
-                // for honest lowering (the E1 rule).
+                // for honest lowering.
                 PathTarget::Unresolved(written) => payload = written,
             },
             Some(other) => self.error(
@@ -5219,15 +5219,15 @@ impl Checker<'_> {
     /// Every lowered clause is also an **observer stub**: the reads it
     /// resolves ([`expr::collect_refs`]) — signals as canonical
     /// `Interface.signalName`, parameters by name, `result` as a flag — plus
-    /// `observer_id`, the handle the E5/E7 observer tooling is expected to
-    /// address a single clause by.
+    /// `observer_id`, the handle that observer tooling, which does not exist
+    /// yet, is expected to address a single clause by.
     ///
     /// The id is `"{Interface}.{interaction}.{require|ensure}[{i}]"`, and its
     /// guarantee is precisely **positional**: `i` counts the interaction's
     /// clauses **of that kind** from 0, so appending a clause of either kind
     /// never renumbers an existing one. Removing a clause does renumber the
     /// survivors of its kind — a known limitation, recorded against ADR-0008
-    /// for E5/E7 (a tombstone or explicit-index mechanism).
+    /// (a tombstone or explicit-index mechanism).
     fn lower_contracts(
         &mut self,
         node: &ridl_syntax::SyntaxNode,
@@ -5672,7 +5672,7 @@ impl Checker<'_> {
                 optional: false,
                 kind: Some(v2::field_type::Kind::Named(self.lower_type_ref(&path))),
             }),
-            // An array payload lowers through the E1 field-type path, which
+            // An array payload lowers through the typl field-type path, which
             // resolves the element and validates the bounds (typl §12.1).
             Some(array @ ast::FieldType::Array(_)) => Some(self.lower_field_type(&array, false).ty),
             Some(other) => {
@@ -7150,7 +7150,7 @@ mod tests {
 
     // --- backing lowering -------------------------------------------------
 
-    /// A primitive-backed type lowers to `Backing { primitive }` — the E0
+    /// A primitive-backed type lowers to `Backing { primitive }` — the old
     /// `unit: "integer"` artifact must not carry into IR v2.
     #[test]
     fn primitive_backing_lowers_to_backing_primitive() {
@@ -10941,13 +10941,13 @@ mod tests {
     // --- TYPL-005 and RIDL-143 on the interaction layer (issue #161) -------
     //
     // The exposure rule used to be a step of the typl definition lowering, so
-    // the two declaration kinds E2 added — `interface` and `service` — were
-    // never checked: a public interface over an `internal` payload compiled
-    // with zero diagnostics and then failed a consumer's `-D warnings` build,
-    // and a public service could publish an `internal` interface. Each test
-    // below pairs the refusal with the legal case it must leave alone; the
-    // rule is about a *public* item naming a package-private one, and
-    // rejecting `internal` over `internal` would be the worse failure.
+    // the two declaration kinds of the interaction layer — `interface` and
+    // `service` — were never checked: a public interface over an `internal`
+    // payload compiled with zero diagnostics and then failed a consumer's
+    // `-D warnings` build, and a public service could publish an `internal`
+    // interface. Each test below pairs the refusal with the legal case it must
+    // leave alone; the rule is about a *public* item naming a package-private
+    // one, and rejecting `internal` over `internal` would be the worse failure.
 
     /// Every ridl type position is an exposure position. The fixture names one
     /// `internal` type from each of them at once — a signal, event and fixed
@@ -13432,7 +13432,7 @@ mod tests {
             bad.diagnostics[0].message,
         );
 
-        // A SCREAMING_SNAKE constant reference resolves through the E1 const
+        // A SCREAMING_SNAKE constant reference resolves through the typl const
         // chain and validates in range.
         let good = check_ridl(
             "app",
@@ -14033,7 +14033,8 @@ interface I {\n\
 
     #[test]
     fn appending_a_clause_does_not_renumber_the_earlier_observer_ids() {
-        // The observer id is the handle E5/E7 observer tooling is expected to
+        // The observer id is the handle that observer tooling, which does not
+        // exist yet, is expected to
         // address a single clause by, so appending a clause must leave every
         // earlier id untouched — which is why `i` is scoped to the clause kind
         // rather than counted across kinds. (Removal is the known limitation,
@@ -14102,7 +14103,7 @@ interface I {\n\
         //
         // This is known and accepted behavior, not an oversight — pinned here
         // so it can never be re-discovered as a regression. A tombstone or
-        // explicit-index mechanism is recorded against ADR-0008 for E5/E7.
+        // explicit-index mechanism is recorded against ADR-0008.
         let both = check_ridl(
             "app",
             &format!(
@@ -15412,7 +15413,7 @@ interface VehicleStatus {
     #[test]
     fn appendix_a_contracts_lower_observer_stubs() {
         // Task 12: every clause of the Appendix A interface is an addressable
-        // observer stub — the reads it resolves plus the positional id E5/E7
+        // observer stub — the reads it resolves plus the positional id that
         // observer tooling addresses it by. A signal read is canonical
         // `Interface.signalName`; a parameter read is the bare parameter name.
         let checked = check_appendix_a();
@@ -16341,7 +16342,7 @@ interface VehicleStatus {
         // channel-init override (ADR-0008 decision 2) reaches
         // `SignalDef.declared_init` from real source, in canonical decimal
         // text, and `init` resolves to it. A constant reference resolves
-        // through the E1 const chain.
+        // through the typl const chain.
         let checked = check_ridl(
             "app",
             &format!(
@@ -16363,7 +16364,7 @@ interface VehicleStatus {
 
     #[test]
     fn interaction_doc_tags_lower_into_the_decl_envelope() {
-        // The E1 doc-tag scanner applied to interactions: prose body in
+        // The typl doc-tag scanner applied to interactions: prose body in
         // `doc`, `@labels` in `labels`, `@deprecated` in `deprecated`.
         let checked = check_ridl(
             "app",

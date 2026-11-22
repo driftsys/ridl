@@ -25,8 +25,8 @@ use crate::syntax_kind::SyntaxKind;
 /// [`Profile::Rsdl`], everything else parses as typl.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Profile {
-    /// `.typl` — the vocabulary layer. Behavior is identical to the E1
-    /// toolchain: only the typl keywords are active.
+    /// `.typl` — the vocabulary layer. Only the typl keywords are
+    /// active.
     Typl,
     /// `.ridl` — the interface-description layer. The typl keywords plus the
     /// nine ridl words are active; durations and `@` are ordinary tokens.

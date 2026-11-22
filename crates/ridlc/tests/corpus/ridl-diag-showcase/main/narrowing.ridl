@@ -3,9 +3,9 @@
 // The interaction layer narrows the typl type surface: a payload, a parameter
 // and a return are named types (plus the stream and tuple and array forms each
 // position allows), and the shapes below are rejected everywhere they appear.
-// The rule is inherited by the layers above — E5's function signatures and
-// E7's registry both read it — and it had no corpus instance, so nothing would
-// have noticed a position that quietly started accepting one.
+// The rule would be inherited by the layers above — function signatures and
+// a registry would both read it — and it had no corpus instance, so nothing
+// would have noticed a position that quietly started accepting one.
 //
 // These paths report FORM-101 and FORM-102, which the showcase's set-equality
 // guard cannot distinguish from the same codes raised elsewhere. The messages

@@ -606,8 +606,8 @@ fn run_mcp() -> ExitCode {
 }
 
 /// Prints the classification rule for one change category — the table of
-/// ADR-0008 decision 14 as text, and the CI-facing documentation of record until
-/// the E4 error index publishes it. An unknown category is a usage error: exit 2
+/// ADR-0008 decision 14 as text, and the CI-facing documentation of record.
+/// An unknown category is a usage error: exit 2
 /// with the valid words listed.
 fn run_explain(category: &str) -> ExitCode {
     match ridl_diff::category_from_word(category) {

@@ -106,11 +106,12 @@ impl DiagCode {
 /// the guards cannot see still puts its codes where the scan can.
 ///
 /// This replaces the pair of hand-maintained arrays `FORM_CATALOG` and
-/// `MANI_CATALOG` carried until E2 close-out, each guarded by a test that
-/// compared it against a *second hand-written list inside the test*. That pair
-/// checked that two lists agreed; it never checked either against the codes
-/// actually declared, so a constant added to neither compiled and turned nothing
-/// red. `RIDL` and `TYPL` had no catalogue at all.
+/// `MANI_CATALOG` carried before the interaction layer's codes joined the
+/// family catalogue, each guarded by a test that compared it against a *second
+/// hand-written list inside the test*. That pair checked that two lists agreed;
+/// it never checked either against the codes actually declared, so a constant
+/// added to neither compiled and turned nothing red. `RIDL` and `TYPL` had no
+/// catalogue at all.
 ///
 /// The remedy available in `crates/ridl-diff` — make the guard an exhaustive `match`
 /// and let the compiler enforce totality — does not exist here: `DiagCode` is a
@@ -714,10 +715,11 @@ diag_codes! {
         /// Narrowed by ADR-0015 decision 6: `command` and `query` admit
         /// the range form now, so the two RPC kinds left this rule and only
         /// `fixed` remains in both halves. The callables drew FORM-102 until
-        /// the E2 close-out, so one rule sat under two codes and one of them
-        /// was a parse code whose catalogue meaning is "unexpected token" —
-        /// for a token the grammar accepts on purpose, precisely so the
-        /// narrowing can be a semantic rule with a semantic message.
+        /// the interaction layer's codes were reconciled, so one rule sat under
+        /// two codes and one of them was a parse code whose catalogue meaning
+        /// is "unexpected token" — for a token the grammar accepts on purpose,
+        /// precisely so the narrowing can be a semantic rule with a semantic
+        /// message.
         RIDL_106 = "RIDL-106", Error,
             "timing annotation on `fixed`, or attribute block on `fixed`";
 

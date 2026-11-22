@@ -201,7 +201,7 @@ fn parse_default_range(text: &str, require_min: bool) -> Result<TimingSpec, Stri
 /// declared response bound, warning, anchored on `anchor`), and FORM-102 for a
 /// duration literal that is not a whole number of time units (ridl §2.1). An
 /// erroneous annotation still lowers its written bounds, so the IR reflects
-/// the source honestly (the E1 discipline) and no written bound is ever
+/// the source honestly and no written bound is ever
 /// silently unset.
 pub fn resolve_timing(
     annot: Option<&ast::Timing>,

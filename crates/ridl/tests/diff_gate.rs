@@ -186,7 +186,7 @@ fn tightening_the_configured_timing_default_is_compatible() {
 // --------------------------------------------------------------------------
 
 /// `--explain` prints the category's rule row, both verdict directions
-/// included — the CI-facing documentation of record until the E4 error index.
+/// included — the CI-facing documentation of record.
 #[test]
 fn explain_prints_the_rule_row_for_a_category() {
     let (code, stdout, stderr) = ridl(&[

@@ -11,8 +11,8 @@
 //! for those types (ADR-0014 decision 14); and the set is written to
 //! `OUT_DIR`, where `lib.rs` embeds it as the `prost-reflect` descriptor
 //! pool behind prototext (ADR-0014 decision 7, amended by decision 14). The
-//! v1 schema was removed when its last consumer moved to v2 (task 6 of the
-//! E2 plan), mirroring the E0 v0 retirement.
+//! v1 schema was removed when its last consumer moved to v2 and the
+//! v0 schema was removed in the same way before it.
 //!
 //! `proto/ridl/codegen/v1/model.proto` — the lowered codegen model
 //! (`ridl.codegen.v1`, the codegen model design note §3) —

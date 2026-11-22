@@ -2509,6 +2509,15 @@ story-id-check root="":
     # fails the recipe instead of passing unnoticed.
     fixtures_marker="story-id-check: fixtures passed."
     id_re='(^|[^A-Za-z0-9_])E[0-9]+\.[0-9]+[a-z]?([^A-Za-z0-9_]|$)'
+    # A bare epic name: E followed by one or two digits, as a whole word, with
+    # no dotted suffix (that is id_re's). The two alternatives let a token that
+    # is not an epic name through: a hexadecimal group or a code point has
+    # three or more digits, a hex literal or `U+E000` has a word character or
+    # a plus sign before the E, and a string literal that holds only the token
+    # (`"E0"`) is test data. An epic name that opens a quoted phrase is still
+    # caught, because the second alternative only accepts a quote on the
+    # left of the E and not on its right.
+    bare_re='(^|[^A-Za-z0-9_"+])E[0-9]{1,2}([^A-Za-z0-9_."]|[.]([^0-9]|$)|"|$)|"E[0-9]{1,2}([^A-Za-z0-9_."]|[.]([^0-9]|$)|$)'
     plan_re='(^|[^A-Za-z0-9_])([Ee][Pp][Ii][Cc] E?[0-9]+|[Ss][Tt][Aa][Gg][Ee] [A-Z][0-9]+[a-z]?|[Ll][Aa][Nn][Ee] [A-Z]|E[0-9]+ [Tt][Aa][Ss][Kk] [0-9]+[a-z]?)([^A-Za-z0-9_]|$)'
     # A git call that ignores an inherited git environment. A hook exports
     # GIT_DIR, which `git -C` does not override; see doc-path-check.
@@ -2520,7 +2529,7 @@ story-id-check root="":
     # Reads a NUL-separated file list on standard input and prints each match as
     # file:line:text. -H keeps the file name when the list holds one file.
     scan() {
-        xargs -0 grep -HInE -e "$id_re" -e "$plan_re" || true
+        xargs -0 grep -HInE -e "$id_re" -e "$plan_re" -e "$bare_re" || true
     }
     # The files of docs/specification/ that a docs/book/ file includes.
     included_specs() {
@@ -2549,7 +2558,7 @@ story-id-check root="":
         if [ -n "$found" ]; then
             printf '%s\n' "$found" | sed 's/^\([^:]*:[0-9]*\):/story-id-check: \1: /' >&2
             count="$(printf '%s\n' "$found" | grep -c . || true)"
-            echo "story-id-check: $count line(s) above name a story id or a plan name. Delete it, or link the tracking issue as driftsys/ridl#N." >&2
+            echo "story-id-check: $count line(s) above name a story id, a plan name or an epic name. Delete it, or link the tracking issue as driftsys/ridl#N." >&2
             exit 1
         fi
         echo "story-id-check: no story id in the scanned trees."
@@ -2578,6 +2587,29 @@ story-id-check root="":
         # glued to the epic id or to the task number, a missing `E`, a doubled space
         # on either side of the word, or an upper-case suffix letter.
         plan_clean="a lane a vehicle takes, lane m, stage 2, stage K, stage k3, stage K3xy, lane  M, epic poem, epic e1, upstage K3, plane M, lane Mx, task 9, E2 task, e2 task 9, E2 task x, xE2 task 9, E2 tasks 9, E2 task9, E task 9, 2 task 9, E2 task 9bc, E2task 9, E2  task 9, E2 task  9, E2 task 9B"
+        # The plan_clean phrases are checked against plan_re alone: those that
+        # hold a bare epic name (`E2 task`) are positives of bare_re, so they
+        # cannot sit in the clean tree. The tree keeps the rest.
+        plan_clean_tree=""
+        while IFS= read -r phrase; do
+            phrase="${phrase# }"
+            if printf '%s\n' "$phrase" | grep -qE -e "$plan_re"; then
+                echo "story-id-check: the plan-name pattern matches '$phrase', which is not a plan name." >&2
+                exit 1
+            fi
+            if ! printf '%s\n' "$phrase" | grep -qE -e "$bare_re"; then
+                plan_clean_tree="${plan_clean_tree:+$plan_clean_tree, }$phrase"
+            fi
+        done < <(printf '%s\n' "$plan_clean" | tr ',' '\n')
+        # Tokens that read like an epic name and are not one: a hexadecimal
+        # group of three digits, a code point, a hex literal, a word character
+        # on either side, and a string literal that holds only the token.
+        bare_clean='258EAFA5-E914-47DA, U+E000, 0xE0, E123, xE2 plan, E2x, E_2, E2_x, CE2 plan, Some("E0".to_owned()), "E1"'
+        # Epic names the pattern states: at the start and end of a line, in
+        # parentheses, before a slash, an apostrophe, a dot or a hyphen, after
+        # a hyphen, after a word such as lane, and at the start of a quoted
+        # phrase.
+        bare_names=("the E2 plan" "E1 v0→v1" "E2 close-out" "the E0 fixture" "E2 (earmarked 3–15)" "(E5)" "E5/E7" "E5's oracle" "until E2." "E2" "lane E16" "pre-E2 code" "E1-only" "\"E2 plan\" says" "U+E000 and E3")
         # Phrases that are a plan name, in the cases the pattern states.
         plan_names=("epic E11" "Epic 10" "EPIC E1" "stage K3" "stage K3x" "stage K9b" "Stage P4" "STAGE M3" "lane M" "Lane P" "(lane Q's" "E2 task 9" "E2 task 11b" "(E2 task 9)" "E16 task 3" "E2 Task 9" "E2 TASK 9")
         root="$work/fixture"
@@ -2585,7 +2617,7 @@ story-id-check root="":
         clean_tree() {
             for tree in "${scanned[@]}"; do
                 mkdir -p "$root/$tree"
-                printf '%s\n' "// driftsys/ridl#12, 1E5.0, TYPE1.2, $(printf 'E%s.%s' 2 8)bc, $(printf 'E%s.%s' 2 8)B, $(printf 'E%s.%s' 2 8)_1 and _$(printf 'E%s.%s' 1 2) are not story ids; nor are $plan_clean" > "$root/$tree/clean.txt"
+                printf '%s\n' "// driftsys/ridl#12, 1E5.0, TYPE1.2, $(printf 'E%s.%s' 2 8)bc, $(printf 'E%s.%s' 2 8)B, $(printf 'E%s.%s' 2 8)_1 and _$(printf 'E%s.%s' 1 2) are not story ids; nor are $plan_clean_tree, $bare_clean" > "$root/$tree/clean.txt"
             done
             git_at "$root" -c core.excludesFile=/dev/null add -A
         }
@@ -2637,8 +2669,8 @@ story-id-check root="":
             cat "$report" >&2
             exit 1
         fi
-        # Each plan name alone is enough to fail the gate.
-        for phrase in "${plan_names[@]}"; do
+        # Each plan name and each bare epic name alone is enough to fail the gate.
+        for phrase in "${plan_names[@]}" "${bare_names[@]}"; do
             clean_tree
             printf '%s\n' "// see $phrase" > "$root/crates/clean.txt"
             git_at "$root" -c core.excludesFile=/dev/null add -A

@@ -752,7 +752,7 @@ fn collect_used_names(db: &dyn salsa::Database, files: &[InputFile]) -> HashSet<
                 // `Ident` in the node rather than resolving it, so a parameter
                 // name, `result`, or a local declaration that happens to share
                 // an import's local name marks that import used. The `Literal`
-                // arm has behaved this way since E1 and the `PathExpr` arm
+                // arm has always behaved this way and the `PathExpr` arm
                 // inherits it. The cost is a missed TYPL-007 warning; the
                 // alternative — resolving each reference before counting it —
                 // needs the symbol table this function runs ahead of.
@@ -1633,7 +1633,7 @@ mod package_tests {
     #[test]
     fn interface_duplicating_a_type_is_typl_009_and_the_type_wins() {
         // A duplicate against any declaration kind is TYPL-009, first wins
-        // (ADR-0007 decision 6, unchanged for E2).
+        // (ADR-0007 decision 6, unchanged for interactions).
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
         let app = ridl_package(

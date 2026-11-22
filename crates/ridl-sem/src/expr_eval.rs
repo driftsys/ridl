@@ -4,7 +4,7 @@
 //!
 //! This is the value half of the contract plane: [`crate::expr`] types a clause,
 //! this module runs it. It is the shared engine behind `ridl test`'s property
-//! runs today and the E5 reference oracle later, which is why §7 makes the
+//! runs today and a reference oracle later, which is why §7 makes the
 //! domains normative — the two must agree exactly.
 //!
 //! Three properties are load-bearing:
@@ -63,8 +63,8 @@ pub enum Value {
 /// `consts` resolves every *named* value that is not a parameter and not
 /// `result`: a package constant under its bare name, and an enum member under
 /// its dotted `Enum.MEMBER` spelling. Routing both through one closure keeps
-/// the environment open — `ridl test` fills it from the IR, the E5 oracle will
-/// fill it from a provider — without this module needing to know either.
+/// the environment open — `ridl test` fills it from the IR, a reference oracle
+/// would fill it from a provider — without this module needing to know either.
 ///
 /// A `require` that reads the enclosing interface's own signals has no entry
 /// here on purpose: a signal is live state, so `ridl test` reports such a

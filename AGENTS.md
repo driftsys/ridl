@@ -166,8 +166,9 @@ member; rsdl is the apex.
                          where such a path records what was true when it was
                          written (the changelog is generated from commit
                          history)
-    just story-id-check  no story id (`E16.5`, `E2.8b`) and no plan name
-                         (`epic E11`, `stage K3`, `lane M`, `E2 task 9`) in a
+    just story-id-check  no story id (`E16.5`, `E2.8b`), no plan name
+                         (`epic E11`, `stage K3`, `lane M`, `E2 task 9`) and
+                         no bare epic name (`E2`, as in "the E2 plan") in a
                          tracked file under crates/, xtask/, examples/,
                          editors/vscode/src/, packages/, docs/book/,
                          docs/design/ or docs/technotes/, nor in a

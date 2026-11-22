@@ -3,12 +3,12 @@
 // `service`.
 //
 // Both escaped the checker entirely until issue #161. TYPL-005 was a step of
-// the typl definition lowering, so the two declaration kinds E2 added —
-// `interface` and `service` — were never checked at all, and a program that
-// crosses the visibility boundary compiled with zero diagnostics. The payload
-// half is the sharper one: the Rust backend then emits a `pub` trait over a
-// `pub(crate)` type, which rustc's `private_interfaces` lint turns into a hard
-// build failure for any consumer building with `-D warnings`.
+// the typl definition lowering, so the two declaration kinds of the interaction
+// layer — `interface` and `service` — were never checked at all, and a program
+// that crosses the visibility boundary compiled with zero diagnostics. The
+// payload half is the sharper one: the Rust backend then emits a `pub` trait
+// over a `pub(crate)` type, which rustc's `private_interfaces` lint turns into
+// a hard build failure for any consumer building with `-D warnings`.
 //
 // `internal interface Backdoor` below is the control. It names `internal`
 // declarations in every position `Exposed` does and draws nothing, because the

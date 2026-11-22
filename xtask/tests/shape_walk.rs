@@ -3,10 +3,11 @@
 //! `ridl_ir::v2::Package::interfaces` and `ridl_syntax::ast::SourceFile::
 //! interfaces()` are **not** the complete set of interface bodies: a `service`
 //! declared with an inline body carries a full interface that lives outside
-//! both. Six defects with that one cause were found independently across E2 —
-//! observer-stub lowering, both backends' transport identity, `ridl test`'s
-//! report, the Rust backend's collision check, and the desk check's span index.
-//! `Package::shapes()` and `SourceFile::shapes()` are the walks that see both.
+//! both. Six defects with that one cause were found independently in the
+//! interaction layer — observer-stub lowering, both backends' transport
+//! identity, `ridl test`'s report, the Rust backend's collision check, and the
+//! desk check's span index. `Package::shapes()` and `SourceFile::shapes()` are
+//! the walks that see both.
 //!
 //! Two scans run here, over every `.rs` file in the workspace:
 //!
@@ -713,7 +714,7 @@ fn every_direct_interfaces_read_is_justified() {
 /// This is not a hypothetical bypass. `shape.interface.interactions` is the
 /// idiomatic access at almost every converted site, so `shape.interface.name`
 /// reads as ordinary code — and it is exactly the value that is `""` for an
-/// inline shape, which is what produced two of the six E2 defects.
+/// inline shape, which is what produced two of the six defects.
 #[test]
 fn every_read_of_an_inline_shapes_empty_fields_is_justified() {
     assert_scan(&Scan {

@@ -1450,8 +1450,8 @@ fn appendix_b_ts_snapshot() {
 /// The generated TypeScript for the full Appendix B package compiles with
 /// `tsc --noEmit --strict` when a tsc binary is discoverable; otherwise the
 /// check is skipped with a printed notice — the snapshot tests are the gate,
-/// this is best-effort local evidence (network-free, mirroring the E1
-/// rustc-compile precedent).
+/// this is best-effort local evidence (network-free, mirroring the
+/// rustc-compile check of the Rust backend).
 #[test]
 fn appendix_b_compiles_with_tsc_strict() {
     let Some(tsc) = discover_tsc() else {

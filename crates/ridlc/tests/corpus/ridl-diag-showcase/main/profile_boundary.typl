@@ -3,7 +3,7 @@
 // expr-core attribute words belong to the profiles above it.
 //
 // TYPL-302 (a duration literal or timing annotation in a typl context) is
-// exercised by the E1 `diag-showcase` entry and is not repeated here.
+// exercised by the `diag-showcase` entry and is not repeated here.
 
 package diag.ridl
 
