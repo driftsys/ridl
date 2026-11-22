@@ -46,7 +46,8 @@ records the decisions taken when the skill and its evals were built:
 
 Accepted 2026-11-22 by the maintainer. The acceptance leaves the judge check and
 the release record of ADR-0035 decisions 11 and 12 deferred; ADR-0035's status
-gives the conditions.
+gives the conditions. The release record was made on 2026-11-22 with the judge
+check waived (ADR-0035, Status).
 
 Assumes ADR-0002 (module system) as accepted and ADR-0004 (implementation
 sequencing and stack) as the direction of record, and depends on the concept

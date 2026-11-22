@@ -153,8 +153,8 @@ numbering.
     with three runs per combination (12 tasks, 2 hosts, both arms: 144 agent
     runs and up to 144 judge calls). While the skill is written, one run per
     combination, filtered by task or host, is enough. `cargo xtask eval`
-    computes the gate and writes it in `summary.md`; no record has been made
-    (design D-9).
+    computes the gate and writes it in `summary.md`. The record of 2026-11-22
+    exists, with the judge check waived (see the Status amendment of that date).
 
 ## Alternatives considered
 
@@ -187,12 +187,13 @@ numbering.
 
 - `skills/` is Markdown only. A change to a diagnostic code, a book heading or a
   fenced sample that the skill cites fails a test in `just build`, not a review.
-- The skill's behaviour is not measured in this repository. The gate and the
-  comparison are built and unit-tested, and the judge is unchecked. Until the
-  judge check and the release record are done, no document may state that the
-  skill improves an agent's result.
-- `evals/runner.toml` pins the model of each host; the pinned ids have not been
-  confirmed by the maintainer for a release record.
+- The record of 2026-11-22 measures the skill's behaviour on Copilot and Codex,
+  and the gate holds on both hosts. The judge was not checked, so the rubric
+  scores are unverified. Until the judge check is done, a document that states
+  the skill improves an agent's result must also state that the judge is
+  unchecked and cite the record.
+- `evals/runner.toml` pins the model of each host; the maintainer approved the
+  pinned ids for the record of 2026-11-22.
 - The skill's version moves with every release, so each release changes
   `SKILL.md` and the editor release attaches a new archive.
 - The Copilot CLI is a third eval host that a run selects with `--host copilot`;
@@ -222,5 +223,6 @@ Source material, archived verbatim:
 [the design](../archive/2026-10-11-ridl-authoring-skill-design.md) and
 [the plan](../archive/2026-10-11-ridl-authoring-skill-plan.md).
 
-Tracking: driftsys/ridl#1440 (the judge check and the release record). The
-earlier issue driftsys/ridl#1401 was closed on 2026-11-19.
+Tracking: driftsys/ridl#1440 (the judge check, and the release record, which was
+made on 2026-11-22). The earlier issue driftsys/ridl#1401 was closed on
+2026-11-19.

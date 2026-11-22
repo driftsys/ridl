@@ -150,6 +150,6 @@ choices, see [`../decisions/`](../decisions/).
 - **authoring-skill.md** — the `ridl-authoring` skill as built: its two files,
   the three tests that keep it consistent with the compiler, how it reaches
   Claude Code, Codex and Copilot, the `cargo xtask eval` runner and its scoring,
-  and what is not built (the per-language references, the judge check and the
-  release record). The decisions behind its choices are
+  and what is not built (the per-language references and the judge check). The
+  decisions behind its choices are
   [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md).

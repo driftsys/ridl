@@ -143,7 +143,8 @@ skill — leads P2, ahead of the advisory score, in this order:
    #75 and #87 and decides which agent hosts it supports, how it is registered,
    and how the evals score an answer. Done: ADR-0035 records it, the skill
    shipped in PR driftsys/ridl#963, and #73, #74, #75 and #87 closed on
-   2026-11-11. The eval runs are tracked in driftsys/ridl#1440.
+   2026-11-11. The release record was made on 2026-11-22; the judge check
+   remains deferred.
 2. Doc comments in generated code: the rules and the source docs rendered as
    rustdoc and TSDoc on the public facade. It needs a specification; its
    dependencies (doc comments in the source, and the catalog descriptor) have
