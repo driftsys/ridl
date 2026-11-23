@@ -240,6 +240,8 @@ impl Judgment {
                         // a carrier for the issue's path and side.
                         (
                             Change {
+                                old_ordinal: None,
+                                old_was_tombstone: false,
                                 path: issue.path,
                                 category: ridl_diff::Category::PodbufRemoteInlineGrowth,
                                 verdict: Verdict::Breaking,

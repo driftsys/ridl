@@ -284,6 +284,8 @@ impl Pass<'_> {
                         self.changes.insert(
                             (path.to_string(), identity.clone()),
                             Change {
+                                old_ordinal: None,
+                                old_was_tombstone: false,
                                 path: path.to_string(),
                                 category: Category::PodbufRemoteInlineGrowth,
                                 verdict: self.verdict,
@@ -398,6 +400,8 @@ impl Pass<'_> {
                     category_word(category),
                 ),
                 Change {
+                    old_ordinal: None,
+                    old_was_tombstone: false,
                     path: path.to_string(),
                     category,
                     verdict: Verdict::Breaking,
@@ -435,6 +439,8 @@ impl Pass<'_> {
                     category_word(category),
                 ),
                 Change {
+                    old_ordinal: None,
+                    old_was_tombstone: false,
                     path: path.to_string(),
                     category,
                     verdict: if breaking {
@@ -552,6 +558,8 @@ fn constraint_changes(
                             changes.insert(
                                 (path.clone(), identity.clone(), "width_changed"),
                                 Change {
+                                    old_ordinal: None,
+                                    old_was_tombstone: false,
                                     path: path.clone(),
                                     category: Category::WidthChanged,
                                     verdict: Verdict::Breaking,
@@ -583,6 +591,8 @@ fn constraint_changes(
                         changes.insert(
                             (path.clone(), identity.clone(), "constraint_changed"),
                             Change {
+                                old_ordinal: None,
+                                old_was_tombstone: false,
                                 path: path.clone(),
                                 category: Category::ConstraintChanged,
                                 verdict,

@@ -471,6 +471,8 @@ mod tests {
         let new = baseline();
         let mut report = diff_sets(&old, &new);
         report.changes.push(crate::Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "b/S/x".to_owned(),
             category: crate::Category::DeclRemoved,
             verdict: Verdict::Breaking,
@@ -500,6 +502,8 @@ mod tests {
     #[test]
     fn a_change_to_a_package_has_no_declaration() {
         let change = |path: &str| crate::Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: path.to_owned(),
             category: crate::Category::DeclRemoved,
             verdict: Verdict::Breaking,

@@ -1174,9 +1174,11 @@ impl PublicationSets {
 /// published whenever that lookup did not resolve — a declared interface and
 /// an inline service sharing a name (driftsys/ridl#339 case 2), or an
 /// interface renamed since publication (found in the review of the fix,
-/// driftsys/ridl#528). The published IR is still read
-/// for the message's ordinal and wording ([`untombstoned_removal_message`]),
-/// never for the verdict.
+/// driftsys/ridl#528). The message's ordinal and wording come from
+/// [`ridl_diff::Change::old_ordinal`] and
+/// [`ridl_diff::Change::old_was_tombstone`] ([`untombstoned_removal_message`]),
+/// which the walk fills from the shape it matched, so the gate does no second
+/// lookup of the published IR.
 ///
 /// The published side is read through [`load_published`], which refuses two
 /// snapshots declaring one package (driftsys/ridl#339 case 1).
@@ -1188,7 +1190,6 @@ fn untombstoned_removals(
     let Some(report) = &sets.report else {
         return Ok(false);
     };
-    let published = &sets.published;
     // Parsing every source file is wasted work on the common republish that
     // carries no refused change at all, so the index is built only once the
     // first one is actually met.
@@ -1206,7 +1207,7 @@ fn untombstoned_removals(
         refusals.push(Diagnostic {
             code: DiagCode::RIDL_408,
             severity: Severity::Error,
-            message: untombstoned_removal_message(change, published),
+            message: untombstoned_removal_message(change),
             primary: index.span_of(&change.path, &mut run.sources),
             labels: Vec::new(),
             fixits: Vec::new(),
@@ -1226,22 +1227,20 @@ fn untombstoned_removals(
 ///   at its own ordinal — is told apart by `change.after`, which only this
 ///   `InteractionRemoved` shape carries (the tombstone's own ordinal);
 /// - a **bare removal** and a **dropped tombstone** both carry no
-///   `change.after`, so they are told apart by asking the published IR
-///   itself whether it already reserved the name — never by reading the
-///   words in `change.before`, which is display text `ridl_diff` owns and may
-///   reword.
+///   `change.after`, so they are told apart by `change.old_was_tombstone` —
+///   never by reading the words in `change.before`, which is display text
+///   `ridl_diff` owns and may reword.
 ///
-/// The ordinal each message names is read from the published IR too
-/// ([`published_ordinal`]), for the same reason. The shape and the name come
+/// The ordinal each message names is `change.old_ordinal`, for the same
+/// reason. The shape and the name come
 /// from the diff path through [`shape_and_name`], as RIDL-407's do, so two
 /// interfaces removing the same name draw two distinct messages.
-fn untombstoned_removal_message(
-    change: &ridl_diff::Change,
-    published: &[ridl_ir::v2::Package],
-) -> String {
+fn untombstoned_removal_message(change: &ridl_diff::Change) -> String {
     let (shape, name) = shape_and_name(&change.path);
     let in_shape = shape.map_or(String::new(), |shape| format!(" in `{shape}`"));
-    let ordinal = published_ordinal(published, &change.path);
+    // The walk always fills `old_ordinal` for these changes. The `None` wording
+    // below is a fail-closed default for a `Change` built without the walk.
+    let ordinal = change.old_ordinal;
     let held = ordinal.map_or(String::new(), |ordinal| format!(" (ordinal {ordinal})"));
     let slot = ordinal.map_or("that ordinal".to_string(), |ordinal| {
         format!("ordinal {ordinal}")
@@ -1261,7 +1260,7 @@ fn untombstoned_removal_message(
              (ridl §11); otherwise the surviving interactions slide into the freed slot. Move \
              `reserved {name}` to {slot}."
         )
-    } else if published_reserves(published, &change.path) {
+    } else if change.old_was_tombstone {
         format!(
             "The baseline being replaced records `{name}`{in_shape} as retired{held}, but the \
              source has dropped the tombstone. A tombstone is a permanent reservation (ridl \
@@ -1275,70 +1274,6 @@ fn untombstoned_removal_message(
              `reserved {name}`."
         )
     }
-}
-
-/// The interaction a `<package>/<container>/<name>` diff path names, as the
-/// published IR declares it: the live declaration, or the `reserved <name>`
-/// tombstone that retires it.
-///
-/// This reads the same shape `ridl_diff`'s own `live_interactions` and
-/// `reserved_names` walks read (`Interface::interactions`, a `Decl` whose
-/// `kind` says whether it is a `ReservedSlot`), so nothing the gate says about
-/// the published side depends on the wording of a `Change`'s rendered
-/// `before`/`after` text. The container is found through `Package::shapes`,
-/// which yields a top-level interface and an inline-form service's own shape
-/// alike — the two containers `ridl_diff`'s interaction walk is ever called
-/// on. A named-form service is not a shape, so a service-level diff path
-/// finds nothing here.
-///
-/// Every shape carrying the container's name is searched, and the first
-/// interaction that matches is the answer. A declared `interface doors`
-/// beside an inline-form `service doors` are two shapes under one identity
-/// name — the walk keys them apart by form, but a diff path does not — and
-/// reading only the first shape of that name answered from the interface
-/// when the service was the one that declared the name (driftsys/ridl#339
-/// case 2). Two shapes both declaring the name cannot be told apart from
-/// the path; the walk's own key order puts the declared interface first.
-fn published_interaction<'a>(
-    published: &'a [ridl_ir::v2::Package],
-    path: &str,
-) -> Option<&'a ridl_ir::v2::Decl> {
-    let mut parts = path.split('/');
-    let (Some(pkg), Some(container), Some(name)) = (parts.next(), parts.next(), parts.next())
-    else {
-        return None;
-    };
-    let package = published.iter().find(|package| package.name == pkg)?;
-    package
-        .shapes()
-        .filter(|shape| shape.name == container)
-        .find_map(|shape| {
-            shape
-                .interface
-                .interactions
-                .iter()
-                .find(|decl| match &decl.kind {
-                    Some(ridl_ir::v2::decl::Kind::ReservedSlot(reserved)) => {
-                        reserved.name.as_deref() == Some(name)
-                    }
-                    Some(_) => decl.name == name,
-                    None => false,
-                })
-        })
-}
-
-/// Whether the published IR already retires the interaction a diff path names
-/// — a `reserved <name>` tombstone already present in the baseline being
-/// replaced.
-fn published_reserves(published: &[ridl_ir::v2::Package], path: &str) -> bool {
-    published_interaction(published, path)
-        .is_some_and(|decl| matches!(&decl.kind, Some(ridl_ir::v2::decl::Kind::ReservedSlot(_))))
-}
-
-/// The ordinal the interaction a diff path names holds in the published IR,
-/// live or retired — the slot every RIDL-408 remedy tells the author to keep.
-fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u32> {
-    published_interaction(published, path).map(|decl| decl.ordinal)
 }
 
 /// The interface level of the publication gate — the lock's own rules (lock
@@ -3502,60 +3437,93 @@ mod tests {
         assert!(PublicationSets::load(&out, &staging).is_err());
     }
 
-    /// Historical IR can hold two shapes under one name even though current
-    /// source declarations cannot. Search both for the retired interaction.
+    /// An interface and an inline-form service can share a name and both
+    /// declare the retired interaction (driftsys/ridl#542). Each refusal
+    /// quotes the ordinal of the shape the diff matched, not the ordinal of
+    /// the first shape that carries the name.
     #[test]
-    fn historical_same_name_shapes_find_the_tombstone_in_either_shape() {
+    fn same_name_shapes_each_quote_the_ordinal_of_the_matched_shape() {
         use ridl_ir::v2;
 
-        let tombstone = v2::Decl {
-            ordinal: 2,
-            kind: Some(v2::decl::Kind::ReservedSlot(v2::Reserved {
-                ordinal: 2,
-                name: Some("doorClosed".into()),
+        let package = |interface_ordinals: &[(u32, bool)], service_ordinals: &[(u32, bool)]| {
+            let body = |number: u32, slots: &[(u32, bool)]| v2::Interface {
+                name: "doors".into(),
+                number,
+                interactions: slots
+                    .iter()
+                    .map(|&(ordinal, tombstone)| v2::Decl {
+                        name: "doorClosed".into(),
+                        ordinal,
+                        kind: Some(if tombstone {
+                            v2::decl::Kind::ReservedSlot(v2::Reserved {
+                                ordinal,
+                                name: Some("doorClosed".into()),
+                                ..Default::default()
+                            })
+                        } else {
+                            v2::decl::Kind::SignalDef(v2::SignalDef::default())
+                        }),
+                        ..Default::default()
+                    })
+                    .collect(),
                 ..Default::default()
-            })),
-            ..Default::default()
-        };
-        for in_service in [false, true] {
-            let published = [v2::Package {
+            };
+            v2::Package {
                 name: "veh.cluster".into(),
-                interfaces: vec![v2::Interface {
-                    name: "doors".into(),
-                    interactions: if in_service {
-                        vec![]
-                    } else {
-                        vec![tombstone.clone()]
-                    },
-                    ..Default::default()
-                }],
+                interfaces: vec![body(1, interface_ordinals)],
                 services: vec![v2::Service {
                     name: "doors".into(),
                     shapes: vec![v2::ServiceShape {
-                        kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
-                            interactions: if in_service {
-                                vec![tombstone.clone()]
-                            } else {
-                                vec![]
-                            },
-                            ..Default::default()
-                        })),
+                        kind: Some(v2::service_shape::Kind::Inline(body(2, service_ordinals))),
                     }],
                     ..Default::default()
                 }],
                 ..Default::default()
-            }];
-            let path = "veh.cluster/doors/doorClosed";
-            assert_eq!(
-                published_ordinal(&published, path),
-                Some(2),
-                "in service: {in_service}"
-            );
-            assert!(
-                published_reserves(&published, path),
-                "in service: {in_service}"
-            );
-        }
+            }
+        };
+        let messages = |published: v2::Package, fresh: v2::Package| {
+            let report = ridl_diff::diff_sets(&[published], &[fresh]);
+            let mut messages: Vec<String> = report
+                .changes
+                .iter()
+                .filter(|change| change.category == ridl_diff::Category::InteractionRemoved)
+                .map(untombstoned_removal_message)
+                .collect();
+            messages.sort();
+            messages
+        };
+
+        // A bare removal from both shapes: ordinal 1 in the interface, 4 in
+        // the service.
+        let removed = messages(package(&[(1, false)], &[(4, false)]), package(&[], &[]));
+        assert_eq!(removed.len(), 2, "{removed:?}");
+        assert!(
+            removed.iter().any(|m| m.contains("(ordinal 1)")),
+            "{removed:?}"
+        );
+        assert!(
+            removed.iter().any(|m| m.contains("(ordinal 4)")),
+            "{removed:?}"
+        );
+
+        // A dropped tombstone from both shapes is worded as a dropped
+        // tombstone, at the ordinal each shape held.
+        let dropped = messages(package(&[(1, true)], &[(4, true)]), package(&[], &[]));
+        assert_eq!(dropped.len(), 2, "{dropped:?}");
+        assert!(
+            dropped
+                .iter()
+                .all(|m| m.contains("has dropped the tombstone")),
+            "{dropped:?}"
+        );
+        assert!(
+            dropped.iter().any(|m| m.contains("(ordinal 1)")),
+            "{dropped:?}"
+        );
+        assert!(
+            dropped.iter().any(|m| m.contains("(ordinal 4)")),
+            "{dropped:?}"
+        );
     }
 
     /// The diff uses global service names; the source writes only the declared
@@ -3665,6 +3633,8 @@ mod tests {
         let mut fresh = published.clone();
         fresh[0].services.clear();
         let change = ridl_diff::Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/doors".into(),
             category: ridl_diff::Category::DeclRemoved,
             before: Some("service".into()),

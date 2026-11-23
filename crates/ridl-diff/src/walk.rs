@@ -47,7 +47,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use ridl_ir::{projection, v2};
 
 use crate::classify::{struct_slots, union_slots, value_slots};
-use crate::{Category, Change, Verdict, emit, frozen};
+use crate::{Category, Change, Verdict, emit, emit_old_slot, frozen};
 
 /// Walks two matched packages, appending every difference to `changes`.
 /// `matching` is the unit-wide pass 1 of the interface walk over the two
@@ -765,15 +765,17 @@ fn diff_interface(
             // interactions slide into the freed slot — a wire break that the
             // relative-order check below cannot see.
             if *reserved_ord == *old_ord {
-                emit(
+                emit_old_slot(
                     changes,
                     member_path,
                     Category::InteractionRetired,
                     Some(interaction_desc(old_decl)),
                     Some("reserved".to_string()),
+                    *old_ord,
+                    false,
                 );
             } else {
-                emit(
+                emit_old_slot(
                     changes,
                     member_path,
                     Category::InteractionRemoved,
@@ -782,15 +784,19 @@ fn diff_interface(
                         interaction_desc(old_decl)
                     )),
                     Some(format!("reserved at ordinal {reserved_ord}")),
+                    *old_ord,
+                    false,
                 );
             }
         } else {
-            emit(
+            emit_old_slot(
                 changes,
                 member_path,
                 Category::InteractionRemoved,
                 Some(interaction_desc(old_decl)),
                 None,
+                *old_ord,
+                false,
             );
         }
     }
@@ -811,12 +817,14 @@ fn diff_interface(
                 Some(format!("reserved at ordinal {old_ord}")),
                 Some(format!("reserved at ordinal {new_ord}")),
             ),
-            None => emit(
+            None => emit_old_slot(
                 changes,
                 format!("{pkg}/{iface}/{name}"),
                 Category::InteractionRemoved,
                 Some(format!("reserved at ordinal {old_ord}")),
                 None,
+                *old_ord,
+                true,
             ),
         }
     }
@@ -852,12 +860,14 @@ fn diff_interface(
         }
         let member_path = format!("{pkg}/{iface}/{name}");
         if old_reserved.contains_key(name) {
-            emit(
+            emit_old_slot(
                 changes,
                 member_path,
                 Category::ReservedNameRedeclared,
                 Some("reserved".to_string()),
                 Some(interaction_desc(new_decl)),
+                old_reserved[name],
+                true,
             );
         } else {
             let category = if anchor_ordinals.iter().any(|&anchor| anchor > *new_ord) {

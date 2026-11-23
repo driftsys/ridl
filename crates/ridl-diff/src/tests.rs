@@ -909,6 +909,8 @@ fn change(
     after: Option<&str>,
 ) -> Change {
     Change {
+        old_ordinal: None,
+        old_was_tombstone: false,
         path: path.to_string(),
         category,
         verdict,
@@ -2122,6 +2124,8 @@ fn an_enum_pure_reorder_is_enum_reordered() {
     assert_eq!(
         report.changes,
         vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Mode".to_string(),
             category: Category::EnumReordered,
             verdict: Verdict::Compatible,
@@ -2146,6 +2150,8 @@ fn an_enum_set_pure_reorder_is_enum_reordered() {
     assert_eq!(
         report.changes,
         vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Flags".to_string(),
             category: Category::EnumReordered,
             verdict: Verdict::Compatible,
@@ -6439,6 +6445,8 @@ mod flatbuffers_width {
     fn the_flatbuffers_width_rule_reads_only_compatible_appends() {
         let (old, new) = (enum_set_of(7, false), enum_set_of(8, false));
         let mut pair = vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Flags/V8".to_string(),
             category: Category::DeclAdded,
             verdict: Verdict::Breaking,
@@ -6628,6 +6636,8 @@ mod proto3_width {
     fn the_proto3_width_rule_reads_only_compatible_appends() {
         let (old, new) = (enum_set_of(31, false), enum_set_of(32, false));
         let mut pair = vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Flags/V32".to_string(),
             category: Category::DeclAdded,
             verdict: Verdict::Breaking,
@@ -6943,6 +6953,8 @@ mod enum_open {
 
     fn added(path: &str) -> Change {
         Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: path.to_string(),
             category: Category::DeclAdded,
             verdict: Verdict::Compatible,
@@ -7117,4 +7129,44 @@ fn decl_removed_explains_the_gone_unit_publication_override() {
         "{explanation}"
     );
     assert!(explanation.contains("RIDL-412"), "{explanation}");
+}
+
+/// The old ordinal and the tombstone flag are filled for each change the
+/// interaction walk emits about a slot the old snapshot had.
+#[test]
+fn old_slot_changes_carry_the_old_ordinal_and_tombstone_flag() {
+    let old = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![
+                signal("gone", 3, "T"),
+                reserved("dropped", 5),
+                reserved("again", 7),
+            ],
+        ),
+    );
+    let new = pkg("veh.cluster", interface("I", vec![signal("again", 8, "T")]));
+    let report = diff_sets(&[old], &[new]);
+    let slot = |path: &str, category: Category| {
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.path == path && change.category == category)
+            .unwrap_or_else(|| panic!("no {category:?} at {path}: {:?}", report.changes));
+        (change.old_ordinal, change.old_was_tombstone)
+    };
+
+    assert_eq!(
+        slot("veh.cluster/I/gone", Category::InteractionRemoved),
+        (Some(3), false)
+    );
+    assert_eq!(
+        slot("veh.cluster/I/dropped", Category::InteractionRemoved),
+        (Some(5), true)
+    );
+    assert_eq!(
+        slot("veh.cluster/I/again", Category::ReservedNameRedeclared),
+        (Some(7), true)
+    );
 }

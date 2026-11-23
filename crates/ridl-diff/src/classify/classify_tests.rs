@@ -1543,6 +1543,8 @@ fn rpc_default_flip_with_a_raised_min_is_breaking() {
 fn an_rpc_bound_change_on_a_kind_that_carries_no_rpc_bound_is_breaking() {
     let package = pkg(vec![signal("s", 1, "T")]);
     let change = Change {
+        old_ordinal: None,
+        old_was_tombstone: false,
         path: "veh.cluster/I/s".to_string(),
         category: Category::RpcBoundChanged,
         verdict: Verdict::Compatible,
@@ -1894,6 +1896,8 @@ fn a_require_removed_from_a_query_is_compatible() {
 fn a_timing_change_on_a_kind_that_carries_no_timing_is_breaking() {
     let package = pkg(vec![command("c", 1, vec![], vec![])]);
     let change = Change {
+        old_ordinal: None,
+        old_was_tombstone: false,
         path: "veh.cluster/I/c".to_string(),
         category: Category::TimingChanged,
         verdict: Verdict::Compatible,
@@ -2106,6 +2110,8 @@ fn adding_an_interface_to_a_service_is_compatible() {
     assert_eq!(
         report.changes,
         vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Cluster/J".to_string(),
             category: Category::ServiceInterfaceAdded,
             verdict: Verdict::Compatible,
@@ -2136,6 +2142,8 @@ fn removing_an_interface_from_a_service_is_compatible_under_the_heading() {
     assert_eq!(
         report.changes,
         vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Cluster/J".to_string(),
             category: Category::ServiceInterfaceRemoved,
             verdict: Verdict::Compatible,
@@ -2196,6 +2204,8 @@ fn a_retargeted_reference_with_the_same_final_name_is_a_removal_plus_an_addition
         report.changes,
         vec![
             Change {
+                old_ordinal: None,
+                old_was_tombstone: false,
                 path: "veh.cluster/fleet.app.diag/fleet.c1.DiagBlock".to_string(),
                 category: Category::ServiceInterfaceRemoved,
                 verdict: Verdict::Compatible,
@@ -2203,6 +2213,8 @@ fn a_retargeted_reference_with_the_same_final_name_is_a_removal_plus_an_addition
                 after: None,
             },
             Change {
+                old_ordinal: None,
+                old_was_tombstone: false,
                 path: "veh.cluster/fleet.app.diag/fleet.c2.DiagBlock".to_string(),
                 category: Category::ServiceInterfaceAdded,
                 verdict: Verdict::Compatible,

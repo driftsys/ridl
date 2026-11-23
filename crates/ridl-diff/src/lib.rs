@@ -361,6 +361,15 @@ pub struct Change {
     pub before: Option<String>,
     /// The rendered new value, absent when the change is a removal.
     pub after: Option<String>,
+    /// The ordinal the old side's interaction slot holds, for a change the
+    /// interaction walk emits about a slot the old snapshot had: a removed,
+    /// retired or redeclared interaction, or a dropped tombstone. `None` for
+    /// every other change. It is the ordinal of the shape the walk matched, so
+    /// a reader needs no second lookup of the old side by path.
+    pub old_ordinal: Option<u32>,
+    /// Whether the old side's slot was a `reserved` tombstone and not a live
+    /// interaction. `false` when [`old_ordinal`](Change::old_ordinal) is `None`.
+    pub old_was_tombstone: bool,
 }
 
 impl Change {
@@ -416,7 +425,27 @@ pub(crate) fn emit(
         verdict: Verdict::Breaking,
         before,
         after,
+        old_ordinal: None,
+        old_was_tombstone: false,
     });
+}
+
+/// Appends one change about an interaction slot the old snapshot had, and
+/// records that slot's ordinal and whether it was a tombstone.
+pub(crate) fn emit_old_slot(
+    changes: &mut Vec<Change>,
+    path: String,
+    category: Category,
+    before: Option<String>,
+    after: Option<String>,
+    old_ordinal: u32,
+    old_was_tombstone: bool,
+) {
+    emit(changes, path, category, before, after);
+    if let Some(change) = changes.last_mut() {
+        change.old_ordinal = Some(old_ordinal);
+        change.old_was_tombstone = old_was_tombstone;
+    }
 }
 
 /// Whether an interface carries an identity: a frozen, non-zero number from
