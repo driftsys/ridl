@@ -120,8 +120,8 @@ enum Command {
     /// Publish the current workspace as a baseline: one `<pkg-name>.ir.json`
     /// snapshot per package and one `<unit>.catalogs` file per unit with an
     /// interface, written to `.ridl/baseline/` at the workspace root. A
-    /// replacement that loses an interaction's tombstone (RIDL-408) is refused
-    /// and leaves the published snapshots as they were.
+    /// replacement that would lose the record of an interaction's ordinal
+    /// (RIDL-408) is refused and leaves the published snapshots as they were.
     Baseline {
         #[arg(default_value = ".")]
         path: PathBuf,

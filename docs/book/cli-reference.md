@@ -61,7 +61,7 @@ Usage: ridl <COMMAND>
 
 Commands:
   check     Type-check a file, package, or workspace (defaults to the current directory)
-  baseline  Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that loses an interaction's tombstone (RIDL-408) is refused and leaves the published snapshots as they were
+  baseline  Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that would lose the record of an interaction's ordinal (RIDL-408) is refused and leaves the published snapshots as they were
   build     Compile to the selected artifacts (defaults to the current directory)
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
@@ -398,7 +398,7 @@ ridl baseline --help
 ```
 
 ```text
-Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that loses an interaction's tombstone (RIDL-408) is refused and leaves the published snapshots as they were
+Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that would lose the record of an interaction's ordinal (RIDL-408) is refused and leaves the published snapshots as they were
 
 Usage: ridl baseline [OPTIONS] [PATH]
 
