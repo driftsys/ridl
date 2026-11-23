@@ -1,0 +1,68 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: system
+input_file: crates/ridlc/tests/corpus/rust-shapes/ridl.toml
+---
+{
+  "name": "Rig",
+  "package": "lint.shapes",
+  "labels": [],
+  "attributes": [],
+  "members": [
+    {
+      "component": "lint.shapes.Shapes",
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": []
+    }
+  ],
+  "components": [
+    {
+      "name": "Shapes",
+      "package": "lint.shapes",
+      "implicit": false,
+      "external": false,
+      "instances": [
+        "primary",
+        "backup"
+      ],
+      "offers": [],
+      "requires": [],
+      "labels": [],
+      "attributes": [],
+      "doc": "",
+      "links": [],
+      "see": [],
+      "since": [],
+      "numbers": [
+        {
+          "instance": "primary",
+          "number": 2,
+          "provisional": true
+        },
+        {
+          "instance": "backup",
+          "number": 1,
+          "provisional": true
+        }
+      ]
+    }
+  ],
+  "producers": [],
+  "grants": [
+    {
+      "component": "lint.shapes.Shapes",
+      "external": false,
+      "regions": []
+    }
+  ],
+  "regions": [],
+  "distributions": [],
+  "deployments": [],
+  "doc": "",
+  "links": [],
+  "see": [],
+  "since": []
+}

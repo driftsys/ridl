@@ -196,6 +196,22 @@ mod tests {
         );
     }
 
+    /// A segment of the qualified name that is a Rust keyword names a module
+    /// the way a package segment does: a raw identifier, or a trailing
+    /// underscore for the words a raw identifier cannot spell.
+    #[test]
+    fn a_keyword_segment_is_escaped_in_the_module_path() {
+        let source = generate_instances_module(&system_of(&[
+            ("veh.match", "Cruise", &[("Unit", 1, false)]),
+            ("veh.self", "Cruise", &[("Unit", 2, false)]),
+        ]))
+        .unwrap()
+        .rust_source;
+        assert!(source.contains("pub mod r#match {"), "{source}");
+        assert!(source.contains("pub mod self_ {"), "{source}");
+        syn::parse_file(&source).expect("the module parses as Rust");
+    }
+
     #[test]
     fn two_keys_with_one_constant_path_are_refused() {
         let error = generate_instances_module(&system_of(&[

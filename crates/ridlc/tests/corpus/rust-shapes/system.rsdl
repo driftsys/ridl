@@ -1,0 +1,8 @@
+// A system whose component is named like the last segment of its package, so
+// that the generated `instances` module holds `lint::shapes::shapes` and
+// `just demo` lints the `clippy::module_inception` allow it carries.
+package lint.shapes
+
+component Shapes [ instances = (primary, backup) ] {}
+
+system Rig { Shapes }
