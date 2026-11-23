@@ -27,6 +27,8 @@
 //!
 //! All read the lowered `System` of each side and nothing else.
 
+use std::collections::{HashMap, HashSet};
+
 use ridl_ir::v2::{self, Component, Deployment, InterfaceRef, System};
 
 /// The heading a system change is listed under (rsdl reference §14).
@@ -223,10 +225,21 @@ fn numbered_instances(system: &System) -> Vec<(String, i32, bool)> {
 fn instance_numbers(old: &System, new: &System, changes: &mut Vec<SystemChange>) {
     let old = numbered_instances(old);
     let new = numbered_instances(new);
+    // The first entry wins for a repeated key or number, as a scan in closure
+    // order would find it.
+    let mut old_by_key: HashMap<&str, (i32, bool)> = HashMap::new();
+    let mut locked_holder: HashMap<i32, &str> = HashMap::new();
+    for (key, number, provisional) in &old {
+        old_by_key.entry(key).or_insert((*number, *provisional));
+        if !provisional {
+            locked_holder.entry(*number).or_insert(key);
+        }
+    }
+    let new_keys: HashSet<&str> = new.iter().map(|(key, ..)| key.as_str()).collect();
     for (key, number, _) in &new {
-        if let Some((_, before, provisional)) = old.iter().find(|(old_key, ..)| old_key == key)
+        if let Some(&(before, provisional)) = old_by_key.get(key.as_str())
             && !provisional
-            && before != number
+            && before != *number
         {
             changes.push(SystemChange {
                 heading: SystemHeading::InstanceNumberChanged,
@@ -237,14 +250,11 @@ fn instance_numbers(old: &System, new: &System, changes: &mut Vec<SystemChange>)
         }
     }
     for (key, number, _) in &new {
-        if old.iter().any(|(old_key, ..)| old_key == key) {
+        if old_by_key.contains_key(key.as_str()) {
             continue;
         }
-        let holder = old
-            .iter()
-            .find(|(old_key, held, provisional)| held == number && !provisional && old_key != key);
-        if let Some((holder, ..)) = holder
-            && new.iter().any(|(new_key, ..)| new_key == holder)
+        if let Some(holder) = locked_holder.get(number)
+            && new_keys.contains(holder)
         {
             changes.push(SystemChange {
                 heading: SystemHeading::InstanceNumberChanged,
