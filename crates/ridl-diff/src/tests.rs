@@ -7130,3 +7130,43 @@ fn decl_removed_explains_the_gone_unit_publication_override() {
     );
     assert!(explanation.contains("RIDL-412"), "{explanation}");
 }
+
+/// The old ordinal and the tombstone flag are filled for each change the
+/// interaction walk emits about a slot the old snapshot had.
+#[test]
+fn old_slot_changes_carry_the_old_ordinal_and_tombstone_flag() {
+    let old = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![
+                signal("gone", 3, "T"),
+                reserved("dropped", 5),
+                reserved("again", 7),
+            ],
+        ),
+    );
+    let new = pkg("veh.cluster", interface("I", vec![signal("again", 8, "T")]));
+    let report = diff_sets(&[old], &[new]);
+    let slot = |path: &str, category: Category| {
+        let change = report
+            .changes
+            .iter()
+            .find(|change| change.path == path && change.category == category)
+            .unwrap_or_else(|| panic!("no {category:?} at {path}: {:?}", report.changes));
+        (change.old_ordinal, change.old_was_tombstone)
+    };
+
+    assert_eq!(
+        slot("veh.cluster/I/gone", Category::InteractionRemoved),
+        (Some(3), false)
+    );
+    assert_eq!(
+        slot("veh.cluster/I/dropped", Category::InteractionRemoved),
+        (Some(5), true)
+    );
+    assert_eq!(
+        slot("veh.cluster/I/again", Category::ReservedNameRedeclared),
+        (Some(7), true)
+    );
+}

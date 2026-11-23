@@ -1238,6 +1238,8 @@ fn untombstoned_removals(
 fn untombstoned_removal_message(change: &ridl_diff::Change) -> String {
     let (shape, name) = shape_and_name(&change.path);
     let in_shape = shape.map_or(String::new(), |shape| format!(" in `{shape}`"));
+    // The walk always fills `old_ordinal` for these changes. The `None` wording
+    // below is a fail-closed default for a `Change` built without the walk.
     let ordinal = change.old_ordinal;
     let held = ordinal.map_or(String::new(), |ordinal| format!(" (ordinal {ordinal})"));
     let slot = ordinal.map_or("that ordinal".to_string(), |ordinal| {

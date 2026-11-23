@@ -3718,3 +3718,42 @@ fn deleting_the_snapshots_of_a_gone_unit_under_a_current_context_exits_2() {
     assert!(!stderr.contains("RIDL-412"), "{stderr}");
     assert_eq!(before, baseline_files(&root), "nothing is changed");
 }
+
+/// A reset that drops a whole unit still refuses a number lost in a unit that
+/// remains, and prints no note for the dropped unit.
+#[test]
+fn reset_with_a_gone_unit_still_refuses_a_number_lost_in_a_remaining_unit() {
+    let dir = TempDir::new("gate-reset-gone-and-lost");
+    let root = two_unit_workspace(&dir);
+    let before = baseline_files(&root);
+    remove_cluster_unit(&dir, &root);
+    // `Session` (number 1) leaves the remaining unit, and its lock entry goes
+    // with it, so the replacement interface takes number 2.
+    dir.write(
+        "hmi/hmi.ridl",
+        "package veh.hmi\ntype Level: integer [0..9]\ninterface Other { signal s : Level @[100ms..1s] }\n",
+    );
+    dir.write("hmi/interfaces.lock", &format!("{LOCK_HEADER}next 2\n"));
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "allocate the replacement number: {stderr}");
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(code, 1, "reset refuses the lost number:\n{stderr}");
+    assert!(
+        stderr.contains("RIDL-412") && stderr.contains("`Session` holds interface number 1"),
+        "{stderr}"
+    );
+    assert!(
+        reset_notes(&stderr).is_empty(),
+        "a refused reset prints no note:\n{stderr}"
+    );
+    assert_eq!(
+        before,
+        baseline_files(&root),
+        "refusal preserves every byte"
+    );
+}
