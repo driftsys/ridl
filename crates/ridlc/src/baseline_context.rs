@@ -10,6 +10,13 @@ use std::path::{Path, PathBuf};
 /// The artifact is evidence, never a compared package snapshot.
 pub const CONTEXT_FILE: &str = "context.json";
 
+/// The two recovery options for a baseline whose historical remote context is
+/// missing or unusable, as `ridl diff` and the `ridl_diff` tool print them
+/// after the compatibility error. The text lives here, in the library both
+/// callers link, so the two surfaces cannot drift apart.
+pub const CONTEXT_REMEDY: &str = "Repair context only from the exact historical local snapshots and verified historical remote pins: ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE.\n\
+To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility for the whole baseline. It retains the normal publication refusal checks except for a whole unit removed on purpose. BASELINE is the affected snapshot input named by the old or new context issue.";
+
 /// The marker `ridl baseline` keeps beside `dir` while it replaces the managed files in `dir`.
 pub fn transaction_marker(out: &Path) -> std::io::Result<PathBuf> {
     let mut name = std::ffi::OsString::from(".");

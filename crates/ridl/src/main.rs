@@ -106,7 +106,8 @@ enum Command {
         /// such a change or to a result union. An append that is breaking
         /// only for its field's type moves no ordinal and draws no warning.
         /// Without the flag, `.ridl/baseline/` at the workspace root is used
-        /// when it exists.
+        /// when it exists. An explicit path that holds no snapshot is an input
+        /// error (exit 2).
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
         /// Output format for the report: text renders to stderr (the
@@ -118,7 +119,9 @@ enum Command {
     },
     /// Publish the current workspace as a baseline: one `<pkg-name>.ir.json`
     /// snapshot per package and one `<unit>.catalogs` file per unit with an
-    /// interface, written to `.ridl/baseline/` at the workspace root.
+    /// interface, written to `.ridl/baseline/` at the workspace root. A
+    /// replacement that loses an interaction's tombstone (RIDL-408) is refused
+    /// and leaves the published snapshots as they were.
     Baseline {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -677,9 +680,8 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat, encodings: &[DiffEncodin
         Ok(report) => report,
         Err(error) => {
             errprintln!(
-                "error: cannot establish podbuf compatibility: {error}\n\
-Repair context only from the exact historical local snapshots and verified historical remote pins: ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE.\n\
-To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility for the whole baseline. It retains the normal publication refusal checks except for a whole unit removed on purpose. BASELINE is the affected snapshot input named by the old or new context issue."
+                "error: cannot establish podbuf compatibility: {error}\n{}",
+                ridlc::baseline_context::CONTEXT_REMEDY
             );
             if error
                 .issues
@@ -2761,8 +2763,9 @@ fn refuse_artifact_directory(dir: &Path, witness: &Path, expectation: &str) -> E
 const PUBLISHED_PARSE_REMEDY: &str = "the file is left as it is, because a record that cannot be \
      read cannot be shown safe to replace. If the file is damaged, restore it from version \
      control or resolve the merge conflict left in it. If a toolchain with a different IR schema \
-     wrote it, check the source against it with that toolchain (`ridl check --baseline`), then \
-     remove the file and run `ridl baseline` with this one";
+     wrote it, compare the source against the snapshot directory with that toolchain (`ridl diff \
+     BASELINE SOURCE`, which exits 1 on a breaking change; `ridl check --baseline` only warns \
+     and exits 0), then remove the file and run `ridl baseline` with this one";
 
 /// Loads the published snapshots `ridl baseline` is about to replace, flat
 /// from `out_dir`, with [`PUBLISHED_PARSE_REMEDY`] on a parse failure, and

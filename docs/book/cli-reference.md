@@ -61,7 +61,7 @@ Usage: ridl <COMMAND>
 
 Commands:
   check     Type-check a file, package, or workspace (defaults to the current directory)
-  baseline  Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root
+  baseline  Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that loses an interaction's tombstone (RIDL-408) is refused and leaves the published snapshots as they were
   build     Compile to the selected artifacts (defaults to the current directory)
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
@@ -109,7 +109,7 @@ Arguments:
 
 Options:
       --frozen               Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
-      --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved and every struct field or union arm change `ridl diff` gates on that concerns an ordinal: a member inserted, one removed, one moved in an edit that added or removed no member, and one appended beside such a change or to a result union. An append that is breaking only for its field's type moves no ordinal and draws no warning. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
+      --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved and every struct field or union arm change `ridl diff` gates on that concerns an ordinal: a member inserted, one removed, one moved in an edit that added or removed no member, and one appended beside such a change or to a result union. An append that is breaking only for its field's type moves no ordinal and draws no warning. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists. An explicit path that holds no snapshot is an input error (exit 2)
       --format <FORMAT>      Output format for the report: text renders to stderr (the default); json goes to stdout instead — see the CLI reference (docs/book/cli-reference.md) for its schema; sarif writes one SARIF 2.1.0 log to stdout, for code-scanning viewers [default: text] [possible values: text, json, sarif]
   -h, --help                 Print help
 ```
@@ -398,7 +398,7 @@ ridl baseline --help
 ```
 
 ```text
-Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root
+Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that loses an interaction's tombstone (RIDL-408) is refused and leaves the published snapshots as they were
 
 Usage: ridl baseline [OPTIONS] [PATH]
 
@@ -609,13 +609,13 @@ modes parse all prior local snapshots and retain compilation refusals. Reset
 skips only the publication refusal for a whole unit removed on purpose;
 provisional interface numbers (RIDL-411), numbers lost from a remaining unit
 (RIDL-412), packages removed from a remaining unit (RIDL-412) and untombstoned
-interaction removals (RIDL-408) still refuse publication. For a snapshot
-published before the IR recorded the unit, a removed subpackage is treated as a
-removed unit. A removed legacy unit-root package with a remaining subpackage
-still receives per-number refusals for lost numbers under reset. Repair skips
-none of these checks. Restore corrupt local snapshots before either operation.
-There is no force option. The flags are mutually exclusive; the positional
-source defaults to `.` and output discovery is the same as ordinary publication.
+interaction removals (RIDL-408) still refuse publication. A snapshot published
+before the IR recorded the unit follows
+[the legacy snapshot rule](#legacy-snapshots-and-the-publication-gate). Repair
+skips none of these checks. Restore corrupt local snapshots before either
+operation. There is no force option. The flags are mutually exclusive; the
+positional source defaults to `.` and output discovery is the same as ordinary
+publication.
 
 Both modes start each shaped unit with exactly one recomputed current canonical
 hash. Type-only units receive context without a catalog file. Repair
@@ -625,27 +625,58 @@ publication refusal is 1, and invalid evidence, unavailable inputs or I/O
 failure is 2. Diff and MCP remain read-only and perform neither recovery
 operation.
 
+#### Legacy snapshots and the publication gate
+
+A published snapshot written before the IR recorded the unit carries no `unit`.
+The gate reads such a snapshot as follows.
+
+- If its package was removed, the gate uses the removed package's own name as
+  its unit. A removed legacy subpackage is therefore treated as a removed unit,
+  even when its original unit remains, and `--reset-history` skips the refusal
+  for it.
+- If a legacy unit-root package is removed while a subpackage remains, the unit
+  is still present: each lost number receives its own refusal, including with
+  `--reset-history`.
+- If the package remains, the gate compares its legacy snapshot in the unit of
+  the fresh package of the same name. The migration to one `interfaces.lock` per
+  unit therefore passes RIDL-412 when the unit's new numbering reaches every
+  published number: delete the per-package lock files, run `ridl lock`, run
+  `ridl baseline`.
+- When the new numbering does not reach every published number, because a legacy
+  lock held retired entries, restore each lost entry in the unit's
+  `interfaces.lock` from version control, as `Key N` with the word `retired`
+  after the number when the interface is gone. A legacy lock stores a key
+  relative to its package, so write the key relative to the unit, as the refusal
+  message gives it; an inline service keeps its `service:` key. Raise `next` to
+  more than the highest restored number, because the lock reader refuses an
+  entry whose number is not below `next` (RIDL-410).
+- Deleting managed snapshots allows a first publication only on a legacy
+  baseline without `context.json`; it is not the documented migration procedure.
+  A current baseline uses `--reset-history` to start a new history, subject to
+  the refusal checks [above](#baseline-publication-and-recovery).
+
 **The publication gate.** Before replacing the published snapshots,
 `ridl baseline` compares the snapshot it is about to publish against the one
 already there, and refuses to replace it when, in an interface body both
 declare, the replacement breaks the tombstone rule of ridl §11 — RIDL-408, exit
 1, the published snapshots left as they were (the compile has already run, so
-`ridl.lock` is written as on any other run). The refusal covers four shapes: an
-interaction is gone from the source with no `reserved` line at all; the source
-retires it with a `reserved` line, but at an ordinal other than the one the
-interaction held; the baseline already retired the interaction with a `reserved`
-line and the source has dropped that line; or the source declares a live
-interaction under a name the baseline retires. The interface level of the gate
-is the lock's: an interface whose number is provisional — a declaration with no
-entry in the unit's `interfaces.lock` — is refused (RIDL-411, exit 1, nothing
-published), on a first publication as on a replacement, until plain `ridl lock`
-records the number; and a number the published baseline holds that the fresh
-snapshot neither carries nor retires is refused too (RIDL-412). A published
-provisional number carries no identity and is excluded. That covers a lock line
-deleted by hand, since a live entry with no declaration already fails the build
-with RIDL-409. It also covers a package deleted, without retiring its numbers,
-from a unit that still has other packages, and a whole unit deleted from the
-workspace. For a package the message names the line to restore in the unit's
+`ridl.lock` is written exactly when it is on any other run: the manifest
+declares `[imports]`). The refusal covers four shapes: an interaction is gone
+from the source with no `reserved` line at all; the source retires it with a
+`reserved` line, but at an ordinal other than the one the interaction held; the
+baseline already retired the interaction with a `reserved` line and the source
+has dropped that line; or the source declares a live interaction under a name
+the baseline retires. The interface level of the gate is the lock's: an
+interface whose number is provisional — a declaration with no entry in the
+unit's `interfaces.lock` — is refused (RIDL-411, exit 1, nothing published), on
+a first publication as on a replacement, until plain `ridl lock` records the
+number; and a number the published baseline holds that the fresh snapshot
+neither carries nor retires is refused too (RIDL-412). A published provisional
+number carries no identity and is excluded. That covers a lock line deleted by
+hand, since a live entry with no declaration already fails the build with
+RIDL-409. It also covers a package deleted, without retiring its numbers, from a
+unit that still has other packages, and a whole unit deleted from the workspace.
+For a package the message names the line to restore in the unit's
 `interfaces.lock`, with one refusal per lost number. For a whole unit the lock
 left with it, so one RIDL-412 lists all lost keys and numbers and names the
 deliberate override:
@@ -657,28 +688,12 @@ no note. The note states the preservation and compatibility limits described
 [above](#baseline-publication-and-recovery). A run refused by another check
 prints no dropped-unit note. Otherwise restore the unit and its
 `interfaces.lock` from version control. A published snapshot written before the
-IR recorded the unit carries no `unit`. If its package was removed, the gate
-uses the removed package's own name as its unit. A removed legacy subpackage is
-therefore treated as a removed unit even when its original unit remains. If a
-legacy unit-root package is removed while a subpackage remains, the unit is
-still present: lost numbers receive per-number refusals, including with
-`--reset-history`. If the package remains, the gate compares its legacy snapshot
-in the unit of the fresh package of the same name, so the migration to one
-`interfaces.lock` per unit — delete the per-package lock files, run `ridl lock`,
-run `ridl baseline` — passes RIDL-412 when the unit's new numbering reaches
-every published number. When it does not, because a legacy lock held retired
-entries, restore each entry's line from version control in the unit's
-`interfaces.lock`, with `retired` after the number when the interface is gone.
-Make `next` greater than the restored number if it is not already. For a legacy
-snapshot, a declared interface's key is relative to the unit used by the gate;
-an inline service keeps its `service:` key. Deleting managed snapshots allows a
-first publication only on a legacy baseline without `context.json`; it is not
-the documented migration procedure. A current baseline uses `--reset-history` to
-start a new history, subject to the refusal checks
-[above](#baseline-publication-and-recovery). A whole service removed from the
-source is reported by `ridl diff` as breaking but is not refused here (ridl
-§17.14), and a named-form service's list is a set the gate does not read.
-Deleting `doorClosed` outright, with `doorOpened` and `doorLocked` still
+IR recorded the unit is compared by
+[the legacy snapshot rule](#legacy-snapshots-and-the-publication-gate). A whole
+service removed from the source, and a service whose form switches between
+inline and named, are reported by `ridl diff` as breaking but are not refused
+here (ridl §17.14), and a named-form service's list is a set the gate does not
+read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked` still
 declared:
 
 ```sh
@@ -746,7 +761,7 @@ ridl baseline
 ```
 
 ```text
-error: ./.ridl/baseline/veh.cluster.ir.json: the IR snapshot is not valid IR v2 JSON: expected value at line 1 column 1; the file is left as it is, because a record that cannot be read cannot be shown safe to replace. If the file is damaged, restore it from version control or resolve the merge conflict left in it. If a toolchain with a different IR schema wrote it, check the source against it with that toolchain (`ridl check --baseline`), then remove the file and run `ridl baseline` with this one
+error: ./.ridl/baseline/veh.cluster.ir.json: the IR snapshot is not valid IR v2 JSON: expected value at line 1 column 1; the file is left as it is, because a record that cannot be read cannot be shown safe to replace. If the file is damaged, restore it from version control or resolve the merge conflict left in it. If a toolchain with a different IR schema wrote it, compare the source against the snapshot directory with that toolchain (`ridl diff BASELINE SOURCE`, which exits 1 on a breaking change; `ridl check --baseline` only warns and exits 0), then remove the file and run `ridl baseline` with this one
 ```
 
 The same parse error on a `ridl diff` input, or on a file or directory named
@@ -3066,19 +3081,19 @@ stable, default-free flags.
 
 ## Exit codes across the toolchain
 
-| Command                      | 0                                                                                                                   | 1                                                                                                                                                                                                                                                                                                                                        | 2                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `ridl check` / `ridlc check` | clean (warnings included)                                                                                           | a diagnostic is an error                                                                                                                                                                                                                                                                                                                 | a stdout report write fails for `ridl check` JSON or SARIF, the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, a snapshot-named entry inside it that cannot be stat'ed, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse, or a transaction marker records an active or interrupted baseline publication  |
-| `ridl build` / `ridlc build` | clean, every requested artifact written                                                                             | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system                                                                                                                                                                                                     | the workspace cannot be found, or a `--deployment` name the system does not declare (when the build has no error of its own), or (for `ridlc build`) a missing `--out-dir`, or (for `ridl build`) a transaction marker records an active or interrupted baseline publication                                                                                                                                                                           |
-| `ridl baseline`              | clean, snapshot(s) published                                                                                        | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412), except a whole unit removed under `--reset-history`; the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, a snapshot-named entry in the output directory cannot be stat'ed, context/history evidence is invalid, historical or current remote evidence does not meet [ADR-0031][adr-0031] decision 13, or a transaction marker records an active or interrupted baseline publication |
-| `ridl test`                  | every range self-corpus and sampled `require` passed                                                                | a self-corpus failure, or a clause raised an evaluation error                                                                                                                                                                                                                                                                            | a stdout report write fails, the workspace fails to compile, cannot be found, or `--samples 0`                                                                                                                                                                                                                                                                                                                                                         |
-| `ridl fmt`                   | nothing under `--check` would change, or the rewrite succeeded                                                      | a file under `--check` would change, or has a parse error                                                                                                                                                                                                                                                                                | the path does not exist, is `vendor/` at the manifest root or lies under it, or a directory the walk reaches is unreadable — named in the message                                                                                                                                                                                                                                                                                                      |
-| `ridl diff`                  | the change is compatible, or the two sides are identical                                                            | the change is breaking                                                                                                                                                                                                                                                                                                                   | a stdout report write fails, a side fails to compile, an input is missing or has invalid context, explicit podbuf comparison has missing or unusable remote inline evidence, or neither `--explain` nor both inputs were given, or a transaction marker records an active or interrupted baseline publication                                                                                                                                          |
-| `ridl lock`                  | the file is written, or there is nothing to change                                                                  | a diagnostic error over the source, nothing written: a live entry with no declaration or no instance under plain `ridl lock` (RIDL-409, RSDL-314), a malformed lock file (RIDL-410, RSDL-315), or any other compile error                                                                                                                | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface or a still-present instance, an interface edit over more than one unit, an instance edit from inside a member; an I/O failure writing a lock file or stdout                                                                                                        |
-| `ridl lock merge`            | the three sides merge clean, and the result is written to OURS                                                      | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved                                                                                                                                                                                                  | an input cannot be read or does not parse, or renumbering has no number left (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS                                                                                                                                                                                                                                                                         |
-| `ridl init` / `ridl new`     | the files are written                                                                                               |                                                                                                                                                                                                                                                                                                                                          | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); these refusals write nothing; a failed write of the `Created` line to stdout exits 2 after the files are written                                                                             |
-| `ridl describe`              | the descriptor was printed                                                                                          |                                                                                                                                                                                                                                                                                                                                          | a missing or unreadable path; a file that is not a catalog or deployment descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout                                                                                                                                                                                                                                                                      |
-| `ridl vendor`                | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108)                                          | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/` or stdout, or a fetch failure (MANI-101)                                                                                                                                                                                                                                                                                                     |
+| Command                      | 0                                                                                                                   | 1                                                                                                                                                                                                                                                                                                                                        | 2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl check` / `ridlc check` | clean (warnings included)                                                                                           | a diagnostic is an error                                                                                                                                                                                                                                                                                                                 | a stdout report write fails for `ridl check` JSON or SARIF, the workspace cannot be found, or — for `ridl check` only — a baseline problem, named with `--baseline` or found by default: absent, wrongly encoded (not `.ir.json`), unreadable, a snapshot-named entry inside it that cannot be stat'ed, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse, or a transaction marker records an active or interrupted baseline publication |
+| `ridl build` / `ridlc build` | clean, every requested artifact written                                                                             | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system                                                                                                                                                                                                     | the workspace cannot be found, or a `--deployment` name the system does not declare (when the build has no error of its own), or (for `ridlc build`) a missing `--out-dir`, or (for `ridl build`) a transaction marker records an active or interrupted baseline publication                                                                                                                                                                                                                   |
+| `ridl baseline`              | clean, snapshot(s) published                                                                                        | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412), except a whole unit removed under `--reset-history`; the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, a published `.ir.json` snapshot fails to parse, two published snapshots declare one package, a snapshot-named entry in the output directory cannot be stat'ed, context/history evidence is invalid, historical or current remote evidence does not meet [ADR-0031][adr-0031] decision 13, or a transaction marker records an active or interrupted baseline publication                                         |
+| `ridl test`                  | every range self-corpus and sampled `require` passed                                                                | a self-corpus failure, or a clause raised an evaluation error                                                                                                                                                                                                                                                                            | a stdout report write fails, the workspace fails to compile, cannot be found, or `--samples 0`                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `ridl fmt`                   | nothing under `--check` would change, or the rewrite succeeded                                                      | a file under `--check` would change, or has a parse error                                                                                                                                                                                                                                                                                | the path does not exist, is `vendor/` at the manifest root or lies under it, or a directory the walk reaches is unreadable — named in the message                                                                                                                                                                                                                                                                                                                                              |
+| `ridl diff`                  | the change is compatible, or the two sides are identical                                                            | the change is breaking                                                                                                                                                                                                                                                                                                                   | a stdout report write fails, a side fails to compile, an input is missing or has invalid context, explicit podbuf comparison has missing or unusable remote inline evidence, or neither `--explain` nor both inputs were given, or a transaction marker records an active or interrupted baseline publication                                                                                                                                                                                  |
+| `ridl lock`                  | the file is written, or there is nothing to change                                                                  | a diagnostic error over the source, nothing written: a live entry with no declaration or no instance under plain `ridl lock` (RIDL-409, RSDL-314), a malformed lock file (RIDL-410, RSDL-315), or any other compile error                                                                                                                | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface or a still-present instance, an interface edit over more than one unit, an instance edit from inside a member; an I/O failure writing a lock file or stdout                                                                                                                                                |
+| `ridl lock merge`            | the three sides merge clean, and the result is written to OURS                                                      | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved                                                                                                                                                                                                  | an input cannot be read or does not parse, or renumbering has no number left (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS                                                                                                                                                                                                                                                                                                                 |
+| `ridl init` / `ridl new`     | the files are written                                                                                               |                                                                                                                                                                                                                                                                                                                                          | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); these refusals write nothing; a failed write of the `Created` line to stdout exits 2 after the files are written                                                                                                                     |
+| `ridl describe`              | the descriptor was printed                                                                                          |                                                                                                                                                                                                                                                                                                                                          | a missing or unreadable path; a file that is not a catalog or deployment descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout                                                                                                                                                                                                                                                                                                              |
+| `ridl vendor`                | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108)                                          | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/` or stdout, or a fetch failure (MANI-101)                                                                                                                                                                                                                                                                                                                                             |
 
 This table is this repository's own taxonomy, recorded in [ADR-0010][adr-0010]:
 **0** succeeded, or the verdict is affirmative; **1** a real answer that happens

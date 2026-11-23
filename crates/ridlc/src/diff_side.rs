@@ -424,9 +424,11 @@ pub fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
 /// tree — `--baseline .` at a repository root — to answer a question about
 /// the one directory the author named, so a path aimed two or more levels
 /// high yields no snapshot from this scan (issue #230). What that empty
-/// result means is the caller's decision: `load_baseline` refuses it for an
-/// explicit `--baseline` (driftsys/ridl#235) and reads it as an unpublished
-/// baseline under auto-discovery.
+/// result means is the caller's decision: `load_baseline` in the `ridl` binary
+/// refuses it for an explicit `--baseline` (driftsys/ridl#235) and reads it as
+/// an unpublished baseline under auto-discovery, and `load_diff_side` (the
+/// `ridl diff` and `ridl_diff` reader) refuses a snapshot directory side whose
+/// snapshots sit one level too deep.
 ///
 /// A subdirectory that cannot be listed is exit 2, not a silent `None`. This
 /// is the one scan in this file that reads a level *no caller has listed* —
