@@ -266,6 +266,8 @@ fn each_fixed_verdict_row_names_the_verdict_the_classifier_gives() {
             continue;
         }
         let change = Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "p/x".to_string(),
             category,
             verdict: Verdict::Identical,

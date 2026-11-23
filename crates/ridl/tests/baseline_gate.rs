@@ -2325,11 +2325,12 @@ fn a_published_snapshot_that_cannot_be_stated_refuses_the_publication() {
 /// the walk emitted the change from a tombstone it read on the published
 /// side. A renamed interface is such a container — the change's path carries
 /// the new name — and the earlier rule, which refused only when its own
-/// lookup found the tombstone again, published the redeclaration. The lookup
-/// now serves the message alone: with no ordinal found, the remedy names
-/// "that ordinal" rather than a number.
+/// lookup found the tombstone again, published the redeclaration. The message
+/// takes the tombstone's ordinal from the change, which the walk filled from
+/// the shape it matched by number, so the remedy names the number although a
+/// lookup by the new name finds nothing.
 #[test]
-fn a_redeclaration_in_a_renamed_interface_is_refused_although_the_lookup_finds_nothing() {
+fn a_redeclaration_in_a_renamed_interface_is_refused_with_the_ordinal_the_diff_matched() {
     let dir = TempDir::new("gate-renamed-container");
     let root = package_workspace(&dir, TOMBSTONED_REMOVAL);
     publish(&root);
@@ -2357,9 +2358,10 @@ fn a_redeclaration_in_a_renamed_interface_is_refused_although_the_lookup_finds_n
     );
     assert!(
         stderr.contains("`doorClosed` is declared again in `Status`")
-            && stderr.contains("keep `reserved doorClosed` at that ordinal"),
-        "the message names the new container; the ordinal is unknown to a lookup by the new \
-         name, so the remedy names no number:\n{stderr}",
+            && stderr.contains("retires that name with `reserved` (ordinal 2)")
+            && stderr.contains("keep `reserved doorClosed` at ordinal 2"),
+        "the message names the new container and the ordinal the diff carried from the \
+         matched old shape, although the new name finds nothing in the baseline:\n{stderr}",
     );
     let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
     assert_eq!(before, after, "a refused publication rewrites nothing");
@@ -3524,4 +3526,195 @@ fn a_later_publication_preserves_retained_staging_artifacts() {
         !root.join(".ridl/.baseline.staging.1").exists(),
         "the retry cleans only its own successfully committed stage"
     );
+}
+
+/// Two units, where the second one declares only a type in its root package
+/// and its one interface in a subpackage. Locked and published.
+fn type_root_unit_workspace(dir: &TempDir) -> PathBuf {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\"]\n",
+    );
+    dir.write(
+        "hmi/ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi/hmi.ridl", SESSION);
+    dir.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "cluster/types.ridl",
+        "package veh.cluster\ntype DoorState: integer [0..1]\n",
+    );
+    dir.write(
+        "cluster/sub/speed.ridl",
+        "package veh.cluster.sub\nimport veh.cluster.DoorState\ninterface Speed { signal v : DoorState @[100ms..1s] }\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's locks are allocated: {stderr}");
+    publish(&root);
+    root
+}
+
+/// Removes the `cluster` unit from the workspace.
+fn remove_cluster_unit(dir: &TempDir, root: &Path) {
+    std::fs::remove_dir_all(root.join("cluster")).expect("remove the unit");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"hmi\"]\n");
+}
+
+fn reset_notes(stderr: &str) -> Vec<&str> {
+    stderr
+        .lines()
+        .filter(|line| line.starts_with("note:") && line.contains("drops unit"))
+        .collect()
+}
+
+/// The note names the unit, not the package of the first lost shape. The
+/// unit's root package holds no allocated interface here, so the first lost
+/// shape is in `veh.cluster.sub`.
+#[test]
+fn the_reset_note_names_the_unit_when_its_root_package_holds_no_interface() {
+    let dir = TempDir::new("gate-reset-note-unit-name");
+    let root = type_root_unit_workspace(&dir);
+    remove_cluster_unit(&dir, &root);
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(code, 0, "reset publishes the remaining unit:\n{stderr}");
+    let notes = reset_notes(&stderr);
+    assert_eq!(notes.len(), 1, "one note for the dropped unit:\n{stderr}");
+    assert!(
+        notes[0].contains("unit `veh.cluster` ") && notes[0].contains("`sub.Speed` (number 1)"),
+        "the note names the unit and the unit-relative key:\n{stderr}"
+    );
+    assert!(
+        !notes[0].contains("veh.cluster.sub"),
+        "the note does not name the subpackage:\n{stderr}"
+    );
+}
+
+/// A removed unit that holds no interface has no number to lose, so a reset
+/// prints no note for it.
+#[test]
+fn resetting_after_a_type_only_unit_is_removed_prints_no_note() {
+    let dir = TempDir::new("gate-reset-type-only-unit");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"hmi\", \"cluster\"]\n",
+    );
+    dir.write(
+        "hmi/ridl.toml",
+        "[package]\nname = \"veh.hmi\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("hmi/hmi.ridl", SESSION);
+    dir.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "cluster/types.ridl",
+        "package veh.cluster\ntype DoorState: integer [0..1]\n",
+    );
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's locks are allocated: {stderr}");
+    publish(&root);
+    assert!(root.join(".ridl/baseline/veh.cluster.ir.json").is_file());
+    remove_cluster_unit(&dir, &root);
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(code, 0, "reset publishes:\n{stderr}");
+    assert!(reset_notes(&stderr).is_empty(), "no note:\n{stderr}");
+    assert!(!stderr.contains("RIDL-412"), "{stderr}");
+}
+
+/// A removed unit whose published numbers are all provisional has no
+/// allocated number to lose, so a reset prints no note for it.
+#[test]
+fn resetting_after_a_provisional_only_unit_is_removed_prints_no_note() {
+    let dir = TempDir::new("gate-reset-provisional-only-unit");
+    let root = two_unit_workspace(&dir);
+    let baseline = root.join(".ridl/baseline");
+    std::fs::remove_file(baseline.join("context.json")).expect("make a legacy baseline");
+    for name in ["veh.cluster.ir.json", "veh.cluster.sub.ir.json"] {
+        let path = baseline.join(name);
+        let mut package = ridl_ir::v2::load_ir_json(&path).expect("read the snapshot");
+        for interface in &mut package.interfaces {
+            interface.provisional = true;
+        }
+        std::fs::write(path, serde_json::to_string_pretty(&package).unwrap()).unwrap();
+    }
+    remove_cluster_unit(&dir, &root);
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--reset-history".as_ref(),
+    ]);
+    assert_eq!(code, 0, "reset publishes:\n{stderr}");
+    assert!(reset_notes(&stderr).is_empty(), "no note:\n{stderr}");
+}
+
+/// Repair skips no publication check: over a workspace that has lost a unit
+/// the published snapshots still name, it refuses and changes nothing.
+#[test]
+fn repair_context_over_a_gone_unit_refuses_and_changes_nothing() {
+    let dir = TempDir::new("gate-repair-gone-unit");
+    let root = two_unit_workspace(&dir);
+    std::fs::remove_file(root.join(".ridl/baseline/context.json")).expect("make a legacy baseline");
+    let before = baseline_files(&root);
+    remove_cluster_unit(&dir, &root);
+
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--repair-context".as_ref(),
+    ]);
+    assert_eq!(code, 2, "repair does not publish:\n{stderr}");
+    assert!(
+        stderr.contains("cannot repair historical baseline: the complete historical local snapshot set does not match"),
+        "{stderr}"
+    );
+    assert!(
+        reset_notes(&stderr).is_empty(),
+        "repair prints no reset note:\n{stderr}"
+    );
+    assert_eq!(before, baseline_files(&root), "nothing is changed");
+}
+
+/// A baseline that still holds `context.json` is not a legacy baseline, so
+/// deleting the snapshots of a gone unit does not lift the refusal: the
+/// context names snapshots that are no longer there, and the command exits 2.
+#[test]
+fn deleting_the_snapshots_of_a_gone_unit_under_a_current_context_exits_2() {
+    let dir = TempDir::new("gate-context-with-deleted-snapshots");
+    let root = two_unit_workspace(&dir);
+    assert!(root.join(".ridl/baseline/context.json").is_file());
+    remove_cluster_unit(&dir, &root);
+    std::fs::remove_file(snapshot(&root)).expect("delete the unit's snapshot");
+    std::fs::remove_file(root.join(".ridl/baseline/veh.cluster.sub.ir.json"))
+        .expect("delete the unit's subpackage snapshot");
+    let before = baseline_files(&root);
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        code, 2,
+        "the context no longer matches the snapshots:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("invalid baseline context: local snapshot fingerprints do not match"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("RIDL-412"), "{stderr}");
+    assert_eq!(before, baseline_files(&root), "nothing is changed");
 }

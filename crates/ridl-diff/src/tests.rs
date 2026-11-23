@@ -909,6 +909,8 @@ fn change(
     after: Option<&str>,
 ) -> Change {
     Change {
+        old_ordinal: None,
+        old_was_tombstone: false,
         path: path.to_string(),
         category,
         verdict,
@@ -2122,6 +2124,8 @@ fn an_enum_pure_reorder_is_enum_reordered() {
     assert_eq!(
         report.changes,
         vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Mode".to_string(),
             category: Category::EnumReordered,
             verdict: Verdict::Compatible,
@@ -2146,6 +2150,8 @@ fn an_enum_set_pure_reorder_is_enum_reordered() {
     assert_eq!(
         report.changes,
         vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Flags".to_string(),
             category: Category::EnumReordered,
             verdict: Verdict::Compatible,
@@ -6439,6 +6445,8 @@ mod flatbuffers_width {
     fn the_flatbuffers_width_rule_reads_only_compatible_appends() {
         let (old, new) = (enum_set_of(7, false), enum_set_of(8, false));
         let mut pair = vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Flags/V8".to_string(),
             category: Category::DeclAdded,
             verdict: Verdict::Breaking,
@@ -6628,6 +6636,8 @@ mod proto3_width {
     fn the_proto3_width_rule_reads_only_compatible_appends() {
         let (old, new) = (enum_set_of(31, false), enum_set_of(32, false));
         let mut pair = vec![Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: "veh.cluster/Flags/V32".to_string(),
             category: Category::DeclAdded,
             verdict: Verdict::Breaking,
@@ -6943,6 +6953,8 @@ mod enum_open {
 
     fn added(path: &str) -> Change {
         Change {
+            old_ordinal: None,
+            old_was_tombstone: false,
             path: path.to_string(),
             category: Category::DeclAdded,
             verdict: Verdict::Compatible,
