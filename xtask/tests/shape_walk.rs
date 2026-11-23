@@ -306,7 +306,7 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl/tests/baseline_gate.rs",
-        lines: 2,
+        lines: 3,
         why: "tests set the `provisional` flag of interfaces in a snapshot \
               they read back and rewrite, not a read of `Package::interfaces`",
     },
