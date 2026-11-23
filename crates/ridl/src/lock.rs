@@ -457,9 +457,7 @@ fn resolve_name(
     if !instance_lock.has_component(component, include_retired) {
         return Ok(None);
     }
-    if let [unit] = units
-        && unit.lock.live(name).is_some()
-    {
+    if let Some(unit) = units.iter().find(|unit| unit.lock.live(name).is_some()) {
         return Err(usage_error(&format!(
             "{flag} {name}: `{name}` is both a component in `{}` and an interface in `{}`; \
              edit its instances one by one as `{name}/INSTANCE`",

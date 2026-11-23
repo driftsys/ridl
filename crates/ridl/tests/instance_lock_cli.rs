@@ -427,6 +427,22 @@ fn rename_onto_a_key_that_is_no_instance_exits_two() {
     assert_eq!(lock_text(&dir), allocated_lock());
 }
 
+/// The new side of an instance rename must have no entry: `veh.Cruise/primary`
+/// is an instance of the system that already holds number 2.
+#[test]
+fn rename_onto_an_instance_that_has_an_entry_exits_two() {
+    let dir = lock_workspace("rename-held", Some(&allocated_lock()));
+    let (code, stdout, stderr) =
+        run_lock(&dir, &["--rename", "veh.Cruise/backup=veh.Cruise/primary"]);
+    assert_eq!(code, 2, "{stderr}");
+    assert!(stdout.is_empty(), "{stdout}");
+    assert!(
+        stderr.contains("`veh.Cruise/primary` is not an instance without an entry"),
+        "{stderr}"
+    );
+    assert_eq!(lock_text(&dir), allocated_lock());
+}
+
 /// A component rename needs every moved key to be an instance of the system
 /// without an entry; component `veh.Ghost` is not in the system.
 #[test]
@@ -474,6 +490,12 @@ fn rename_a_component_moves_every_entry_with_its_number() {
     dir.write("system.rsdl", &LOCK_SYSTEM.replace("Cruise", "Speed"));
     let (code, stdout, stderr) = run_lock(&dir, &["--rename", "veh.Cruise=veh.Speed"]);
     assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
+    assert_eq!(
+        stdout,
+        "renamed veh.Cruise/primary veh.Speed/primary 2\n\
+         renamed veh.Cruise/backup veh.Speed/backup 1\n\
+         renamed veh.Cruise/old veh.Speed/old 4\n"
+    );
     let text = lock_text(&dir);
     for line in [
         "veh.Speed/backup 1\n",
@@ -567,6 +589,53 @@ fn the_merge_driver_merges_two_instance_allocations() {
         std::fs::read_to_string(&ours).unwrap(),
         format!("{HEADER}next 4\nveh.C/a 1\nveh.C/b 2\nveh.C/c 3\n")
     );
+}
+
+/// Runs `ridl lock merge` over the three texts, 7 as the marker size, and
+/// returns the exit code, the text written to OURS and the standard error.
+fn merge_texts(base: &str, ours: &str, theirs: &str) -> (i32, String, String) {
+    let dir = TempDir::new("merge-texts");
+    let base = dir.write("base", base);
+    let ours = dir.write("ours", ours);
+    let theirs = dir.write("theirs", theirs);
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        "merge".as_ref(),
+        base.as_os_str(),
+        ours.as_os_str(),
+        theirs.as_os_str(),
+        "7".as_ref(),
+    ]);
+    (code, std::fs::read_to_string(&ours).unwrap(), stderr)
+}
+
+/// Two sides that give one number to different instances conflict, with the
+/// RSDL-315 note, and the disagreeing entries sit between conflict markers.
+#[test]
+fn the_merge_driver_reports_an_instance_lock_conflict() {
+    let (code, written, stderr) = merge_texts(
+        &format!("{HEADER}next 2\nveh.C/a 1\n"),
+        &format!("{HEADER}next 2\nveh.C/b 1\n"),
+        &format!("{HEADER}next 2\nveh.C/c 1\n"),
+    );
+    assert_eq!(code, 1, "{stderr}");
+    assert!(stderr.contains("(RSDL-315)"), "{stderr}");
+    assert_eq!(
+        written,
+        format!("{HEADER}next 2\n<<<<<<< ours\nveh.C/b 1\n=======\nveh.C/c 1\n>>>>>>> theirs\n")
+    );
+}
+
+/// The file is an instance lock when THEIRS alone carries the header.
+#[test]
+fn the_merge_driver_takes_the_header_from_theirs_alone() {
+    let (code, written, stderr) = merge_texts(
+        "next 2\nveh.C/a 1\n",
+        "next 2\nveh.C/a 1\n",
+        &format!("{HEADER}next 3\nveh.C/a 1\nveh.C/b 2\n"),
+    );
+    assert_eq!(code, 0, "{stderr}");
+    assert_eq!(written, format!("{HEADER}next 3\nveh.C/a 1\nveh.C/b 2\n"));
 }
 
 #[test]
@@ -676,4 +745,39 @@ fn renaming_a_service_key_at_the_root_of_two_units_exits_two() {
     );
     assert_eq!(code, 2, "{stderr}");
     assert!(stderr.contains("name the unit directory"), "{stderr}");
+}
+
+/// A name that is a component and, in the lock of one unit, a live interface
+/// entry is refused whatever the number of units, so an edit never moves the
+/// instances of a name that an interface lock also holds.
+#[test]
+fn a_component_name_that_an_interface_lock_holds_is_refused_in_a_workspace_of_two_units() {
+    let dir = TempDir::new("both-two-units");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"adas\", \"ego\"]\n");
+    dir.write(
+        "adas/ridl.toml",
+        "[package]\nname = \"veh.adas\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "adas/car.rsdl",
+        "package veh.adas\ncomponent Cruise [ instances = (primary, backup) ] {}\n\
+         system Vehicle { Cruise }\n",
+    );
+    dir.write("adas/interfaces.lock", "next 2\nveh.adas.Cruise 1\n");
+    dir.write("ego/ridl.toml", EGO_MANIFEST);
+    dir.write("ego/types.typl", "package veh.ego\ntype Flag: boolean\n");
+    let lock = format!("{HEADER}next 3\nveh.adas.Cruise/primary 1\nveh.adas.Cruise/backup 2\n");
+    dir.write("instances.lock", &lock);
+    for flag in [
+        ["--retire", "veh.adas.Cruise"],
+        ["--rename", "veh.adas.Cruise=veh.adas.Speed"],
+    ] {
+        let (code, _, stderr) = run_lock(&dir, &flag);
+        assert_eq!(code, 2, "{stderr}");
+        assert!(
+            stderr.contains("`veh.adas.Cruise` is both a component in"),
+            "{flag:?}: {stderr}"
+        );
+        assert_eq!(lock_text(&dir), lock);
+    }
 }
