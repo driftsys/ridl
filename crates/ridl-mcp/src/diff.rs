@@ -62,9 +62,10 @@ pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {
         &ridlc::diff_side_context(&new),
         &encodings,
     ).map_err(|error| {
-        let mut message = format!("cannot establish podbuf compatibility: {error}\n\
-Repair context only from the exact historical local snapshots and verified historical remote pins: ridl baseline HISTORICAL_SOURCE --repair-context --out BASELINE.\n\
-To start a new history, use ridl baseline CURRENT_SOURCE --reset-history --out BASELINE; reset preserves the prior baseline and claims no earlier compatibility. BASELINE is the affected snapshot input named by the old or new context issue.");
+        let mut message = format!(
+            "cannot establish podbuf compatibility: {error}\n{}",
+            ridlc::baseline_context::CONTEXT_REMEDY
+        );
         if error.issues.iter().any(|issue| issue.side == ridl_diff::ContextSide::New) {
             message.push_str("\nFor missing or unusable candidate evidence, compare its source path or an enriched snapshot directory.");
         }
@@ -574,6 +575,10 @@ mod tests {
         ] {
             match diff(&remote_input(old, new)).unwrap_err() {
                 ToolError::Request(message) => {
+                    assert!(
+                        message.contains(ridlc::baseline_context::CONTEXT_REMEDY),
+                        "the shared remedy text is missing: {message}"
+                    );
                     for expected in [
                         "app/Sample/reading",
                         "dep.Reading",

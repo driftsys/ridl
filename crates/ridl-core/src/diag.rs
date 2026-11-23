@@ -1077,14 +1077,15 @@ diag_codes! {
         /// the source dropped the tombstone; or the source declares a live
         /// interaction under the name a tombstone retires. Error. Emitted by
         /// `ridl baseline` alone, for the interaction level only — a whole
-        /// interface or service removed, and a named-form service's shape
-        /// list, are outside it. Publication is the last point at which the
+        /// interface or service removed, a service whose form switches between
+        /// inline and named, and a named-form service's shape list, are
+        /// outside it. Publication is the last point at which the
         /// change can still be refused, because the snapshot about to be
         /// overwritten is the only record that the ordinal was ever taken.
         /// Distinct from RIDL-407, which is the desk-time warning that an
         /// ordinal moved and which neither classifies nor gates.
         RIDL_408 = "RIDL-408", Error,
-            "interaction removed, its tombstone dropped or moved, or its retired name redeclared";
+            "interaction removed, its tombstone dropped or misplaced, or its retired name redeclared";
 
         /// A live entry of the package's `interfaces.lock` names an interface
         /// the package no longer declares (lock design §4, §8) — the interface

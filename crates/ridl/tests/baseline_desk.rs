@@ -1864,8 +1864,9 @@ fn check_refuses_a_baseline_directory_of_non_json_artifacts() {
 ///
 /// The directory holds no IR artifact *directly*, so the artifact refusal
 /// above cannot see it, and it used to be indistinguishable from the ordinary
-/// "no baseline published yet" state below: the desk check ran against
-/// nothing and the command printed nothing at all. The control at the head of
+/// "no baseline published yet" state, which auto-discovery keeps silent
+/// (`auto_discovery_of_an_empty_baseline_directory_stays_silent`): the desk
+/// check ran against nothing and the command printed nothing at all. The control at the head of
 /// this test is what makes that false assurance rather than a quiet no-op —
 /// the very same edit warns when the flag names the right directory.
 ///
@@ -2005,9 +2006,10 @@ fn check_refuses_an_empty_baseline_directory() {
         "the cause names the directory — the nested and artifact-directory refusals say \
          `no `.ir.json` snapshot` too, so the wording must be this refusal's own:\n{stderr}",
     );
+    let aimed = stderr.find("point `--baseline` at the directory that holds the snapshots");
+    let publish = stderr.find(&format!("`ridl baseline --out {}`", empty.display()));
     assert!(
-        stderr.contains("point `--baseline` at the directory that holds the snapshots")
-            && stderr.contains(&format!("`ridl baseline --out {}`", empty.display())),
+        aimed.is_some() && publish.is_some() && aimed < publish,
         "the remedy names both ways out, the aimed-too-high one first:\n{stderr}",
     );
     // The publish suggestion names the directory it writes to. "there" would

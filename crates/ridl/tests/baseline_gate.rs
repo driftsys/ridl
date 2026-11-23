@@ -219,6 +219,17 @@ service Doors {
 }
 ";
 
+/// `INLINE_SERVICE_TOMBSTONED` with the retired name `doorClosed` declared live
+/// again, at the end of the inline body.
+const INLINE_SERVICE_TOMBSTONE_REDECLARED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+service Doors {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+
 /// `doorClosed` declared live again, at the end, in a source whose baseline
 /// (`TOMBSTONED_REMOVAL`) retires that name at ordinal 2. `diff_interface`
 /// emits this as `ReservedNameRedeclared`, not `InteractionRemoved`: the
@@ -347,6 +358,11 @@ fn baseline_refuses_to_publish_an_untombstoned_removal() {
         stderr.contains("is gone from the source"),
         "a bare removal draws the bare-removal wording, not the misplaced- or \
          dropped-tombstone one:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("still declares it in `VehicleStatus` (ordinal 2)"),
+        "the bare-removal wording names the interface and the ordinal the baseline holds, as \
+         the CLI reference shows:\n{stderr}",
     );
     assert_eq!(
         stderr.matches("RIDL-408").count(),
@@ -640,7 +656,8 @@ fn baseline_refuses_a_tombstone_at_the_wrong_ordinal() {
          consequence, not a second refusal:\n{stderr}",
     );
     assert!(
-        stderr.contains("not at the ordinal the interaction held (ordinal 2)")
+        stderr.contains("retires `doorClosed` in `VehicleStatus` with a tombstone")
+            && stderr.contains("not at the ordinal the interaction held (ordinal 2)")
             && stderr.contains("Move `reserved doorClosed` to ordinal 2"),
         "the misplaced-tombstone wording is drawn and names the ordinal to move the \
          tombstone to:\n{stderr}",
@@ -650,8 +667,8 @@ fn baseline_refuses_a_tombstone_at_the_wrong_ordinal() {
         "the bare-removal wording must not fire when the source does retire the name:\n{stderr}",
     );
     assert!(
-        stderr.contains("┌─") && stderr.contains("reserved doorClosed"),
-        "the tombstone is in the source, so the span points at it:\n{stderr}",
+        stderr.contains("cluster.ridl:6:3") && stderr.contains("6 │   reserved doorClosed"),
+        "the tombstone is on line 6 of the source, so the span points at that line:\n{stderr}",
     );
 }
 
@@ -780,6 +797,35 @@ fn baseline_refuses_a_dropped_tombstone_in_an_inline_service() {
     );
 }
 
+/// A retired name redeclared live inside an inline-form service is refused too.
+/// The refusal depends on `Package::shapes` resolving the inline body, which the
+/// published side and the fresh side both reach through the service's global
+/// name rather than through `Package::interfaces`.
+#[test]
+fn baseline_refuses_a_redeclared_name_in_an_inline_service() {
+    let dir = TempDir::new("gate-inline-redeclared-name");
+    let root = package_workspace(&dir, INLINE_SERVICE_TOMBSTONED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", INLINE_SERVICE_TOMBSTONE_REDECLARED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "redeclaring a retired name in an inline body is a refusal:\n{stderr}",
+    );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one redeclared name:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doorClosed` is declared again in `veh.cluster.Doors`"),
+        "the redeclared-name wording names the service's global name:\n{stderr}",
+    );
+}
+
 /// An interaction appended at the end of the body is the sanctioned way to
 /// grow an interface (ridl §11): no ordinal moves and nothing is dropped, so
 /// the gate must admit it (baseline gate design §4).
@@ -805,9 +851,12 @@ fn baseline_publishes_an_append() {
         "an append drops nothing, so it draws no refusal:\n{stderr}",
     );
     let after = std::fs::read(&snapshot).expect("the republished snapshot is readable");
-    assert_ne!(
-        before, after,
-        "the append is published: the snapshot must now carry `doorAjar`",
+    assert_ne!(before, after, "the append replaces the published snapshot");
+    let carries = |bytes: &[u8]| String::from_utf8_lossy(bytes).contains("doorAjar");
+    assert!(
+        !carries(&before) && carries(&after),
+        "the append is published: the snapshot must now carry `doorAjar`, which the first \
+         publication did not",
     );
 }
 
@@ -1092,13 +1141,21 @@ fn baseline_refuses_to_republish_over_a_corrupt_snapshot() {
     );
     assert!(
         stderr.contains("restore it from version control")
-            && stderr.contains("check the source against it with that toolchain"),
+            && stderr.contains("with that toolchain"),
         "the message names a remedy for each cause it cannot tell apart — a damaged file, and \
          a snapshot another toolchain wrote:\n{stderr}",
     );
+    let compare = stderr.find("compare the source against the snapshot directory");
+    let remove = stderr.find("then remove the file");
     assert!(
-        !stderr.contains("delete it"),
-        "the remedy never tells the author to discard the record unread:\n{stderr}",
+        compare.is_some() && remove.is_some() && compare < remove,
+        "the remedy has the other toolchain compare the source before the file is removed, so \
+         the record is never discarded unread:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`ridl diff BASELINE SOURCE`, which exits 1 on a breaking change")
+            && stderr.contains("`ridl check --baseline` only warns and exits 0"),
+        "the comparison named is one that fails on a break:\n{stderr}",
     );
     let after =
         std::fs::read_to_string(&snapshot).expect("the corrupt file is still readable, untouched");

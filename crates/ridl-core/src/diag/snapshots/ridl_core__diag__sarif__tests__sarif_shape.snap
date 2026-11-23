@@ -1092,7 +1092,7 @@ expression: log
             {
               "id": "RIDL-408",
               "shortDescription": {
-                "text": "interaction removed, its tombstone dropped or moved, or its retired name redeclared"
+                "text": "interaction removed, its tombstone dropped or misplaced, or its retired name redeclared"
               },
               "defaultConfiguration": {
                 "level": "error"

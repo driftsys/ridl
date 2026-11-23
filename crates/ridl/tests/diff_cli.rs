@@ -1873,6 +1873,10 @@ fn remote_legacy_inline_baseline_requires_historical_evidence() {
             "missing historical context prevents judgment: {stdout}\n{stderr}"
         );
         assert!(stdout.is_empty(), "no complete report exists: {stdout}");
+        assert!(
+            stderr.contains(ridlc::baseline_context::CONTEXT_REMEDY),
+            "the shared remedy text is missing: {stderr}"
+        );
         for expected in [
             "app/Sample/reading",
             "dep.Reading",
