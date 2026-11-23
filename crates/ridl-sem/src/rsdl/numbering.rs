@@ -98,13 +98,12 @@ pub fn number_instances(system: &CheckedSystem, lock: Option<&InstanceLock>) -> 
 /// The RSDL-314 diagnostics of `numbering`'s orphans, and the RSDL-315 of an
 /// exhausted number range, on `lock_file`. `lock_dir` is the directory the
 /// message gives to `ridl lock`. The orphan entries carry their own line
-/// ranges, so the table they came from (`_lock`) is not read.
+/// ranges, so the table they came from is not needed.
 ///
 /// A component with live entries and no instance in the system draws one
 /// RSDL-314, on its first entry. Every other orphan draws one on its own line.
 pub fn instance_lock_diagnostics(
     numbering: &InstanceNumbering,
-    _lock: &InstanceLock,
     lock_file: FileId,
     lock_dir: &str,
 ) -> Vec<Diagnostic> {
@@ -321,7 +320,7 @@ mod tests {
             "next 10\nveh.topology.Pair/spare 7\nveh.topology.Gone/a 8\nveh.topology.Gone/b 9\n",
         );
         let numbering = number_instances(&sized_closure(), Some(&lock));
-        let diagnostics = instance_lock_diagnostics(&numbering, &lock, lock_file(), ".");
+        let diagnostics = instance_lock_diagnostics(&numbering, lock_file(), ".");
         assert_eq!(
             diagnostics
                 .iter()
@@ -354,13 +353,68 @@ mod tests {
         let lock = lock("next 2147483647\n");
         let numbering = number_instances(&sized_closure(), Some(&lock));
         assert_eq!(numbering.overflow.len(), 5);
-        let diagnostics = instance_lock_diagnostics(&numbering, &lock, lock_file(), ".");
+        let diagnostics = instance_lock_diagnostics(&numbering, lock_file(), ".");
         assert_eq!(
             diagnostics
                 .iter()
                 .map(|d| d.code.as_str())
                 .collect::<Vec<_>>(),
             ["RSDL-315"]
+        );
+    }
+
+    /// An orphan entry of a component whose only instance missed a number is
+    /// still an orphan instance, not an orphan component: the instance is in
+    /// the system, in the overflow set.
+    #[test]
+    fn an_instance_only_in_the_overflow_set_keeps_its_component_in_the_system() {
+        let lock = lock("next 2147483647\nveh.topology.Panel/old 7\n");
+        let numbering = number_instances(&sized_closure(), Some(&lock));
+        assert!(numbering.overflow.contains(&key("veh.topology.Panel/Unit")));
+        assert!(
+            !numbering
+                .numbers
+                .contains_key(&key("veh.topology.Panel/Unit"))
+        );
+        let diagnostics = instance_lock_diagnostics(&numbering, lock_file(), ".");
+        let orphan: Vec<&Diagnostic> = diagnostics
+            .iter()
+            .filter(|d| d.code == DiagCode::RSDL_314)
+            .collect();
+        assert_eq!(orphan.len(), 1, "{diagnostics:?}");
+        assert!(
+            orphan[0]
+                .message
+                .starts_with("`veh.topology.Panel/old` is a live entry"),
+            "{}",
+            orphan[0].message
+        );
+    }
+
+    /// With every instance locked, nothing is provisional, so a message names
+    /// `--retire` only: there is no instance without an entry to rename to.
+    #[test]
+    fn the_orphan_messages_offer_only_retire_when_nothing_is_provisional() {
+        let lock = lock(
+            "next 9\nveh.diag.FaultAccess/Unit 1\nveh.topology.Backend/Unit 2\n\
+             veh.topology.Lane/Unit 3\nveh.topology.Pair/backup 4\n\
+             veh.topology.Pair/primary 5\nveh.topology.Panel/Unit 6\n\
+             veh.topology.Pair/spare 7\nveh.topology.Gone/a 8\n",
+        );
+        let numbering = number_instances(&sized_closure(), Some(&lock));
+        assert!(!numbering.any_provisional);
+        let diagnostics = instance_lock_diagnostics(&numbering, lock_file(), "dir");
+        let messages: Vec<&str> = diagnostics.iter().map(|d| d.message.as_str()).collect();
+        assert_eq!(
+            messages,
+            [
+                "`veh.topology.Pair/spare` is a live entry of `instances.lock` with no instance \
+                 in the system: run `ridl lock dir --retire veh.topology.Pair/spare` to record \
+                 that the instance is gone",
+                "`veh.topology.Gone` has live entries in `instances.lock` and is not in the \
+                 system: run `ridl lock dir --retire veh.topology.Gone` to record that the \
+                 component is gone",
+            ]
         );
     }
 }

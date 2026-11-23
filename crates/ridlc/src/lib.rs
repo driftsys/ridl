@@ -598,8 +598,9 @@ pub fn is_remote(
 /// Whether `path` is the `ridl.toml` or the `instances.lock` of a directory at
 /// or above `scope`: the workspace root's manifest or instance lock, for a
 /// member scope. The instance lock numbers the whole workspace's system, so a
-/// finding on it (RSDL-314, RSDL-315) is every member's to see. A sibling member's manifest
-/// is not, because its directory is beside `scope`, not above it.
+/// finding on it (RSDL-314, RSDL-315) is every member's to see. A sibling
+/// member's manifest is not, because its directory is beside `scope`, not above
+/// it.
 fn is_manifest_above(path: &Path, scope: &Path) -> bool {
     path.file_name()
         .is_some_and(|name| name == "ridl.toml" || name == ridl_core::instance_lock::FILE_NAME)
@@ -2059,8 +2060,8 @@ fn write_crate_files(
     // left as it is.
     let wasm_path = out_dir.join(WASM_FILE);
     if wasm.is_none() && ridl_core::fs_probe::is_file(&wasm_path)? {
-        let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
-        if std::fs::read_to_string(&wasm_path)?.starts_with(&marker) {
+        let prefix = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
+        if std::fs::read_to_string(&wasm_path)?.starts_with(&prefix) {
             std::fs::remove_file(&wasm_path)?;
         }
     }
@@ -2077,8 +2078,8 @@ fn write_crate_files(
     // removes the file an earlier build with one wrote.
     let instances_path = out_dir.join(INSTANCES_FILE);
     if instances.is_none() && ridl_core::fs_probe::is_file(&instances_path)? {
-        let marker = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
-        if std::fs::read_to_string(&instances_path)?.starts_with(&marker) {
+        let prefix = format!("// {}", codegen::GENERATED_MARKER_PREFIX);
+        if std::fs::read_to_string(&instances_path)?.starts_with(&prefix) {
             std::fs::remove_file(&instances_path)?;
         }
     }
@@ -2971,7 +2972,7 @@ pub fn number_workspace_instances(
         Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
         _ => ".".to_string(),
     };
-    let diagnostics = instance_lock_diagnostics(&numbering, &file.lock, lock_file, &lock_dir);
+    let diagnostics = instance_lock_diagnostics(&numbering, lock_file, &lock_dir);
     (numbering, diagnostics)
 }
 
