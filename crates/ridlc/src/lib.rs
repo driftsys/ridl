@@ -104,6 +104,8 @@ use ridl_core::{
     Cache, Frozen, LoadedWorkspace, MaterializedUnit, RemoteAccess, RidlDatabase,
     load_workspace_with_remotes, parse_file, std_package,
 };
+mod release;
+pub use release::running_release;
 use ridl_ir::codegen::{self, v1};
 use ridl_sem::{
     CheckedPackage, CheckedSystem, CheckedWorkspace, InstanceNumbering, Resolution, check_package,
@@ -969,6 +971,9 @@ const NOT_RAISED_BY_BUILD_WITH_DEPLOYMENT: &[DiagCode] = &[DiagCode::RIDL_407, D
 /// result of [`run_check_unlevelled`] for `ir`, possibly with more
 /// diagnostics added.
 pub fn report_directives(run: &mut CliRun, ir: &CheckedIr, not_raised: &[DiagCode]) {
+    if run.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        return;
+    }
     let mut all = std::mem::take(&mut run.diagnostics);
     all.extend(
         ir.diagnostics
@@ -1309,6 +1314,14 @@ fn run_build_inner<E: From<std::io::Error>>(
         ..
     } = load_and_check(&mut db, entry, &[], RemoteAccess::new(frozen, &cache))
         .map_err(|err| E::from(load_io_error(err)))?;
+    if diagnostics.iter().any(ridl_core::is_release_refusal) {
+        return Ok(CliRun {
+            diagnostics,
+            sources,
+            lints,
+            usage_error: false,
+        });
+    }
     // The backends whose table sets `wasm = true`; only the Rust backend acts
     // on it, and a backend that takes no such option refuses it.
     let mut wasm_backends: BTreeSet<String> = backends
@@ -2772,7 +2785,8 @@ fn load_and_check(
     access: RemoteAccess<'_>,
 ) -> Result<Compiled, ridl_core::LoadError> {
     let std = std_package(db);
-    let loaded = load_workspace_with_remotes(db, entry, overlays, access)?;
+    let loaded =
+        load_workspace_with_remotes(db, entry, overlays, access, crate::running_release())?;
     Ok(check_loaded(db, std, loaded))
 }
 
@@ -2800,6 +2814,27 @@ fn check_loaded(db: &RidlDatabase, std: Package, loaded: LoadedWorkspace) -> Com
         instance_lock_dir,
     } = loaded;
 
+    if diagnostics.iter().any(ridl_core::is_release_refusal) {
+        return Compiled {
+            workspace,
+            std,
+            checked: Vec::new(),
+            resolutions: Vec::new(),
+            imports: Vec::new(),
+            system: CheckedSystem::default(),
+            diagnostics,
+            sources,
+            lints,
+            codegen_header,
+            backends,
+            limits: unit_limits,
+            report_scope,
+            root_package,
+            remote_units,
+            instances: InstanceNumbering::default(),
+            instance_lock_dir,
+        };
+    }
     let packages = workspace.packages(db).clone();
     let mut checked = Vec::with_capacity(packages.len());
     let mut resolutions: Vec<Resolution> = Vec::with_capacity(packages.len());

@@ -123,6 +123,10 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
             return ExitCode::from(2);
         }
     };
+    if output.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        errprint!("{}", render(&output.diagnostics, &output.sources));
+        return ExitCode::from(2);
+    }
     // A path inside a workspace member loads the whole workspace, and the
     // command reports on, allocates in and edits that member only (ADR-0024
     // decision 9, as ADR-0026 amends it).
@@ -257,7 +261,7 @@ fn locked_units(
     scope: Option<&Path>,
 ) -> std::io::Result<Vec<LockedUnit>> {
     let mut db = RidlDatabase::default();
-    let loaded = load_workspace(&mut db, entry)?;
+    let loaded = load_workspace(&mut db, entry, ridlc::running_release())?;
     let handles = loaded.workspace.packages(&db).clone();
     // Units keep the order in which the workspace first lists one of their
     // packages.

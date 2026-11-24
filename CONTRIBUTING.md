@@ -63,6 +63,14 @@ The Rust toolchain is pinned to an exact version in `rust-toolchain.toml`, so
 Bumping it is a deliberate PR: edit `channel`, run `just build`, and land the
 repairs the new release wants in the same commit.
 
+The root `ridl-version` key can
+[pin a consumer workspace's release](docs/book/release-pin.md). Repository
+examples and book sources remain unpinned because development builds report the
+previous release until the release commit. Pin tests pass a release to the core
+loader or set `RIDL_TEST_RUNNING_RELEASE` on a debug child process; release
+binaries ignore that test variable. Version normalization tests include the
+crate-local build-support functions and do not rebuild binaries.
+
 ## Workflow
 
 1. Branch from `main`.

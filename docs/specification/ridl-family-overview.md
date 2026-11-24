@@ -377,6 +377,10 @@ are `1xx`.
 | MANI-021 | unknown kind in `[limits.kind]`                                                                                                                                                        | error    |
 | MANI-022 | payload limit above what its entry may give (a `[limits.kind]` value above the default ceiling of its kind, or a `default` or a `[limits.interaction]` value above 65,280 bytes)       | error    |
 | MANI-023 | two directories of one unit give the same package name                                                                                                                                 | error    |
+| MANI-024 | `ridl-version` is not a string of the form MAJOR.MINOR.PATCH                                                                                                                           | error    |
+| MANI-025 | `ridl-version` is below the minimum pinnable release 0.23.0                                                                                                                            | error    |
+| MANI-026 | the running release is incompatible with the root `ridl-version`                                                                                                                       | error    |
+| MANI-027 | a member manifest's `ridl-version` is ignored; only the root pins                                                                                                                      | warning  |
 | MANI-101 | remote import fetch failed                                                                                                                                                             | error    |
 | MANI-102 | fetched content hash does not match the lockfile                                                                                                                                       | error    |
 | MANI-103 | `--frozen` or `ridl vendor --check`: no lockfile entry for a remote import                                                                                                             | error    |

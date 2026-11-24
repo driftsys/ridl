@@ -95,13 +95,14 @@ cargo reads (`.github/scripts/wait-for-crate-index.sh`).
 
 The `ridl` crate shares the workspace version like every other crate, but that
 version is not what a user sees: it moves on the crates.io train's `v*` tags,
-which say nothing about the CLI binary. `crates/ridl/build.rs` reads
-`RIDL_BUILD_VERSION` at build time and falls back to the crate version when that
-variable is absent or empty, which is what a local build gets. The release
-workflow sets it to the `editor-v*` tag. One stamped string is then reported by
-`ridl --version`, by `ridl lsp`'s LSP `serverInfo`, and by `ridl mcp`'s MCP
-server info, so a user reporting a bug from any of the three names the same
-build.
+which say nothing about the CLI binary. Both `crates/ridl/build.rs` and
+`crates/ridlc/build.rs` read `RIDL_BUILD_VERSION` at build time, trim
+whitespace, and remove one leading `editor-v` or `v`. Absent or blank input uses
+the crate version. The release workflow supplies the `editor-v*` tag, so both
+binaries report its unprefixed version. `ridl --version`, LSP `serverInfo` and
+MCP server info share that display string. Pin checks use the crate version if
+the display string is not a plain release. See
+[workspace release pins](../book/release-pin.md).
 
 ## The extension resolves one binary, spawns it in two roles
 

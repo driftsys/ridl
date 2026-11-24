@@ -91,7 +91,11 @@ crate the workspace holds — see `AGENTS.md` for that.
   for `wasm32-unknown-unknown` with `--no-default-features` (ADR-0007 decision
   5). The `catalog_history` module reads and writes the `<unit>.catalogs` file
   that `ridl baseline` publishes: the catalog hashes of a unit's published
-  baselines, newest first.
+  baselines, newest first. The pure `release` module parses root release pins
+  and compares numeric releases. Workspace loaders take the running release
+  explicitly and refuse before source overlays, members, headers, lockfiles or
+  remotes. One root manifest overlay is accepted before this check; other
+  manifest overlays are unsupported. See [release pins](../book/release-pin.md).
 
   The `lint` module looks lint names up in the catalogue, defines the four
   levels (`allow`, `info`, `warn`, `deny`), holds the effective levels of each

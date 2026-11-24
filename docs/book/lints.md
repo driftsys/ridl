@@ -246,6 +246,7 @@ MANI-010 is itself a lint, so the table can set its level.
 | `unknown-manifest-key`         | MANI-005 | warn    | unknown manifest key                                                                                       |
 | `unknown-lint`                 | MANI-010 | warn    | `[lints]` entry names no lint, or its value is not a level                                                 |
 | `vendor-source-not-loaded`     | MANI-018 | warn    | a source file under the root's `vendor/` is not loaded                                                     |
+| `member-ridl-version`          | MANI-027 | warn    | `ridl-version` in a member manifest is ignored                                                             |
 
 `vendor-source-not-loaded` (MANI-018) is raised in standalone mode only; a
 workspace has no such warning.

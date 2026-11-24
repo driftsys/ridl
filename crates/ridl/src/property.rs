@@ -205,6 +205,13 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    if output.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        errprint!(
+            "{}",
+            ridl_core::render(&output.diagnostics, &output.sources)
+        );
+        return ExitCode::from(2);
+    }
     // `ridl test` applies no `[lints]` levels (ADR-0024 decision 8), so a lint
     // that is `allow` by default is left out of what it renders.
     ridl_core::lint::drop_allowed_by_default(&mut output.diagnostics);

@@ -1615,6 +1615,15 @@ diag_codes! {
         /// visits directories in name order, is not loaded.
         MANI_023 = "MANI-023", Error,
             "two directories of one unit give the same package name";
+        /// A root release pin has the wrong type or grammar.
+        MANI_024 = "MANI-024", Error, "invalid `ridl-version`: expected MAJOR.MINOR.PATCH";
+        /// A root release pin predates pin support.
+        MANI_025 = "MANI-025", Error, "`ridl-version` is below the minimum pinnable release";
+        /// The running release cannot answer for the pinned workspace.
+        MANI_026 = "MANI-026", Error, "running release is incompatible with `ridl-version`";
+        /// Only the root manifest can pin the workspace release.
+        MANI_027 = "MANI-027", Warning, "`ridl-version` in a member manifest is ignored", lint = "member-ridl-version";
+
 
         /// A remote import could not be fetched (network failure, a non-2xx HTTP
         /// status, or a value that is not a fetchable `http(s)` URL).
@@ -2580,6 +2589,7 @@ mod tests {
             ("RSDL-806", "depth-underivable"),
             ("RSDL-807", "link-encoding-not-emitted"),
             ("MANI-005", "unknown-manifest-key"),
+            ("MANI-027", "member-ridl-version"),
             ("MANI-010", "unknown-lint"),
             ("MANI-018", "vendor-source-not-loaded"),
         ]
@@ -2635,6 +2645,7 @@ mod tests {
             let expected = if entry.code == DiagCode::MANI_005
                 || entry.code == DiagCode::MANI_010
                 || entry.code == DiagCode::MANI_018
+                || entry.code == DiagCode::MANI_027
             {
                 Severity::Warning
             } else {

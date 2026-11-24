@@ -1,12 +1,9 @@
-//! Stamps the binary with its release version. The release workflow sets
-//! `RIDL_BUILD_VERSION` to the `editor-v*` tag; a local build reports the
-//! crate version, so a bug report can name the build it came from.
-
+//! Stamps the binary with the normalized release version, or the local crate version.
+#[path = "build_support/version.rs"]
+mod version;
 fn main() {
     println!("cargo:rerun-if-env-changed=RIDL_BUILD_VERSION");
-    let version = std::env::var("RIDL_BUILD_VERSION")
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
+    let value = std::env::var("RIDL_BUILD_VERSION").unwrap_or_default();
+    let version = version::normalise_version(&value);
     println!("cargo:rustc-env=RIDL_BUILD_VERSION={version}");
 }

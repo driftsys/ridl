@@ -448,6 +448,7 @@ impl ServerState {
             dir,
             &[],
             RemoteAccess::new(Frozen::Yes, &cache),
+            ridlc::running_release(),
         )
         .map_err(|error| match error {
             ridl_core::LoadError::Io(e) => e,

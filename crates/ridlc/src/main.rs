@@ -5,7 +5,7 @@
 //! directory, or a workspace root. Coded diagnostics render to stderr via
 //! `codespan-reporting`. The exit code is 0 when there is no error diagnostic
 //! (warnings and info alone still exit 0), 1 when at least one error diagnostic
-//! is present, and 2 on an input/output or usage error.
+//! is present, and 2 on a release refusal, input/output or usage error.
 
 // A write to a closed pipe must not panic, so no print macro is used.
 #![deny(clippy::print_stderr, clippy::print_stdout)]
@@ -22,7 +22,7 @@ use ridlc::plugin::PluginSpec;
 use ridlc::{ApplyLints, CliRun, Emit};
 
 #[derive(Parser)]
-#[command(name = "ridlc", about = "The RIDL family compiler (plumbing)", version)]
+#[command(name = "ridlc", about = "The RIDL family compiler (plumbing)", version = env!("RIDL_BUILD_VERSION"))]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -101,7 +101,7 @@ fn main() -> ExitCode {
 }
 
 /// Renders the run's diagnostics to stderr and turns the outcome into an exit
-/// code: 2 on an I/O error or a bad flag value, 1 when any diagnostic is an
+/// code: 2 on a release refusal, I/O error or bad flag value, 1 when any other diagnostic is an
 /// error, 0 otherwise.
 fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     match run {
@@ -112,7 +112,7 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
                 "{}",
                 render(&run.diagnostics, &run.sources)
             );
-            if run.usage_error {
+            if run.diagnostics.iter().any(ridl_core::is_release_refusal) || run.usage_error {
                 ExitCode::from(2)
             } else if run.has_error() {
                 ExitCode::FAILURE

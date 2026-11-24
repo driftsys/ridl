@@ -41,6 +41,14 @@ mod tests {
                 .any(|l| l.starts_with("RSDL-807 ") && l.contains("lint=link-encoding-not-emitted")),
             "{lines:?}"
         );
+        for line in [
+            "MANI-024 error",
+            "MANI-025 error",
+            "MANI-026 error",
+            "MANI-027 warning lint=member-ridl-version default=warn",
+        ] {
+            assert!(lines.contains(&line.to_string()), "missing {line}");
+        }
         let summary = ALL_CATALOGS
             .iter()
             .flat_map(|(_, c)| c.iter())

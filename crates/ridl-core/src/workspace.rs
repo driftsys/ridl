@@ -57,6 +57,9 @@ use crate::manifest::{
 use crate::package::{
     InstanceLockFile, Package, PackageLock, PackageOrigin, Workspace, package_declarations,
 };
+use crate::release::{
+    Release, ReleasePin, check_release_pin, is_release_refusal, parse_release_pin, pin_value,
+};
 
 /// One unit's `[limits]` table and the manifest it was read from. A unit with
 /// no `[limits]` table has no [`UnitLimits`].
@@ -327,8 +330,12 @@ fn overlay_key(path: &Path) -> Option<PathBuf> {
 /// a sibling member; the task 9 resolver walks the order itself. In a
 /// standalone package load the manifest's `[imports]` ride on its packages
 /// and [`Workspace::imports`] is empty.
-pub fn load_workspace(db: &mut RidlDatabase, entry: &Path) -> io::Result<LoadedWorkspace> {
-    load_workspace_with(db, entry, &[]).map_err(|error| match error {
+pub fn load_workspace(
+    db: &mut RidlDatabase,
+    entry: &Path,
+    running: Release,
+) -> io::Result<LoadedWorkspace> {
+    load_workspace_with(db, entry, &[], running).map_err(|error| match error {
         LoadError::Io(e) => e,
         _ => unreachable!("no overlay error is possible without overlays"),
     })
@@ -341,14 +348,15 @@ pub fn load_workspace_with(
     db: &mut RidlDatabase,
     entry: &Path,
     overlays: &[Overlay],
+    running: Release,
 ) -> Result<LoadedWorkspace, LoadError> {
     #[cfg(feature = "fetch")]
     {
-        load_inner(db, entry, overlays, None)
+        load_inner(db, entry, overlays, None, running)
     }
     #[cfg(not(feature = "fetch"))]
     {
-        load_inner(db, entry, overlays)
+        load_inner(db, entry, overlays, running)
     }
 }
 
@@ -371,8 +379,71 @@ pub fn load_workspace_with_remotes(
     entry: &Path,
     overlays: &[Overlay],
     access: RemoteAccess<'_>,
+    running: Release,
 ) -> Result<LoadedWorkspace, LoadError> {
-    load_inner(db, entry, overlays, Some(access))
+    load_inner(db, entry, overlays, Some(access), running)
+}
+
+/// The root's manifest and pin, read independently of members and compiler release.
+pub struct RootRelease {
+    pub manifest: Option<PathBuf>,
+    pub text: Option<String>,
+    pub pin: Option<ReleasePin>,
+    pub diagnostics: Vec<Diagnostic>,
+    pub sources: SourceMap,
+}
+
+/// Resolves an existing entry through on-disk root discovery and reads only its manifest.
+/// An optional overlay substitutes the root text; it never changes root discovery.
+pub fn read_root_release(
+    entry: &Path,
+    manifest_overlay: Option<&Overlay>,
+) -> io::Result<RootRelease> {
+    read_release_manifest(root_manifest(entry)?, manifest_overlay)
+}
+
+fn root_manifest(entry: &Path) -> io::Result<Option<PathBuf>> {
+    let metadata = fs::metadata(entry).map_err(|e| cannot_read(entry, e))?;
+    let dir = if metadata.is_dir() {
+        entry
+    } else {
+        entry.parent().unwrap_or(entry)
+    };
+    Ok(find_root(dir).map(|root| root.join("ridl.toml")))
+}
+
+fn read_release_manifest(
+    manifest: Option<PathBuf>,
+    manifest_overlay: Option<&Overlay>,
+) -> io::Result<RootRelease> {
+    let mut result = RootRelease {
+        manifest: None,
+        text: None,
+        pin: None,
+        diagnostics: Vec::new(),
+        sources: SourceMap::new(),
+    };
+    let Some(manifest) = manifest else {
+        return Ok(result);
+    };
+    let text = match manifest_overlay {
+        Some(overlay) if overlay_key(&overlay.path) == overlay_key(&manifest) => {
+            overlay.text.clone()
+        }
+        _ => fs::read_to_string(&manifest).map_err(|e| cannot_read(&manifest, e))?,
+    };
+    let file = result.sources.file_id(&path_string(&manifest), &text);
+    if toml::from_str::<toml::Table>(&text).is_err() {
+        result.diagnostics = parse_manifest(file, &text).1;
+    } else {
+        match parse_release_pin(file, &text) {
+            Ok(pin) => result.pin = pin,
+            Err(diagnostic) => result.diagnostics.push(diagnostic),
+        }
+    }
+    result.manifest = Some(manifest);
+    result.text = Some(text);
+    Ok(result)
 }
 
 /// The load behind [`load_workspace_with`] and
@@ -382,9 +453,69 @@ fn load_inner(
     entry: &Path,
     overlays: &[Overlay],
     #[cfg(feature = "fetch")] access: Option<RemoteAccess<'_>>,
+    running: Release,
 ) -> Result<LoadedWorkspace, LoadError> {
+    if fs::metadata(entry).is_ok_and(|metadata| !metadata.is_file() && !metadata.is_dir()) {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("`{}` does not exist", entry.display()),
+        )
+        .into());
+    }
+    let manifest = root_manifest(entry).map_err(|error| {
+        if matches!(
+            error.kind(),
+            io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+        ) && fs::metadata(entry).is_err()
+        {
+            io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("`{}` does not exist", entry.display()),
+            )
+        } else {
+            error
+        }
+    })?;
+    let manifest_key = manifest.as_deref().and_then(overlay_key);
+    let manifest_overlays: Vec<_> = overlays
+        .iter()
+        .filter(|overlay| manifest_key.is_some() && overlay_key(&overlay.path) == manifest_key)
+        .collect();
+    let root_release = read_release_manifest(manifest, manifest_overlays.first().copied())?;
     let mut loader = Loader::default();
+    if let (Some(manifest), Some(text)) = (&root_release.manifest, &root_release.text) {
+        let file = loader.sources.file_id(&path_string(manifest), text);
+        if let Some(diagnostic) = check_release_pin(file, text, running) {
+            return Ok(LoadedWorkspace {
+                workspace: Workspace::new(&*db, Vec::new(), BTreeMap::new()),
+                diagnostics: vec![diagnostic],
+                sources: loader.sources,
+                lints: LintScopes::default(),
+                codegen_header: None,
+                backends: BTreeMap::new(),
+                unit_limits: BTreeMap::new(),
+                report_scope: None,
+                units: BTreeMap::new(),
+                root_package: None,
+                imports: BTreeMap::new(),
+                remote_units: BTreeMap::new(),
+                instance_lock: None,
+                instance_lock_dir: PathBuf::new(),
+            });
+        }
+    }
+    if manifest_overlays.len() > 1 {
+        return Err(LoadError::OverlayNotSource(
+            manifest_overlays[1].path.clone(),
+        ));
+    }
     for overlay in overlays {
+        if manifest_overlays
+            .first()
+            .is_some_and(|root| std::ptr::eq(*root, overlay))
+        {
+            continue;
+        }
         // A `.rxdl` or `.rmdl` overlay is accepted so that the loader reports
         // it as RIDL-417, as it reports such a file on disk; it is not compiled.
         if unsupported_extension(&overlay.path).is_none()
@@ -402,43 +533,31 @@ fn load_inner(
         loader.overlays.push((key, overlay.clone(), false));
     }
 
-    let root = match fs::metadata(entry) {
-        Ok(metadata) if metadata.is_file() => match entry.parent().and_then(find_root) {
-            Some(root) => Some(root),
-            None => {
-                loader.load_single_file(db, entry)?;
-                None
-            }
-        },
-        Ok(metadata) if metadata.is_dir() => match find_root(entry) {
-            Some(root) => Some(root),
-            None => {
-                return Err(io::Error::new(
-                    io::ErrorKind::NotFound,
-                    format!("no `ridl.toml` found at or above `{}`", entry.display()),
-                )
-                .into());
-            }
-        },
-        Err(error)
-            if !matches!(
-                error.kind(),
-                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
-            ) =>
+    let root = root_release
+        .manifest
+        .as_ref()
+        .and_then(|manifest| manifest.parent())
+        .map(Path::to_path_buf);
+    if root.is_none() {
+        if fs::metadata(entry)
+            .map_err(|e| cannot_read(entry, e))?
+            .is_file()
         {
-            return Err(cannot_read(entry, error).into());
-        }
-        // NotFound, NotADirectory, and entries that are neither files nor directories.
-        _ => {
+            loader.load_single_file(db, entry)?;
+        } else {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                format!("`{}` does not exist", entry.display()),
+                format!("no `ridl.toml` found at or above `{}`", entry.display()),
             )
             .into());
         }
-    };
+    }
     if let Some(root) = &root {
-        loader.load_root(db, root)?;
+        loader.load_root(
+            db,
+            root,
+            root_release.text.as_deref().expect("root text was read"),
+        )?;
         #[cfg(feature = "fetch")]
         if let Some(access) = access {
             loader.load_remotes(db, root, access)?;
@@ -801,19 +920,11 @@ struct Loader {
 impl Loader {
     /// Loads from a directory known to contain a `ridl.toml`, in whichever
     /// mode its manifest declares.
-    fn load_root(&mut self, db: &mut RidlDatabase, root: &Path) -> io::Result<()> {
+    fn load_root(&mut self, db: &mut RidlDatabase, root: &Path, text: &str) -> io::Result<()> {
         self.root = root.to_path_buf();
         let manifest_path = root.join("ridl.toml");
-        // The error names the manifest: the root may be a workspace above the
-        // entry (`find_root`), so the reader cannot assume which file failed.
-        let text = fs::read_to_string(&manifest_path).map_err(|e| {
-            io::Error::new(
-                e.kind(),
-                format!("cannot read `{}`: {e}", manifest_path.display()),
-            )
-        })?;
-        let file_id = self.sources.file_id(&path_string(&manifest_path), &text);
-        let (manifest, diags) = parse_manifest(file_id, &text);
+        let file_id = self.sources.file_id(&path_string(&manifest_path), text);
+        let (manifest, diags) = parse_manifest(file_id, text);
         self.diagnostics.extend(diags);
         let Some(Manifest {
             kind,
@@ -928,7 +1039,7 @@ impl Loader {
                         self.diagnostics.push(error(
                             DiagCode::MANI_017,
                             file_id,
-                            member_entry_range(&text, member),
+                            member_entry_range(text, member),
                             format!(
                                 "workspace member `{member}` is `vendor` or a path under it; `vendor/` at the manifest root holds the remote units `ridl vendor` writes and is never a member"
                             ),
@@ -936,7 +1047,7 @@ impl Loader {
                         continue;
                     }
                     self.member_dirs.push(member_dir);
-                    self.load_member(db, root, member, file_id, &text)?;
+                    self.load_member(db, root, member, file_id, text)?;
                 }
             }
         }
@@ -981,7 +1092,12 @@ impl Loader {
             fs::read_to_string(&manifest_path).map_err(|e| cannot_read(&manifest_path, e))?;
         let file_id = self.sources.file_id(&path_string(&manifest_path), &text);
         let (manifest, diags) = parse_manifest(file_id, &text);
-        self.diagnostics.extend(diags);
+        self.diagnostics
+            .extend(diags.into_iter().filter(|d| !is_release_refusal(d)));
+        if let Some(pin) = pin_value(&text) {
+            self.diagnostics.push(crate::release::pin_diagnostic(DiagCode::MANI_027, file_id, pin.span,
+                "`ridl-version` in a member manifest is ignored; only the workspace root pins the release".to_string()));
+        }
         let Some(Manifest {
             kind,
             imports,
@@ -1506,7 +1622,8 @@ impl Loader {
             fs::read_to_string(&manifest_path).map_err(|e| cannot_read(&manifest_path, e))?;
         let file_id = self.sources.file_id(&path_string(&manifest_path), &text);
         let (manifest, diags) = parse_manifest(file_id, &text);
-        self.diagnostics.extend(diags);
+        self.diagnostics
+            .extend(diags.into_iter().filter(|d| !is_release_refusal(d)));
         let Some(manifest) = manifest else {
             return Ok(None);
         };
@@ -1971,6 +2088,12 @@ mod tests {
     use salsa::plumbing::AsId;
 
     use super::*;
+    const TEST_RELEASE: Release = Release {
+        major: 0,
+        minor: 23,
+        patch: 2,
+    };
+
     use crate::lint::{LintLevel, apply_lint_levels, lint_by_name};
 
     /// A unique directory under the system temp dir, removed on drop.
@@ -2013,6 +2136,222 @@ mod tests {
         diags.iter().map(|d| d.code.as_str()).collect()
     }
 
+    #[test]
+    fn release_refusal_precedes_members_overlays_and_remotes() {
+        let dir = TempDir::new("release-refusal");
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"p\", \"missing\"]\nridl-version = \"0.23.0\"\nunknown = true\n[codegen]\nheader-file = \"absent\"\n[imports]\nremote = \"https://invalid.example/unit.tar\"\n");
+        dir.write(
+            "p/ridl.toml",
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("p/a.typl", "broken source");
+        dir.write("instances.lock", "not valid [ TOML");
+        let outside = TempDir::new("outside");
+        fn snapshot(path: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+            let mut result = BTreeMap::new();
+            for e in fs::read_dir(path).unwrap() {
+                let p = e.unwrap().path();
+                result.insert(
+                    p.clone(),
+                    if p.is_file() {
+                        fs::read(&p).unwrap()
+                    } else {
+                        Vec::new()
+                    },
+                );
+                if p.is_dir() {
+                    result.extend(snapshot(&p));
+                }
+            }
+            result
+        }
+        let before = snapshot(dir.path());
+        for entry in [dir.path().to_path_buf(), dir.path().join("p")] {
+            let mut db = RidlDatabase::default();
+            let loaded = load_workspace(
+                &mut db,
+                &entry,
+                crate::release::Release {
+                    major: 0,
+                    minor: 24,
+                    patch: 0,
+                },
+            )
+            .unwrap();
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-026"]);
+            assert!(loaded.workspace.packages(&db).is_empty());
+            assert_eq!(loaded.sources.iter_files().count(), 1);
+            assert!(loaded.report_scope.is_none());
+            assert!(loaded.instance_lock.is_none());
+            assert!(
+                loaded.backends.is_empty() && loaded.units.is_empty() && loaded.imports.is_empty()
+            );
+            #[cfg(feature = "fetch")]
+            {
+                let cache = Cache {
+                    root: dir.path().join("cache"),
+                };
+                let loaded = load_workspace_with_remotes(
+                    &mut db,
+                    &entry,
+                    &[overlay(outside.path().join("a.typl"), "broken")],
+                    RemoteAccess::new(Frozen::No, &cache),
+                    Release {
+                        major: 0,
+                        minor: 24,
+                        patch: 0,
+                    },
+                )
+                .unwrap();
+                assert_eq!(codes(&loaded.diagnostics), ["MANI-026"]);
+                assert!(loaded.workspace.packages(&db).is_empty());
+                assert_eq!(loaded.sources.iter_files().count(), 1);
+            }
+            let loaded = load_workspace_with(
+                &mut db,
+                &entry,
+                &[overlay(outside.path().join("a.typl"), "broken")],
+                crate::release::Release {
+                    major: 0,
+                    minor: 24,
+                    patch: 0,
+                },
+            )
+            .unwrap();
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-026"]);
+        }
+        assert_eq!(snapshot(dir.path()), before);
+    }
+
+    #[test]
+    fn member_pin_is_warning_even_when_its_value_is_invalid() {
+        for value in ["42", "\"bad\"", "\"0.22.0\"", "\"9.0.0\""] {
+            let dir = TempDir::new("member-release");
+            dir.write("ridl.toml", "[workspace]\nmembers = [\"p\"]\n");
+            let text =
+                format!("[package]\nname = \"p\"\nversion = \"1.0.0\"\nridl-version = {value}\n");
+            dir.write("p/ridl.toml", &text);
+            let loaded =
+                load_workspace(&mut RidlDatabase::default(), dir.path(), TEST_RELEASE).unwrap();
+            assert_eq!(codes(&loaded.diagnostics), ["MANI-027"]);
+            assert_eq!(loaded.diagnostics[0].severity, Severity::Warning);
+            let range = loaded.diagnostics[0].primary.range;
+            assert_eq!(
+                &text[usize::from(range.start())..usize::from(range.end())],
+                value
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_toml_keeps_mani_001() {
+        let dir = TempDir::new("invalid-toml-release");
+        dir.write("ridl.toml", "[package]\nridl-version = [");
+        let loaded =
+            load_workspace(&mut RidlDatabase::default(), dir.path(), TEST_RELEASE).unwrap();
+        assert_eq!(codes(&loaded.diagnostics), ["MANI-001"]);
+    }
+
+    #[test]
+    fn release_root_reader_and_root_manifest_overlay() {
+        let dir = TempDir::new("root-reader");
+        let manifest = dir.write(
+            "ridl.toml",
+            "[workspace]\nmembers = [\"p\"]\nridl-version = \"0.24.0\"\n",
+        );
+        let member = dir.write(
+            "p/ridl.toml",
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("p/a.typl", "package p\ntype A: integer [0..1]\n");
+        let root = read_root_release(&member, None).unwrap();
+        assert_eq!(root.manifest, Some(manifest.clone()));
+        assert_eq!(root.pin.unwrap().release.minor, 24);
+        assert_eq!(root.sources.iter_files().count(), 1);
+        let overlay = overlay(
+            manifest,
+            "[workspace]\nmembers = [\"p\"]\nridl-version = \"0.23.0\"\n",
+        );
+        let mut db = RidlDatabase::default();
+        let running = Release {
+            major: 0,
+            minor: 23,
+            patch: 2,
+        };
+        let loaded = load_workspace_with(&mut db, &member, &[overlay], running).unwrap();
+        assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
+        assert_eq!(loaded.workspace.packages(&db).len(), 1);
+        let outside = TempDir::new("reader-no-root");
+        assert!(
+            read_root_release(outside.path(), None)
+                .unwrap()
+                .manifest
+                .is_none()
+        );
+        assert!(read_root_release(&outside.path().join("absent"), None).is_err());
+        dir.write("ridl.toml", "[workspace]\nridl-version = [");
+        let root = read_root_release(&member, None).unwrap();
+        assert_eq!(codes(&root.diagnostics), ["MANI-001"]);
+        assert!(
+            root.sources
+                .path(root.diagnostics[0].primary.file)
+                .unwrap()
+                .ends_with("ridl.toml")
+        );
+    }
+
+    #[cfg(feature = "fetch")]
+    #[test]
+    fn release_remote_pins_do_not_constrain_the_consumer() {
+        for value in ["42", "\"bad\"", "\"0.22.0\"", "\"9.0.0\""] {
+            let dir = TempDir::new("remote-release");
+            dir.write(
+                "ridl.toml",
+                &format!("[package]\nname = \"p\"\nversion = \"1.0.0\"\nridl-version = {value}\n"),
+            );
+            dir.write("a.typl", "package p\ntype A: integer [0..1]\n");
+            let mut loader = Loader::default();
+            let mut db = RidlDatabase::default();
+            let unit = MaterializedUnit {
+                url: "https://invalid.example/unit".to_string(),
+                dir: dir.path().to_path_buf(),
+                tree: "unused".to_string(),
+            };
+            let name = loader
+                .read_remote_unit(
+                    &mut db,
+                    &unit,
+                    &BTreeSet::from(["p".to_string()]),
+                    &BTreeMap::new(),
+                )
+                .unwrap();
+            assert_eq!(name.as_deref(), Some("p"));
+            assert!(loader.diagnostics.is_empty(), "{:?}", loader.diagnostics);
+        }
+    }
+
+    #[test]
+    fn release_root_overlay_replaces_non_utf8_disk_manifest() {
+        let dir = TempDir::new("root-overlay-bytes");
+        let manifest = dir.write("ridl.toml", "");
+        fs::write(&manifest, [0xff]).unwrap();
+        let root_overlay = overlay(
+            manifest,
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\nridl-version = \"0.23.0\"\n",
+        );
+        let result = load_workspace_with(
+            &mut RidlDatabase::default(),
+            dir.path(),
+            &[root_overlay],
+            TEST_RELEASE,
+        );
+        assert!(
+            result.is_ok(),
+            "the root overlay must replace disk bytes before reading: {:?}",
+            result.err()
+        );
+    }
+
     fn overlay_fixture() -> (TempDir, PathBuf) {
         let dir = TempDir::new("overlay");
         dir.write(
@@ -2039,6 +2378,7 @@ mod tests {
             &mut db,
             &dir.path().join("p"),
             &[overlay(path.clone(), text)],
+            TEST_RELEASE,
         )
         .unwrap();
         let files = loaded.workspace.packages(&db)[0].files(&db);
@@ -2057,6 +2397,7 @@ mod tests {
             &mut db,
             &dir.path().join("p"),
             &[overlay(dir.path().join("p/0.typl"), "package p\n")],
+            TEST_RELEASE,
         )
         .unwrap();
         let files = loaded.workspace.packages(&db)[0].files(&db);
@@ -2075,6 +2416,7 @@ mod tests {
                 path,
                 "package p\ntype Replacement: integer [0..1]\n",
             )],
+            TEST_RELEASE,
         )
         .unwrap();
         assert_eq!(loaded.workspace.packages(&db)[0].files(&db).len(), 1);
@@ -2088,6 +2430,7 @@ mod tests {
             &mut db,
             &dir.path().join("p"),
             &[overlay(dir.path().join("p/b.typl"), "package p\n")],
+            TEST_RELEASE,
         )
         .unwrap();
         let files = loaded.workspace.packages(&db)[0].files(&db);
@@ -2105,6 +2448,7 @@ mod tests {
             &mut db,
             &dir.path().join("p"),
             &[overlay(dir.path().join("p/sub/d.typl"), "package p.sub\n")],
+            TEST_RELEASE,
         )
         .unwrap();
         let package = loaded
@@ -2127,6 +2471,7 @@ mod tests {
             &mut db,
             &dir.path().join("p"),
             &[overlay(dir.path().join("p/b.typl"), "package q\n")],
+            TEST_RELEASE,
         )
         .unwrap();
         let diag = loaded
@@ -2153,6 +2498,7 @@ mod tests {
                 dir.path().join("p/nope/e.typl"),
                 "package p.nope\n",
             )],
+            TEST_RELEASE,
         );
         assert!(matches!(
             result,
@@ -2171,6 +2517,7 @@ mod tests {
             &mut RidlDatabase::default(),
             &dir.path().join("p"),
             &[overlay(path, "package sibling\n")],
+            TEST_RELEASE,
         );
         assert!(matches!(
             result,
@@ -2192,6 +2539,7 @@ mod tests {
                 dir.path().join("p/.hidden/f.typl"),
                 "package p.hidden\n",
             )],
+            TEST_RELEASE,
         );
         assert!(matches!(
             result,
@@ -2208,7 +2556,8 @@ mod tests {
         let result = load_workspace_with(
             &mut RidlDatabase::default(),
             &dir.path().join("p"),
-            &[overlay(dir.path().join("p/ridl.toml"), "")],
+            &[overlay(dir.path().join("p/other.txt"), "")],
+            TEST_RELEASE,
         );
         assert!(matches!(result, Err(LoadError::OverlayNotSource(_))));
     }
@@ -2219,7 +2568,9 @@ mod tests {
         let path = dir.write("x.typl", "package x\n");
         let text = "package x\ntype Other: integer [0..1]\n";
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace_with(&mut db, &path, &[overlay(path.clone(), text)]).unwrap();
+        let loaded =
+            load_workspace_with(&mut db, &path, &[overlay(path.clone(), text)], TEST_RELEASE)
+                .unwrap();
         assert_eq!(
             loaded.workspace.packages(&db)[0].files(&db)[0].text(&db),
             text
@@ -2228,6 +2579,7 @@ mod tests {
             &mut db,
             &path,
             &[overlay(dir.path().join("y.typl"), "package y\n")],
+            TEST_RELEASE,
         );
         assert!(matches!(
             result,
@@ -2253,9 +2605,13 @@ mod tests {
         for (entry, overlay_path) in [(&relative, &path), (&path, &relative)] {
             let mut db = RidlDatabase::default();
             let text = "package p\ntype Other: integer [0..1]\n";
-            let loaded =
-                load_workspace_with(&mut db, entry, &[overlay(overlay_path.clone(), text)])
-                    .unwrap();
+            let loaded = load_workspace_with(
+                &mut db,
+                entry,
+                &[overlay(overlay_path.clone(), text)],
+                TEST_RELEASE,
+            )
+            .unwrap();
             assert_eq!(
                 loaded.workspace.packages(&db)[0].files(&db)[0].text(&db),
                 text
@@ -2268,7 +2624,7 @@ mod tests {
     fn load_workspace_without_overlays_is_unchanged() {
         let (dir, _) = overlay_fixture();
         let mut db = RidlDatabase::default();
-        let first = load_workspace_with(&mut db, &dir.path().join("p"), &[]).unwrap();
+        let first = load_workspace_with(&mut db, &dir.path().join("p"), &[], TEST_RELEASE).unwrap();
         let describe = |db: &RidlDatabase, loaded: &LoadedWorkspace| {
             loaded
                 .workspace
@@ -2287,7 +2643,7 @@ mod tests {
         };
         let expected = describe(&db, &first);
         let mut other = RidlDatabase::default();
-        let second = load_workspace(&mut other, &dir.path().join("p")).unwrap();
+        let second = load_workspace(&mut other, &dir.path().join("p"), TEST_RELEASE).unwrap();
         assert_eq!(expected, describe(&other, &second));
     }
 
@@ -2309,7 +2665,7 @@ mod tests {
         dir.write("own.typl", SOURCE);
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(
             codes(&loaded.diagnostics),
             vec!["TYPL-010"],
@@ -2366,7 +2722,7 @@ mod tests {
         let file = dir.write("ridl_std.typl", "package ridl.std\ntype MyOwnType: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &file).expect("single-file mode loads");
+        let loaded = load_workspace(&mut db, &file, TEST_RELEASE).expect("single-file mode loads");
         assert_eq!(
             codes(&loaded.diagnostics),
             vec!["TYPL-010"],
@@ -2390,7 +2746,8 @@ mod tests {
             let source = format!("package {declared}\n");
             let file = dir.write("sample.ridl", &source);
             let mut db = RidlDatabase::default();
-            let loaded = load_workspace(&mut db, &file).expect("single-file mode loads");
+            let loaded =
+                load_workspace(&mut db, &file, TEST_RELEASE).expect("single-file mode loads");
             let found: Vec<_> = loaded
                 .diagnostics
                 .iter()
@@ -2432,7 +2789,7 @@ mod tests {
         dir.write("own.typl", "package ridl.stdlib\ntype MyOwnType: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(
             loaded.diagnostics,
             Vec::new(),
@@ -2451,7 +2808,7 @@ mod tests {
         dir.write("b.typl", "package veh.common\ntype B: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(
             loaded.diagnostics,
             Vec::new(),
@@ -2532,7 +2889,8 @@ mod tests {
         let bad_path = dir.write("bad.typl", bad_text);
 
         let mut db = RidlDatabase::default();
-        let mut loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let mut loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["TYPL-002"]);
 
         let diag = &loaded.diagnostics[0];
@@ -2566,7 +2924,7 @@ mod tests {
         );
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["TYPL-001"]);
         assert_eq!(
             loaded.diagnostics[0].primary.range,
@@ -2598,7 +2956,8 @@ mod tests {
         dir.write("m-two/two.typl", "package veh.two\ntype B: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -2680,7 +3039,8 @@ mod tests {
         dir.write("m-inherit/inherit.typl", "package veh.inherit\ntype B: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -2720,7 +3080,8 @@ mod tests {
         dir.write("m/m.typl", "package veh.m\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
         let packages = loaded.workspace.packages(&db).clone();
         let member = packages
@@ -2750,7 +3111,8 @@ mod tests {
         dir.write("m/m.typl", "package veh.m\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
         let packages = loaded.workspace.packages(&db).clone();
         let member = packages
@@ -2784,7 +3146,8 @@ mod tests {
         dir.write("sub/s.typl", "package veh.common.sub\ntype S: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package tree loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         let packages = loaded.workspace.packages(&db).clone();
         let names: Vec<_> = packages.iter().map(|p| p.name(&db).clone()).collect();
@@ -2823,7 +3186,8 @@ mod tests {
         dir.write("sub/s.typl", "package veh.common.sub\ntype S: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package tree loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         for package in loaded.workspace.packages(&db) {
             assert_eq!(
@@ -2838,7 +3202,7 @@ mod tests {
         let single = bare.write("iface.ridl", "package solo\ntype A: m\n");
         let mut single_db = RidlDatabase::default();
         let single_loaded =
-            load_workspace(&mut single_db, &single).expect("single-file mode loads");
+            load_workspace(&mut single_db, &single, TEST_RELEASE).expect("single-file mode loads");
         assert_eq!(
             single_loaded.workspace.packages(&single_db)[0].defaults(&single_db),
             &TimingDefaults::default(),
@@ -2871,7 +3235,8 @@ mod tests {
         let b_file = dir.write("b/b.typl", "package b\ntype B: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "a clean workspace");
 
         let missing_timing = lint_by_name("missing-timing").expect("missing-timing is a lint");
@@ -2928,7 +3293,8 @@ mod tests {
         dir.write("a/a.typl", "package a\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-010"]);
         let unknown_lint = lint_by_name("unknown-lint").expect("unknown-lint is a lint");
         let path = loaded
@@ -2967,7 +3333,8 @@ mod tests {
         let nested = dir.write("sub/s.typl", "package veh.common.sub\ntype S: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package tree loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         let missing_timing = lint_by_name("missing-timing").expect("missing-timing is a lint");
         for path in [&top, &nested] {
@@ -2985,7 +3352,7 @@ mod tests {
         let single = bare.write("iface.ridl", "package solo\ntype A: m\n");
         let mut single_db = RidlDatabase::default();
         let single_loaded =
-            load_workspace(&mut single_db, &single).expect("single-file mode loads");
+            load_workspace(&mut single_db, &single, TEST_RELEASE).expect("single-file mode loads");
         assert!(
             single_loaded.lints.for_path(&single).is_none(),
             "single-file mode has no lint scope",
@@ -3010,7 +3377,8 @@ mod tests {
         dir.write("m-good/good.typl", "package veh.good\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let mut loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let mut loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-004"]);
 
         let diag = &loaded.diagnostics[0];
@@ -3047,7 +3415,8 @@ mod tests {
         dir.write("m-good/good.typl", "package veh.good\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-008"]);
         assert_eq!(loaded.diagnostics[0].severity, Severity::Error);
         assert!(loaded.diagnostics[0].message.contains("m-gone"));
@@ -3069,7 +3438,7 @@ mod tests {
         dir.write("good/good.typl", "package veh.good\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let result = load_workspace(&mut db, dir.path());
+        let result = load_workspace(&mut db, dir.path(), TEST_RELEASE);
         assert!(
             result.is_ok(),
             "the workspace must load: {:?}",
@@ -3102,7 +3471,8 @@ mod tests {
         dir.write("types/t.typl", "package veh.common.types\ntype T: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package tree loads");
         assert_eq!(loaded.diagnostics, Vec::new());
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -3133,7 +3503,7 @@ mod tests {
         dir.write("b.ridl", "package veh.common\ntype B: s\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "a clean mixed package");
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -3163,7 +3533,7 @@ mod tests {
         dir.write("c.rsdl", "package veh.common\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "a clean mixed package");
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -3193,7 +3563,7 @@ mod tests {
         let path = dir.write("iface.ridl", "package veh.iface\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        let loaded = load_workspace(&mut db, &path, TEST_RELEASE).expect("single-file mode loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "exempt from TYPL-002");
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -3216,7 +3586,8 @@ mod tests {
         dir.write("cluster/speed.ridl", "package veh.hmi.cluster\ntype S: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package tree loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package tree loads");
         assert_eq!(loaded.diagnostics, Vec::new());
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -3246,7 +3617,8 @@ mod tests {
         dir.write("b/b.ridl", "package x.b\ntype B: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(loaded.diagnostics, Vec::new());
 
         assert_eq!(
@@ -3271,7 +3643,7 @@ mod tests {
         let path = dir.write("p.ridl", "package p\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        let loaded = load_workspace(&mut db, &path, TEST_RELEASE).expect("single-file mode loads");
         assert_eq!(loaded.diagnostics, Vec::new());
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -3296,7 +3668,7 @@ mod tests {
             .expect("create the directory symlink");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(loaded.diagnostics, Vec::new());
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -3315,7 +3687,7 @@ mod tests {
             .expect("write the non-UTF8 fixture");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the load continues");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the load continues");
         assert_eq!(loaded.diagnostics.len(), 1, "{:?}", loaded.diagnostics);
         assert!(loaded.diagnostics[0].message.contains("not valid UTF-8"));
         assert!(loaded.diagnostics[0].message.contains("._x.typl"));
@@ -3333,7 +3705,7 @@ mod tests {
             .expect("write the non-UTF8 fixture");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the load continues");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the load continues");
         assert_eq!(loaded.diagnostics.len(), 1);
         assert!(
             loaded.diagnostics[0].message.contains("UTF-8"),
@@ -3369,7 +3741,7 @@ mod tests {
         let path = dir.write("walking_skeleton.typl", &text);
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        let loaded = load_workspace(&mut db, &path, TEST_RELEASE).expect("single-file mode loads");
         assert_eq!(loaded.diagnostics, Vec::new(), "exempt from TYPL-002");
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -3410,7 +3782,7 @@ service:veh.common.Climate 2
         let lock_path = dir.write("interfaces.lock", LOCK_TEXT);
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(
             loaded.diagnostics,
             Vec::new(),
@@ -3439,7 +3811,7 @@ service:veh.common.Climate 2
         dir.write("a.ridl", "package veh.common\ntype A: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         let packages = loaded.workspace.packages(&db).clone();
         assert_eq!(*packages[0].lock(&db), None);
@@ -3460,7 +3832,7 @@ service:veh.common.Climate 2
         let lock_path = dir.write("interfaces.lock", text);
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), ["RIDL-410"]);
         let diagnostic = &loaded.diagnostics[0];
         assert_eq!(diagnostic.severity, Severity::Error);
@@ -3507,7 +3879,7 @@ service:veh.common.Climate 2
         let lock_path = dir.write("instances.lock", text);
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         let lock = loaded.instance_lock.expect("the instance lock is loaded");
         assert_eq!(lock.path, path_string(&lock_path));
@@ -3527,7 +3899,7 @@ service:veh.common.Climate 2
         let lock_path = dir.write("instances.lock", "next x\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), ["RSDL-315"]);
         let diagnostic = &loaded.diagnostics[0];
         assert_eq!(diagnostic.severity, Severity::Error);
@@ -3556,7 +3928,7 @@ service:veh.common.Climate 2
         dir.write("interfaces.lock", "");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), ["RIDL-410"]);
         assert_eq!(loaded.diagnostics[0].primary.range, byte_range(0, 0));
         assert!(
@@ -3577,7 +3949,7 @@ service:veh.common.Climate 2
             .expect("write the bytes");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), ["RIDL-410"]);
         assert!(
             loaded.diagnostics[0].message.contains("not valid UTF-8"),
@@ -3598,7 +3970,7 @@ service:veh.common.Climate 2
         dir.write("interfaces.lock", LOCK_TEXT);
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        let loaded = load_workspace(&mut db, &path, TEST_RELEASE).expect("single-file mode loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         let packages = loaded.workspace.packages(&db).clone();
         let lock = packages[0]
@@ -3622,7 +3994,7 @@ service:veh.common.Climate 2
         dir.write("cluster/speed.ridl", "package veh.hmi.cluster\ntype B: m\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the tree loads");
         assert_eq!(loaded.diagnostics, Vec::new());
         let packages = loaded.workspace.packages(&db).clone();
         assert_eq!(packages.len(), 2);
@@ -3649,7 +4021,7 @@ service:veh.common.Climate 2
         let ignored = dir.write("cluster/interfaces.lock", "x");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the tree loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-416"]);
         let diag = &loaded.diagnostics[0];
         assert_eq!(diag.severity, Severity::Warning);
@@ -3691,7 +4063,7 @@ service:veh.common.Climate 2
         let nested = dir.write("cluster/speed.rxdl", "package veh.hmi.cluster\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the tree loads");
         assert_eq!(
             codes(&loaded.diagnostics),
             vec!["RIDL-417", "RIDL-417", "RIDL-417"]
@@ -3734,6 +4106,7 @@ service:veh.common.Climate 2
                 overlay(on_disk.clone(), "package p\n"),
                 overlay(added.clone(), "package p\n"),
             ],
+            TEST_RELEASE,
         );
         assert!(
             result.is_ok(),
@@ -3766,6 +4139,7 @@ service:veh.common.Climate 2
             &mut db,
             &dir.path().join("p"),
             &[overlay(added.clone(), "package p\n")],
+            TEST_RELEASE,
         )
         .expect("a `.rmdl` overlay is accepted");
         assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417", "RIDL-417"]);
@@ -3801,6 +4175,7 @@ service:veh.common.Climate 2
             &mut db,
             &dir.path().join("p"),
             &[overlay(on_disk.clone(), text)],
+            TEST_RELEASE,
         )
         .expect("the overlay is accepted");
         assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
@@ -3817,7 +4192,8 @@ service:veh.common.Climate 2
         let (dir, _) = overlay_fixture();
         dir.write("p/b.rxdl", "package p\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &dir.path().join("p")).expect("the tree loads");
+        let loaded =
+            load_workspace(&mut db, &dir.path().join("p"), TEST_RELEASE).expect("the tree loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
         assert_eq!(
             loaded.sources.text(loaded.diagnostics[0].primary.file),
@@ -3834,7 +4210,7 @@ service:veh.common.Climate 2
             let (dir, typl) = overlay_fixture();
             let entry = dir.write(&format!("p/b.{extension}"), "package p\n");
             let mut db = RidlDatabase::default();
-            let loaded = load_workspace(&mut db, &entry).expect("the package loads");
+            let loaded = load_workspace(&mut db, &entry, TEST_RELEASE).expect("the package loads");
             assert_eq!(codes(&loaded.diagnostics), vec!["RIDL-417"]);
             assert_eq!(
                 loaded.sources.path(loaded.diagnostics[0].primary.file),
@@ -3865,6 +4241,7 @@ service:veh.common.Climate 2
                 overlay(b.clone(), "package p\n"),
                 overlay(a.clone(), "package p\n"),
             ],
+            TEST_RELEASE,
         )
         .expect("the overlays are accepted");
         let anchored: Vec<_> = loaded
@@ -3891,7 +4268,7 @@ service:veh.common.Climate 2
             let path = dir.write(&format!("hmi.{extension}"), "package veh.hmi\n");
 
             let mut db = RidlDatabase::default();
-            let error = load_workspace(&mut db, &path)
+            let error = load_workspace(&mut db, &path, TEST_RELEASE)
                 .err()
                 .unwrap_or_else(|| panic!("a lone `.{extension}` entry is a load error"));
             assert_eq!(error.kind(), io::ErrorKind::InvalidInput);
@@ -3916,6 +4293,7 @@ service:veh.common.Climate 2
                 &mut db,
                 &path,
                 &[overlay(path.clone(), "package veh.hmi\ntype B: m\n")],
+                TEST_RELEASE,
             );
             let Err(LoadError::Io(error)) = result else {
                 panic!("a lone `.{extension}` entry with an overlay is a load error");
@@ -4036,7 +4414,7 @@ service:veh.common.Climate 2
         let dir = TempDir::new("member-manifest-directory");
         dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
         fs::create_dir_all(dir.path().join("a/ridl.toml")).unwrap();
-        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path(), TEST_RELEASE);
         assert!(result.is_ok(), "a non-file manifest produces a diagnostic");
         let loaded = result.unwrap();
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-008"]);
@@ -4046,7 +4424,7 @@ service:veh.common.Climate 2
     fn a_missing_entry_reports_that_it_does_not_exist() {
         let dir = TempDir::new("missing-entry");
         let entry = dir.path().join("missing");
-        let result = load_workspace(&mut RidlDatabase::default(), &entry);
+        let result = load_workspace(&mut RidlDatabase::default(), &entry, TEST_RELEASE);
         assert!(result.is_err(), "a missing entry does not load");
         let error = result.err().unwrap();
         assert_eq!(error.kind(), io::ErrorKind::NotFound);
@@ -4068,7 +4446,7 @@ service:veh.common.Climate 2
                 .unwrap()
                 .success()
         );
-        let result = load_workspace(&mut RidlDatabase::default(), &entry);
+        let result = load_workspace(&mut RidlDatabase::default(), &entry, TEST_RELEASE);
         assert!(result.is_err(), "a FIFO entry does not load");
         let error = result.err().unwrap();
         assert_eq!(error.kind(), io::ErrorKind::NotFound);
@@ -4086,7 +4464,7 @@ service:veh.common.Climate 2
         let dir = TempDir::new("entry-below-file");
         let file = dir.write("file", "text");
         let entry = file.join("below");
-        let result = load_workspace(&mut RidlDatabase::default(), &entry);
+        let result = load_workspace(&mut RidlDatabase::default(), &entry, TEST_RELEASE);
         assert!(result.is_err(), "an entry below a file does not load");
         let error = result.err().unwrap();
         assert_eq!(error.kind(), io::ErrorKind::NotFound);
@@ -4147,7 +4525,7 @@ service:veh.common.Climate 2
             .unwrap()
             .to_path_buf();
         let _permissions = RestrictedPermissions::new(&dir.path().join("ancestor"));
-        let result = load_workspace(&mut RidlDatabase::default(), &entry);
+        let result = load_workspace(&mut RidlDatabase::default(), &entry, TEST_RELEASE);
         assert!(result.is_err(), "an inaccessible entry does not load");
         let error = result.err().unwrap();
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
@@ -4167,7 +4545,7 @@ service:veh.common.Climate 2
         dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
         let manifest = dir.write("a/ridl.toml", PACKAGE_A);
         let _permissions = RestrictedPermissions::new(&manifest);
-        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path(), TEST_RELEASE);
         assert!(
             result.is_err(),
             "an unreadable member manifest does not load"
@@ -4195,7 +4573,7 @@ service:veh.common.Climate 2
         dir.write("ridl.toml", "[workspace]\nmembers = [\"a\"]\n");
         let manifest = dir.write("a/ridl.toml", PACKAGE_A);
         let _permissions = RestrictedPermissions::new(&dir.path().join("a"));
-        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path(), TEST_RELEASE);
         assert!(result.is_err(), "an unsearchable member does not load");
         let error = result.err().unwrap();
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
@@ -4222,7 +4600,7 @@ service:veh.common.Climate 2
         std::os::unix::fs::symlink("ridl.toml", sub.join("ridl.toml")).unwrap();
         let nested = nested_manifest_of(&sub);
         assert!(nested.is_err(), "{nested:?}");
-        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path(), TEST_RELEASE);
         assert!(result.is_err(), "the load reports the manifest");
         let message = result.err().unwrap().to_string();
         assert!(
@@ -4249,7 +4627,7 @@ service:veh.common.Climate 2
         dir.write("sub/deep/b.ridl", "package a\n");
         let sub = dir.path().join("sub");
         fs::set_permissions(&sub, fs::Permissions::from_mode(0o444)).unwrap();
-        let result = load_workspace(&mut RidlDatabase::default(), dir.path());
+        let result = load_workspace(&mut RidlDatabase::default(), dir.path(), TEST_RELEASE);
         fs::set_permissions(&sub, fs::Permissions::from_mode(0o755)).unwrap();
         assert!(result.is_err(), "the load reports the subdirectory");
         let message = result.err().unwrap().to_string();
@@ -4269,7 +4647,7 @@ service:veh.common.Climate 2
         assert_eq!(find_root(&dir.path().join("pkg/../other")), None);
 
         let mut db = RidlDatabase::default();
-        let error = load_workspace(&mut db, &dir.path().join("pkg/../other"))
+        let error = load_workspace(&mut db, &dir.path().join("pkg/../other"), TEST_RELEASE)
             .err()
             .expect("an entry outside every package does not load");
         assert!(
@@ -4319,7 +4697,8 @@ service:veh.common.Climate 2
         let b_file = dir.write("b/b.typl", "package b\ntype B: integer [0..1]\n");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &dir.path().join("a")).expect("the workspace loads");
+        let loaded = load_workspace(&mut db, &dir.path().join("a"), TEST_RELEASE)
+            .expect("the workspace loads");
         assert_eq!(loaded.report_scope, Some(dir.path().join("a")));
         let mut names: Vec<_> = loaded
             .workspace
@@ -4331,11 +4710,12 @@ service:veh.common.Climate 2
         assert_eq!(names, vec!["a", "b"], "both members compile");
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &b_file).expect("the workspace loads");
+        let loaded = load_workspace(&mut db, &b_file, TEST_RELEASE).expect("the workspace loads");
         assert_eq!(loaded.report_scope, Some(dir.path().join("b")));
 
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(loaded.report_scope, None, "the root reports on everything");
     }
 
@@ -4349,7 +4729,7 @@ service:veh.common.Climate 2
         dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
         dir.write("H.txt", "SPDX-License-Identifier: MIT\r\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
         assert_eq!(
             loaded.codegen_header.as_deref(),
@@ -4366,7 +4746,7 @@ service:veh.common.Climate 2
         );
         dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
         let names: Vec<&str> = loaded.backends["rust"]
             .encodings
@@ -4385,7 +4765,7 @@ service:veh.common.Climate 2
         );
         dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
         let unit = &loaded.unit_limits["a"];
         assert_eq!(
@@ -4416,7 +4796,8 @@ service:veh.common.Climate 2
         );
         dir.write("m-two/two.typl", "package two\ntype B: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
         let names: Vec<&str> = loaded.unit_limits.keys().map(String::as_str).collect();
         assert_eq!(names, ["one"], "the root's table reaches no member");
@@ -4440,7 +4821,7 @@ service:veh.common.Climate 2
         dir.write("ridl.toml", PACKAGE_A);
         dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert!(loaded.unit_limits.is_empty());
     }
 
@@ -4451,7 +4832,7 @@ service:veh.common.Climate 2
         dir.write("ridl.toml", &manifest);
         dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
         let diag = &loaded.diagnostics[0];
         let start = usize::from(diag.primary.range.start());
@@ -4476,7 +4857,7 @@ service:veh.common.Climate 2
         dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
         fs::write(dir.path().join("H.txt"), [0xffu8, 0xfe]).expect("write the header");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
         assert!(
             loaded.diagnostics[0].message.contains("H.txt"),
@@ -4496,7 +4877,7 @@ service:veh.common.Climate 2
         dir.write("a.typl", "package a\ntype A: integer [0..1]\n");
         dir.write("H.txt", "A\u{2028}B\u{0}\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the package loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-011"]);
         let diag = &loaded.diagnostics[0];
         let manifest = fs::read_to_string(dir.path().join("ridl.toml")).unwrap();
@@ -4525,7 +4906,8 @@ service:veh.common.Climate 2
         dir.write("a/ridl.toml", &member);
         dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-012"]);
         let diag = &loaded.diagnostics[0];
         let start = usize::from(diag.primary.range.start());
@@ -4542,7 +4924,8 @@ service:veh.common.Climate 2
         dir.write("a/ridl.toml", &member);
         dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-016"]);
         let diag = &loaded.diagnostics[0];
         let start = usize::from(diag.primary.range.start());
@@ -4562,7 +4945,8 @@ service:veh.common.Climate 2
         dir.write("a/ridl.toml", &member);
         dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-015", "MANI-016"]);
         let diag = &loaded.diagnostics[1];
         let start = usize::from(diag.primary.range.start());
@@ -4580,7 +4964,8 @@ service:veh.common.Climate 2
         dir.write("a/ridl.toml", PACKAGE_A);
         dir.write("a/a.typl", "package a\ntype A: integer [0..1]\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), Vec::<&str>::new());
     }
 
@@ -4598,7 +4983,7 @@ service:veh.common.Climate 2
         );
         dir.write("cluster/x.ridl", "package veh.hmi.cluster\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the unit loads");
+        let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the unit loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-013"]);
         let diag = &loaded.diagnostics[0];
         assert_eq!(
@@ -4674,7 +5059,7 @@ service:veh.common.Climate 2
             }
             let found = find_nested_manifest(dir.path()).expect("the tree is readable");
             let mut db = RidlDatabase::default();
-            let loaded = load_workspace(&mut db, dir.path()).expect("the unit loads");
+            let loaded = load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the unit loads");
             let reported: Vec<&str> = loaded
                 .diagnostics
                 .iter()
@@ -4710,7 +5095,8 @@ service:veh.common.Climate 2
         );
         dir.write("a/b/b.typl", "package b\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         let count = codes(&loaded.diagnostics)
             .iter()
             .filter(|c| **c == "MANI-013")
@@ -4745,7 +5131,8 @@ service:veh.common.Climate 2
         let nested = fixture.write("app/vendor/other/sub/s.ridl", "package other.sub\n");
         fixture.write("app/vendor/other/notes.md", "not a source\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &fixture.path().join("app")).expect("the unit loads");
+        let loaded = load_workspace(&mut db, &fixture.path().join("app"), TEST_RELEASE)
+            .expect("the unit loads");
         assert_eq!(
             codes(&loaded.diagnostics),
             vec!["MANI-018", "MANI-018"],
@@ -4802,8 +5189,8 @@ service:veh.common.Climate 2
             "package veh.common.sub\n",
         );
         let mut db = RidlDatabase::default();
-        let mut loaded =
-            load_workspace(&mut db, &fixture.path().join("app")).expect("the unit loads");
+        let mut loaded = load_workspace(&mut db, &fixture.path().join("app"), TEST_RELEASE)
+            .expect("the unit loads");
         assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
         let packages = loaded.workspace.packages(&db);
         assert_eq!(packages.len(), 1);
@@ -4822,7 +5209,8 @@ service:veh.common.Climate 2
         );
         fixture.write("app/parts/vendor/v.typl", "package app.parts.vendor\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, &fixture.path().join("app")).expect("the unit loads");
+        let loaded = load_workspace(&mut db, &fixture.path().join("app"), TEST_RELEASE)
+            .expect("the unit loads");
         assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
         let names: Vec<String> = loaded
             .workspace
@@ -4848,7 +5236,8 @@ service:veh.common.Climate 2
         fixture.write("app/app.typl", "package app\n");
         fixture.write("app/vendor/v.typl", "package app.vendor\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, fixture.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, fixture.path(), TEST_RELEASE).expect("the workspace loads");
         assert!(loaded.diagnostics.is_empty(), "{:?}", loaded.diagnostics);
         let names: Vec<String> = loaded
             .workspace
@@ -4881,8 +5270,8 @@ service:veh.common.Climate 2
         );
         fixture.write("ws/vendor/x/x.typl", "package x\n");
         let mut db = RidlDatabase::default();
-        let loaded =
-            load_workspace(&mut db, &fixture.path().join("ws")).expect("the workspace loads");
+        let loaded = load_workspace(&mut db, &fixture.path().join("ws"), TEST_RELEASE)
+            .expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-017", "MANI-017"]);
         assert!(
             loaded
@@ -4918,7 +5307,8 @@ service:veh.common.Climate 2
         let second_path = dir.write("hmi/ridl.toml", second);
         dir.write("hmi/y.ridl", "package com.example.hmi\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-014"]);
         let diag = &loaded.diagnostics[0];
         assert_eq!(
@@ -4962,7 +5352,8 @@ service:veh.common.Climate 2
             &format!("package x\n\ninterface {}A {{}}\n", second.to_uppercase()),
         );
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert_eq!(codes(&loaded.diagnostics), vec!["MANI-014"]);
         let diag = &loaded.diagnostics[0];
         assert_eq!(
@@ -5016,7 +5407,8 @@ service:veh.common.Climate 2
         dir.write("x/a.b/p.ridl", "package x.a.b\n\ninterface P {}\n");
         dir.write("x/a/b/q.ridl", "package x.a.b\n\ninterface Q {}\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         let codes = codes(&loaded.diagnostics);
         assert!(!codes.contains(&"MANI-014"), "{codes:?}");
         assert_eq!(
@@ -5099,7 +5491,8 @@ service:veh.common.Climate 2
         );
         dir.write("a/x.ridl", "package x\n\ninterface A {}\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         for (i, diag) in loaded.diagnostics.iter().enumerate() {
             assert!(
                 !loaded.diagnostics[..i].contains(diag),
@@ -5131,7 +5524,8 @@ service:veh.common.Climate 2
         );
         dir.write("hmi/y.ridl", "package com.example.hmi\n");
         let mut db = RidlDatabase::default();
-        let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
+        let loaded =
+            load_workspace(&mut db, dir.path(), TEST_RELEASE).expect("the workspace loads");
         assert!(
             loaded.diagnostics.is_empty(),
             "{:?}",
@@ -5234,9 +5628,14 @@ service:veh.common.Climate 2
         ) -> (RidlDatabase, LoadedWorkspace) {
             let cache = cache(fixture);
             let mut db = RidlDatabase::default();
-            let loaded =
-                load_workspace_with_remotes(&mut db, root, &[], RemoteAccess::new(frozen, &cache))
-                    .expect("the workspace loads");
+            let loaded = load_workspace_with_remotes(
+                &mut db,
+                root,
+                &[],
+                RemoteAccess::new(frozen, &cache),
+                TEST_RELEASE,
+            )
+            .expect("the workspace loads");
             (db, loaded)
         }
 
@@ -5828,7 +6227,7 @@ service:veh.common.Climate 2
             let fixture = TempDir::new("remote-plain");
             let root = consumer(&fixture);
             let mut db = RidlDatabase::default();
-            let loaded = load_workspace(&mut db, &root).expect("the workspace loads");
+            let loaded = load_workspace(&mut db, &root, TEST_RELEASE).expect("the workspace loads");
             assert!(loaded.remote_units.is_empty());
             assert_eq!(loaded.imports.len(), 1);
             assert_eq!(loaded.workspace.packages(&db).len(), 1);

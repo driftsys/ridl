@@ -49,6 +49,8 @@ mod tests {
             "backend.*.wasm boolean",
             "backend.*.codec boolean (implies backend.rust.wasm)",
             "package.name string",
+            "package.ridl-version string",
+            "workspace.ridl-version string",
             "backend table<table>",
             "lints table<string>",
             "imports table<string>",

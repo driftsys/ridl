@@ -34,6 +34,10 @@ MANI-020 error
 MANI-021 error
 MANI-022 error
 MANI-023 error
+MANI-024 error
+MANI-025 error
+MANI-026 error
+MANI-027 warning lint=member-ridl-version default=warn
 MANI-101 error
 MANI-102 error
 MANI-103 error
