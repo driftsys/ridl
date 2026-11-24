@@ -297,7 +297,10 @@ fn compile_entry(entry: &Path) -> Compiled {
             &system,
             &irs,
             std_ir,
-            &ridl_sem::number_instances(&system, None),
+            &ridl_sem::number_instances(
+                &system,
+                loaded.instance_lock.as_ref().map(|file| &file.lock),
+            ),
         )
         .map(|lowered| {
             ridl_ir::v2::system_to_json_pretty(&lowered)

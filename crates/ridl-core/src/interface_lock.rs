@@ -1166,7 +1166,11 @@ C 3
         );
         assert_eq!(lock.live(&key("LaneKeeping")), None);
         assert_eq!(lock.next, 6, "a rename never allocates");
-        assert!(lock.render().contains("\nLaneCentering 3\n"));
+        assert_eq!(
+            lock.render(),
+            EXAMPLE.replace("LaneKeeping 3", "LaneCentering 3"),
+            "only the renamed line changes; the retired line stays"
+        );
 
         assert_eq!(
             lock.rename(&key("Absent"), key("X")),

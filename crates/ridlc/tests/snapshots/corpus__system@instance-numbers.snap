@@ -56,13 +56,13 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
       "numbers": [
         {
           "instance": "primary",
-          "number": 2,
-          "provisional": true
+          "number": 1,
+          "provisional": false
         },
         {
           "instance": "backup",
-          "number": 1,
-          "provisional": true
+          "number": 2,
+          "provisional": false
         }
       ]
     },
@@ -95,7 +95,7 @@ input_file: crates/ridlc/tests/corpus/instance-numbers/ridl.toml
         {
           "instance": "Unit",
           "number": 3,
-          "provisional": true
+          "provisional": false
         }
       ]
     }

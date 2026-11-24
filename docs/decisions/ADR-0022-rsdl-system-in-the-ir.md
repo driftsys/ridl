@@ -59,7 +59,7 @@ descriptor unbuilt. Decision 12 records the deployment descriptor as the second
 emitter over `System`; the record is
 [`docs/design/deployment-descriptor.md`](../design/deployment-descriptor.md).
 
-Amended again 2026-11-02 (instance numbers): decision 12 takes the instance
+Amended again 2026-11-02 (driftsys/ridl#1179): decision 12 takes the instance
 number from `instances.lock`; the lowered `System` gains `Component.numbers`,
 and the codegen deployment section and the deployment descriptor carry `number`
 and `provisional` for each instance. Decision 9 gains the heading "instance

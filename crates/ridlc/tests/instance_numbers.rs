@@ -370,3 +370,84 @@ fn a_package_named_instances_builds_without_a_system() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+/// The text a build prints, standard output and standard error together.
+fn printed(output: &std::process::Output) -> String {
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    )
+}
+
+/// A package whose name only resembles `instances` does not use the module
+/// name: the refusal is for a first segment equal to `instances`.
+#[test]
+fn a_package_that_only_resembles_instances_builds_with_a_system() {
+    for package in ["instancesx", "foo.instances"] {
+        let entry = entry_with_instances_package(package, true);
+        let out = tempfile::tempdir().unwrap();
+        let output = build(entry.path(), out.path(), "rust");
+        assert!(output.status.success(), "{package}: {}", printed(&output));
+        assert!(out.path().join("__ridl_instances.rs").is_file());
+    }
+}
+
+#[test]
+fn rust_without_a_system_removes_only_generated_instances() {
+    let entry = entry_with_instances_package("instances", false);
+    let out = tempfile::tempdir().unwrap();
+    let output = build(&corpus_entry(), out.path(), "rust");
+    assert!(output.status.success(), "{}", printed(&output));
+    let path = out.path().join("__ridl_instances.rs");
+    assert!(path.is_file());
+    let output = build(entry.path(), out.path(), "rust");
+    assert!(output.status.success(), "{}", printed(&output));
+    assert!(!path.exists());
+    let handwritten = "pub const PERSONAL: i32 = 42;\n";
+    std::fs::write(&path, handwritten).unwrap();
+    let output = build(entry.path(), out.path(), "rust");
+    assert!(output.status.success(), "{}", printed(&output));
+    assert_eq!(std::fs::read_to_string(path).unwrap(), handwritten);
+}
+
+#[test]
+fn rust_refuses_to_overwrite_handwritten_instances_before_writing_packages() {
+    let out = tempfile::tempdir().unwrap();
+    let path = out.path().join("__ridl_instances.rs");
+    let handwritten = "pub const PERSONAL: i32 = 42;\n";
+    std::fs::write(&path, handwritten).unwrap();
+    let output = build(&corpus_entry(), out.path(), "rust");
+    assert_eq!(output.status.code(), Some(1));
+    let text = printed(&output);
+    assert!(
+        text.contains("__ridl_instances.rs") && text.contains("This build wrote nothing at all"),
+        "{text}"
+    );
+    assert_eq!(std::fs::read_to_string(path).unwrap(), handwritten);
+    assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 1);
+}
+
+/// RSDL-315 for an exhausted number range: with `next` at the last number, the
+/// first instance takes it and the other two have none left. The build exits 1
+/// and writes nothing.
+#[test]
+fn an_exhausted_number_range_stops_the_build_with_rsdl_315() {
+    let entry = tempfile::tempdir().unwrap();
+    copy_dir(&corpus_entry(), entry.path());
+    std::fs::write(
+        entry.path().join("instances.lock"),
+        "# instances.lock — written by ridl lock; do not edit by hand.\nnext 2147483647\n",
+    )
+    .unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let output = build(entry.path(), out.path(), "rust");
+    assert_eq!(output.status.code(), Some(1), "{}", printed(&output));
+    let text = printed(&output);
+    assert!(text.contains("error[RSDL-315]"), "{text}");
+    assert!(
+        text.contains("has no number left: 2 instances would take a number above 2147483647"),
+        "{text}"
+    );
+    assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 0);
+}

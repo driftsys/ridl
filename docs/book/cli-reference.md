@@ -2377,7 +2377,7 @@ A live entry whose instance is gone from the system is RSDL-314, and plain
 `ridl lock` refuses it as it refuses RIDL-409. The two flags are its fix, and
 they accept the same two diagnostics. A key with a `/` names an instance. A key
 without one names a component when `instances.lock` has an entry under it, else
-an interface; when the interface lock of the unit and `instances.lock` both hold
+an interface; when the interface lock of any unit and `instances.lock` both hold
 the key, the command exits 2 and names both files.
 
 - `--rename veh.Cruise/backup=veh.Cruise/spare` moves one entry, keeping its

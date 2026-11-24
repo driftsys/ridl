@@ -4761,6 +4761,13 @@ fn a_malformed_instance_lock_is_published_under_the_lock_files_uri() {
 
     let published = next_publish(&client, &lock_uri);
     assert_eq!(codes(&published.diagnostics), ["RSDL-315"]);
+    let diagnostic = &published.diagnostics[0];
+    assert_eq!(
+        diagnostic.range,
+        lt::Range::new(pos(0, 0), pos(0, 6)),
+        "the line `next x`: {}",
+        diagnostic.message
+    );
 
     shut_down(&client, 10);
     server.join().expect("thread joins").expect("clean exit");

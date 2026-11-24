@@ -273,10 +273,13 @@ fn the_instances_carry_their_number_and_provisional_flag() {
 fn a_zero_instance_number_is_an_internal_error() {
     let mut system = system();
     system.components[0].numbers.clear();
-    assert!(matches!(
-        lower(&system, "Prod", &[], &catalogs()),
-        Err(DeploymentLowerError::Internal(text)) if text.contains("number")
-    ));
+    let Err(DeploymentLowerError::Internal(text)) = lower(&system, "Prod", &[], &catalogs()) else {
+        panic!("a zero instance number must be an internal error");
+    };
+    assert_eq!(
+        text,
+        "instance `veh.Provider/p0` has no positive number in the system"
+    );
 }
 
 #[test]
