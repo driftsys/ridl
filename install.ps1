@@ -203,7 +203,9 @@ function Main {
                     $suffix = $old.Name.Substring($stagePrefix.Length)
                     if ($old.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
                     if ($suffix -match '^[0-9]+$' -and $old.LastWriteTimeUtc -lt $cutoff) {
-                        Remove-Item -LiteralPath $old.FullName -Recurse -Force
+                        # Removal is best effort: a locked stage stays.
+                        try { Remove-Item -LiteralPath $old.FullName -Recurse -Force }
+                        catch { Write-Warning "could not remove the old stage $($old.FullName): $_" }
                     }
                 }
                 # A previous directory for this PID is stale; other stages may be live.

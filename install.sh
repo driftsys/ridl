@@ -112,7 +112,8 @@ remove_old_script_stages() {
     suffix="${dir#"$prefix"}"
     case "$suffix" in ''|*[!0-9]*) continue ;; esac
     [ -n "$(find "$dir" -prune -mmin +1440)" ] || continue
-    rm -rf -- "$dir"
+    # Removal is best effort: a stage of another user or a locked one stays.
+    rm -rf -- "$dir" || echo "warning: could not remove the old stage $dir" >&2
   done
 }
 
