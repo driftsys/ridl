@@ -313,7 +313,10 @@ so uninstall does not serialize against them.
 pinnable `ridl` releases. The
 [getting-started instructions](../book/getting-started.md#installing-the-toolchain)
 own version selection and environment settings. Scripts verify the checksum and
-required archive files before publishing. They do not acquire the CLI lock.
+required archive files before publishing. They do not verify signatures: each
+script is fetched from the same repository as the archives, so a check inside it
+would add no independent trust, and they keep the checksum check. They do not
+acquire the CLI lock.
 
 The scripts accept decimal release components from 0 to 4294967295 (`u32`). The
 CLI accepts components through 18446744073709551615 (`u64`), so a release

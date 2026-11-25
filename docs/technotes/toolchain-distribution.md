@@ -163,6 +163,9 @@ download against it; the
 [toolchain directory record](../design/toolchain-directory.md#targets-and-download-source)
 owns the verification rules. The install scripts do not verify signatures.
 
+A lost signing key is handled the same way as a rotation: generate a new key
+pair, put the new public key in `RELEASE_PUBLIC_KEY`, and sign the next release
+with the new secret key. The new public key ships in that release's binary.
 Rotation uses a new key for the next release. A binary verifies only releases
 that are signed with the key it embeds, so a binary built before the rotation
 keeps verifying earlier releases and refuses later ones. No release is signed
