@@ -12,8 +12,8 @@ Amended 2026-11-25 by
 [driftsys/ridl#1477](https://github.com/driftsys/ridl/issues/1477): decisions 6,
 8, 9 and 10, new decision 11, the Restricted Mode alternative, three further
 alternatives and the consequences. The amendment follows the same delegation.
-Each changed passage keeps the earlier position in its text where the difference
-matters.
+Decision 8 and the Restricted Mode alternative name the earlier position where
+the difference matters.
 
 Scope: root release requirements, their enforcement by workspace consumers,
 versioned toolchain management and VS Code selection. Amends
