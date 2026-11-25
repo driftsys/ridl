@@ -70,8 +70,8 @@ pin without enforcing compatibility with the running binary.
 
 The toolchain root is the nonempty `RIDL_TOOLCHAIN_DIR` environment variable, or
 the platform data directory below. `ridl` refuses a relative override, exit 2,
-and so do `install.sh` and `install.ps1`. Empty environment values count as
-unset.
+and `install.sh` and `install.ps1` refuse it with a failure status of 1, the
+status they use for every error. Empty environment values count as unset.
 
 | Platform | Default root                                                                |
 | -------- | --------------------------------------------------------------------------- |

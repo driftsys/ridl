@@ -105,12 +105,15 @@ toolchain_root() {
 # is old when it has not changed for more than 24 hours; younger stages may
 # belong to a live run. Only names ending in a nonempty digit suffix are stages.
 remove_old_script_stages() {
-  local dir suffix
-  while IFS= read -r dir; do
-    suffix="${dir##*/.tmp-script-"$normalized"-}"
+  local dir suffix prefix="$root/versions/.tmp-script-$normalized-"
+  # A glob expands each name as one word, so a name with a newline stays whole.
+  for dir in "$prefix"*; do
+    [ -d "$dir" ] && [ ! -L "$dir" ] || continue
+    suffix="${dir#"$prefix"}"
     case "$suffix" in ''|*[!0-9]*) continue ;; esac
-    rm -rf "$dir"
-  done < <(find "$root/versions" -mindepth 1 -maxdepth 1 -type d -name ".tmp-script-$normalized-*" -mmin +1440)
+    [ -n "$(find "$dir" -prune -mmin +1440)" ] || continue
+    rm -rf -- "$dir"
+  done
 }
 
 # An existing directory is never repaired or replaced.

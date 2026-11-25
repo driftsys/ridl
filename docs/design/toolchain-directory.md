@@ -333,8 +333,9 @@ If another installer publishes first, the script reuses the appeared directory
 only if it is complete, then removes its own stage. A damaged destination is
 reported and preserved. A failed or skipped rename is followed by the same
 completion check. When the rename fails and no destination appeared, the script
-reports `could not move the staged release` with the `mv` exit status. Cleanup
-removes only the operation's claimed paths.
+reports `could not move the staged release` with the `mv` exit status. Failure
+cleanup removes only the operation's claimed paths. `install.ps1` skips reparse
+points when it removes old stages.
 
 The scripts require an absolute `RIDL_TOOLCHAIN_DIR` and refuse a relative value
 with `RIDL_TOOLCHAIN_DIR must be an absolute path`, the same rule as the CLI.

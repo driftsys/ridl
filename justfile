@@ -3090,19 +3090,31 @@ install-check:
         versions="$root/versions"
         mkdir -p "$versions/.tmp-script-0.23.0-111" "$versions/.tmp-script-0.23.0-222" \
             "$versions/.tmp-script-0.22.9-333" "$versions/.tmp-script-0.23.0-4x4" \
-            "$versions/.tmp-0.23.0-555"
+            "$versions/.tmp-0.23.0-555" "$versions/.tmp-script-0.23.0-777"
         : > "$versions/.tmp-script-0.23.0-666"
         for name in .tmp-script-0.23.0-111 .tmp-script-0.22.9-333 .tmp-script-0.23.0-4x4 .tmp-0.23.0-555 .tmp-script-0.23.0-666; do
             python3 -c 'import os,sys,time; t=time.time()-25*3600; os.utime(sys.argv[1],(t,t))' "$versions/$name"
         done
+        python3 -c 'import os,sys,time; t=time.time()-23.5*3600; os.utime(sys.argv[1],(t,t))' "$versions/.tmp-script-0.23.0-777"
         RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh
         test ! -e "$versions/.tmp-script-0.23.0-111"
-        for name in .tmp-script-0.23.0-222 .tmp-script-0.22.9-333 .tmp-script-0.23.0-4x4 .tmp-0.23.0-555 .tmp-script-0.23.0-666; do
+        for name in .tmp-script-0.23.0-222 .tmp-script-0.23.0-777 .tmp-script-0.22.9-333 .tmp-script-0.23.0-4x4 .tmp-0.23.0-555 .tmp-script-0.23.0-666; do
             test -e "$versions/$name" || {
                 echo "install-check: $name was removed" >&2
                 return 1
             }
         done
+        test -f "$versions/0.23.0/.complete"
+    }
+    install_removes_an_old_stage_whose_name_has_a_newline() {
+        local root="$scratch/newline root" dest="$scratch/newline path" versions work="$scratch/newline work"
+        versions="$root/versions"
+        mkdir -p "$work" "$versions/.tmp-script-0.23.0-1"$'\n'"222" "$versions/sibling"
+        : > "$work/222"
+        python3 -c 'import os,sys,time; t=time.time()-25*3600; [os.utime(p,(t,t)) for p in sys.argv[1:]]' "$versions/.tmp-script-0.23.0-1"$'\n'"222" "$work/222"
+        (cd "$work" && RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash "$repo/install.sh")
+        test -d "$versions/sibling"
+        test -f "$work/222"
         test -f "$versions/0.23.0/.complete"
     }
     install_reports_a_failed_mv() {
@@ -3152,7 +3164,7 @@ install-check:
         done
     }
     # Cases are functions so failures identify the behavior under test.
-    for case in install_bare_and_tag_versions_share_layout install_reuses_complete_release_without_download install_preserves_damaged_version install_tamper_leaves_no_version_or_path_copy install_ridlc_remains_flat install_older_release_remains_flat install_platform_roots_and_spaces install_refuses_a_relative_toolchain_dir install_rejects_invalid_archives install_preserves_directory_appearing_before_publish install_removes_only_its_own_stale_script_stage install_removes_old_script_stages_of_its_version install_reports_a_failed_mv install_reuses_complete_directory_appearing_at_rename; do
+    for case in install_bare_and_tag_versions_share_layout install_reuses_complete_release_without_download install_preserves_damaged_version install_tamper_leaves_no_version_or_path_copy install_ridlc_remains_flat install_older_release_remains_flat install_platform_roots_and_spaces install_refuses_a_relative_toolchain_dir install_rejects_invalid_archives install_preserves_directory_appearing_before_publish install_removes_only_its_own_stale_script_stage install_removes_old_script_stages_of_its_version install_removes_an_old_stage_whose_name_has_a_newline install_reports_a_failed_mv install_reuses_complete_directory_appearing_at_rename; do
         echo "install-check: $case"
         "$case"
     done
@@ -3259,12 +3271,14 @@ install-check:
                     New-Item -ItemType Directory -Path (Join-Path $oldVersions $name) | Out-Null
                 }
                 New-Item -ItemType File -Path (Join-Path $oldVersions ".tmp-script-0.23.0-666") | Out-Null
+                New-Item -ItemType Directory -Path (Join-Path $oldVersions ".tmp-script-0.23.0-777") | Out-Null
+                (Get-Item -LiteralPath (Join-Path $oldVersions ".tmp-script-0.23.0-777") -Force).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddHours(-23.5)
                 foreach ($name in $aged + @(".tmp-script-0.23.0-666")) {
                     (Get-Item -LiteralPath (Join-Path $oldVersions $name) -Force).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddHours(-25)
                 }
                 Main
                 Assert (-not (Test-Path -LiteralPath (Join-Path $oldVersions ".tmp-script-0.23.0-111"))) "old stage remains"
-                foreach ($name in @(".tmp-script-0.23.0-222", ".tmp-script-0.22.9-333", ".tmp-script-0.23.0-4x4", ".tmp-0.23.0-555", ".tmp-script-0.23.0-666")) {
+                foreach ($name in @(".tmp-script-0.23.0-222", ".tmp-script-0.23.0-777", ".tmp-script-0.22.9-333", ".tmp-script-0.23.0-4x4", ".tmp-0.23.0-555", ".tmp-script-0.23.0-666")) {
                     Assert (Test-Path -LiteralPath (Join-Path $oldVersions $name)) "$name was removed"
                 }
                 Assert (Test-Path (Join-Path $oldVersions "0.23.0/.complete")) "missing release"
