@@ -24,7 +24,7 @@ fn toolchain_ureq_path_verifies_and_installs() {
     let server = std::thread::spawn(move || {
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut paths = Vec::new();
-        while paths.len() < 4 {
+        while paths.len() < 5 {
             assert!(Instant::now() < deadline, "HTTP fixture timed out");
             let (mut stream, _) = match listener.accept() {
                 Ok(pair) => pair,
@@ -64,6 +64,7 @@ fn toolchain_ureq_path_verifies_and_installs() {
         parse_release("0.23.0").unwrap(),
         support::TARGET,
         &base,
+        &support::test_public_key(),
     )
     .unwrap();
     support::assert_complete(&p);
@@ -79,7 +80,8 @@ fn toolchain_ureq_path_verifies_and_installs() {
             bad.path(),
             parse_release("0.23.0").unwrap(),
             support::TARGET,
-            &base
+            &base,
+            &support::test_public_key()
         )
         .is_err()
     );
@@ -92,6 +94,7 @@ fn toolchain_ureq_path_verifies_and_installs() {
         [
             archive.clone(),
             format!("{archive}.sha256"),
+            format!("{archive}.minisig"),
             archive.clone(),
             format!("{archive}.sha256")
         ]

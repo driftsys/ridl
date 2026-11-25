@@ -77,9 +77,11 @@ Empty environment values count as unset.
 
 A missing home directory or required Windows variable is an error. Releases
 remain side by side; an existing damaged installation is reported and preserved.
-The [directory and installation protocol](../design/toolchain-directory.md)
-defines completion, archive verification, locking, separate CLI/script staging
-and cleanup ownership.
+Install verifies the SHA-256 checksum and the minisign signature of the archive
+before it extracts anything. The
+[directory and installation protocol](../design/toolchain-directory.md) defines
+completion, archive verification, locking, separate CLI/script staging and
+cleanup ownership.
 
 `ridl toolchain uninstall VERSION` removes the version directory of an exact
 release of at least 0.23.0, complete or damaged, and prints the removed path. It

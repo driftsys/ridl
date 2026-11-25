@@ -431,6 +431,7 @@ fn run_toolchain(command: ToolchainCommand) -> ExitCode {
                     release,
                     env!("RIDL_BUILD_TARGET"),
                     toolchain::RELEASE_BASE_URL,
+                    toolchain::RELEASE_PUBLIC_KEY,
                 )?;
                 Ok((0, format!("{}\n", binary.display())))
             }

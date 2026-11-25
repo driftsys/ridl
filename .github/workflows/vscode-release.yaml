@@ -257,6 +257,45 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      # The Ubuntu package reads the key password from standard input and needs
+      # no build.
+      - name: install minisign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+          minisign -v
+      # Only this job holds the signing secret; the build runners never see it.
+      # `ridlc` archives are not signed.
+      - name: sign the ridl archives
+        env:
+          RIDL_RELEASE_SIGNING_KEY: ${{ secrets.RIDL_RELEASE_SIGNING_KEY }}
+          RIDL_RELEASE_SIGNING_KEY_PASSWORD: ${{ secrets.RIDL_RELEASE_SIGNING_KEY_PASSWORD }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          : "${RIDL_RELEASE_SIGNING_KEY:?the RIDL_RELEASE_SIGNING_KEY secret is required to sign a release}"
+          : "${RIDL_RELEASE_SIGNING_KEY_PASSWORD:?the RIDL_RELEASE_SIGNING_KEY_PASSWORD secret is required to sign a release}"
+          if grep -qF RIDL-RELEASE-KEY-PLACEHOLDER crates/ridl/src/toolchain/mod.rs; then
+            echo "error: crates/ridl/src/toolchain/mod.rs still holds the RIDL-RELEASE-KEY-PLACEHOLDER public key; a release signed now could not be verified" >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#editor-v}"
+          key="$(mktemp "${TMPDIR:-/tmp}/ridl-signing-key.XXXXXX")"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$RIDL_RELEASE_SIGNING_KEY" > "$key"
+          shopt -s nullglob
+          archives=(artifacts/ridl-*.tar.gz)
+          if [ "${#archives[@]}" -eq 0 ]; then
+            echo "error: no ridl archive to sign in artifacts/" >&2
+            exit 1
+          fi
+          for archive in "${archives[@]}"; do
+            name="${archive##*/}"
+            target="${name#ridl-}"
+            target="${target%.tar.gz}"
+            printf '%s\n' "$RIDL_RELEASE_SIGNING_KEY_PASSWORD" \
+              | minisign -S -s "$key" -m "$archive" -t "ridl $version $target" -x "$archive.minisig"
+          done
       # The ridl-authoring skill, for Claude Code and Codex; the VSIX already
       # carries it for GitHub Copilot.
       - name: package the skill
@@ -271,6 +310,7 @@ jobs:
           files: |
             artifacts/*.tar.gz
             artifacts/*.sha256
+            artifacts/*.minisig
             artifacts/*.vsix
             artifacts/*.zip
 

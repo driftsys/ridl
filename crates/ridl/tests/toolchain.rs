@@ -399,6 +399,92 @@ mod toolchain_support;
 use toolchain_support as support;
 
 #[test]
+fn test_signer_produces_minisign_signatures() {
+    use support::{other_test_public_key, sign, test_public_key};
+    assert_ne!(test_public_key(), other_test_public_key());
+    let key = minisign_verify::PublicKey::from_base64(&test_public_key()).unwrap();
+    let sig = minisign_verify::Signature::decode(&sign(b"payload", "ridl 0.23.0 t")).unwrap();
+    assert!(key.verify(b"payload", &sig, false).is_ok());
+    assert_eq!(sig.trusted_comment(), "ridl 0.23.0 t");
+}
+
+#[test]
+fn toolchain_install_requires_a_valid_signature() {
+    let expected = format!("ridl 0.23.0 {TARGET}");
+    for case in [
+        "wrong-key",
+        "old-release",
+        "other-target",
+        "prefix",
+        "missing",
+        "tampered",
+        "oversize",
+    ] {
+        let assets = TempDir::new().unwrap();
+        let root = TempDir::new().unwrap();
+        let dir = support::fixture(assets.path(), &support::regular_files());
+        let archive_path = dir.join(support::archive_name());
+        let minisig = dir.join(format!("{}.minisig", support::archive_name()));
+        let archive = fs::read(&archive_path).unwrap();
+        let mut key = support::test_public_key();
+        let (want, comment): (&str, Option<String>) = match case {
+            "wrong-key" => {
+                key = support::other_test_public_key();
+                ("signature", None)
+            }
+            "old-release" => (&expected, Some(format!("ridl 0.22.9 {TARGET}"))),
+            "other-target" => (
+                &expected,
+                Some("ridl 0.23.0 x86_64-pc-windows-msvc".to_string()),
+            ),
+            "prefix" => (&expected, Some(format!("{expected} extra"))),
+            "missing" => {
+                fs::remove_file(&minisig).unwrap();
+                (".minisig", None)
+            }
+            "tampered" => {
+                support::write_unsigned_asset(&dir, b"other archive bytes");
+                ("signature", None)
+            }
+            "oversize" => {
+                fs::write(&minisig, vec![b'a'; 4097]).unwrap();
+                ("exceeds 4096", None)
+            }
+            _ => unreachable!(),
+        };
+        if let Some(comment) = comment {
+            fs::write(&minisig, support::sign(&archive, &comment)).unwrap();
+        }
+        let error = install(
+            root.path(),
+            release("0.23.0"),
+            TARGET,
+            &support::source(assets.path()),
+            &key,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains(want), "{case}: {error}");
+        assert!(!root.path().join("versions/0.23.0").exists(), "{case}");
+        support::assert_no_stage(root.path());
+    }
+}
+
+#[test]
+fn toolchain_install_refuses_an_undecodable_public_key_before_download() {
+    let root = TempDir::new().unwrap();
+    let error = install(
+        root.path(),
+        release("0.23.0"),
+        TARGET,
+        "file:///nonexistent-origin",
+        "PLACEHOLDER",
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("release public key"), "{error}");
+    assert!(!error.to_string().contains("nonexistent-origin"), "{error}");
+}
+
+#[test]
 fn toolchain_install_verifies_and_publishes_complete_release() {
     let root = TempDir::new().unwrap();
     let assets = TempDir::new().unwrap();
@@ -408,6 +494,7 @@ fn toolchain_install_verifies_and_publishes_complete_release() {
         release("0.23.0"),
         support::TARGET,
         &support::source(assets.path()),
+        &support::test_public_key(),
     )
     .unwrap();
     assert_eq!(
@@ -426,7 +513,8 @@ fn toolchain_install_verifies_and_publishes_complete_release() {
             root.path(),
             release("0.23.0"),
             support::TARGET,
-            &support::source(assets.path())
+            &support::source(assets.path()),
+            &support::test_public_key()
         )
         .unwrap(),
         p
@@ -436,7 +524,8 @@ fn toolchain_install_verifies_and_publishes_complete_release() {
             root.path(),
             release("0.22.9"),
             support::TARGET,
-            &support::source(assets.path())
+            &support::source(assets.path()),
+            &support::test_public_key()
         )
         .is_err()
     );
@@ -444,7 +533,6 @@ fn toolchain_install_verifies_and_publishes_complete_release() {
 
 #[test]
 fn toolchain_install_and_which_use_the_target_binary_name() {
-    use sha2::{Digest, Sha256};
     for (target, binary) in [
         ("x86_64-pc-windows-msvc", "ridl.exe"),
         ("aarch64-apple-darwin", "ridl"),
@@ -456,27 +544,22 @@ fn toolchain_install_and_which_use_the_target_binary_name() {
         let workspace = TempDir::new().unwrap();
         pin(workspace.path(), "0.23.0");
         let assets = TempDir::new().unwrap();
-        let dir = support::fixture(
+        support::fixture_for(
             assets.path(),
+            "0.23.0",
+            target,
             &[
                 (binary, b'0', support::BINARY),
                 ("LICENSE", b'0', support::LICENSE),
                 ("THIRD-PARTY-NOTICES.txt", b'0', support::NOTICES),
             ],
         );
-        let bytes = fs::read(dir.join(support::archive_name())).unwrap();
-        let archive = format!("ridl-{target}.tar.gz");
-        fs::write(dir.join(&archive), &bytes).unwrap();
-        fs::write(
-            dir.join(format!("{archive}.sha256")),
-            format!("{:x}  {archive}\n", Sha256::digest(&bytes)),
-        )
-        .unwrap();
         let result = install(
             root.path(),
             release("0.23.0"),
             target,
             &support::source(assets.path()),
+            &support::test_public_key(),
         )
         .unwrap();
         assert_eq!(result.file_name().unwrap(), binary);
@@ -530,7 +613,8 @@ fn toolchain_install_rejects_checksum_and_unsafe_archive() {
                 root.path(),
                 release("0.23.0"),
                 support::TARGET,
-                &support::source(assets.path())
+                &support::source(assets.path()),
+                &support::test_public_key()
             )
             .is_err()
         );
@@ -610,6 +694,7 @@ fn toolchain_install_rejects_absolute_archive_path() {
         release("0.23.0"),
         support::TARGET,
         &support::source(assets.path()),
+        &support::test_public_key(),
     );
     assert!(result.is_err());
     assert!(!escaped.exists(), "absolute archive path escaped staging");
@@ -633,7 +718,8 @@ fn toolchain_install_missing_asset_cleans_only_its_stage() {
             root.path(),
             release("0.23.0"),
             support::TARGET,
-            &support::source(assets.path())
+            &support::source(assets.path()),
+            &support::test_public_key()
         )
         .is_err()
     );
@@ -646,7 +732,8 @@ fn toolchain_install_missing_asset_cleans_only_its_stage() {
             root.path(),
             release("0.23.0"),
             support::TARGET,
-            &support::source(assets.path())
+            &support::source(assets.path()),
+            &support::test_public_key()
         )
         .is_err()
     );
@@ -689,6 +776,7 @@ fn toolchain_install_removes_only_stale_cli_stages_under_lock() {
         release("0.23.0"),
         support::TARGET,
         &support::source(assets.path()),
+        &support::test_public_key(),
     );
     assert!(
         result.is_ok(),
@@ -736,6 +824,7 @@ fn assert_download_size_limit(checksum: bool, limit: u64) {
         release("0.23.0"),
         support::TARGET,
         &support::source(assets.path()),
+        &support::test_public_key(),
     );
     assert!(result.is_err(), "oversized download accepted: {name}");
     let error = result.unwrap_err().to_string();
@@ -763,6 +852,8 @@ fn toolchain_install_child() {
         release("0.23.0"),
         support::TARGET,
         &std::env::var("RIDL_TEST_SOURCE").unwrap(),
+        // The child process generated its own key pair; the parent's key signed the fixture.
+        &std::env::var("RIDL_TEST_PUBLIC_KEY").unwrap(),
     )
     .unwrap();
     fs::write(
@@ -784,6 +875,7 @@ fn child(root: &Path, source: &str, ready: &Path, result: &Path) -> Child {
             .args(["--exact", "toolchain_install_child", "--nocapture"])
             .env("RIDL_TEST_INSTALL_ROOT", root)
             .env("RIDL_TEST_SOURCE", source)
+            .env("RIDL_TEST_PUBLIC_KEY", support::test_public_key())
             .env("RIDL_TEST_READY", ready)
             .env("RIDL_TEST_RESULT", result)
             .stdout(std::process::Stdio::null())
@@ -874,6 +966,7 @@ fn toolchain_install_waits_rechecks_and_preserves_damage() {
         release("0.23.0"),
         support::TARGET,
         "file:///missing",
+        &support::test_public_key(),
     )
     .unwrap_err()
     .to_string();
@@ -1185,11 +1278,17 @@ fn toolchain_install_rechecks_the_requested_target_binary() {
         format!("{:x}  {archive}\n", Sha256::digest(&bytes)),
     )
     .unwrap();
+    fs::write(
+        dir.join(format!("{archive}.minisig")),
+        support::sign(&bytes, &format!("ridl 0.23.0 {target}")),
+    )
+    .unwrap();
     let first = install(
         root.path(),
         release("0.23.0"),
         target,
         &support::source(assets.path()),
+        &support::test_public_key(),
     )
     .unwrap();
     support::assert_complete(&first);
@@ -1199,6 +1298,7 @@ fn toolchain_install_rechecks_the_requested_target_binary() {
         release("0.23.0"),
         target,
         &support::source(assets.path()),
+        &support::test_public_key(),
     );
     assert!(repeated.is_ok(), "{repeated:?}");
     assert_eq!(repeated.unwrap(), first);

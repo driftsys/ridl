@@ -128,17 +128,26 @@ Binary naming follows the supplied target, including `ridl.exe` for Windows.
 
 Production requests use
 `https://github.com/driftsys/ridl/releases/download/editor-v<version>/ridl-<target>.tar.gz`
-and the same URL with `.sha256` appended. The library's `base_url` parameter
-allows fixture `file://` and local HTTP sources; the CLI always passes its
-constant origin and exposes no override. Each HTTP request has a 30-second
-connect timeout and a 10-minute overall timeout. Downloads are bounded to 256
-MiB for the archive and 4 KiB for the checksum record.
+and the same URL with `.sha256` and with `.minisig` appended. The library's
+`base_url` parameter allows fixture `file://` and local HTTP sources; the CLI
+always passes its constant origin and exposes no override. Each HTTP request has
+a 30-second connect timeout and a 10-minute overall timeout. Downloads are
+bounded to 256 MiB for the archive, 4 KiB for the checksum record and 4 KiB for
+the signature file.
 
 The checksum record is one UTF-8 line: 64 hexadecimal SHA-256 digits, then two
 spaces or a space followed by `*`, then the exact archive name, with an optional
-LF or CRLF. The computed digest must match, case-insensitively. This verifies
-consistency with the origin's record, not an independently signed publisher
-identity.
+LF or CRLF. The computed digest must match, case-insensitively. The checksum
+verifies consistency with the origin's record only.
+
+The `.minisig` file is a minisign signature of the archive. Only prehashed
+signatures verify; a legacy signature is refused. The library takes the public
+key as a parameter (`public_key`), and the CLI passes `RELEASE_PUBLIC_KEY`. An
+undecodable key is an error before any download, and the error does not name the
+origin. The signature's trusted comment must equal `ridl <version> <target>`
+exactly, with the version in `MAJOR.MINOR.PATCH` form. This stops a signed
+archive of an older release, or of another target, from being served under the
+requested name. Archives of `ridlc` are not signed.
 
 ## CLI installation transaction
 
@@ -160,8 +169,10 @@ return exit 2.
    `.tmp-<version>-<digits>`, with a nonempty ASCII decimal suffix. Preserve
    other versions, script stages, similarly prefixed names and non-directories.
 4. Exclusively create `.tmp-<version>-<pid>` under `versions/`. Cleanup
-   ownership starts only after creation succeeds. Download and verify both
-   assets before extracting.
+   ownership starts only after creation succeeds. Download the archive and the
+   checksum record and verify the checksum. Then download the signature file and
+   verify the signature and its trusted comment. Extract only after both
+   verifications succeed.
 5. Accept exactly one regular root-level file for each required name: the target
    binary, `LICENSE`, and `THIRD-PARTY-NOTICES.txt`. Reject extra, nested,
    absolute, traversal, duplicate, symlink and hard-link entries, including an
@@ -258,9 +269,14 @@ The following tests cover the implemented contracts:
   `toolchain_install_rejects_checksum_and_unsafe_archive`,
   `toolchain_install_waits_rechecks_and_preserves_damage` and
   `toolchain_install_removes_only_stale_cli_stages_under_lock` cover extraction
-  and transaction boundaries. The ignored
-  `toolchain_ureq_path_verifies_and_installs` exercises HTTP through
-  `just install-check`.
+  and transaction boundaries. `toolchain_install_requires_a_valid_signature` and
+  `toolchain_install_refuses_an_undecodable_public_key_before_download` cover
+  the signature rules, and `signature_verifies_a_real_minisign_signature` and
+  `signature_refuses_a_legacy_signature` in the `install.rs` unit tests pin
+  compatibility with the `minisign` tool and the refusal of legacy signatures.
+  The `release_signing` tests run the release workflow's signing step against a
+  fake `minisign`. The ignored `toolchain_ureq_path_verifies_and_installs`
+  exercises HTTP through `just install-check`.
 - `toolchain_uninstall_removes_complete_and_damaged_entries`,
   `toolchain_uninstall_removes_a_symlink_entry_without_following_it`,
   `toolchain_uninstall_refuses_the_running_release`,
