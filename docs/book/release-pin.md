@@ -208,9 +208,17 @@ manifest changes reload the current server without selecting a release from
 unsaved text. Removing a VS Code folder stops clients no longer used by another
 mapping, and deactivation stops every client.
 
-The extension declares no support for untrusted workspaces. VS Code therefore
-keeps it inactive in Restricted Mode: no server or installer runs. Granting
-Workspace Trust enables normal activation. The MCP definition uses the release
+The extension supports untrusted workspaces in a limited way. In Restricted Mode
+it starts no language client and registers no MCP definition, and it never
+installs a release by itself. It runs `ridl toolchain which --json` with the
+bundled binary for each `ridl.toml` directory and each opened RIDL document.
+When a release is missing, it shows one prompt for each release, with the
+buttons Install and Manage Workspace Trust. Install runs
+`ridl toolchain install` with the bundled binary; the CLI verifies the release
+signature. `ridl.serverPath` and `ridl.toolchain.autoInstall` are restricted
+configurations, and the extension reads neither in Restricted Mode. Granting
+Workspace Trust enables normal activation. When no bundled binary exists, the
+extension runs nothing in Restricted Mode. The MCP definition uses the release
 selected for the first VS Code workspace folder, independently of document-open
 order. There is one MCP definition per window; a selection change updates it.
 

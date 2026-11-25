@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   bundledBinaryPath,
   clientDocumentSelector,
+  findOnPath,
   isLegacyServerName,
   normalizeAbsolutePath,
   resolveBinary,
@@ -18,6 +19,7 @@ test("tier 1: an explicit setting wins even when a bundled binary exists", () =>
   const resolved = resolveBinary({
     configuredPath: "/opt/ridl/bin/ridl",
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "linux",
     exists: () => true,
   });
@@ -29,6 +31,7 @@ test("tier 2: the bundled binary when it exists and no setting is given", () => 
   const resolved = resolveBinary({
     configuredPath: undefined,
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "darwin",
     exists: (file) => file === bundled,
   });
@@ -43,20 +46,45 @@ test("tier 3: PATH lookup when nothing is bundled (the development launch)", () 
   const resolved = resolveBinary({
     configuredPath: undefined,
     extensionPath: EXT,
+    pathValue: "/usr/bin:/opt/ridl",
     platform: "linux",
-    exists: () => false,
+    exists: (file) => file === "/opt/ridl/ridl",
   });
-  assert.deepEqual(resolved, { command: "ridl", source: "path" });
+  assert.deepEqual(resolved, { command: "/opt/ridl/ridl", source: "path" });
+});
+
+test("path_lookup_uses_only_absolute_entries", () => {
+  assert.equal(
+    findOnPath(".:bin::/abs", "linux", (f) => f !== "/abs/ridl" ? f === "bin/ridl" || f === "ridl" : true),
+    "/abs/ridl",
+  );
+  assert.equal(
+    findOnPath(".;C:\\tools;relative", "win32", (f) => f === "C:\\tools\\ridl.exe" || f === "ridl.exe"),
+    "C:\\tools\\ridl.exe",
+  );
+  assert.equal(findOnPath(".;relative", "win32", () => true), undefined);
+  assert.equal(findOnPath(undefined, "linux", () => true), undefined);
+  const base = {
+    configuredPath: undefined,
+    extensionPath: EXT,
+    pathValue: undefined,
+    platform: "linux" as const,
+  };
+  assert.deepEqual(resolveBinary({ ...base, pathValue: ".", exists: () => false }), {
+    command: bundledBinaryPath(base.extensionPath, base.platform),
+    source: "none",
+  });
 });
 
 test("a blank setting counts as unset", () => {
   const resolved = resolveBinary({
     configuredPath: "   ",
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "linux",
     exists: () => false,
   });
-  assert.equal(resolved.source, "path");
+  assert.equal(resolved.source, "none");
 });
 
 test("the old ridl-lsp binary name is recognised so the user gets a warning", () => {
@@ -70,6 +98,7 @@ test("the MCP definition spawns the same binary with the mcp subcommand", () => 
   const definition = resolveMcpDefinition({
     configuredPath: undefined,
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "linux",
     exists: (file) => file === bundled,
     extensionVersion: "0.1.0",
@@ -89,6 +118,7 @@ test("the LSP command spawns the same binary with the lsp subcommand", () => {
   const resolved = resolveLspCommand({
     configuredPath: undefined,
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "linux",
     exists: (file) => file === bundled,
   });
@@ -128,6 +158,7 @@ test("mcp_selected_command_passes_through", () => {
     resolveMcpDefinition({
       configuredPath: undefined,
       extensionPath: EXT,
+      pathValue: undefined,
       platform: "linux",
       exists: () => true,
       extensionVersion: "1.0.0",

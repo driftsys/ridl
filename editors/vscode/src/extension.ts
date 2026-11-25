@@ -14,6 +14,7 @@ import {
   TransportKind,
 } from "vscode-languageclient/node";
 import {
+  bundledBinaryPath,
   isLegacyServerName,
   resolveBinary,
   resolveMcpDefinition,
@@ -21,6 +22,7 @@ import {
 } from "./binaryResolution";
 import { ClientPhase, phaseOf } from "./clientLifecycle";
 import { copyIsStale, isDirOnPath, parseVersionOutput, pathHint, performCopy, planInstall } from "./installToPath";
+import { RestrictedPrompts } from "./restrictedMode";
 import { runOnce } from "./runOnce";
 import { BinaryRunner, Selection, ToolchainSelector } from "./toolchainSelection";
 import {
@@ -124,6 +126,55 @@ function isRidlDocument(document: vscode.TextDocument): boolean {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  if (vscode.workspace.isTrusted) return activateTrusted(context);
+  // Restricted Mode: no language client, no MCP definition and no automatic
+  // install. The extension only reports a missing pinned release, using the
+  // bundled binary, and runs the normal activation once trust is granted.
+  const output = vscode.window.createOutputChannel("RIDL Language Server", { log: true });
+  const bundled = bundledBinaryPath(context.extensionPath, process.platform);
+  const prompts = new RestrictedPrompts(
+    new ToolchainSelector(runner, {
+      progress: async (title, work) =>
+        vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, work),
+      offerInstall: async () => false,
+      errorOnce: (_key, message) => {
+        void vscode.window.showErrorMessage(message);
+      },
+      log: (message) => output.warn(message),
+    }),
+    fs.existsSync(bundled) ? bundled : undefined,
+    {
+      prompt: async (message, buttons) => vscode.window.showInformationMessage(message, ...buttons),
+      manageTrust: async () => {
+        await vscode.commands.executeCommand("workbench.trust.manage");
+      },
+      log: (message) => output.warn(message),
+    },
+  );
+  let granted = false;
+  const checkDocument = async (document: vscode.TextDocument) => {
+    if (!granted && isRidlDocument(document)) await prompts.check(path.dirname(document.uri.fsPath));
+  };
+  context.subscriptions.push(
+    output,
+    vscode.workspace.onDidOpenTextDocument((document) => void checkDocument(document)),
+    vscode.workspace.onDidGrantWorkspaceTrust(async () => {
+      if (granted) return;
+      granted = true;
+      try {
+        await activateTrusted(context);
+      } catch (error) {
+        output.error(String(error));
+      }
+    }),
+  );
+  for (const file of await vscode.workspace.findFiles("**/ridl.toml")) {
+    await prompts.check(path.dirname(file.fsPath));
+  }
+  await Promise.all(vscode.workspace.textDocuments.map(checkDocument));
+}
+
+async function activateTrusted(context: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel("RIDL Language Server", { log: true });
   context.subscriptions.push(output);
   const active = new Map<RidlLanguageClient, Selection>();
@@ -143,6 +194,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         string
       >("serverPath"),
       extensionPath: context.extensionPath,
+      pathValue: process.env.PATH ?? process.env.Path,
       platform: process.platform,
       exists: fs.existsSync,
     });
@@ -329,6 +381,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const resolved = resolveMcpDefinition({
           configuredPath: resolver(folder).source === "setting" ? resolver(folder).command : undefined,
           extensionPath: context.extensionPath,
+          pathValue: process.env.PATH ?? process.env.Path,
           platform: process.platform,
           exists: fs.existsSync,
           extensionVersion: String(context.extension.packageJSON.version),

@@ -93,6 +93,17 @@ class FakeClient {
   }
 }
 let provider: any, mcpChanges = 0;
+let trusted = true;
+let findFilesResult: ReturnType<typeof uri>[] = [uri("/work/ridl.toml")];
+const whichBinaries: string[] = [];
+const restrictedPrompts: string[][] = [];
+const executedCommands: any[][] = [];
+const pathDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "ridl-host-path-"));
+fs.writeFileSync(path.join(pathDirectory, process.platform === "win32" ? "ridl.exe" : "ridl"), "");
+const ridlOnPath = path.join(pathDirectory, process.platform === "win32" ? "ridl.exe" : "ridl");
+process.env.PATH = pathDirectory;
+process.env.Path = pathDirectory;
+let acceptRestricted: ((button: string | undefined) => void) | undefined;
 let command = "/selected/a", whichCalls = 0, installCalls = 0;
 let autoInstall = true, missingRelease = false, nestedRoot = true;
 let acceptInstall: ((button: string | undefined) => void) | undefined;
@@ -122,6 +133,12 @@ const host: any = {
     showWarningMessage: async () => undefined,
     showErrorMessage: async () => undefined,
     showInformationMessage: async (message: string, ...buttons: string[]) => {
+      if (message.includes("requires ridl")) {
+        restrictedPrompts.push(buttons);
+        return new Promise<string | undefined>((resolve) => {
+          acceptRestricted = resolve;
+        });
+      }
       if (message.includes("required by this workspace")) installPrompts.push(buttons);
       return message.includes("required by this workspace")
         ? new Promise<string | undefined>((resolve) => {
@@ -131,8 +148,18 @@ const host: any = {
     },
     withProgress: async (_: any, work: any) => work(),
   },
-  commands: { registerCommand: () => ({ dispose() {} }) },
+  commands: {
+    registerCommand: () => ({ dispose() {} }),
+    executeCommand: async (...args: any[]) => {
+      executedCommands.push(args);
+    },
+  },
   workspace: {
+    get isTrusted() {
+      return trusted;
+    },
+    onDidGrantWorkspaceTrust: register("trust"),
+    findFiles: async () => findFilesResult,
     textDocuments: documents,
     workspaceFolders: folders,
     getWorkspaceFolder: (u: any) => folders.find((f) => u.fsPath.startsWith(f.uri.fsPath)),
@@ -192,6 +219,7 @@ loader._load = function (id: string, ...rest: any[]) {
           return;
         }
         whichCalls++;
+        whichBinaries.push(binary);
         const d = args[3];
         if (d.startsWith(abs("/loose"))) {
           done(
@@ -339,6 +367,14 @@ async function tickUntil(predicate: () => boolean): Promise<void> {
 }
 function resetHost(): void {
   listeners.clear();
+  process.env.PATH = pathDirectory;
+  trusted = true;
+  findFilesResult = [uri("/work/ridl.toml")];
+  whichBinaries.splice(0);
+  restrictedPrompts.splice(0);
+  executedCommands.splice(0);
+  acceptRestricted = undefined;
+  provider = undefined;
   clients.splice(0);
   documents.splice(0, documents.length, document("/work/ridl.toml", "plaintext"));
   autoInstall = false;
@@ -360,7 +396,7 @@ test("application_policy_starts_fallback_before_install_button_is_answered", asy
     } as any,
   );
   assert.equal(clients.length, 1);
-  assert.equal(clients[0].serverOptions.command, "ridl");
+  assert.equal(clients[0].serverOptions.command, ridlOnPath);
   assert.equal(installCalls, before);
   assert.ok(acceptInstall);
   assert.ok(
@@ -629,8 +665,107 @@ test("activation_auto_install_false_offers_install_without_running_it", async ()
     } as any);
     assert.equal(installCalls, before);
     assert.deepEqual(installPrompts, [["Install"]]);
-    assert.equal(clients[0].serverOptions.command, "ridl");
+    assert.equal(clients[0].serverOptions.command, ridlOnPath);
   } finally {
     await extension.deactivate();
+  }
+});
+
+function bundledExtension(): { extensionPath: string; bundled: string; cleanup(): void } {
+  const extensionPath = fs.mkdtempSync(path.join(os.tmpdir(), "ridl-host-ext-"));
+  fs.mkdirSync(path.join(extensionPath, "bin"));
+  const bundled = path.join(extensionPath, "bin", process.platform === "win32" ? "ridl.exe" : "ridl");
+  fs.writeFileSync(bundled, "");
+  return { extensionPath, bundled, cleanup: () => fs.rmSync(extensionPath, { recursive: true, force: true }) };
+}
+const restrictedContext = (extensionPath: string): any => ({
+  extensionPath,
+  extension: { packageJSON: { version: "0.23.0" } },
+  subscriptions: [],
+});
+
+test("restricted_mode_starts_no_client_and_no_mcp_definition", async () => {
+  resetHost();
+  trusted = false;
+  autoInstall = true;
+  missingRelease = true;
+  const { extensionPath, bundled, cleanup } = bundledExtension();
+  const before = installCalls;
+  configurationReads.splice(0);
+  try {
+    await extension.activate(restrictedContext(extensionPath));
+    await tickUntil(() => restrictedPrompts.length > 0);
+    assert.equal(clients.length, 0);
+    assert.equal(provider, undefined);
+    assert.ok(whichBinaries.length > 0 && whichBinaries.every((b) => b === bundled));
+    assert.equal(installCalls, before);
+    assert.deepEqual(restrictedPrompts, [["Install", "Manage Workspace Trust"]]);
+    assert.ok(!configurationReads.some(([name]) => name === "serverPath" || name === "toolchain.autoInstall"));
+    acceptRestricted!("Install");
+    await tickUntil(() => installCalls === before + 1);
+    assert.equal(clients.length, 0, "installing in Restricted Mode starts no client");
+  } finally {
+    await extension.deactivate();
+    cleanup();
+  }
+});
+
+test("restricted_mode_checks_a_document_opened_later", async () => {
+  resetHost();
+  trusted = false;
+  missingRelease = true;
+  findFilesResult = [];
+  documents.splice(0);
+  const { extensionPath, bundled, cleanup } = bundledExtension();
+  try {
+    await extension.activate(restrictedContext(extensionPath));
+    assert.deepEqual(restrictedPrompts, []);
+    const opened = document("/work/a.ridl");
+    documents.push(opened);
+    await fire("open", opened);
+    await tickUntil(() => restrictedPrompts.length > 0);
+    assert.ok(whichBinaries.every((b) => b === bundled));
+    assert.equal(clients.length, 0);
+    assert.equal(provider, undefined);
+  } finally {
+    await extension.deactivate();
+    cleanup();
+  }
+});
+
+test("restricted_manage_trust_runs_the_trust_command", async () => {
+  resetHost();
+  trusted = false;
+  const { extensionPath, cleanup } = bundledExtension();
+  try {
+    await extension.activate(restrictedContext(extensionPath));
+    await tickUntil(() => restrictedPrompts.length > 0);
+    acceptRestricted!("Manage Workspace Trust");
+    await tickUntil(() => executedCommands.length > 0);
+    assert.deepEqual(executedCommands, [["workbench.trust.manage"]]);
+  } finally {
+    await extension.deactivate();
+    cleanup();
+  }
+});
+
+test("granting_trust_runs_normal_activation", async () => {
+  resetHost();
+  trusted = false;
+  missingRelease = false;
+  const { extensionPath, cleanup } = bundledExtension();
+  try {
+    await extension.activate(restrictedContext(extensionPath));
+    assert.equal(clients.length, 0);
+    assert.equal(provider, undefined);
+    trusted = true;
+    await fire("trust", undefined);
+    assert.equal(clients.length, 1);
+    assert.notEqual(provider, undefined);
+    await fire("trust", undefined);
+    assert.equal(clients.length, 1, "a second grant event does not activate twice");
+  } finally {
+    await extension.deactivate();
+    cleanup();
   }
 });

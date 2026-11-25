@@ -396,7 +396,7 @@ The following tests cover the implemented contracts:
   `missing_installs_requeries_then_starts`,
   `two_ridl_roots_inside_one_folder_get_two_clients`,
   `mcp_uses_first_folder_selected_binary` and
-  `auto_install_is_application_scoped_and_trust_capability_is_absent` in the
-  extension's fake-runner tests cover the consumer and host policy. Editor
-  implementation ownership is in the
+  `auto_install_is_application_scoped_and_trust_is_limited` in the extension's
+  fake-runner tests cover the consumer and host policy. Editor implementation
+  ownership is in the
   [distribution record](../technotes/toolchain-distribution.md#editor-toolchain-selection).

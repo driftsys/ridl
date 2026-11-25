@@ -4,19 +4,21 @@
 // Three tiers, first match wins:
 //   1. the `ridl.serverPath` setting (a developer override),
 //   2. the binary bundled in the extension at `bin/ridl(.exe)`,
-//   3. `ridl` resolved from PATH — reached only when nothing is bundled,
-//      which is the unpackaged extension-development launch.
+//   3. `ridl` found in an absolute PATH entry — reached only when nothing is
+//      bundled, which is the unpackaged extension-development launch. When
+//      nothing is found either, the source is "none".
 
 import * as path from "node:path";
 
 export interface ResolveInput {
   readonly configuredPath: string | undefined;
   readonly extensionPath: string;
+  readonly pathValue: string | undefined;
   readonly platform: NodeJS.Platform;
   readonly exists: (file: string) => boolean;
 }
 
-export type BinarySource = "setting" | "bundled" | "path";
+export type BinarySource = "setting" | "bundled" | "path" | "none";
 
 export const BINARY_NAME = "ridl";
 
@@ -33,6 +35,26 @@ export function bundledBinaryPath(extensionPath: string, platform: NodeJS.Platfo
   return path.join(extensionPath, "bin", file);
 }
 
+/**
+ * The first `ridl` that an absolute PATH entry holds. An empty or relative
+ * entry would resolve against the working directory, so it is skipped.
+ */
+export function findOnPath(
+  pathValue: string | undefined,
+  platform: NodeJS.Platform,
+  exists: (file: string) => boolean,
+): string | undefined {
+  if (!pathValue) return undefined;
+  const flavor = platform === "win32" ? path.win32 : path.posix;
+  const name = platform === "win32" ? `${BINARY_NAME}.exe` : BINARY_NAME;
+  for (const entry of pathValue.split(platform === "win32" ? ";" : ":")) {
+    if (!flavor.isAbsolute(entry)) continue;
+    const candidate = flavor.join(entry, name);
+    if (exists(candidate)) return candidate;
+  }
+  return undefined;
+}
+
 export function resolveBinary(input: ResolveInput): { command: string; source: BinarySource } {
   const configured = input.configuredPath?.trim();
   if (configured) {
@@ -42,7 +64,10 @@ export function resolveBinary(input: ResolveInput): { command: string; source: B
   if (input.exists(bundled)) {
     return { command: bundled, source: "bundled" };
   }
-  return { command: BINARY_NAME, source: "path" };
+  const found = findOnPath(input.pathValue, input.platform, input.exists);
+  if (found) return { command: found, source: "path" };
+  // A bare "ridl" would make a spawn search the working directory.
+  return { command: bundled, source: "none" };
 }
 
 /** The setting used to name the `ridl-lsp` binary; that binary no longer exists. */

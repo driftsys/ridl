@@ -101,7 +101,7 @@ test("the typl grammar highlights `open` only directly before enum or enumset", 
   assert.deepEqual(matches("open enumerate"), []);
 });
 
-test("auto_install_is_application_scoped_and_trust_capability_is_absent", () => {
+test("auto_install_is_application_scoped_and_trust_is_limited", () => {
   const manifest = readJson("package.json");
   assert.deepEqual(manifest.contributes.configuration.properties["ridl.toolchain.autoInstall"], {
     type: "boolean",
@@ -109,7 +109,14 @@ test("auto_install_is_application_scoped_and_trust_capability_is_absent", () => 
     scope: "application",
     description: "Automatically install a missing workspace RIDL release.",
   });
-  assert.equal(manifest.capabilities?.untrustedWorkspaces, undefined);
+  assert.deepEqual(manifest.capabilities, {
+    untrustedWorkspaces: {
+      supported: "limited",
+      description:
+        "In Restricted Mode, RIDL starts no language server and no MCP server. It only checks whether the release a workspace pins is installed, and offers to install it.",
+      restrictedConfigurations: ["ridl.serverPath", "ridl.toolchain.autoInstall"],
+    },
+  });
 });
 test("manifest_workspace_activation_enables_pin_actions", () => {
   assert.ok(readJson("package.json").activationEvents?.includes("workspaceContains:**/ridl.toml"));
