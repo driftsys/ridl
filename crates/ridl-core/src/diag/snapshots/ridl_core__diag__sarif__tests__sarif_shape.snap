@@ -1758,6 +1758,43 @@ expression: log
               }
             },
             {
+              "id": "MANI-024",
+              "shortDescription": {
+                "text": "invalid `ridl-version`: expected MAJOR.MINOR.PATCH"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-025",
+              "shortDescription": {
+                "text": "`ridl-version` is below the minimum pinnable release"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-026",
+              "shortDescription": {
+                "text": "running release is incompatible with `ridl-version`"
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            },
+            {
+              "id": "MANI-027",
+              "name": "member-ridl-version",
+              "shortDescription": {
+                "text": "`ridl-version` in a member manifest is ignored"
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
               "id": "MANI-101",
               "shortDescription": {
                 "text": "remote import fetch failed"
@@ -1923,7 +1960,7 @@ expression: log
         },
         {
           "ruleId": "MANI-101",
-          "ruleIndex": 189,
+          "ruleIndex": 193,
           "level": "error",
           "message": {
             "text": "could not fetch `demo`"

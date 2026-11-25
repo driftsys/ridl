@@ -129,7 +129,8 @@ struct Compiled {
 fn compile_entry(entry: &Path) -> Compiled {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
-    let loaded = load_workspace(&mut db, entry).expect("a corpus entry loads");
+    let loaded =
+        load_workspace(&mut db, entry, ridlc::running_release()).expect("a corpus entry loads");
     let workspace = loaded.workspace;
     let mut sources: SourceMap = loaded.sources;
     let mut diagnostics: Vec<Diagnostic> = loaded.diagnostics;
@@ -461,8 +462,12 @@ fn veh_cluster_payloads_fit_the_default_ceilings() {
 fn a_composed_service_compiles_and_round_trips_through_the_ir() {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
-    let loaded = load_workspace(&mut db, Path::new("tests/corpus/services-workspace"))
-        .expect("the services-workspace entry loads");
+    let loaded = load_workspace(
+        &mut db,
+        Path::new("tests/corpus/services-workspace"),
+        ridlc::running_release(),
+    )
+    .expect("the services-workspace entry loads");
     let workspace = loaded.workspace;
     let vehicle = workspace
         .packages(&db)
@@ -1763,7 +1768,7 @@ fn generate_rust_beside(
 fn generated_packages(entry: &Path) -> Vec<(String, String)> {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
-    let workspace = load_workspace(&mut db, entry)
+    let workspace = load_workspace(&mut db, entry, ridlc::running_release())
         .expect("a corpus entry loads")
         .workspace;
     let packages: Vec<Package> = workspace.packages(&db).clone();
@@ -2198,7 +2203,7 @@ fn build_writes_the_standard_package_exactly_when_the_generated_rust_names_it() 
 fn checked_ir(entry: &Path, package: &str) -> ridl_ir::v2::Package {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
-    let workspace = load_workspace(&mut db, entry)
+    let workspace = load_workspace(&mut db, entry, ridlc::running_release())
         .expect("a corpus entry loads")
         .workspace;
     let packages: Vec<Package> = workspace.packages(&db).clone();
@@ -2219,7 +2224,7 @@ fn checked_ir(entry: &Path, package: &str) -> ridl_ir::v2::Package {
 fn generated_typescript_packages(entry: &Path) -> Vec<(String, String)> {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
-    let workspace = load_workspace(&mut db, entry)
+    let workspace = load_workspace(&mut db, entry, ridlc::running_release())
         .expect("a corpus entry loads")
         .workspace;
     let packages: Vec<Package> = workspace.packages(&db).clone();

@@ -10,7 +10,7 @@
 //! loaded units. One line per change goes to stdout, diagnostics go to
 //! stderr (ADR-0010 decision 2). The exit codes follow ADR-0010 decision 1:
 //! 0 when `vendor/` was written or there was nothing to change, 1 on any
-//! diagnostic error, 2 on a missing path, a path with no manifest, a fetch
+//! ordinary diagnostic error, 2 on a release refusal, a missing path, a path with no manifest, a fetch
 //! failure (MANI-101), or an I/O failure. Nothing in `vendor/` changes on
 //! exit 1 or on a fetch failure.
 //!
@@ -58,7 +58,9 @@ pub fn run(path: &Path) -> ExitCode {
     };
     // A fetch failure means the command could not answer (exit 2); any other
     // error is a negative answer (exit 1). Nothing is written in either case.
-    let refused = if has_error(Some(DiagCode::MANI_101)) {
+    let refused = if output.diagnostics.iter().any(ridl_core::is_release_refusal)
+        || has_error(Some(DiagCode::MANI_101))
+    {
         Some(ExitCode::from(2))
     } else if has_error(None) {
         Some(ExitCode::FAILURE)
@@ -121,7 +123,8 @@ pub fn run(path: &Path) -> ExitCode {
 /// loaded without its remote units, so nothing is fetched and no cache is
 /// read; `ridl.lock` is read and never rewritten. The load's own diagnostics (a manifest that does
 /// not parse, for one) are rendered with those of [`check_vendor`], and
-/// any Error among them is exit 1: a broken manifest gives no import set to
+/// any ordinary Error among them is exit 1. A release refusal exits 2 before
+/// reading locks or vendor state. A broken manifest gives no import set to
 /// compare with, so it cannot be reported as a clean `vendor/`.
 pub fn run_check(path: &Path) -> ExitCode {
     let root = match root_of(path) {
@@ -129,13 +132,17 @@ pub fn run_check(path: &Path) -> ExitCode {
         Err(code) => return code,
     };
     let mut db = RidlDatabase::default();
-    let loaded = match load_workspace(&mut db, &root) {
+    let loaded = match load_workspace(&mut db, &root, ridlc::running_release()) {
         Ok(loaded) => loaded,
         Err(err) => {
             errprintln!("error: {err}");
             return ExitCode::from(2);
         }
     };
+    if loaded.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        errprint!("{}", render(&loaded.diagnostics, &loaded.sources));
+        return ExitCode::from(2);
+    }
     let mut diagnostics = loaded.diagnostics;
     let (lock, lock_diagnostics) = read_lockfile(&root.join("ridl.lock"));
     diagnostics.extend(lock_diagnostics);

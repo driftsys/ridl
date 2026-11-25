@@ -26,17 +26,29 @@ Pass the workspace root (the directory that holds its `ridl.toml`) as `path`. A
 package directory or source file is also accepted. Relative paths resolve
 against the server's working directory. A path inside a workspace member loads
 the whole workspace that lists the member, so sibling imports resolve, and
-`ridl_check` reports only the diagnostics of files under the member.
+`ridl_check` reports only the diagnostics of files under the member, except that
+a root release refusal is always reported.
 
 Optional `overlays: [{path, source}]` replace unsaved text inside the loader.
-Paths match by canonical parent plus file name. Only `.typl`, `.ridl`, `.rsdl`,
-`.rxdl` and `.rmdl` files are accepted. A `.rxdl` or `.rmdl` overlay in a
+Paths match by canonical parent plus file name. One overlay may replace the root
+`ridl.toml`; other manifests are unsupported. Source overlays accept `.typl`,
+`.ridl`, `.rsdl`, `.rxdl` and `.rmdl` files. A `.rxdl` or `.rmdl` overlay in a
 package directory draws the warning RIDL-417 (`unsupported-source-file`) and is
 not compiled. A lone `.rxdl` or `.rmdl` file as `path` is a tool error. A new
 file is accepted in an existing loaded package directory; create its directory
 first. Empty text is valid. An overlay outside the loaded workspace, in a hidden
 directory or separate package root, or for another file in single-file mode is a
 tool error. Tools never write files or fetch remote imports.
+
+A root [release refusal](../../docs/book/release-pin.md) stops workspace
+analysis before sources or remote imports are read. Path-mode `ridl_check`
+returns only the root diagnostic and its value span, including from a member
+path. Metrics and the five name/dependency lookup tools return a tool error with
+the refusal code and message. Source-side `ridl_diff` returns the existing error
+with structured diagnostics. `ridl_explain`, source-text-only `ridl_check` and
+snapshot diff inputs remain available. A root manifest overlay is checked before
+any source overlays. Tool names and input/output schema structures are
+unchanged; the `OverlayInput` descriptions now document root manifest overlays.
 
 Workspace results carry `workspace: {root, errors, warnings, notes}`. Locations
 are `{path, start, end}` with 1-based `{line, column}` and an exclusive end. The

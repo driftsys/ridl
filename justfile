@@ -2861,239 +2861,416 @@ gate-parity:
     fi
     echo "gate-parity: ci.yml invokes all $(echo $members | wc -w | tr -d ' ') members of 'just build'."
 
-# End-to-end test of install.sh: downloads, checksum-verifies, and extracts a
-# fixture release reached through a file:// URL — curl reads file://, so no
-# server is needed. A dry run alone (RIDL_INSTALL_DRY_RUN=1) exercises neither
-# the checksum nor the extraction, the two steps that matter most in a script
-# users pipe straight into `bash`.
-#
-# Also runs install.ps1 through the same three checks — dry run, good
-# install, corrupted download — behind a `command -v pwsh` guard:
-# ubuntu-latest, where this recipe runs in CI, ships PowerShell 7 as `pwsh`,
-# so this is the one place install.ps1 is exercised at all. The guard skips
-# that part, rather than failing the recipe, on a machine — such as the one
-# this was developed on — with no pwsh. Invoke-WebRequest does not support
-# the file:// scheme install.sh's half of this recipe relies on, so the
-# install.ps1 cases serve the same kind of fixture over a local
-# `python3 -m http.server` instead, reached through the same
-# RIDL_INSTALL_BASE_URL override install.sh's own tests use — install.ps1
-# already honours that variable, with the same name and the same default.
-#
-# It also runs scripts/verify-deno-zip.sh against a temporary pin file: a
-# matching zip passes, and a different zip, an absent target and a malformed
-# pin each fail.
+# Run the ignored toolchain HTTP test first (requires a local TCP listener),
+# then fixture-release checks of both installers and the Deno ZIP verifier.
+# Bash uses file://; the optional PowerShell branch needs pwsh and uses a local
+# Python HTTP server to exercise HTTP downloads through Net.WebRequest.
 install-check:
     #!/usr/bin/env bash
     set -euo pipefail
+    cargo test --locked -p ridl-cli --test toolchain_http -- --ignored
     scratch="$(mktemp -d)"
     http_pid=""
     trap 'rm -rf "$scratch"; [ -n "$http_pid" ] && kill "$http_pid" 2>/dev/null; true' EXIT
-
-    # Learn this host's tarball name from the dry run rather than duplicating
-    # install.sh's own detect_target platform table here.
-    version="editor-v0.0.0-install-check"
-    url="$(RIDL_VERSION="$version" RIDL_INSTALL_DRY_RUN=1 bash install.sh)"
+    repo="$PWD"
+    mkdir -p "$scratch/tmp"
+    export TMPDIR="$scratch/tmp" TMP="$scratch/tmp" TEMP="$scratch/tmp"
+    export HOME="$scratch/home" XDG_DATA_HOME="$scratch/xdg data" LOCALAPPDATA="$scratch/local data"
+    export RIDL_TOOLCHAIN_DIR="$scratch/toolchain root" RIDL_INSTALL_DIR="$scratch/path dir"
+    export RIDL_INSTALL_BASE_URL="file://$scratch/release"
+    unset RIDL_INSTALL_DRY_RUN RIDL_INSTALL_BINARY
+    version="editor-v0.23.0"
+    export RIDL_VERSION="$version"
+    url="$(RIDL_INSTALL_DRY_RUN=1 bash install.sh)"
     tarball="$(basename "$url")"
     reldir="$scratch/release/$version"
-    mkdir -p "$reldir"
+    mkdir -p "$reldir" "$HOME"
+    printf '#!/bin/sh\necho "ridl 0.23.0"\n' > "$reldir/ridl"
+    printf '#!/bin/sh\necho "ridlc 0.23.0"\n' > "$reldir/ridlc"
+    printf 'ridl 0.23.0\n' > "$reldir/ridl.exe"
+    printf 'ridlc 0.23.0\n' > "$reldir/ridlc.exe"
+    printf 'fixture license\n' > "$reldir/LICENSE"
+    printf 'fixture notices\n' > "$reldir/THIRD-PARTY-NOTICES.txt"
+    checksum() {
+        if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi
+    }
+    pack() {
+        (cd "$reldir" && tar czf "$1" "$2" LICENSE THIRD-PARTY-NOTICES.txt && checksum "$1" > "$1.sha256")
+    }
+    pack "$tarball" ridl
+    pack "${tarball/ridl-/ridlc-}" ridlc
+    pack ridl-x86_64-pc-windows-msvc.tar.gz ridl.exe
+    pack ridlc-x86_64-pc-windows-msvc.tar.gz ridlc.exe
+    cp "$reldir/$tarball" "$scratch/good.tar.gz"
+    cp "$reldir/$tarball.sha256" "$scratch/good.sha256"
+    assert_layout() {
+        test -f "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/.complete"
+        test ! -s "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/.complete"
+        test -f "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/ridl"
+        cmp "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/ridl" "$RIDL_INSTALL_DIR/ridl"
+        test ! -L "$RIDL_INSTALL_DIR/ridl"
+        cmp "$reldir/LICENSE" "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/LICENSE"
+        cmp "$reldir/THIRD-PARTY-NOTICES.txt" "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/THIRD-PARTY-NOTICES.txt"
+        test "$(find "$RIDL_TOOLCHAIN_DIR/versions/0.23.0" -type f | wc -l | tr -d ' ')" = 4
+        test "$("$RIDL_INSTALL_DIR/ridl" --version)" = 'ridl 0.23.0'
+        test -z "$(find "$RIDL_TOOLCHAIN_DIR/versions" -name '.tmp-*')"
+        test -z "$(find "$RIDL_INSTALL_DIR" -name '.ridl.*')"
+    }
+    install_bare_and_tag_versions_share_layout() {
+        test "$(RIDL_VERSION=0.23.0 RIDL_INSTALL_DRY_RUN=1 bash install.sh)" = "$url"
+        test ! -e "$RIDL_TOOLCHAIN_DIR"
+        test ! -e "$RIDL_INSTALL_DIR"
+        RIDL_VERSION=0.23.0 bash install.sh
+        assert_layout
+        RIDL_VERSION=editor-v00.023.000 bash install.sh
+        assert_layout
+        for invalid in 0.23 0.23.0-rc1 editor-veditor-v0.23.0 ' 0.23.0' 4294967296.23.0; do
+            if (source <(sed '$d' install.sh); normalise_version "$invalid"); then return 1; fi
+        done
+    }
+    install_reuses_complete_release_without_download() {
+        mv "$scratch/release" "$scratch/unavailable"
+        rm "$RIDL_INSTALL_DIR/ridl"
+        bash install.sh
+        test -x "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/ridl"
+        test -f "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/ridl"
+        cmp "$RIDL_TOOLCHAIN_DIR/versions/0.23.0/ridl" "$RIDL_INSTALL_DIR/ridl"
+        bash install.sh
+        test -z "$(find "$RIDL_INSTALL_DIR" -name '.ridl.*')"
+        mv "$scratch/unavailable" "$scratch/release"
+    }
+    install_preserves_damaged_version() {
+        local root="$scratch/damaged root" variant
+        for variant in missing marker-directory marker-nonempty missing-binary; do
+            local dir="$root/$variant/versions/0.23.0"
+            mkdir -p "$dir"
+            printf 'preserve\n' > "$dir/sentinel"
+            cp "$reldir/ridl" "$dir/ridl"
+            case "$variant" in
+                marker-directory) mkdir "$dir/.complete" ;;
+                marker-nonempty) printf damaged > "$dir/.complete" ;;
+                missing-binary) touch "$dir/.complete"; rm "$dir/ridl" ;;
+            esac
+            cp -R "$dir" "$scratch/before-$variant"
+            if RIDL_TOOLCHAIN_DIR="$root/$variant" bash install.sh 2>"$scratch/damage.err"; then return 1; fi
+            grep -qF "$dir" "$scratch/damage.err"
+            diff -r "$scratch/before-$variant" "$dir"
+        done
+    }
+    install_tamper_leaves_no_version_or_path_copy() {
+        local root="$scratch/tamper root" dest="$scratch/tamper path"
+        printf '#!/bin/sh\necho tampered\n' > "$reldir/ridl"
+        (cd "$reldir" && tar czf "$tarball" ridl LICENSE THIRD-PARTY-NOTICES.txt)
+        if RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh 2>"$scratch/tamper.err"; then return 1; fi
+        grep -qi checksum "$scratch/tamper.err"
+        test ! -e "$root/versions/0.23.0"
+        test ! -e "$dest/ridl"
+        test -z "$(find "$root/versions" -name '.tmp-*')"
+        cp "$scratch/good.tar.gz" "$reldir/$tarball"
+        cp "$scratch/good.sha256" "$reldir/$tarball.sha256"
+        printf '#!/bin/sh\necho "ridl 0.23.0"\n' > "$reldir/ridl"
+    }
+    install_ridlc_remains_flat() {
+        local root="$scratch/ridlc root" dest="$scratch/ridlc path"
+        RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" RIDL_INSTALL_BINARY=ridlc bash install.sh
+        test "$("$dest/ridlc")" = 'ridlc 0.23.0'
+        test ! -e "$root"
+        test ! -L "$dest/ridlc"
+    }
+    install_older_release_remains_flat() {
+        cp -R "$reldir" "$scratch/release/editor-v0.22.9"
+        RIDL_TOOLCHAIN_DIR="$scratch/old root" RIDL_INSTALL_DIR="$scratch/old path" RIDL_VERSION=editor-v0.22.9 bash install.sh
+        test -x "$scratch/old path/ridl"
+        test ! -e "$scratch/old root"
+        # Historical tags remain usable without a toolchain directory.
+        for tag in editor-vold-fixture editor-v0.23.0-rc1 custom-tag; do
+            cp -R "$reldir" "$scratch/release/$tag"
+            RIDL_TOOLCHAIN_DIR="$scratch/old root" RIDL_INSTALL_DIR="$scratch/old path" RIDL_VERSION="$tag" bash install.sh
+            test ! -e "$scratch/old root"
+        done
+    }
+    install_platform_roots_and_spaces() {
+        mkdir -p "$scratch/uname"
+        printf '#!/bin/sh\ncase "$1" in -s) echo "$TEST_OS";; -m) echo x86_64;; esac\n' > "$scratch/uname/uname"
+        chmod +x "$scratch/uname/uname"
+        local os root target
+        for os in Linux Darwin; do
+            if [ "$os" = Linux ]; then
+                root="$XDG_DATA_HOME/ridl"; target=x86_64-unknown-linux-gnu
+            else
+                root="$HOME/Library/Application Support/ridl"; target=x86_64-apple-darwin
+            fi
+            pack "ridl-$target.tar.gz" ridl
+            env -u RIDL_TOOLCHAIN_DIR TEST_OS="$os" PATH="$scratch/uname:$PATH" bash install.sh
+            test -f "$root/versions/0.23.0/.complete"
+            cmp "$root/versions/0.23.0/ridl" "$RIDL_INSTALL_DIR/ridl"
+        done
+        env -u RIDL_TOOLCHAIN_DIR -u XDG_DATA_HOME TEST_OS=Linux PATH="$scratch/uname:$PATH" bash install.sh
+        test -f "$HOME/.local/share/ridl/versions/0.23.0/.complete"
+        (cd "$scratch" && RIDL_TOOLCHAIN_DIR="relative root" bash "$repo/install.sh")
+        test -f "$scratch/relative root/versions/0.23.0/.complete"
+    }
+    install_rejects_invalid_archives() {
+        local kind root dest
+        for kind in missing-file duplicate symlink unexpected-file invalid-gzip wrong-checksum-name extra-checksum-line oversize-checksum oversize-archive; do
+            root="$scratch/unsafe-$kind"; dest="$scratch/unsafe-path-$kind"
+            cp "$scratch/good.tar.gz" "$reldir/$tarball"
+            cp "$scratch/good.sha256" "$reldir/$tarball.sha256"
+            case "$kind" in
+                missing-file) (cd "$reldir" && tar czf "$tarball" ridl LICENSE) ;;
+                duplicate) (cd "$reldir" && tar czf "$tarball" ridl LICENSE THIRD-PARTY-NOTICES.txt ridl) ;;
+                symlink)
+                    mv "$reldir/ridl" "$scratch/saved-binary"
+                    ln -s "$scratch/saved-binary" "$reldir/ridl"
+                    (cd "$reldir" && tar czf "$tarball" ridl LICENSE THIRD-PARTY-NOTICES.txt)
+                    rm "$reldir/ridl"; mv "$scratch/saved-binary" "$reldir/ridl" ;;
+                unexpected-file) (cd "$reldir" && tar czf "$tarball" ridl LICENSE THIRD-PARTY-NOTICES.txt ridlc) ;;
+                invalid-gzip) printf 'not gzip\n' > "$reldir/$tarball" ;;
+                wrong-checksum-name) sed "s/$tarball/not-the-archive.tar.gz/" "$scratch/good.sha256" > "$reldir/$tarball.sha256" ;;
+                extra-checksum-line) printf '\n' >> "$reldir/$tarball.sha256" ;;
+                oversize-archive) dd if=/dev/zero of="$reldir/$tarball" bs=1 count=1 seek=268435456 2>/dev/null ;;
+                oversize-checksum) dd if=/dev/zero of="$reldir/$tarball.sha256" bs=4097 count=1 2>/dev/null ;;
+            esac
+            case "$kind" in wrong-checksum-name | extra-checksum-line | oversize-checksum | oversize-archive) ;; *) (cd "$reldir" && checksum "$tarball" > "$tarball.sha256") ;; esac
+            if RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh 2>"$scratch/unsafe.err"; then echo "accepted $kind" >&2; return 1; fi
+            case "$kind" in oversize-*) grep -qi exceed "$scratch/unsafe.err" ;; esac
+            test ! -e "$root/versions/0.23.0"
+            test ! -e "$dest/ridl"
+            test -z "$(find "$root/versions" -name '.tmp-*')"
+        done
+        cp "$scratch/good.tar.gz" "$reldir/$tarball"
+        cp "$scratch/good.sha256" "$reldir/$tarball.sha256"
+    }
+    install_preserves_directory_appearing_before_publish() {
+        local root="$scratch/appearing root" dest="$scratch/appearing path"
+        mkdir -p "$scratch/mv"
+        cat > "$scratch/mv/mv" <<'MV'
+    #!/bin/sh
+    for arg in "$@"; do
+        if [ "$arg" = "$TEST_APPEAR" ] || [ "$arg" = "${TEST_APPEAR%/*}/" ]; then
+            mkdir -p "$TEST_APPEAR"
+            printf 'preserve\n' > "$TEST_APPEAR/sentinel"
+            break
+        fi
+    done
+    exec /bin/mv "$@"
+    MV
+        chmod +x "$scratch/mv/mv"
+        if TEST_APPEAR="$root/versions/0.23.0" PATH="$scratch/mv:$PATH" RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh 2>"$scratch/appearing.err"; then return 1; fi
+        test "$(cat "$root/versions/0.23.0/sentinel")" = preserve
+        test "$(find "$root/versions/0.23.0" -mindepth 1 | wc -l | tr -d ' ')" = 1
+        grep -Fq "$root/versions/0.23.0" "$scratch/appearing.err"
+        test ! -e "$dest/ridl"
+        test -z "$(find "$root/versions" -name '.tmp-*')"
+    }
+    install_removes_only_its_own_stale_script_stage() {
+        local root="$scratch/stale script root" dest="$scratch/stale script path"
+        RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash -c '
+            set -euo pipefail
+            versions="$RIDL_TOOLCHAIN_DIR/versions"
+            mkdir -p "$versions/.tmp-script-0.23.0-$$"
+            printf "stale bytes\n" > "$versions/.tmp-script-0.23.0-$$/leftover"
+            mkdir "$versions/.tmp-script-0.23.0-0"
+            printf "preserve\n" > "$versions/.tmp-script-0.23.0-0/sentinel"
+            exec bash install.sh
+        '
+        test "$(cat "$root/versions/.tmp-script-0.23.0-0/sentinel")" = preserve
+        test "$(find "$root/versions" -name '.tmp-*' | wc -l | tr -d ' ')" = 1 || {
+            echo 'install-check: own stale script stage remains or an unexpected stage was created' >&2
+            return 1
+        }
+        test -f "$root/versions/0.23.0/.complete"
+        cmp "$root/versions/0.23.0/ridl" "$dest/ridl"
+    }
+    install_reuses_complete_directory_appearing_at_rename() {
+        local status root dest
+        mkdir -p "$scratch/race-mv"
+        cat > "$scratch/race-mv/mv" <<'MV'
+    #!/bin/sh
+    if [ "$1" = -n ]; then
+        mkdir -p "$TEST_APPEAR"
+        printf '#!/bin/sh\necho "concurrent release"\n' > "$TEST_APPEAR/ridl"
+        chmod +x "$TEST_APPEAR/ridl"
+        printf 'concurrent license\n' > "$TEST_APPEAR/LICENSE"
+        printf 'concurrent notices\n' > "$TEST_APPEAR/THIRD-PARTY-NOTICES.txt"
+        : > "$TEST_APPEAR/.complete"
+        # Model both BSD and GNU skipped-rename exit statuses, leaving source intact.
+        exit "$TEST_MV_STATUS"
+    fi
+    exec /bin/mv "$@"
+    MV
+        chmod +x "$scratch/race-mv/mv"
+        for status in 0 1; do
+            root="$scratch/complete race root $status"; dest="$scratch/complete race path $status"
+            TEST_APPEAR="$root/versions/0.23.0" TEST_MV_STATUS="$status" PATH="$scratch/race-mv:$PATH" \
+                RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh || {
+                    echo "install-check: complete concurrent directory was not reused after mv status $status" >&2
+                    return 1
+                }
+            test "$("$dest/ridl")" = 'concurrent release'
+            cmp "$root/versions/0.23.0/ridl" "$dest/ridl"
+            test "$(cat "$root/versions/0.23.0/LICENSE")" = 'concurrent license'
+            test "$(cat "$root/versions/0.23.0/THIRD-PARTY-NOTICES.txt")" = 'concurrent notices'
+            test -f "$root/versions/0.23.0/.complete"
+            test ! -s "$root/versions/0.23.0/.complete"
+            test "$(find "$root/versions/0.23.0" -mindepth 1 | wc -l | tr -d ' ')" = 4
+            test -z "$(find "$root/versions" -name '.tmp-*')"
+        done
+    }
+    # Cases are functions so failures identify the behavior under test.
+    for case in install_bare_and_tag_versions_share_layout install_reuses_complete_release_without_download install_preserves_damaged_version install_tamper_leaves_no_version_or_path_copy install_ridlc_remains_flat install_older_release_remains_flat install_platform_roots_and_spaces install_rejects_invalid_archives install_preserves_directory_appearing_before_publish install_removes_only_its_own_stale_script_stage install_reuses_complete_directory_appearing_at_rename; do
+        echo "install-check: $case"
+        "$case"
+    done
+    if RIDL_INSTALL_BINARY=bogus bash install.sh 2>"$scratch/bad-binary.err"; then exit 1; fi
+    grep -q "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc'" "$scratch/bad-binary.err"
 
     if command -v pwsh >/dev/null 2>&1; then
-        ps1_url="$(pwsh -NoProfile -Command '$env:RIDL_VERSION="editor-v0.1.0"; $env:RIDL_INSTALL_DRY_RUN="1"; ./install.ps1')"
-        expected="https://github.com/driftsys/ridl/releases/download/editor-v0.1.0/ridl-x86_64-pc-windows-msvc.tar.gz"
-        if [ "$ps1_url" != "$expected" ]; then
-            echo "install-check: install.ps1 dry run printed '$ps1_url', expected '$expected'" >&2
-            exit 1
-        fi
-        echo "install-check: install.ps1 dry run verified ($ps1_url)"
-
-        # install.ps1 always requests the Windows target regardless of this
-        # host's own platform, so it gets its own tarball, built the same way
-        # as install.sh's and placed in the same version directory.
-        ps_tarball="ridl-x86_64-pc-windows-msvc.tar.gz"
-        printf 'ridl 0.0.0-install-check\n' > "$reldir/ridl.exe"
-        if command -v sha256sum >/dev/null 2>&1; then
-            (cd "$reldir" && tar czf "$ps_tarball" ridl.exe && sha256sum "$ps_tarball" > "$ps_tarball.sha256")
-        else
-            (cd "$reldir" && tar czf "$ps_tarball" ridl.exe && shasum -a 256 "$ps_tarball" > "$ps_tarball.sha256")
-        fi
-        rm "$reldir/ridl.exe"
-
-        # Ask the operating system for a free port instead of fixing one, so a
-        # busy port on the host does not fail the check.
+        # Use the same isolated fixtures, with a Windows binary and HTTP origin.
         http_port="$(python3 -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
-        python3 -m http.server "$http_port" --bind 127.0.0.1 --directory "$scratch/release" \
-            >"$scratch/http.log" 2>&1 &
+        python3 -m http.server "$http_port" --bind 127.0.0.1 --directory "$scratch/release" >"$scratch/http.log" 2>&1 &
         http_pid=$!
         for _ in $(seq 1 50); do
             curl -fsS "http://127.0.0.1:$http_port/" >/dev/null 2>&1 && break
             sleep 0.1
         done
+        RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" RIDL_TOOLCHAIN_DIR="$scratch/ps root" RIDL_INSTALL_DIR="$scratch/ps path" \
+            pwsh -NoProfile -Command '
+                function Assert($Condition, $Message) { if (-not $Condition) { throw $Message } }
+                $root = $env:RIDL_TOOLCHAIN_DIR; $dest = $env:RIDL_INSTALL_DIR
+                $savedError = $ErrorActionPreference; $savedProgress = $ProgressPreference
+                $savedTls = [Net.ServicePointManager]::SecurityProtocol
+                $env:RIDL_VERSION = "0.23.0"; $env:RIDL_INSTALL_DRY_RUN = "1"
+                $url = ./install.ps1
+                Assert ($url -eq "$env:RIDL_INSTALL_BASE_URL/editor-v0.23.0/ridl-x86_64-pc-windows-msvc.tar.gz") "dry-run URL"
+                Assert (-not (Test-Path -LiteralPath $root)) "dry-run created root"
+                Remove-Item Env:RIDL_INSTALL_DRY_RUN
+                Write-Host "install-check: PowerShell install_bare_and_tag_versions_share_layout"
+                ./install.ps1
+                $release = Join-Path $root "versions/0.23.0"
+                $marker = Join-Path $release ".complete"
+                Assert ((Test-Path -LiteralPath $marker -PathType Leaf) -and (Get-Item -LiteralPath $marker -Force).Length -eq 0) "marker"
+                Assert ((Get-FileHash (Join-Path $release "ridl.exe")).Hash -eq (Get-FileHash (Join-Path $dest "ridl.exe")).Hash) "PATH copy"
+                Assert ((Get-Content (Join-Path $dest "ridl.exe") -Raw).Trim() -eq "ridl 0.23.0") "binary content"
+                Assert (-not (Get-Item (Join-Path $dest "ridl.exe")).LinkType) "PATH symlink"
+                Assert ((Get-Content (Join-Path $release "LICENSE") -Raw).Trim() -eq "fixture license") "license"
+                Assert ((Get-Content (Join-Path $release "THIRD-PARTY-NOTICES.txt") -Raw).Trim() -eq "fixture notices") "notices"
+                Assert (@(Get-ChildItem -LiteralPath $release -Force).Count -eq 4) "release contents"
+                Write-Host "install-check: PowerShell install_reuses_complete_release_without_download"
+                $env:RIDL_VERSION = "editor-v0.23.0"; $source = $env:RIDL_INSTALL_BASE_URL
+                $env:RIDL_INSTALL_BASE_URL = "$source/unavailable"
+                Remove-Item (Join-Path $dest "ridl.exe")
+                ./install.ps1
+                Assert (Test-Path (Join-Path $release "ridl.exe")) "moved versioned binary"
+                Assert (Test-Path (Join-Path $dest "ridl.exe")) "offline reuse"
+                Assert ((Get-FileHash (Join-Path $release "ridl.exe")).Hash -eq (Get-FileHash (Join-Path $dest "ridl.exe")).Hash) "offline copy content"
+                Assert ($ErrorActionPreference -eq $savedError -and $ProgressPreference -eq $savedProgress -and [Net.ServicePointManager]::SecurityProtocol -eq $savedTls) "preference restoration"
+                $env:RIDL_INSTALL_BASE_URL = $source
+                Write-Host "install-check: PowerShell install_preserves_damaged_version"
+                Remove-Item -LiteralPath $marker -Force
+                Assert (-not (Test-Path -LiteralPath $marker)) "damage fixture still has marker"
+                $before = (Get-FileHash (Join-Path $release "ridl.exe")).Hash
+                try { ./install.ps1; throw "accepted damage" } catch { Assert ($_.ToString().Contains($release)) "damage must name directory" }
+                Assert ((Get-FileHash (Join-Path $release "ridl.exe")).Hash -eq $before) "modified damage"
+                Write-Host "install-check: PowerShell install_ridlc_remains_flat"
+                $env:RIDL_TOOLCHAIN_DIR = "$root-ridlc"; $env:RIDL_INSTALL_BINARY = "ridlc"
+                ./install.ps1
+                Assert (-not (Test-Path $env:RIDL_TOOLCHAIN_DIR)) "ridlc used versions"
+                Assert ((Get-Content (Join-Path $dest "ridlc.exe") -Raw).Trim() -eq "ridlc 0.23.0") "ridlc content"
+                Remove-Item Env:RIDL_INSTALL_BINARY
+                $env:RIDL_VERSION = "editor-v0.22.9"; ./install.ps1
+                Assert (-not (Test-Path $env:RIDL_TOOLCHAIN_DIR)) "old release used versions"
+                $env:RIDL_VERSION = "0.23.0"
+                Write-Host "install-check: PowerShell install_platform_roots_and_spaces"
+                Remove-Item Env:RIDL_TOOLCHAIN_DIR; Remove-Item Env:RIDL_INSTALL_DIR
+                ./install.ps1
+                Assert (Test-Path (Join-Path $env:LOCALAPPDATA "ridl/versions/0.23.0/.complete")) "Windows root"
+                Assert (Test-Path (Join-Path $env:LOCALAPPDATA "Programs/ridl/ridl.exe")) "Windows PATH directory"
+            '
+        RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" RIDL_TOOLCHAIN_DIR="$scratch/ps stage root" RIDL_INSTALL_DIR="$scratch/ps stage path" \
+            pwsh -NoProfile -Command '
+                function Assert($Condition, $Message) { if (-not $Condition) { throw $Message } }
+                $env:RIDL_VERSION = "0.23.0"; $env:RIDL_INSTALL_DRY_RUN = "1"
+                . ./install.ps1 | Out-Null
+                Remove-Item Env:RIDL_INSTALL_DRY_RUN
+                $ErrorActionPreference = "Stop"
+                Write-Host "install-check: PowerShell install_removes_only_its_own_stale_script_stage"
+                $root = $env:RIDL_TOOLCHAIN_DIR; $dest = $InstallDir
+                $versions = Join-Path $root "versions"
+                $own = Join-Path $versions ".tmp-script-0.23.0-$PID"
+                $other = Join-Path $versions ".tmp-script-0.23.0-0"
+                New-Item -ItemType Directory -Path $own -Force | Out-Null
+                New-Item -ItemType Directory -Path $other | Out-Null
+                Set-Content (Join-Path $own "leftover") "stale bytes"
+                Set-Content (Join-Path $other "sentinel") "preserve"
+                Main
+                Assert (-not (Test-Path -LiteralPath $own)) "own stale stage remains"
+                Assert ((Get-Content (Join-Path $other "sentinel") -Raw).Trim() -eq "preserve") "modified unrelated stage"
+                Assert (@(Get-ChildItem -LiteralPath $versions -Force -Filter ".tmp-*").Count -eq 1) "unexpected stage"
+                Assert (Test-Path (Join-Path $versions "0.23.0/.complete")) "missing release"
+                Assert ((Get-FileHash (Join-Path $versions "0.23.0/ridl.exe")).Hash -eq (Get-FileHash (Join-Path $dest "ridl.exe")).Hash) "PATH copy"
 
-        # A good install: same shape as install.sh's own good-install case
-        # below, but ridl.exe cannot run on this host, so the check compares
-        # the installed file's content against the fixture's instead of
-        # executing it.
-        ps_install1="$scratch/ridl install ps-good"
-        RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" \
-            RIDL_INSTALL_DIR="$ps_install1" pwsh -NoProfile -File ./install.ps1
-        if [ ! -f "$ps_install1/ridl.exe" ]; then
-            echo "install-check: install.ps1 did not land ridl.exe in $ps_install1" >&2
-            exit 1
-        fi
-        ps_got="$(cat "$ps_install1/ridl.exe")"
-        if [ "$ps_got" != "ridl 0.0.0-install-check" ]; then
-            echo "install-check: install.ps1 installed a file reading '$ps_got', expected the fixture's line" >&2
-            exit 1
-        fi
-        echo "install-check: install.ps1 good install verified ($ps_install1/ridl.exe)"
-
-        # A corrupted download: same construction as install.sh's own case
-        # below — original .sha256, tampered tarball content.
-        printf 'ridl tampered\n' > "$reldir/ridl.exe"
-        (cd "$reldir" && tar czf "$ps_tarball" ridl.exe)
-        rm "$reldir/ridl.exe"
-        ps_install2="$scratch/ridl install ps-tamper"
-        if RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" \
-            RIDL_INSTALL_DIR="$ps_install2" pwsh -NoProfile -File ./install.ps1 2>"$scratch/ps-tamper.err"; then
-            echo "install-check: install.ps1 succeeded against a corrupted tarball" >&2
-            exit 1
-        fi
-        cat "$scratch/ps-tamper.err" >&2
-        # Test-Checksum's own Write-Error text, so this pins the rejection to
-        # the checksum step rather than trusting that something rejected it.
-        if ! grep -qi "checksum mismatch" "$scratch/ps-tamper.err"; then
-            echo "install-check: install.ps1 rejected the download, but not visibly because of the checksum" >&2
-            exit 1
-        fi
-        if [ -e "$ps_install2/ridl.exe" ]; then
-            echo "install-check: a corrupted download still installed a binary via install.ps1" >&2
-            exit 1
-        fi
-        echo "install-check: install.ps1 tamper case correctly rejected by the checksum and installed nothing"
-
+                $savedComplete = ${function:Test-CompleteRelease}
+                foreach ($kind in @("complete", "damaged")) {
+                    Write-Host "install-check: PowerShell install_directory_appearing_at_rename $kind"
+                    $env:RIDL_TOOLCHAIN_DIR = "$root-$kind"; $InstallDir = "$dest-$kind"
+                    $script:raceChecks = 0; $script:raceKind = $kind
+                    function Test-CompleteRelease([string]$Directory) {
+                        $script:raceChecks++
+                        if ($script:raceChecks -eq 2) {
+                            # Publish after the last check but before Directory.Move.
+                            New-Item -ItemType Directory -Path $Directory | Out-Null
+                            Set-Content (Join-Path $Directory "ridl.exe") "concurrent release"
+                            if ($script:raceKind -eq "complete") {
+                                Set-Content (Join-Path $Directory "LICENSE") "concurrent license"
+                                Set-Content (Join-Path $Directory "THIRD-PARTY-NOTICES.txt") "concurrent notices"
+                                [IO.File]::WriteAllBytes((Join-Path $Directory ".complete"), [byte[]]@())
+                            }
+                            return $false
+                        }
+                        & $savedComplete $Directory
+                    }
+                    try {
+                        $release = Join-Path $env:RIDL_TOOLCHAIN_DIR "versions/0.23.0"
+                        if ($kind -eq "complete") {
+                            Main
+                            Assert ((Get-Content (Join-Path $InstallDir "ridl.exe") -Raw).Trim() -eq "concurrent release") "did not reuse concurrent release"
+                            Assert ((Get-Content (Join-Path $release "LICENSE") -Raw).Trim() -eq "concurrent license") "modified concurrent license"
+                            Assert ((Get-Content (Join-Path $release "THIRD-PARTY-NOTICES.txt") -Raw).Trim() -eq "concurrent notices") "modified concurrent notices"
+                            Assert (@(Get-ChildItem -LiteralPath $release -Force).Count -eq 4) "modified concurrent release"
+                        } else {
+                            $failure = $null
+                            try { Main } catch { $failure = $_ }
+                            Assert ($null -ne $failure -and $failure.ToString().Contains($release)) "damage refusal must name directory"
+                            Assert (-not (Test-Path (Join-Path $InstallDir "ridl.exe"))) "published damaged release"
+                            Assert (@(Get-ChildItem -LiteralPath $release -Force).Count -eq 1) "modified damaged directory"
+                        }
+                        Assert ((Get-Content (Join-Path $release "ridl.exe") -Raw).Trim() -eq "concurrent release") "modified concurrent binary"
+                        Assert (@(Get-ChildItem -LiteralPath (Split-Path $release) -Force -Filter ".tmp-*").Count -eq 0) "stage remains after race"
+                    } finally {
+                        ${function:Test-CompleteRelease} = $savedComplete
+                    }
+                }
+            '
+        # Fresh root prevents the complete-release fast path masking corruption.
+        printf 'tampered\n' > "$reldir/ridl.exe"
+        (cd "$reldir" && tar czf ridl-x86_64-pc-windows-msvc.tar.gz ridl.exe LICENSE THIRD-PARTY-NOTICES.txt)
+        if RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" RIDL_TOOLCHAIN_DIR="$scratch/ps tamper root" RIDL_INSTALL_DIR="$scratch/ps tamper path" pwsh -NoProfile -File ./install.ps1 2>"$scratch/ps-tamper.err"; then exit 1; fi
+        grep -qi checksum "$scratch/ps-tamper.err"
+        test ! -e "$scratch/ps tamper root/versions/0.23.0"
+        test ! -e "$scratch/ps tamper path/ridl.exe"
+        printf 'not gzip\n' > "$reldir/ridl-x86_64-pc-windows-msvc.tar.gz"
+        (cd "$reldir" && checksum ridl-x86_64-pc-windows-msvc.tar.gz > ridl-x86_64-pc-windows-msvc.tar.gz.sha256)
+        if RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" RIDL_TOOLCHAIN_DIR="$scratch/ps extraction root" RIDL_INSTALL_DIR="$scratch/ps extraction path" pwsh -NoProfile -File ./install.ps1 2>"$scratch/ps-extraction.err"; then exit 1; fi
+        grep -qi 'tar extraction failed' "$scratch/ps-extraction.err"
+        test ! -e "$scratch/ps extraction root/versions/0.23.0"
+        test ! -e "$scratch/ps extraction path/ridl.exe"
+        if RIDL_INSTALL_BINARY=bogus pwsh -NoProfile -File ./install.ps1 2>"$scratch/ps-bad.err"; then exit 1; fi
+        grep -q "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc'" "$scratch/ps-bad.err"
         kill "$http_pid" 2>/dev/null || true
         http_pid=""
     else
-        echo "install-check: pwsh not installed — install.ps1 checks skipped"
-    fi
-
-    # Build the fixture release: <version>/<tarball> plus its .sha256. The
-    # "binary" is a tiny script that prints a recognisable version line.
-    printf '#!/bin/sh\necho "ridl 0.0.0-install-check"\n' > "$reldir/ridl"
-    chmod +x "$reldir/ridl"
-    if command -v sha256sum >/dev/null 2>&1; then
-        (cd "$reldir" && tar czf "$tarball" ridl && sha256sum "$tarball" > "$tarball.sha256")
-    else
-        (cd "$reldir" && tar czf "$tarball" ridl && shasum -a 256 "$tarball" > "$tarball.sha256")
-    fi
-    rm "$reldir/ridl"
-
-    # A good install: the binary lands in a fresh directory — its name
-    # holding a space, the quoting risk both scripts are most exposed to —
-    # executable, and matching the fixture's own output.
-    install1="$scratch/ridl install 1"
-    RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
-        RIDL_INSTALL_DIR="$install1" bash install.sh
-    if [ ! -x "$install1/ridl" ]; then
-        echo "install-check: ridl did not land executable in $install1" >&2
-        exit 1
-    fi
-    got="$("$install1/ridl")"
-    if [ "$got" != "ridl 0.0.0-install-check" ]; then
-        echo "install-check: installed binary printed '$got', expected the fixture's line" >&2
-        exit 1
-    fi
-    echo "install-check: good install verified ($install1/ridl)"
-
-    # A second install into the same, already-populated directory: install.sh
-    # replaces the existing binary rather than merely writing into an empty
-    # one, and the atomic rename it uses to do that (see the comment above
-    # the install step in install.sh) leaves no `.ridl.*` temporary file
-    # behind, unlike a same-directory copy that stops partway.
-    RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
-        RIDL_INSTALL_DIR="$install1" bash install.sh
-    if [ ! -x "$install1/ridl" ]; then
-        echo "install-check: the second install did not leave ridl executable in $install1" >&2
-        exit 1
-    fi
-    if find "$install1" -maxdepth 1 -name '.ridl.*' | grep -q .; then
-        echo "install-check: a stray .ridl.* temporary file was left behind in $install1" >&2
-        exit 1
-    fi
-    echo "install-check: second install over an existing binary verified, no stray temp file ($install1/ridl)"
-
-    # A corrupted download: different content than the original .sha256
-    # describes, but still a well-formed tarball. Appending garbage bytes
-    # instead would also make some `tar` implementations refuse to extract
-    # the archive at all, which would let this test pass for the wrong
-    # reason — rejected by extraction, not by the checksum, which is exactly
-    # the failure mode a checksum test exists to rule out. Keeping the
-    # original .sha256 and replacing only the tarball's content isolates the
-    # checksum step as the one thing that can reject this.
-    printf '#!/bin/sh\necho "ridl tampered"\n' > "$reldir/ridl"
-    chmod +x "$reldir/ridl"
-    (cd "$reldir" && tar czf "$tarball" ridl)
-    rm "$reldir/ridl"
-    install2="$scratch/ridl install 2"
-    if RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
-        RIDL_INSTALL_DIR="$install2" bash install.sh 2>"$scratch/tamper.err"; then
-        echo "install-check: installer succeeded against a corrupted tarball" >&2
-        exit 1
-    fi
-    cat "$scratch/tamper.err" >&2
-    # install.sh runs under `set -eu`, and the tampered tarball is still a
-    # well-formed archive (see above) so nothing before the checksum step can
-    # fail: the non-zero exit above and the no-binary check below together
-    # already pin the rejection to the checksum step, with no need to also
-    # match sha256sum's own message — which driftsys/ridl#501 found is
-    # localized by GNU coreutils (e.g. French's "ne correspond pas" instead
-    # of "did not match"), making that match fail outside the C locale CI
-    # runs in.
-    if [ -e "$install2/ridl" ]; then
-        echo "install-check: a corrupted download still installed a binary" >&2
-        exit 1
-    fi
-    echo "install-check: tamper case correctly rejected by the checksum and installed nothing"
-
-    # RIDL_INSTALL_BINARY=ridlc: a dry run is enough to prove the wiring —
-    # the download/verify/install path past URL construction is the same
-    # code already exercised above for ridl.
-    ridlc_expected="${url/ridl-/ridlc-}"
-    ridlc_url="$(RIDL_VERSION="$version" RIDL_INSTALL_BINARY=ridlc RIDL_INSTALL_DRY_RUN=1 bash install.sh)"
-    if [ "$ridlc_url" != "$ridlc_expected" ]; then
-        echo "install-check: RIDL_INSTALL_BINARY=ridlc dry run printed '$ridlc_url', expected '$ridlc_expected'" >&2
-        exit 1
-    fi
-    echo "install-check: install.sh RIDL_INSTALL_BINARY=ridlc dry run verified ($ridlc_url)"
-
-    if RIDL_INSTALL_BINARY=bogus bash install.sh 2>"$scratch/bad-binary.err"; then
-        echo "install-check: install.sh accepted RIDL_INSTALL_BINARY=bogus" >&2
-        exit 1
-    fi
-    if ! grep -q "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc'" "$scratch/bad-binary.err"; then
-        echo "install-check: install.sh rejected RIDL_INSTALL_BINARY=bogus, but not with the expected message" >&2
-        exit 1
-    fi
-    echo "install-check: install.sh rejects an unknown RIDL_INSTALL_BINARY"
-
-    if command -v pwsh >/dev/null 2>&1; then
-        ridlc_ps1_url="$(pwsh -NoProfile -Command '$env:RIDL_VERSION="editor-v0.1.0"; $env:RIDL_INSTALL_BINARY="ridlc"; $env:RIDL_INSTALL_DRY_RUN="1"; ./install.ps1')"
-        ridlc_ps1_expected="https://github.com/driftsys/ridl/releases/download/editor-v0.1.0/ridlc-x86_64-pc-windows-msvc.tar.gz"
-        if [ "$ridlc_ps1_url" != "$ridlc_ps1_expected" ]; then
-            echo "install-check: install.ps1 RIDL_INSTALL_BINARY=ridlc dry run printed '$ridlc_ps1_url', expected '$ridlc_ps1_expected'" >&2
-            exit 1
-        fi
-        echo "install-check: install.ps1 RIDL_INSTALL_BINARY=ridlc dry run verified ($ridlc_ps1_url)"
-
-        if pwsh -NoProfile -Command '$env:RIDL_INSTALL_BINARY="bogus"; ./install.ps1' 2>"$scratch/bad-binary-ps1.err"; then
-            echo "install-check: install.ps1 accepted RIDL_INSTALL_BINARY=bogus" >&2
-            exit 1
-        fi
-        if ! grep -q "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc'" "$scratch/bad-binary-ps1.err"; then
-            echo "install-check: install.ps1 rejected RIDL_INSTALL_BINARY=bogus, but not with the expected message" >&2
-            exit 1
-        fi
-        echo "install-check: install.ps1 rejects an unknown RIDL_INSTALL_BINARY"
+        echo "install-check: pwsh not installed; PowerShell cases skipped"
     fi
 
     # scripts/verify-deno-zip.sh: a matching zip passes, and a different zip,

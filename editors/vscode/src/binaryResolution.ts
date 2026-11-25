@@ -1,4 +1,4 @@
-// Resolves the one `ridl` binary the extension spawns in two roles. Pure —
+// Resolves the bootstrap `ridl` binary used for toolchain discovery. Pure —
 // no `vscode` import — so it is unit-tested directly.
 //
 // Three tiers, first match wins:
@@ -52,6 +52,7 @@ export function isLegacyServerName(configuredPath: string): boolean {
 }
 
 export interface McpDefinitionInput extends ResolveInput {
+  readonly selectedCommand?: string;
   readonly extensionVersion: string;
   readonly workspaceFolder: string | undefined;
 }
@@ -64,7 +65,7 @@ export function resolveMcpDefinition(input: McpDefinitionInput): {
   cwd: string | undefined;
   version: string;
 } {
-  const { command } = resolveBinary(input);
+  const command = input.selectedCommand ?? resolveBinary(input).command;
   return {
     label: "RIDL",
     command,
@@ -90,7 +91,28 @@ export function shouldStartClientForLanguage(languageId: string): boolean {
   return (CLIENT_LANGUAGE_IDS as readonly string[]).includes(languageId);
 }
 
-/** The language client's document selector: a `file` document of each client language. */
-export function clientDocumentSelector(): { scheme: string; language: string }[] {
-  return CLIENT_LANGUAGE_IDS.map((language) => ({ scheme: "file", language }));
+/** Absolute globs escape metacharacters in actual directory names. Nested roots
+ * are excluded by routing middleware because VS Code globs cannot express it. */
+export function clientDocumentSelector(
+  root?: string,
+  excludedRoots: readonly string[] = [],
+): { scheme: string; language: string; pattern?: string }[] {
+  const glob = root?.replace(/\\/g, "/").replace(/[\[\]{}*?!()]/g, "[$&]").replace(/\/$/, "");
+  const selectors: { scheme: string; language: string; pattern?: string }[] = CLIENT_LANGUAGE_IDS.map((language) => ({
+    scheme: "file",
+    language,
+    ...(glob === undefined ? {} : { pattern: `${glob}/**/*` }),
+  }));
+  if (glob !== undefined) selectors.push({ scheme: "file", language: "*", pattern: `${glob}/ridl.toml` });
+  return selectors;
+}
+
+/** Rust canonicalization on Windows uses verbatim paths; VS Code uses ordinary drive/UNC paths. */
+export function normalizeAbsolutePath(file: string, platform: NodeJS.Platform = process.platform): string {
+  if (platform === "win32") {
+    if (file.startsWith("\\\\?\\UNC\\")) file = "\\\\" + file.slice(8);
+    else if (file.startsWith("\\\\?\\")) file = file.slice(4);
+    return path.win32.normalize(file);
+  }
+  return path.normalize(file);
 }

@@ -5,6 +5,10 @@ the extension finds the binary once it is there. Informative: the normative
 decisions are ADR-0007 decision 14 and its 2026-09-13 amendment (the release
 train and the maintainer acts) and ADR-0005's resolved host-coverage question
 (which agent hosts are first-class, and the VS Code version floor that follows).
+[ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md) governs workspace
+pins and editor selection;
+[ADR-0010 decision 8](../decisions/ADR-0010-cli-conventions.md) governs version
+stamps.
 
 ## Two release trains, disjoint tag namespaces
 
@@ -95,36 +99,53 @@ cargo reads (`.github/scripts/wait-for-crate-index.sh`).
 
 The `ridl` crate shares the workspace version like every other crate, but that
 version is not what a user sees: it moves on the crates.io train's `v*` tags,
-which say nothing about the CLI binary. `crates/ridl/build.rs` reads
-`RIDL_BUILD_VERSION` at build time and falls back to the crate version when that
-variable is absent or empty, which is what a local build gets. The release
-workflow sets it to the `editor-v*` tag. One stamped string is then reported by
-`ridl --version`, by `ridl lsp`'s LSP `serverInfo`, and by `ridl mcp`'s MCP
-server info, so a user reporting a bug from any of the three names the same
-build.
+which say nothing about the CLI binary. Both `crates/ridl/build.rs` and
+`crates/ridlc/build.rs` read `RIDL_BUILD_VERSION` at build time, trim
+whitespace, and remove one leading `editor-v` or `v`. Absent or blank input uses
+the crate version. The release workflow supplies the `editor-v*` tag, so both
+binaries report its unprefixed version. `ridl --version`, LSP `serverInfo` and
+MCP server info share that display string. Pin checks use the crate version if
+the display string is not a plain release. A development build of `main` reports
+the previous release until the release commit bumps it, so a debug build reads
+the environment variable `RIDL_TEST_RUNNING_RELEASE` as the running release in
+integration tests (`ridl` takes its running release from `ridlc`). The override
+is compiled out of release builds. See
+[workspace release pins](../book/release-pin.md).
 
-## The extension resolves one binary, spawns it in two roles
+## Versioned toolchains
 
-`editors/vscode/src/binaryResolution.ts` is pure — it does not import `vscode` —
-so it is unit-tested directly. It picks the binary in three tiers, first match
-wins:
+`ridl toolchain install`, `list` and `which` manage and inspect a shared
+versions directory independently of workspace compilation. The
+[release pin chapter](../book/release-pin.md#installing-and-selecting-toolchains)
+owns root precedence and command usage. The
+[toolchain directory record](../design/toolchain-directory.md) owns layout,
+selection schema and installation protocol. The installer uses the build target
+exported by Cargo, and the fixed GitHub `editor-v<version>` release origin. Its
+alternate download source is a library test parameter, with no CLI, manifest or
+environment override.
 
-1. the `ridl.serverPath` setting, a developer override;
-2. the binary bundled in the extension at `bin/ridl` (`bin/ridl.exe` on
-   Windows);
-3. `ridl` resolved from `PATH`.
+`just install-check` also runs the ignored
+`toolchain_ureq_path_verifies_and_installs` local HTTP test, exercising the
+actual ureq path and checksum refusal. File-based fixture tests cover
+extraction, cleanup, damaged directories and concurrent installers without a
+network listener. The install scripts below produce the shared layout for
+pinnable `ridl` releases.
 
-Tier 3 is reached only when nothing is bundled, which in practice means an
-unpackaged extension-development launch: every VSIX the release train produces
-carries a binary. The module also recognises a `ridl.serverPath` still naming
-`ridl-lsp`, the separate binary that no longer exists, and the extension shows a
-warning that names the change. It still spawns the configured path, so the
-warning explains the spawn failure that follows rather than preventing it.
+## Editor toolchain selection
 
-The same resolved command backs both roles: `ridl lsp` for the language client
-and `ridl mcp` for the MCP server definition the extension registers. The
-language client appends `--stdio`, so the server runs as `ridl lsp --stdio`
-(ADR-0010).
+`editors/vscode/src/binaryResolution.ts` resolves the bootstrap binary from
+`ridl.serverPath`, the bundled `bin/ridl` (`bin/ridl.exe` on Windows), or PATH.
+The pure `toolchainSelection.ts` validates the CLI selection report and manages
+installation through that bootstrap binary. `workspaceClients.ts` associates
+document directories with discovered roots and owns their client lifecycles.
+`extension.ts` connects these modules to VS Code document events, manifest
+watching, notifications and the MCP registry.
+
+The [release pin chapter](../book/release-pin.md#editors-and-agent-tools) owns
+the editor's selection, installation policy, routing, override and trust
+behavior, including the first-folder MCP limitation. Language clients run the
+selected binary as `ridl lsp --stdio`; the MCP definition runs its selection as
+`ridl mcp` (ADR-0010).
 
 ## "Install ridl to PATH"
 
@@ -147,14 +168,28 @@ reason:
 ## The install scripts
 
 `install.sh` and `install.ps1` install the binary without the extension, which
-is what Claude Code and Codex need — they read their own MCP configuration and
-only require `ridl` on `PATH`. Each downloads `ridl-<target>.tar.gz` and its
-`.sha256` from the resolved release, verifies the checksum, and places `ridl` in
-`RIDL_INSTALL_DIR` (default `$HOME/.local/bin`; `install.ps1` uses
-`%LOCALAPPDATA%\Programs\ridl`, the folder the extension uses on Windows).
-`RIDL_VERSION` pins a specific `editor-v*` tag; `RIDL_INSTALL_DRY_RUN=1` prints
-the resolved URL and exits without downloading. `just install-check` runs
-`install.sh` end to end against a `file://` fixture release: one good install, a
-reinstall over the existing binary, and one tampered tarball that the checksum
-must reject with nothing installed. When `pwsh` and `python3` are present, it
-runs the same cases for `install.ps1` against a local HTTP server on 127.0.0.1.
+is what Claude Code and Codex need for their MCP configuration. They discover
+the newest editor release or use `RIDL_VERSION`, accepting `0.23.0` and
+`editor-v0.23.0`. Explicit historical tags remain supported. Dry runs print the
+resolved URL without creating directories or downloading.
+
+For `ridl` 0.23.0 and later, the scripts download the target archive and SHA-256
+record, verify the digest and archive contents, and install into the shared
+[toolchain directory](../design/toolchain-directory.md). That record owns the
+layout and completion rules; the
+[book](../book/release-pin.md#installing-and-selecting-toolchains) owns root
+configuration. Complete releases are reused offline; damaged directories are
+preserved and named in the error. The scripts then copy the binary to
+`RIDL_INSTALL_DIR`, defaulting to `$HOME/.local/bin` or
+`%LOCALAPPDATA%\Programs\ridl`. PATH entries are regular files. Older releases,
+historical tags without a plain release version, and `RIDL_INSTALL_BINARY=ridlc`
+retain flat installation in that PATH directory.
+
+`just install-check` first runs the ignored toolchain HTTP test, then checks the
+scripts with fixture releases at `editor-v0.23.0`: bare/tag normalization,
+shared layout, offline reuse, damaged-directory preservation, checksum and
+archive refusal, platform roots and paths containing spaces. It also checks flat
+`ridlc` and historical `ridl` installation, invalid binary selection, dry runs
+and Deno ZIP verification. Bash fixtures use `file://`; the optional PowerShell
+branch uses a local HTTP server. The full recipe requires permission to bind
+local TCP listeners, including when `pwsh` is absent.

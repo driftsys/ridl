@@ -19,13 +19,11 @@ Learn the languages:
 - **Syntax highlighting** for `.typl`, `.ridl` and `.rsdl` files.
 - **Language server** (`ridl lsp`): diagnostics, quick fixes, hovers, ordinal
   inlay hints, navigation, completion, rename, and whole-document formatting
-  with the `ridl fmt` style, across all three languages. It loads the workspace
-  of the nearest `ridl.toml` at or above the window's first folder, and shows a
-  warning when that load fails. When the load fails or no folder is open, it
-  loads the workspace of the first file you open that has a `ridl.toml` at or
-  above it. A window or a file inside a member of a `[workspace]` loads the
-  whole workspace that lists the member, so imports from the other members
-  resolve.
+  with the `ridl fmt` style, across all three languages. The
+  [workspace release pin chapter](https://driftsys.github.io/ridl/release-pin.html#editors-and-agent-tools)
+  describes pinned release selection, automatic installation and the Install
+  button, fallback errors, explicit overrides, Workspace Trust, multiple roots
+  and the first-folder MCP limitation.
 - **On a `.ridl` file**: the ridl §11 ordinal renders beside every interaction
   and `reserved` tombstone, hovering an interaction expands its resolved timing
   into the per-kind reading of family general form §6.2, and completion offers
@@ -48,11 +46,11 @@ Learn the languages:
 
 Releases are published to the VS Code Marketplace under "RIDL". A maintainer
 cuts each one from an `editor-v*` tag. The published extension bundles the
-`ridl` binary and runs it as `ridl lsp` (the language server) and `ridl mcp`
-(the MCP server Copilot sees). Before the first release, or to test a change,
-build the extension from source (below). The repository root also has installer
-scripts (`install.sh` / `install.ps1`) that download `ridl` alone from the
-newest `editor-v*` GitHub Release.
+`ridl` binary used to select and install workspace toolchains. Selected binaries
+run the language server and the MCP server Copilot sees. Before the first
+release, or to test a change, build the extension from source (below). The
+repository root also has installer scripts (`install.sh` / `install.ps1`) that
+download `ridl` alone from the newest `editor-v*` GitHub Release.
 
 Once the extension is installed, by whichever route, run the command **RIDL:
 Install ridl to PATH** to use `ridl` from a terminal, Claude Code, or Codex too.
@@ -72,12 +70,21 @@ just package-vscode
 code --install-extension editors/vscode/ridl-lang-<version>.vsix
 ```
 
+The [selection protocol](../../docs/design/toolchain-directory.md) defines the
+schema consumed by the extension;
+[ADR-0036](../../docs/decisions/ADR-0036-workspace-toolchain-pins.md) records
+the per-root selection and Workspace Trust decisions.
+
 ## Settings
 
-| Setting             | Default | Description                                                                                                                              |
-| ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `ridl.serverPath`   | `""`    | Path to the `ridl` binary. Empty (the default) uses the bundled binary, or `ridl` on `PATH` when none is bundled (a development launch). |
-| `ridl.trace.server` | `"off"` | Trace level for the JSON-RPC traffic between VS Code and `ridl lsp` — `off`, `messages`, or `verbose`.                                   |
+| Setting                      | Default | Description                                                                                                                   |
+| ---------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `ridl.serverPath`            | `""`    | Explicit path to the `ridl` binary; bypasses workspace toolchain selection. Empty uses the release selection described above. |
+| `ridl.toolchain.autoInstall` | `true`  | Automatically install a missing workspace release. Application setting; workspace settings cannot change it.                  |
+| `ridl.trace.server`          | `"off"` | Trace level for JSON-RPC traffic between VS Code and `ridl lsp`: `off`, `messages`, or `verbose`.                             |
+
+If `ridl.serverPath` names the retired `ridl-lsp` binary, the extension warns;
+set it to the `ridl` binary, which runs as `ridl lsp`.
 
 ## Development
 

@@ -130,7 +130,7 @@ The behaviour that is not in the README:
 
 ### 4.1 `ridl-core` and `ridlc`: compiling with overlays
 
-`ridl_core::load_workspace_with(db, entry, overlays)` takes
+`ridl_core::load_workspace_with(db, entry, overlays, running)` takes
 `Overlay { path, text }` values and returns a `LoadedWorkspace`;
 `load_workspace` calls it with none. `LoadError` has three variants: `Io`,
 `OverlayNotSource(path)` and
@@ -139,9 +139,15 @@ The behaviour that is not in the README:
 1. Paths compare by key: the canonicalised parent directory joined with the file
    name. The parent must exist; the file need not. A parent that does not exist
    is `OverlayOutsideWorkspace` with `missing_directory`, and its message says
-   to create the directory first. The canonicalisation runs only when there is
-   an overlay.
-2. An overlay path must end in `.typl`, `.ridl`, `.rsdl`, `.rxdl` or `.rmdl`. A
+   to create the directory first. Every load with a root manifest canonicalises
+   that manifest's key, even without overlays. Source keys are canonicalised
+   when overlays are present.
+2. One overlay may substitute the root `ridl.toml` text. Root discovery still
+   uses the disk. The root release pin is checked before source overlays or
+   other workspace validation; a refusal returns an empty workspace and the root
+   diagnostic only. Other manifest overlays remain unsupported.
+
+   A source path must end in `.typl`, `.ridl`, `.rsdl`, `.rxdl` or `.rmdl`. A
    `.rxdl` or `.rmdl` overlay in a package directory is accepted, reported with
    the warning RIDL-417 (`unsupported-source-file`) on its path, and not
    compiled, as the same file on disk is. Its text is interned for the span of
@@ -223,6 +229,17 @@ no checked IR, the error names that package and gives the same advice. A
 canonical `pkg.Name` whose package has no IR gets the unknown-name error, with
 no `ridl_check` advice.
 
+A root release refusal (MANI-024 through MANI-026) is an exception: check
+returns only that diagnostic, including its root manifest span, for root and
+member paths. Metrics and all five name/dependency lookups stop at the common
+snapshot refusal guard and return a request error naming the code and message.
+Source-side diff keeps its diagnostic-bearing error route. Root manifest
+overlays take precedence over disk text before source overlays are validated.
+`ridl_explain`, source-text-only check and snapshot diff inputs are independent
+of root pins. The [release pin chapter](../book/release-pin.md) defines the
+compatibility rule. The [MCP contract](../../crates/ridl-mcp/README.md#tools)
+records the schema structure and overlay description changes.
+
 ### 5.2 A wrong request is a tool error
 
 A tool error is an MCP result with `isError: true` and a message that says what
@@ -230,7 +247,7 @@ to change. The cases: a `path` that does not exist; a directory with no
 `ridl.toml` at or above it (the message says a workspace root holds one);
 `ridl_check` given both modes, neither, a source without a profile, a path with
 a profile, or a source with overlays (the message gives the two accepted input
-forms); an overlay outside the workspace or not a source file; a name with no
+forms); an overlay outside the workspace or an unsupported path; a name with no
 match (the message lists up to 10 declared canonical names that contain it,
 ignoring case, sorted, and ends after the name when there are none); a bare name
 with several matches (every canonical name, and that `pkg.Name` or `from`
@@ -253,12 +270,12 @@ structured content).
 
 `workspace.notes` carries one note. (A path inside a workspace member loads the
 member's workspace, ADR-0002 §4, so it needs no note; `workspace.errors` and
-`workspace.warnings` then count the diagnostics of files under the member only.)
-The note: when the workspace has `.rsdl` files and no system was lowered, the
-note says that rsdl uses were not counted, because the workspace declares no
-`system` or an error in its closure blocked the lowering, and tells the agent to
-run `ridl_check`. The field is a list of strings, so a later note is not a
-schema change.
+`workspace.warnings` then count the diagnostics of files under the member only,
+except for a root release refusal.) The note: when the workspace has `.rsdl`
+files and no system was lowered, the note says that rsdl uses were not counted,
+because the workspace declares no `system` or an error in its closure blocked
+the lowering, and tells the agent to run `ridl_check`. The field is a list of
+strings, so a later note is not a schema change.
 
 ## 6. Compatibility with `ridl check`
 

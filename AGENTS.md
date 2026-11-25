@@ -56,6 +56,9 @@ and `rmdl` stays a Proposed draft with no implementation. See
     a skill.
   - ADR-0035 and `docs/design/authoring-skill.md` — before changing the
     `ridl-authoring` skill, its gates, or the eval runner's tasks or scoring.
+  - [ADR-0036](docs/decisions/ADR-0036-workspace-toolchain-pins.md) and
+    `docs/design/toolchain-directory.md` — before changing workspace release
+    pins, toolchain selection or installation, or editor per-root clients.
   - ADR-0008 — read its `## Status` before editing it.
   - ADR-0009 (toolchain pin and gate parity) and ADR-0010 (CLI conventions) —
     bind every contributor and every subcommand.
@@ -134,13 +137,19 @@ member; rsdl is the apex.
                          a SHA-256 for every target ./bootstrap downloads
     just gate-parity     CI invokes every member of just build, and the members
                          of build match the expected list in the recipe
-    just install-check   end-to-end test of install.sh and, where pwsh
-                         is installed, install.ps1 (dry run, good install,
-                         corrupted download), against a fixture release;
+    just install-check   first runs the ignored local-HTTP toolchain installation
+                         test unconditionally, then tests install.sh and, where
+                         pwsh is installed, install.ps1 against a fixture release
+                         (dry run, versioned layout and empty completion marker,
+                         byte-identical PATH copy, bare and tag version forms,
+                         offline reuse, preserved damage,
+                         checksum refusal, platform roots and paths with spaces,
+                         flat ridlc and historical ridl installs);
                          it also runs scripts/verify-deno-zip.sh against a
                          temporary pin file: a matching zip passes, and a
                          different zip, an absent target and a malformed pin
-                         each fail
+                         each fail. The recipe
+                         requires permission to bind a local TCP listener
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just book-check      mdbook build on a copy of docs/ and of the
                          examples/**/*.rs and examples/**/*.ridl sources —
@@ -399,6 +408,11 @@ them.
 
 ## Conventions
 
+- The `ridl-core` loaders take the running release explicitly. A root release
+  refusal (MANI-024 through MANI-026) returns an empty workspace and only the
+  root diagnostic before source overlays, members, lockfiles or remotes. The
+  root manifest overlay is read before this check. `docs/book/release-pin.md`
+  documents the compatibility rule and command coverage.
 - **Conventional Commits**, linted by git-std against `.git-std.toml` — types
   and scopes are enumerated there. Never push directly to `main`; use a PR.
 - **Every crate lives at `crates/<crate-name>/`** — the directory name equals

@@ -745,6 +745,14 @@ other entry below is Accepted.
   judge check is deferred (driftsys/ridl#1440). Amends ADR-0005 §2, §5 and §7
   and adds a dated amendment to ADR-0027.
 
+- **[ADR-0036 — Workspace toolchain pins](ADR-0036-workspace-toolchain-pins.md).**
+  _Accepted 2026-11-25._ Records the root release requirement, exclusive
+  refusal, shared versions directory and direct per-root editor selection.
+  Amends ADR-0002 §4, ADR-0010, ADR-0024's language server reload consequence,
+  ADR-0025 decisions 2, 5 and 7, and
+  [the MCP workspace tools record](../design/mcp-workspace-tools.md); the record
+  links the deferred work and minimum-release extension CI follow-up.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.

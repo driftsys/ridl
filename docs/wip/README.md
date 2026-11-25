@@ -428,3 +428,11 @@ module, the runtime package, the cabin demos and the codec table);
 [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
 (open items 4 and 6, amended 2026-11-12) and
 [the generated code chapter](../book/generated-code.md) are its durable records.
+
+The toolchain pin design and plan (`2026-11-25-toolchain-pin-{design,plan}.md`)
+were archived on 2026-11-25, after the implementation tests passed on the
+development branch (driftsys/ridl#1476, pull request driftsys/ridl#1479); this
+is not a merge or release claim.
+[ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md),
+[`../design/toolchain-directory.md`](../design/toolchain-directory.md) and
+[the release pin chapter](../book/release-pin.md) are their durable records.

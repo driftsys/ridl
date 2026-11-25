@@ -9,7 +9,7 @@
 //! salsa's own cancellation applies once queries run off-thread.
 //!
 //! The state model is the incremental overlay design described in the crate
-//! docs: one workspace load, then `set_text` on the existing salsa
+//! docs: an initial workspace load, then `set_text` on the existing salsa
 //! [`InputFile`]s per edit, with every recompute going through the memoized
 //! `parse_file` / `resolve_package` / `check_package` / `service_catalog` /
 //! `check_system` queries. The load runs at initialize from the client's
@@ -41,11 +41,17 @@
 //! skips the packages beneath that manifest. Its diagnostics on a manifest
 //! are published for that `ridl.toml`.
 //!
-//! Two scope limits of this task, both by design:
+//! Root release refusals are published on the manifest and suspend source
+//! analysis. Root manifest open/change/close notifications and watched disk
+//! changes replace the analysis state while retaining open source text. The
+//! server also offers a refactor action to pin an unpinned root manifest.
+//!
+//! Two diagnostic publication limits:
 //!
 //! - The loader's own findings (manifest diagnostics and the
-//!   package↔directory law, e.g. TYPL-002) are computed once at load time —
-//!   the loader does not re-run per edit. They are published for files whose
+//!   package↔directory law, e.g. TYPL-002) are computed at each workspace load,
+//!   including a root manifest buffer or watched-file change. Source edits do
+//!   not reload the workspace. Findings are published for files whose
 //!   buffer still matches the loaded text and dropped once a file is edited.
 //! - A load diagnostic whose file the load-time [`SourceMap`] cannot resolve
 //!   back to a path (only a [`FileId::DETACHED`] span) is not published;
@@ -94,7 +100,9 @@ pub fn run(connection: Connection) -> Result<SessionEnd, Error> {
 }
 
 /// [`run`], reporting `version` in the initialize result's `serverInfo` when
-/// one is given — the `ridl` binary passes its own build version here.
+/// one is given — the `ridl` binary passes its own build version here. The
+/// parsed release is also used for workspace pin checks; an unparsable display
+/// version uses the compiler crate's running release instead.
 ///
 /// This drives the handshake through `initialize_start`/`initialize_finish`
 /// rather than the single-call `Connection::initialize`, because that method
@@ -121,6 +129,15 @@ pub fn run_with_version(
     });
     connection.initialize_finish(id, result)?;
     let mut state = ServerState::new();
+    state.running = version
+        .and_then(|v| {
+            let v = v
+                .strip_prefix("editor-v")
+                .or_else(|| v.strip_prefix('v'))
+                .unwrap_or(v);
+            ridl_core::release::parse_release(v)
+        })
+        .unwrap_or_else(ridlc::running_release);
     if let Some(root) = workspace_root(&params)
         && let Err(err) = state.load(&root)
     {
@@ -161,7 +178,10 @@ fn server_capabilities() -> lt::ServerCapabilities {
         )),
         code_action_provider: Some(lt::CodeActionProviderCapability::Options(
             lt::CodeActionOptions {
-                code_action_kinds: Some(vec![lt::CodeActionKind::QUICKFIX]),
+                code_action_kinds: Some(vec![
+                    lt::CodeActionKind::QUICKFIX,
+                    lt::CodeActionKind::REFACTOR_REWRITE,
+                ]),
                 ..Default::default()
             },
         )),
@@ -275,6 +295,12 @@ struct Batch {
 /// The server's whole state: the salsa database with the one loaded
 /// workspace, the overlay bookkeeping, and the latest publish results.
 struct ServerState {
+    running: ridl_core::release::Release,
+    refused: bool,
+    root_manifest: Option<PathBuf>,
+    /// Editor text survives replacement of the analysis inputs.
+    source_buffers: HashMap<String, String>,
+    manifest_buffers: HashMap<String, String>,
     db: RidlDatabase,
     /// The embedded `ridl.std` package, threaded into every resolve/check.
     std: Package,
@@ -283,8 +309,8 @@ struct ServerState {
     /// first `didOpen` of a file that has a `ridl.toml` at or above it. Empty
     /// until then.
     workspace: Workspace,
-    /// Whether [`ServerState::load`] has succeeded. Once it has, the
-    /// workspace is not loaded again; a file outside it is an overlay.
+    /// Whether a root has loaded, including a refused root. A source open
+    /// retries discovery only until this becomes true.
     loaded: bool,
     /// The `[lints]` levels by directory, as the loader built them (ADR-0024
     /// decision 10); replaced by each [`ServerState::load`], empty
@@ -381,6 +407,11 @@ impl ServerState {
         let std = std_package(&mut db);
         let workspace = Workspace::new(&db, Vec::new(), BTreeMap::new());
         ServerState {
+            running: ridlc::running_release(),
+            refused: false,
+            root_manifest: None,
+            source_buffers: HashMap::new(),
+            manifest_buffers: HashMap::new(),
             db,
             std,
             workspace,
@@ -407,24 +438,54 @@ impl ServerState {
         }
     }
 
-    /// Loads the workspace whose `ridl.toml` is at or above `dir` — the only
-    /// cold, from-disk load in the server's lifetime; every later recompute
-    /// reuses these inputs. On an error no field of the state changes; the
-    /// salsa inputs the failed load created stay in the database, unused.
-    /// A load that reads no package and whose root `ridl.toml` draws an
-    /// error (a TOML syntax error, for example) is an error too, so it is
-    /// shown like a manifest that cannot be read.
-    ///
-    /// An open overlay whose path the loaded workspace contains (a file
-    /// opened before its `ridl.toml` existed) moves its buffer onto the
-    /// loaded input and stops being an overlay, so the file is analyzed once,
-    /// as a member of its package.
-    ///
-    /// The remote units of the manifest's `[imports]` are read from
-    /// `vendor/`, then the cache, under [`Frozen::Yes`]: the server never
-    /// fetches and never writes `ridl.lock`. A pin neither holds is
-    /// MANI-104, kept as [`ServerState::remote_notice`].
+    /// Loads from disk at initialize or the first source open under a root.
+    /// Root manifest events use `reload_workspace` with the current manifest
+    /// buffer instead. Remote units are read from vendor/cache under
+    /// `Frozen::Yes`; the server never fetches or writes a lockfile.
     fn load(&mut self, dir: &Path) -> io::Result<()> {
+        self.reload_workspace(dir, None)
+    }
+
+    /// Replaces all analysis state, retaining the editor text and publication
+    /// history so that stale diagnostics receive an empty publication.
+    fn reload_workspace(
+        &mut self,
+        dir: &Path,
+        manifest_overlay: Option<ridl_core::Overlay>,
+    ) -> io::Result<()> {
+        let mut next = ServerState::new();
+        next.running = self.running;
+        next.root_manifest = find_root(dir)
+            .map(|root| root.join("ridl.toml"))
+            .or_else(|| self.root_manifest.clone());
+        next.source_buffers = self.source_buffers.clone();
+        next.manifest_buffers = self.manifest_buffers.clone();
+        next.published = std::mem::take(&mut self.published);
+        next.cancelled = std::mem::take(&mut self.cancelled);
+        next.shown_load_error = self.shown_load_error.clone();
+        let result = match next.root_manifest.as_ref().map(std::fs::metadata) {
+            Some(Err(error)) if error.kind() == io::ErrorKind::NotFound => {
+                // A deleted root unloads the workspace. Keep its path and buffers
+                // so a later create or buffer change can load it again.
+                Ok(())
+            }
+            Some(Err(error)) => Err(error),
+            _ => next.load_workspace_data(dir, manifest_overlay),
+        };
+        if result.is_ok() && next.loaded && !next.refused {
+            for (path, text) in next.source_buffers.clone() {
+                next.open(path, text);
+            }
+        }
+        *self = next;
+        result
+    }
+
+    fn load_workspace_data(
+        &mut self,
+        dir: &Path,
+        manifest_overlay: Option<ridl_core::Overlay>,
+    ) -> io::Result<()> {
         let cache = Cache::user_default();
         // `report_scope` is not used: the server publishes the diagnostics of
         // every loaded file of the consumer.
@@ -446,14 +507,19 @@ impl ServerState {
         } = load_workspace_with_remotes(
             &mut self.db,
             dir,
-            &[],
+            &manifest_overlay.into_iter().collect::<Vec<_>>(),
             RemoteAccess::new(Frozen::Yes, &cache),
+            self.running,
         )
         .map_err(|error| match error {
             ridl_core::LoadError::Io(e) => e,
-            _ => unreachable!("no overlay error is possible without overlays"),
+            error => io::Error::new(io::ErrorKind::InvalidInput, error.to_string()),
         })?;
-        if workspace.packages(&self.db).is_empty()
+        self.refused = diagnostics
+            .iter()
+            .any(ridl_core::release::is_release_refusal);
+        if !self.refused
+            && workspace.packages(&self.db).is_empty()
             && let Some(root) = find_root(dir)
         {
             let manifest = root.join("ridl.toml").to_string_lossy().into_owned();
@@ -538,22 +604,6 @@ impl ServerState {
         self.instance_lock = instance_lock;
         self.loaded = true;
 
-        let joined: Vec<String> = self
-            .overlays
-            .keys()
-            .filter(|path| self.files.contains_key(*path))
-            .cloned()
-            .collect();
-        for path in joined {
-            let Some((overlay, _)) = self.overlays.remove(&path) else {
-                continue;
-            };
-            let text = overlay.text(&self.db).clone();
-            let input = self.files[&path];
-            // The cached line table was built for the overlay input.
-            self.line_indexes.remove(&path);
-            self.set_text(path, input, text);
-        }
         Ok(())
     }
 
@@ -587,9 +637,99 @@ impl ServerState {
         show_message(connection, lt::MessageType::ERROR, message)
     }
 
+    /// Root changes use the unsaved manifest when one is open and its disk
+    /// file exists, including watched disk changes. Deletion unloads the
+    /// workspace until the disk file returns. Member manifests are never
+    /// source overlays.
+    fn reload_for_manifest(&mut self, path: &str, connection: &Connection) -> Result<(), Error> {
+        if !is_manifest_path(path) {
+            return Ok(());
+        }
+        let path_buf = Path::new(path);
+        let Some(dir) = path_buf.parent() else {
+            return Ok(());
+        };
+        let root_manifest = self
+            .root_manifest
+            .clone()
+            .or_else(|| find_root(dir).map(|root| root.join("ridl.toml")));
+        if root_manifest.as_deref() != Some(path_buf) {
+            return Ok(());
+        }
+        let overlay = self
+            .manifest_buffers
+            .get(path)
+            .map(|text| ridl_core::Overlay {
+                path: path_buf.to_path_buf(),
+                text: text.clone(),
+            });
+        if let Err(error) = self.reload_workspace(dir, overlay) {
+            let key = load_error_key(dir, &error);
+            if self.shown_load_error.as_ref() != Some(&key) {
+                self.shown_load_error = Some(key);
+                show_message(
+                    connection,
+                    lt::MessageType::ERROR,
+                    format!("ridl-lsp could not reload `{path}`: {error}"),
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn pin_workspace_action(&self, params: &lt::CodeActionParams) -> Option<lt::CodeAction> {
+        if self.running < ridl_core::release::MIN_PINNABLE_RELEASE {
+            return None;
+        }
+        let path = convert::uri_to_path(&params.text_document.uri)?;
+        if self.root_manifest.as_deref() != Some(Path::new(&path)) {
+            return None;
+        }
+        let text = self
+            .manifest_buffers
+            .get(&path)
+            .cloned()
+            .or_else(|| std::fs::read_to_string(&path).ok())?;
+        let (offset, new_text) = pin_insertion(&text, self.running)?;
+        let position = convert::line_index(&text).position(rowan::TextSize::from(offset as u32));
+        Some(lt::CodeAction {
+            title: format!("Pin this workspace to ridl {}", self.running),
+            kind: Some(lt::CodeActionKind::REFACTOR_REWRITE),
+            edit: Some(lt::WorkspaceEdit {
+                changes: Some(HashMap::from([(
+                    params.text_document.uri.clone(),
+                    vec![lt::TextEdit {
+                        range: lt::Range::new(position, position),
+                        new_text,
+                    }],
+                )])),
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+    }
+
     /// Handles one request; shutdown and cancellation were already handled
     /// by the loop.
     fn dispatch_request(&mut self, request: Request) -> Response {
+        if self.refused {
+            let empty = match request.method.as_str() {
+                "textDocument/hover"
+                | "textDocument/definition"
+                | "textDocument/prepareRename"
+                | "textDocument/rename" => Some(serde_json::Value::Null),
+                "textDocument/completion"
+                | "textDocument/references"
+                | "textDocument/documentSymbol"
+                | "workspace/symbol"
+                | "textDocument/inlayHint"
+                | "textDocument/formatting" => Some(serde_json::json!([])),
+                _ => None,
+            };
+            if let Some(empty) = empty {
+                return Response::new_ok(request.id, empty);
+            }
+        }
         match request.method.as_str() {
             lt::request::CodeActionRequest::METHOD => {
                 match serde_json::from_value::<lt::CodeActionParams>(request.params) {
@@ -710,8 +850,11 @@ impl ServerState {
                 let Some(path) = convert::uri_to_path(&params.text_document.uri) else {
                     return Ok(());
                 };
-                self.load_for_opened_file(&path, connection)?;
-                self.open(path, params.text_document.text);
+                if !is_manifest_path(&path) {
+                    self.load_for_opened_file(&path, connection)?;
+                }
+                self.open(path.clone(), params.text_document.text);
+                self.reload_for_manifest(&path, connection)?;
                 self.publish_all(connection)
             }
             lt::notification::DidChangeTextDocument::METHOD => {
@@ -721,6 +864,7 @@ impl ServerState {
                     return Ok(());
                 };
                 self.change(&path, &params.content_changes);
+                self.reload_for_manifest(&path, connection)?;
                 self.publish_all(connection)
             }
             lt::notification::DidCloseTextDocument::METHOD => {
@@ -730,6 +874,17 @@ impl ServerState {
                     return Ok(());
                 };
                 self.close(&path);
+                self.reload_for_manifest(&path, connection)?;
+                self.publish_all(connection)
+            }
+            lt::notification::DidChangeWatchedFiles::METHOD => {
+                let params: lt::DidChangeWatchedFilesParams =
+                    serde_json::from_value(notification.params)?;
+                for event in params.changes {
+                    if let Some(path) = convert::uri_to_path(&event.uri) {
+                        self.reload_for_manifest(&path, connection)?;
+                    }
+                }
                 self.publish_all(connection)
             }
             lt::notification::Cancel::METHOD => {
@@ -744,6 +899,14 @@ impl ServerState {
     /// `didOpen`: overlay the editor buffer over the loaded input, or create
     /// a standalone overlay for a file outside the workspace.
     fn open(&mut self, path: String, text: String) {
+        if is_manifest_path(&path) {
+            self.manifest_buffers.insert(path, text);
+            return;
+        }
+        self.source_buffers.insert(path.clone(), text.clone());
+        if self.refused {
+            return;
+        }
         if let Some(input) = self.files.get(&path).copied() {
             self.set_text(path, input, text);
         } else if let Some((input, _)) = self.overlays.get(&path).copied() {
@@ -769,14 +932,14 @@ impl ServerState {
     /// range is relative to the text after the previous change — then drives
     /// `set_text` once.
     fn change(&mut self, path: &str, changes: &[lt::TextDocumentContentChangeEvent]) {
-        let input = match self.files.get(path).copied() {
-            Some(input) => input,
-            None => match self.overlays.get(path) {
-                Some((input, _)) => *input,
-                None => return,
-            },
+        let buffer = if is_manifest_path(path) {
+            self.manifest_buffers.get(path)
+        } else {
+            self.source_buffers.get(path)
         };
-        let mut text = input.text(&self.db).clone();
+        let Some(mut text) = buffer.cloned() else {
+            return;
+        };
         for change in changes {
             match change.range {
                 Some(range) => {
@@ -790,12 +953,17 @@ impl ServerState {
                 None => text.clone_from(&change.text),
             }
         }
-        self.set_text(path.to_string(), input, text);
+        self.open(path.to_string(), text);
     }
 
     /// `didClose`: a standalone overlay is dropped (its diagnostics clear on
     /// the next publish); a workspace file reverts to its on-disk text.
     fn close(&mut self, path: &str) {
+        if is_manifest_path(path) {
+            self.manifest_buffers.remove(path);
+            return;
+        }
+        self.source_buffers.remove(path);
         if self.overlays.remove(path).is_some() {
             // Dropping the overlay drops its input; a later reopen mints a
             // fresh one, so the cached line table for this path is stale.
@@ -1159,14 +1327,24 @@ impl ServerState {
         let Some(path) = convert::uri_to_path(&params.text_document.uri) else {
             return Vec::new();
         };
-        let Some(fixes) = self.fixes.get(&path) else {
-            return Vec::new();
-        };
-        fixes
-            .iter()
-            .filter(|fix| ranges_touch(fix.range, params.range))
-            .map(|fix| lt::CodeActionOrCommand::CodeAction(fix.action.clone()))
-            .collect()
+        let mut actions = Vec::new();
+        if action_kind_allowed(params, &lt::CodeActionKind::REFACTOR_REWRITE)
+            && let Some(action) = self.pin_workspace_action(params)
+        {
+            actions.push(lt::CodeActionOrCommand::CodeAction(action));
+        }
+        if !self.refused
+            && action_kind_allowed(params, &lt::CodeActionKind::QUICKFIX)
+            && let Some(fixes) = self.fixes.get(&path)
+        {
+            actions.extend(
+                fixes
+                    .iter()
+                    .filter(|fix| ranges_touch(fix.range, params.range))
+                    .map(|fix| lt::CodeActionOrCommand::CodeAction(fix.action.clone())),
+            );
+        }
+        actions
     }
 
     /// `textDocument/hover`: the declaration or field the cursor names, rendered
@@ -1578,6 +1756,9 @@ impl ServerState {
     /// The input and package for a document path: an overlay file, or a loaded
     /// workspace file with its package.
     fn locate(&self, path: &str) -> Option<(InputFile, Package)> {
+        if self.refused {
+            return None;
+        }
         if let Some((input, package)) = self.overlays.get(path) {
             return Some((*input, *package));
         }
@@ -1618,8 +1799,62 @@ impl ServerState {
     }
 }
 
-/// The key [`ServerState::shown_load_error`] compares: the manifest directory
-/// the load started from and the reason it failed.
+fn is_manifest_path(path: &str) -> bool {
+    Path::new(path)
+        .file_name()
+        .is_some_and(|name| name == "ridl.toml")
+}
+
+fn action_kind_allowed(params: &lt::CodeActionParams, kind: &lt::CodeActionKind) -> bool {
+    params.context.only.as_ref().is_none_or(|only| {
+        only.iter().any(|parent| {
+            kind.as_str() == parent.as_str()
+                || kind
+                    .as_str()
+                    .strip_prefix(parent.as_str())
+                    .is_some_and(|suffix| suffix.starts_with('.'))
+        })
+    })
+}
+
+/// Validates TOML before selecting a byte insertion; no original byte is
+/// rewritten. Spans locate inline tables even when their values contain braces.
+fn pin_insertion(text: &str, running: ridl_core::release::Release) -> Option<(usize, String)> {
+    let doc: BTreeMap<String, toml::Spanned<toml::Value>> = toml::from_str(text).ok()?;
+    let mode = match (doc.get("workspace"), doc.get("package")) {
+        (Some(value), None) => ("workspace", value),
+        (None, Some(value)) => ("package", value),
+        _ => return None,
+    };
+    let table = mode.1.get_ref().as_table()?;
+    if table.contains_key("ridl-version") {
+        return None;
+    }
+    let key = format!("ridl-version = \"{running}\"");
+    let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    let span = mode.1.span();
+    let value = text.get(span.clone())?;
+    if value.starts_with('{') {
+        let separator = if table.is_empty() { "" } else { ", " };
+        return Some((span.start + 1, format!("{key}{separator}")));
+    }
+    if value.starts_with('[') {
+        // The parsed table span identifies the actual header, excluding its
+        // trailing comment. Text resembling a header inside a string is ignored.
+        let end = text[span.end..]
+            .find('\n')
+            .map_or(text.len(), |at| span.end + at + 1);
+        let prefix = if text[..end].ends_with('\n') {
+            ""
+        } else {
+            newline
+        };
+        return Some((end, format!("{prefix}{key}{newline}")));
+    }
+    Some((0, format!("{}.{key}{newline}", mode.0)))
+}
+
+/// The key used to suppress a repeated load error for the same root.
 fn load_error_key(manifest_dir: &Path, err: &io::Error) -> String {
     format!("{}: {err}", manifest_dir.display())
 }
@@ -1746,10 +1981,11 @@ fn batch(diagnostics: Vec<Diagnostic>, table: &HashMap<FileId, (String, String)>
 ///
 /// The load-time [`SourceMap`] is the authority: [`SourceMap::path`] reverses
 /// each diagnostic's [`FileId`] to the file the loader interned it for. A
-/// `.typl` file's current text comes from its [`InputFile`]; a manifest's text
-/// is read back from disk (nothing edited it this early). A span the map cannot
-/// resolve (only [`FileId::DETACHED`]) or a manifest that cannot be read drops
-/// its diagnostics from publication — `ridl check` still renders them.
+/// source file's current text comes from its [`InputFile`]; other text comes
+/// from the source map, including a root manifest overlay. Disk text is a
+/// fallback when the map has no text. A span with no mapped path (only
+/// [`FileId::DETACHED`]), or no available text, drops its diagnostics from
+/// publication — `ridl check` still renders them.
 fn convert_loader_diagnostics(
     db: &RidlDatabase,
     files: &HashMap<String, InputFile>,
@@ -1776,7 +2012,12 @@ fn convert_loader_diagnostics(
         let path = path.to_string();
         let text = match files.get(&path) {
             Some(input) => input.text(db).clone(),
-            None => match std::fs::read_to_string(&path) {
+            None => match sources
+                .text(id)
+                .map(str::to_string)
+                .map(Ok)
+                .unwrap_or_else(|| std::fs::read_to_string(&path))
+            {
                 Ok(text) => text,
                 Err(_) => continue,
             },
@@ -1824,4 +2065,77 @@ fn request_id(id: lt::NumberOrString) -> RequestId {
 /// Whether two LSP ranges share at least one position.
 fn ranges_touch(a: lt::Range, b: lt::Range) -> bool {
     a.start <= b.end && b.start <= a.end
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn release_refusal_discards_analysis_inputs() {
+        let dir = std::env::temp_dir().join(format!("ridl-lsp-discard-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let manifest = dir.join("ridl.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n",
+        )
+        .unwrap();
+        std::fs::write(dir.join("lib.typl"), "package demo\ntype Value: integer\n").unwrap();
+        let mut state = ServerState::new();
+        state.running = ridl_core::release::parse_release("0.23.2").unwrap();
+        state.load(&dir).unwrap();
+        let outside = dir.with_extension("typl").to_string_lossy().into_owned();
+        state.open(
+            outside.clone(),
+            "package standalone\ntype Unsaved: integer\n".into(),
+        );
+        assert_eq!(state.overlays.len(), 1);
+        let input = state.overlays[&outside].0;
+        state.line_index_of(input);
+        state
+            .reload_workspace(
+                &dir,
+                Some(ridl_core::Overlay {
+                    path: manifest,
+                    text: "[package]\nridl-version = \"0.24.0\"\n".into(),
+                }),
+            )
+            .unwrap();
+        std::fs::remove_dir_all(dir).unwrap();
+        assert!(state.refused);
+        assert!(state.files.is_empty());
+        assert!(state.file_package.is_empty());
+        assert!(state.overlays.is_empty());
+        assert!(state.fixes.is_empty());
+        assert!(state.line_indexes.is_empty());
+        assert!(state.workspace.packages(&state.db).is_empty());
+        assert!(state.source_buffers.contains_key(&outside));
+
+        let opened = format!("{outside}.new.typl");
+        state.open(
+            opened.clone(),
+            "package demo\ntype Opened: integer\n".into(),
+        );
+        assert!(
+            state.overlays.is_empty(),
+            "refused open creates no analysis input"
+        );
+        state.change(
+            &opened,
+            &[lt::TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: "package demo\ntype Changed: integer\n".into(),
+            }],
+        );
+        assert!(
+            state.overlays.is_empty(),
+            "refused change creates no analysis input"
+        );
+        assert_eq!(
+            state.source_buffers[&opened],
+            "package demo\ntype Changed: integer\n"
+        );
+    }
 }

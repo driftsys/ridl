@@ -2,7 +2,8 @@
 .SYNOPSIS
     Installs a binary on Windows from the newest editor-v* GitHub Release (or
     $env:RIDL_VERSION): downloads <binary>-x86_64-pc-windows-msvc.tar.gz and
-    its .sha256, verifies the checksum, and places <binary>.exe in
+    its .sha256, verifies the checksum, stores pinnable ridl releases in the
+    shared toolchain directory, and copies <binary>.exe to
     $env:RIDL_INSTALL_DIR (default %LOCALAPPDATA%\Programs\ridl, the folder the
     VS Code extension uses for its "Install ridl to PATH" command).
 
@@ -38,9 +39,6 @@ $Repo = 'driftsys/ridl'
 $TagPrefix = 'editor-v'
 $Target = 'x86_64-pc-windows-msvc'
 $BinaryName = if ($env:RIDL_INSTALL_BINARY) { $env:RIDL_INSTALL_BINARY } else { 'ridl' }
-if ($BinaryName -ne 'ridl' -and $BinaryName -ne 'ridlc') {
-    Write-Error "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc', got '$BinaryName'"
-}
 $Binary = "$BinaryName.exe"
 $LocalAppData = if ($env:LOCALAPPDATA) { $env:LOCALAPPDATA } else { Join-Path $HOME 'AppData\Local' }
 $InstallDir = if ($env:RIDL_INSTALL_DIR) { $env:RIDL_INSTALL_DIR } else { Join-Path $LocalAppData 'Programs\ridl' }
@@ -55,49 +53,185 @@ function Get-Version {
     return $match.tag_name
 }
 
+# Accept decimal release components from 0 to 4294967295 (u32).
+function ConvertTo-ReleaseVersion {
+    param([string]$Value)
+    $value = $Value -creplace '^editor-v', ''
+    if ($value -cnotmatch '\A[0-9]+\.[0-9]+\.[0-9]+\z') { throw "invalid release version $Value" }
+    $parts = foreach ($part in $value.Split('.')) {
+        [uint32]$number = 0
+        if (-not [uint32]::TryParse($part, [ref]$number)) { throw "invalid release version $Value" }
+        $number.ToString([Globalization.CultureInfo]::InvariantCulture)
+    }
+    return [string]($parts -join '.')
+}
+
+function Get-ToolchainRoot {
+    if ($env:RIDL_TOOLCHAIN_DIR) { return [IO.Path]::GetFullPath($env:RIDL_TOOLCHAIN_DIR) }
+    if (-not $env:LOCALAPPDATA) { throw 'toolchain directory requires LOCALAPPDATA' }
+    return [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'ridl'))
+}
+
+function Test-CompleteRelease {
+    param([string]$Directory)
+    if (-not (Test-Path -LiteralPath $Directory)) { return $false }
+    $dir = Get-Item -LiteralPath $Directory -Force
+    $binaryPath = Join-Path $Directory 'ridl.exe'
+    $markerPath = Join-Path $Directory '.complete'
+    $valid = $dir.PSIsContainer -and -not ($dir.Attributes -band [IO.FileAttributes]::ReparsePoint)
+    foreach ($path in @($binaryPath, $markerPath)) {
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { $valid = $false; continue }
+        if ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { $valid = $false }
+    }
+    if ($valid -and (Get-Item -LiteralPath $markerPath -Force).Length -eq 0) { return $true }
+    throw "damaged toolchain directory $Directory; preserve or move it before installing again"
+}
+
+function Get-Download {
+    param([string]$Url, [string]$File, [long]$Limit)
+    # Stream a bounded response directly to disk, including for chunked HTTP.
+    $request = [Net.WebRequest]::Create($Url)
+    $request.Timeout = 30000
+    if ($request -is [Net.HttpWebRequest]) { $request.ReadWriteTimeout = 30000 }
+    $response = $null; $inputStream = $null; $outputStream = $null
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        $response = $request.GetResponse()
+        if ($response.ContentLength -gt $Limit) { throw "download exceeds $Limit bytes" }
+        $inputStream = $response.GetResponseStream()
+        $outputStream = [IO.File]::Open($File, [IO.FileMode]::CreateNew)
+        $buffer = New-Object byte[] 81920
+        [long]$total = 0
+        while (($count = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            $total += $count
+            if ($total -gt $Limit) { throw "download exceeds $Limit bytes" }
+            if ($timer.Elapsed.TotalSeconds -gt 600) { throw 'download exceeded 600 seconds' }
+            $outputStream.Write($buffer, 0, $count)
+        }
+    } finally {
+        if ($outputStream) { $outputStream.Dispose() }
+        if ($inputStream) { $inputStream.Dispose() }
+        if ($response) { $response.Close() }
+    }
+}
+
 function Test-Checksum {
-    param([string]$File, [string]$ChecksumFile)
-    $expected = ((Get-Content -LiteralPath $ChecksumFile -Raw).Trim() -split '\s+', 2)[0]
+    param([string]$File, [string]$ChecksumFile, [string]$Archive)
+    $record = Get-Content -LiteralPath $ChecksumFile -Raw
+    $pattern = '\A([a-fA-F0-9]{64})(?:  | \*)' + [regex]::Escape($Archive) + '(?:\r?\n)?\z'
+    if ($record -cnotmatch $pattern) { throw "invalid checksum record for $Archive" }
+    $expected = $Matches[1]
     $actual = (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash
-    if ($expected.ToLower() -ne $actual.ToLower()) {
-        Write-Error "checksum mismatch: expected $expected, got $actual"
+    if ($expected -ine $actual) { throw "checksum mismatch: expected $expected, got $actual" }
+}
+
+function Expand-Release {
+    param([string]$Archive, [string]$Directory)
+    $names = @(tar -tzf $Archive)
+    if ($LASTEXITCODE -ne 0) { throw "tar extraction failed with exit code $LASTEXITCODE" }
+    $types = @(tar -tvzf $Archive)
+    if ($LASTEXITCODE -ne 0) { throw "tar extraction failed with exit code $LASTEXITCODE" }
+    $required = @($Binary, 'LICENSE', 'THIRD-PARTY-NOTICES.txt')
+    if ($names.Count -ne 3 -or @($names | Select-Object -Unique).Count -ne 3) { throw 'archive missing required files or contains duplicates' }
+    foreach ($name in $names) {
+        if ($required -cnotcontains $name) { throw "unsafe archive entry $name" }
+    }
+    foreach ($line in $types) {
+        if (-not $line.StartsWith('-')) { throw 'unsafe archive entry type' }
+    }
+    tar -xzf $Archive -C $Directory
+    if ($LASTEXITCODE -ne 0) { throw "tar extraction failed with exit code $LASTEXITCODE" }
+    foreach ($name in $required) {
+        $path = Join-Path $Directory $name
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "archive missing $name" }
+        if ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "unsafe archive entry $name" }
     }
 }
 
 function Main {
-    $version = Get-Version
+    if ($BinaryName -ne 'ridl' -and $BinaryName -ne 'ridlc') {
+        throw "RIDL_INSTALL_BINARY must be 'ridl' or 'ridlc', got '$BinaryName'"
+    }
+    $raw = Get-Version
+    $version = $raw
+    $normalized = $null
+    try { $normalized = ConvertTo-ReleaseVersion $raw } catch {
+        # Reselect only plain releases; historical tags retain flat installation.
+    }
+    $versioned = $false
+    if ($normalized) {
+        $version = "$TagPrefix$normalized"
+        $parts = $normalized.Split('.')
+        $versioned = $BinaryName -eq 'ridl' -and ([uint32]$parts[0] -gt 0 -or [uint32]$parts[1] -ge 23)
+    }
     $tarball = "$BinaryName-$Target.tar.gz"
     $url = "$BaseUrl/$version/$tarball"
     if ($env:RIDL_INSTALL_DRY_RUN) { Write-Output $url; return }
 
-    Write-Host "Installing $BinaryName $version ($Target) to $InstallDir"
-    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("ridl-install-" + [System.Guid]::NewGuid())
-    New-Item -ItemType Directory -Path $tmp | Out-Null
+    $tmp = $null; $stage = $null; $source = $null; $tmpBinary = $null
     try {
-        Invoke-WebRequest -Uri $url -OutFile (Join-Path $tmp $tarball) -UseBasicParsing
-        Invoke-WebRequest -Uri "$url.sha256" -OutFile (Join-Path $tmp "$tarball.sha256") -UseBasicParsing
-        Test-Checksum -File (Join-Path $tmp $tarball) -ChecksumFile (Join-Path $tmp "$tarball.sha256")
-        # Windows 10 1803+ ships bsdtar as tar.exe. $ErrorActionPreference does
-        # not apply to a native command's own exit code, so it is checked here
-        # directly — otherwise a failed or partial extraction would go
-        # unnoticed and either error confusingly at Move-Item or, worse, move
-        # a truncated binary onto the user's PATH.
-        tar -xzf (Join-Path $tmp $tarball) -C $tmp
-        if ($LASTEXITCODE -ne 0) {
-            Write-Error "tar extraction failed with exit code $LASTEXITCODE"
+        if ($versioned) {
+            $versions = Join-Path (Get-ToolchainRoot) 'versions'
+            $directory = Join-Path $versions $normalized
+            if (Test-CompleteRelease $directory) { $source = Join-Path $directory $Binary }
+        }
+        if (-not $source) {
+            if ($versioned) {
+                New-Item -ItemType Directory -Path $versions -Force | Out-Null
+                # A previous directory for this PID is stale; other stages may be live.
+                $candidate = Join-Path $versions ".tmp-script-$normalized-$PID"
+                if (Test-Path -LiteralPath $candidate) {
+                    Remove-Item -LiteralPath $candidate -Recurse -Force
+                }
+                New-Item -ItemType Directory -Path $candidate | Out-Null
+                $stage = $candidate
+            }
+            $candidate = Join-Path ([IO.Path]::GetTempPath()) ("ridl-install-" + [guid]::NewGuid())
+            New-Item -ItemType Directory -Path $candidate | Out-Null
+            $tmp = $candidate
+            $archive = Join-Path $tmp $tarball
+            Get-Download $url $archive 268435456
+            Get-Download "$url.sha256" "$archive.sha256" 4096
+            Test-Checksum $archive "$archive.sha256" $tarball
+            if ($versioned) {
+                Expand-Release $archive $stage
+                [IO.File]::WriteAllBytes((Join-Path $stage '.complete'), [byte[]]@())
+                if (-not (Test-CompleteRelease $directory)) {
+                    # Directory.Move refuses an existing destination atomically.
+                    try {
+                        [IO.Directory]::Move($stage, $directory)
+                    } catch {
+                        if (-not (Test-CompleteRelease $directory)) {
+                            throw "toolchain directory could not be published: $directory; $($_.Exception.Message)"
+                        }
+                    }
+                }
+                if (Test-Path -LiteralPath $stage) {
+                    Remove-Item -LiteralPath $stage -Recurse -Force
+                }
+                $stage = $null
+                $source = Join-Path $directory $Binary
+            } else {
+                tar -xzf $archive -C $tmp
+                if ($LASTEXITCODE -ne 0) { throw "tar extraction failed with exit code $LASTEXITCODE" }
+                $source = Join-Path $tmp $Binary
+            }
         }
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-        Move-Item -LiteralPath (Join-Path $tmp $Binary) -Destination (Join-Path $InstallDir $Binary) -Force
+        $tmpBinary = Join-Path $InstallDir (".$BinaryName." + [guid]::NewGuid())
+        Copy-Item -LiteralPath $source -Destination $tmpBinary
+        Move-Item -LiteralPath $tmpBinary -Destination (Join-Path $InstallDir $Binary) -Force
+        $tmpBinary = $null
         Write-Host "Installed $(Join-Path $InstallDir $Binary)"
         $onPath = ($env:Path -split ';') | Where-Object { $_.Trim().ToLower() -eq $InstallDir.ToLower() }
         if (-not $onPath) {
-            # Through the registry, not setx: setx truncates a PATH over 1024 characters.
-            Write-Host ""
-            Write-Host "Add to your PATH (PowerShell):"
+            Write-Host 'Add to your PATH (PowerShell):'
             Write-Host "  [Environment]::SetEnvironmentVariable('Path', `"$InstallDir;`" + [Environment]::GetEnvironmentVariable('Path', 'User'), 'User')"
         }
     } finally {
-        Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+        foreach ($owned in @($tmp, $stage, $tmpBinary)) {
+            if ($owned) { Remove-Item -LiteralPath $owned -Recurse -Force -ErrorAction SilentlyContinue }
+        }
     }
 }
 

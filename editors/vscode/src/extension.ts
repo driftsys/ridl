@@ -1,17 +1,4 @@
-// The RIDL VS Code extension entry point.
-//
-// `activate` registers the "Install ridl to PATH" command and the MCP
-// server definition provider unconditionally — both are cheap and spawn no
-// process. It starts the LSP client (over stdio against the `ridl` binary,
-// run as `ridl lsp`, crates/ridl) only once a `typl`, `ridl` or `rsdl`
-// document is open: one already open at activation, or the first one opened
-// later. One server serves the three languages: the compiler selects the
-// profile from the file extension, so the `.typl`, `.ridl` and `.rsdl` files
-// of one workspace are checked together. The same binary also runs as
-// `ridl mcp` for the Model Context Protocol server. binaryResolution.ts picks
-// the binary in three tiers: the `ridl.serverPath` setting, the binary bundled
-// in the extension, then `ridl` resolved from PATH.
-
+// Starts one directly selected language server per discovered RIDL root.
 import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -19,6 +6,7 @@ import * as path from "node:path";
 import { promisify } from "node:util";
 import * as vscode from "vscode";
 import {
+  InitializeParams,
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
@@ -26,27 +14,44 @@ import {
   TransportKind,
 } from "vscode-languageclient/node";
 import {
-  clientDocumentSelector,
   isLegacyServerName,
-  resolveLspCommand,
+  resolveBinary,
   resolveMcpDefinition,
   shouldStartClientForLanguage,
 } from "./binaryResolution";
-import { ClientLifecycle, ClientPhase, phaseOf } from "./clientLifecycle";
+import { ClientPhase, phaseOf } from "./clientLifecycle";
 import { copyIsStale, isDirOnPath, parseVersionOutput, pathHint, performCopy, planInstall } from "./installToPath";
 import { runOnce } from "./runOnce";
-
-const MCP_PROVIDER_ID = "ridl";
+import { BinaryRunner, Selection, ToolchainSelector } from "./toolchainSelection";
+import {
+  aliasRegistrations,
+  canonicalFile,
+  routingMiddleware,
+  selectFirstWorkspaceFolder,
+  WorkspaceClients,
+} from "./workspaceClients";
 
 const execFileAsync = promisify(execFile);
 
-/**
- * `this.state`'s numeric value, checked exhaustively against the library's
- * own `State` enum so a future vscode-languageclient version that adds or
- * renumbers a state fails this compile instead of only throwing at runtime
- * inside `phaseOf`, which takes a plain number and so cannot check this
- * itself (see its own comment).
- */
+/** execFile's callback retains stdout for ordinary nonzero exits, including which exit 1. */
+const runner: BinaryRunner = {
+  run(command, args, cwd) {
+    return new Promise((resolve, reject) => {
+      execFile(command, [...args], {
+        cwd,
+        timeout: args[1] === "install" ? 25 * 60_000 : 15_000,
+        maxBuffer: 1024 * 1024,
+      }, (error, stdout, stderr) => {
+        if (error && (typeof error.code !== "number" || error.killed || error.signal)) {
+          reject(error);
+          return;
+        }
+        resolve({ exitCode: error ? error.code as number : 0, stdout, stderr });
+      });
+    });
+  },
+};
+
 function libraryStateNumber(state: State): number {
   switch (state) {
     case State.Starting:
@@ -61,143 +66,274 @@ function libraryStateNumber(state: State): number {
   }
 }
 
-/** A `LanguageClient` that reports its own state in the vocabulary `ClientLifecycle` reads. */
 class RidlLanguageClient extends LanguageClient {
+  readonly opened = new Set<string>();
+  manifestless = false;
+  refreshAliases: (() => void) | undefined;
+  private aliasSignature = "";
+  private aliasRegistrations: { method: string; id: string }[] = [];
+  private aliasSequence = 0;
+
+  syncAliases(selector: Parameters<typeof aliasRegistrations>[1]): void {
+    const signature = JSON.stringify(selector);
+    if (this.phase() !== "running" || this.aliasSignature === signature) return;
+    const previous = this.aliasRegistrations;
+    this.aliasRegistrations = [];
+    if (selector.length > 0 && this.initializeResult) {
+      for (const registration of aliasRegistrations(this.initializeResult.capabilities, selector)) {
+        // All methods here implement the public document registration interface.
+        const feature = this.getFeature(registration.method as "textDocument/hover");
+        const id = `ridl-alias-${++this.aliasSequence}`;
+        feature.register({ id, registerOptions: registration.options });
+        this.aliasRegistrations.push({ method: registration.method, id });
+      }
+    }
+    // Replacement registrations must cover documents before old ones are removed.
+    for (const { method, id } of previous) this.getFeature(method as "textDocument/hover").unregister(id);
+    this.aliasSignature = signature;
+  }
+  start(): Promise<void> {
+    // The library can restart this same client after a server crash.
+    if (this.phase() === "stopped" || this.phase() === "startFailed") {
+      this.opened.clear();
+      this.aliasSignature = "";
+      this.aliasRegistrations = [];
+    }
+    return super.start().then(() => {
+      this.refreshAliases?.();
+    });
+  }
   phase(): ClientPhase {
     return phaseOf(libraryStateNumber(this.state));
   }
+  protected fillInitializeParams(params: InitializeParams): void {
+    super.fillInitializeParams(params);
+    if (this.manifestless) {
+      params.rootUri = null;
+      params.rootPath = null;
+      params.workspaceFolders = null;
+    }
+  }
+}
+let clients: WorkspaceClients<RidlLanguageClient> | undefined;
+let disposeActivation: (() => void) | undefined;
+
+function isRidlDocument(document: vscode.TextDocument): boolean {
+  return document.uri.scheme === "file" &&
+    (shouldStartClientForLanguage(document.languageId) || path.basename(document.uri.fsPath) === "ridl.toml");
 }
 
-let lifecycle: ClientLifecycle<RidlLanguageClient> | undefined;
-
-// Runs the stale-copy offer at most once per activation, after the first
-// start that brings a client up, whether from a document open or a restart
-// (for example, one reached through a corrected `ridl.serverPath` after an
-// earlier start failure). Set in `activate`, once `context` is available.
-let offerStaleCopyOnce: (() => void) | undefined;
-
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  // Shared by every client the lifecycle creates: a client whose start fails
-  // never disposes the output channel it created itself, and
-  // vscode-languageclient does not dispose a channel it was given, so one
-  // channel outliving every retry avoids leaking a channel per retry. It
-  // must be a LogOutputChannel because the library reads `.logLevel` from
-  // the supplied channel.
-  const outputChannel = vscode.window.createOutputChannel("RIDL Language Server", { log: true });
-  context.subscriptions.push(outputChannel);
-  lifecycle = new ClientLifecycle(() => createClient(context, outputChannel));
-  offerStaleCopyOnce = runOnce(() => void offerRefreshOfStaleCopy(context));
-  const configured = configuredServerPath();
-  if (configured && isLegacyServerName(configured)) {
-    void vscode.window.showWarningMessage(
-      "ridl.serverPath names the old ridl-lsp binary. The setting now points at the ridl binary, which the extension runs as `ridl lsp`.",
-    );
+  const output = vscode.window.createOutputChannel("RIDL Language Server", { log: true });
+  context.subscriptions.push(output);
+  const active = new Map<RidlLanguageClient, Selection>();
+  const offerStaleCopyOnce = runOnce(() => void offerRefreshOfStaleCopy(context));
+  const mcpChanged = new vscode.EventEmitter<void>();
+  context.subscriptions.push(mcpChanged);
+  const approved = new Set<string>(), offered = new Set<string>();
+  let mcpSelection: Selection | undefined, mcpGeneration = 0;
+  let disposed = false;
+  disposeActivation = () => {
+    disposed = true;
+    ++mcpGeneration;
+  };
+  const resolver = (directory?: string) =>
+    resolveBinary({
+      configuredPath: vscode.workspace.getConfiguration("ridl", directory ? vscode.Uri.file(directory) : undefined).get<
+        string
+      >("serverPath"),
+      extensionPath: context.extensionPath,
+      platform: process.platform,
+      exists: fs.existsSync,
+    });
+  const selector = new ToolchainSelector(runner, {
+    progress: async (title, work) =>
+      vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title }, work),
+    // Return the fallback immediately while the nonmodal Install button is pending.
+    // An accepted release is selected again through the same validated CLI path.
+    async offerInstall(pin) {
+      if (approved.has(pin)) return true;
+      if (!offered.has(pin)) {
+        offered.add(pin);
+        void Promise.resolve(
+          vscode.window.showInformationMessage(`RIDL ${pin} is required by this workspace.`, "Install"),
+        ).then(async (button) => {
+          if (button === "Install" && !disposed) {
+            approved.add(pin);
+            await manager.refresh("");
+            await refreshMcp();
+          }
+        }).catch(logError);
+      }
+      return false;
+    },
+    errorOnce: (_key, message) => {
+      void vscode.window.showErrorMessage(message);
+    },
+    log: (message) => output.warn(message),
+  });
+  const select = async (directory: string): Promise<Selection> => {
+    const selected = await selector.select({
+      resolver: resolver(directory),
+      directory,
+      autoInstall: vscode.workspace.getConfiguration("ridl").get<boolean>("toolchain.autoInstall", true),
+    });
+    if (!selected.key.startsWith("folder:")) return selected;
+    const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(directory))?.uri.fsPath ?? directory;
+    return { ...selected, key: `folder:${path.resolve(folder)}`, root: path.resolve(folder) };
+  };
+  function logError(error: unknown): void {
+    output.error(String(error));
   }
-  registerMcpProvider(context);
+  async function refreshMcp(): Promise<void> {
+    const generation = ++mcpGeneration;
+    const selected = await selectFirstWorkspaceFolder(
+      vscode.workspace.workspaceFolders?.map((f) => f.uri.fsPath) ?? [],
+      select,
+    );
+    if (disposed || generation !== mcpGeneration) return;
+    if (selected?.command !== mcpSelection?.command || selected?.key !== mcpSelection?.key) {
+      mcpSelection = selected;
+      mcpChanged.fire();
+    }
+  }
+  const manager = new WorkspaceClients(select, (selection) => {
+    const client = createClient(
+      selection,
+      output,
+      (file) => manager.owns(selection.key, file),
+      (file) => manager.hostPath(selection.key, file),
+    );
+    client.refreshAliases = () =>
+      client.syncAliases(
+        vscode.workspace.textDocuments.filter((document) =>
+          isRidlDocument(document) && manager.owns(selection.key, document.uri.fsPath)
+        ).map((document) => ({
+          scheme: "file",
+          language: path.basename(document.uri.fsPath) === "ridl.toml" ? "*" : document.languageId,
+          pattern: document.uri.fsPath.replace(/\\/g, "/").replace(/[\[\]{}*?!()]/g, "[$&]"),
+        })),
+      );
+    active.set(client, selection);
+    return client;
+  });
+  clients = manager;
+  manager.onChange = async () => {
+    // Update every selector before awaiting buffer synchronization. A provider
+    // must never compete with another root for the same open document.
+    for (const client of active.keys()) {
+      if (manager.hasClient(client)) client.refreshAliases?.();
+    }
+    for (const [client, selection] of active) {
+      if (!manager.hasClient(client)) {
+        active.delete(client);
+        continue;
+      }
+      if (client.phase() !== "running") continue;
+      // Remove diagnostics and open overlays whose ownership has moved to a nested root.
+      client.diagnostics?.forEach((uri) => {
+        if (!manager.owns(selection.key, uri.fsPath)) client.diagnostics?.delete(uri);
+      });
+      for (const document of vscode.workspace.textDocuments) {
+        if (!isRidlDocument(document)) continue;
+        const owned = manager.owns(selection.key, document.uri.fsPath);
+        const uri = canonicalUri(document.uri);
+        if (!owned && client.opened.has(uri)) {
+          await client.sendNotification("textDocument/didClose", { textDocument: { uri } });
+        } else if (owned && !client.opened.has(uri)) {
+          await client.sendNotification("textDocument/didOpen", {
+            textDocument: { uri, languageId: document.languageId, version: document.version, text: document.getText() },
+          });
+        }
+      }
+    }
+    if ([...active.keys()].some((client) => client.phase() === "running")) offerStaleCopyOnce();
+  };
+  async function open(document: vscode.TextDocument): Promise<void> {
+    if (isRidlDocument(document)) await manager.open(path.dirname(document.uri.fsPath));
+  }
+  // Forward before reselection: deletion/change must also reach the old server
+  // when selection keeps its binary or removes its root.
+  async function watched(uri: vscode.Uri, type: number): Promise<void> {
+    for (const client of active.keys()) {
+      if (client.phase() === "starting") await client.start().catch(logError);
+      if (client.phase() === "running") {
+        await client.sendNotification("workspace/didChangeWatchedFiles", {
+          changes: [{ uri: canonicalUri(uri), type }],
+        });
+      }
+    }
+    await manager.refresh(uri.fsPath);
+    await refreshMcp();
+  }
+  const watcher = vscode.workspace.createFileSystemWatcher("**/ridl.toml");
   context.subscriptions.push(
-    vscode.commands.registerCommand("ridl.installToPath", () => installToPath(context)),
-  );
-  context.subscriptions.push(
+    watcher,
+    watcher.onDidCreate(async (uri) => {
+      try {
+        await watched(uri, 1);
+      } catch (error) {
+        logError(error);
+      }
+    }),
+    watcher.onDidChange(async (uri) => {
+      try {
+        await watched(uri, 2);
+      } catch (error) {
+        logError(error);
+      }
+    }),
+    watcher.onDidDelete(async (uri) => {
+      try {
+        await watched(uri, 3);
+      } catch (error) {
+        logError(error);
+      }
+    }),
+    vscode.workspace.onDidOpenTextDocument(async (document) => {
+      try {
+        await open(document);
+      } catch (error) {
+        logError(error);
+      }
+    }),
     vscode.workspace.onDidChangeConfiguration(async (event) => {
-      // No gate on `lifecycle.client` here: after a failed start the client
-      // is undefined, and correcting the setting must still restart. The
-      // gate on "a document was opened" lives inside `lifecycle.restart`.
-      if (event.affectsConfiguration("ridl.serverPath")) {
-        if (await lifecycle?.restart()) {
-          offerStaleCopyOnce!();
+      if (event.affectsConfiguration("ridl.serverPath") || event.affectsConfiguration("ridl.toolchain.autoInstall")) {
+        try {
+          await manager.refresh("");
+          await refreshMcp();
+        } catch (error) {
+          logError(error);
         }
       }
     }),
-  );
-  // This listener stays registered for the whole session. Opening a RIDL
-  // document also restarts a client that stopped, after a failed start or an
-  // earlier stop, because `startClientIfNeeded` starts one whenever none is
-  // running. That is intended: the next document open is the retry.
-  context.subscriptions.push(
-    vscode.workspace.onDidOpenTextDocument((document) => {
-      if (shouldStartClientForLanguage(document.languageId)) {
-        void startClientIfNeeded(context);
+    vscode.workspace.onDidChangeWorkspaceFolders(async (event) => {
+      try {
+        for (const folder of event.removed) await manager.removeFolder(folder.uri.fsPath);
+        await manager.refresh("");
+        for (const document of vscode.workspace.textDocuments) {
+          if (vscode.workspace.getWorkspaceFolder(document.uri)) await open(document);
+        }
+        await refreshMcp();
+      } catch (error) {
+        logError(error);
       }
     }),
-  );
-  if (vscode.workspace.textDocuments.some((document) => shouldStartClientForLanguage(document.languageId))) {
-    await startClientIfNeeded(context);
-  }
-}
-
-export async function deactivate(): Promise<void> {
-  await lifecycle?.stop();
-}
-
-/**
- * Starts the language client the first time a `typl`, `ridl` or `rsdl`
- * document is open; a no-op while the client is running. Retried on every
- * later document open after a failed start, since `lifecycle.startIfNeeded`
- * drops the client on failure.
- */
-async function startClientIfNeeded(context: vscode.ExtensionContext): Promise<void> {
-  if (await lifecycle!.startIfNeeded()) {
-    offerStaleCopyOnce!();
-  }
-}
-
-/** The `ridl.serverPath` setting, trimmed, or undefined when blank. */
-function configuredServerPath(): string | undefined {
-  const value = vscode.workspace.getConfiguration("ridl").get<string>("serverPath");
-  return value && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-/** Builds the language client: stdio transport to `ridl lsp`, scoped to `.typl`, `.ridl` and `.rsdl` files. */
-function createClient(context: vscode.ExtensionContext, outputChannel: vscode.LogOutputChannel): RidlLanguageClient {
-  const { command, args } = resolveLspCommand({
-    configuredPath: configuredServerPath(),
-    extensionPath: context.extensionPath,
-    platform: process.platform,
-    exists: (file) => fs.existsSync(file),
-  });
-  const serverOptions: ServerOptions = {
-    command,
-    args,
-    transport: TransportKind.stdio,
-  };
-
-  const clientOptions: LanguageClientOptions = {
-    documentSelector: clientDocumentSelector(),
-    outputChannel,
-  };
-
-  // The client id "ridl" ties this client to the `ridl.trace.server` setting:
-  // vscode-languageclient reads the trace level from `<id>.trace.server`.
-  return new RidlLanguageClient("ridl", "RIDL Language Server", serverOptions, clientOptions);
-}
-
-/**
- * Registers `ridl mcp` with VS Code's MCP registry so Copilot (and any other
- * MCP-aware client inside VS Code) sees the same binary the LSP uses. Claude
- * Code and Codex do not read this registry; crates/ridl-mcp/README.md covers
- * them.
- */
-function registerMcpProvider(context: vscode.ExtensionContext): void {
-  const didChange = new vscode.EventEmitter<void>();
-  context.subscriptions.push(didChange);
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration((event) => {
-      if (event.affectsConfiguration("ridl.serverPath")) {
-        didChange.fire();
-      }
-    }),
-  );
-  context.subscriptions.push(
-    vscode.lm.registerMcpServerDefinitionProvider(MCP_PROVIDER_ID, {
-      onDidChangeMcpServerDefinitions: didChange.event,
-      provideMcpServerDefinitions: () => {
+    vscode.commands.registerCommand("ridl.installToPath", () => installToPath(context)),
+    { dispose: disposeActivation },
+    vscode.lm.registerMcpServerDefinitionProvider("ridl", {
+      onDidChangeMcpServerDefinitions: mcpChanged.event,
+      provideMcpServerDefinitions: async () => {
+        await refreshMcp();
+        const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
         const resolved = resolveMcpDefinition({
-          configuredPath: configuredServerPath(),
+          configuredPath: resolver(folder).source === "setting" ? resolver(folder).command : undefined,
           extensionPath: context.extensionPath,
           platform: process.platform,
-          exists: (file) => fs.existsSync(file),
+          exists: fs.existsSync,
           extensionVersion: String(context.extension.packageJSON.version),
-          workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+          workspaceFolder: folder,
+          selectedCommand: mcpSelection?.command,
         });
         const definition = new vscode.McpStdioServerDefinition(
           resolved.label,
@@ -206,13 +342,80 @@ function registerMcpProvider(context: vscode.ExtensionContext): void {
           {},
           resolved.version,
         );
-        if (resolved.cwd) {
-          definition.cwd = vscode.Uri.file(resolved.cwd);
-        }
+        if (resolved.cwd) definition.cwd = vscode.Uri.file(resolved.cwd);
         return [definition];
       },
     }),
   );
+  for (const folder of vscode.workspace.workspaceFolders ?? []) {
+    const configured = resolver(folder.uri.fsPath);
+    if (configured.source === "setting" && isLegacyServerName(configured.command)) {
+      void vscode.window.showWarningMessage(
+        "ridl.serverPath names the old ridl-lsp binary. The setting now points at the ridl binary, which the extension runs as `ridl lsp`.",
+      );
+      break;
+    }
+  }
+  await Promise.all(vscode.workspace.textDocuments.map(open));
+}
+
+export async function deactivate(): Promise<void> {
+  disposeActivation?.();
+  await clients?.stop();
+}
+
+function canonicalUri(uri: vscode.Uri): string {
+  return uri.scheme === "file" ? vscode.Uri.file(canonicalFile(uri.fsPath)).toString() : uri.toString();
+}
+
+function createClient(
+  selection: Selection,
+  outputChannel: vscode.LogOutputChannel,
+  owns: (file: string) => boolean,
+  hostPath: (file: string) => string,
+): RidlLanguageClient {
+  const serverOptions: ServerOptions = { command: selection.command, args: ["lsp"], transport: TransportKind.stdio };
+  const middleware = routingMiddleware(owns);
+  const clientOptions: LanguageClientOptions = {
+    // Providers are registered for owned open documents after discovery. Root
+    // globs overlap at equal scores in VS Code, including for formatting.
+    documentSelector: [],
+    outputChannel,
+    middleware,
+    uriConverters: {
+      code2Protocol: canonicalUri,
+      protocol2Code: (value) => {
+        const uri = vscode.Uri.parse(value);
+        if (uri.scheme !== "file") return uri;
+        const file = canonicalFile(uri.fsPath);
+        return vscode.workspace.textDocuments.find((document) =>
+          document.uri.scheme === "file" && canonicalFile(document.uri.fsPath) === file
+        )?.uri ??
+          vscode.Uri.file(hostPath(file));
+      },
+    },
+    ...(selection.root === null
+      ? {}
+      : { workspaceFolder: { uri: vscode.Uri.file(selection.root), name: path.basename(selection.root), index: 0 } }),
+  };
+  const client = new RidlLanguageClient("ridl", "RIDL Language Server", serverOptions, clientOptions);
+  client.manifestless = selection.root === null;
+  middleware.sendNotification = async (type, next, params) => {
+    const method = typeof type === "string" ? type : type.method;
+    const document = (params as { textDocument?: { uri?: string } } | undefined)?.textDocument;
+    if (document?.uri) {
+      const uri = vscode.Uri.parse(document.uri);
+      if (method !== "textDocument/didClose" && (uri.scheme !== "file" || !owns(uri.fsPath))) return;
+      if (method === "textDocument/didOpen") {
+        if (client.opened.has(document.uri)) return;
+        client.opened.add(document.uri);
+      } else if (method === "textDocument/didClose") {
+        if (!client.opened.delete(document.uri)) return;
+      }
+    }
+    await next(type, params);
+  };
+  return client;
 }
 
 /** Runs `binary --version` and parses the version out of its output; undefined when the binary cannot be run. */

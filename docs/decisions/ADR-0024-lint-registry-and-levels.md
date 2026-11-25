@@ -127,6 +127,11 @@ The user-facing description is [the lints page of the book](../book/lints.md),
 which also holds the table of lint names. The output formats are in
 [the CLI reference](../book/cli-reference.md).
 
+Amended 2026-11-25 by [ADR-0036](ADR-0036-workspace-toolchain-pins.md): the
+language server reload consequence now follows the root manifest reload
+contract. A member's table takes effect at the next workspace reload (a root
+`ridl.toml` event) or a server restart.
+
 ## Context
 
 The compiler already emitted warnings and infos, and none of them could be
@@ -517,11 +522,13 @@ decisions 17 and 19.
   adds a note naming the lint (it depends only on the code, so it also appears
   for commands that apply no level), and `ridl check --format sarif` is new. The
   MCP tool `ridl_explain` adds `lint` and `default_level` for a lint code.
-- Known limitations, both of the language server: it reads the `[lints]` tables
-  once, when it loads the workspace, so an edit to a table takes effect after a
-  restart; and it does not canonicalise paths when it looks up a scope. The
-  member entry point gap of the original decision 9 was #529, which ADR-0026
-  closes.
+- Amended 2026-11-25 by ADR-0036: edits to the root `[lints]` table take effect
+  through the
+  [root manifest reload contract](../book/release-pin.md#editors-and-agent-tools).
+  A member's table takes effect at the next workspace reload (a root `ridl.toml`
+  event) or a server restart. The language server does not canonicalise paths
+  when it looks up a scope. The member entry point gap of the original decision
+  9 was #529, which ADR-0026 closes.
 - From the amendment of 2026-10-30: the directive spelling, like a lint name, is
   something a source file refers to, so once released it is stable as the lint
   names are (decision 7). Adding it and the two lints is an addition, which

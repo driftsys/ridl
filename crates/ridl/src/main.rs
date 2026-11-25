@@ -5,7 +5,7 @@
 //! `ridl fmt` formats `.typl`, `.ridl` and `.rsdl` files, resolving the width
 //! from `.editorconfig` per file. The exit
 //! code is 0 clean, 1 on a diagnostic error (or, for `fmt --check`, a file that
-//! would change), and 2 on an input/output or usage error.
+//! would change), and 2 on a release refusal, input/output or usage error.
 //!
 //! `ridl diff` compares two IR snapshots or source trees through the
 //! `ridl-diff` engine. It carries its own exit contract — 0 compatible
@@ -88,6 +88,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Install and select versioned RIDL toolchains.
+    Toolchain {
+        #[command(subcommand)]
+        command: ToolchainCommand,
+    },
     /// Type-check a file, package, or workspace (defaults to the current
     /// directory).
     Check {
@@ -167,7 +172,8 @@ enum Command {
     },
     /// Run the property suite over a workspace: the range self-corpora and the
     /// contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on
-    /// a self-corpus failure or an evaluation error, 2 on a compile error.
+    /// a self-corpus failure or an evaluation error, 2 on a release refusal or
+    /// a compile error.
     Test {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -218,9 +224,9 @@ enum Command {
     /// unit's `interfaces.lock`, and to every instance of the system that has
     /// none and write the root `instances.lock`; with `--rename` or
     /// `--retire`, rewrite entries in place instead. Exit 0 when the files
-    /// are written or nothing changes, 1 on a diagnostic error, 2 on a bad
-    /// flag or a path or I/O failure. `ridl lock merge` is the git merge
-    /// driver for both files.
+    /// are written or nothing changes, 1 on a diagnostic error, 2 on a release
+    /// refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the
+    /// git merge driver for both files.
     #[command(args_conflicts_with_subcommands = true)]
     Lock {
         /// A unit directory, a workspace root, or a file. A directory
@@ -306,7 +312,7 @@ enum Command {
     /// removed; files and hidden entries are left. Exit 0 when `vendor/` was
     /// written or there was nothing to change, 1 on a diagnostic error
     /// (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a
-    /// missing or unreadable path, a fetch failure, or an I/O failure. With
+    /// release refusal, missing or unreadable path, a fetch failure, or an I/O failure. With
     /// `--check`, compare `vendor/` with the imports and `ridl.lock` instead,
     /// writing nothing.
     Vendor {
@@ -316,8 +322,8 @@ enum Command {
         path: PathBuf,
         /// Compare `vendor/` with `[imports]` and `ridl.lock` instead of
         /// writing: no network, no write. Exit 0 when `vendor/` matches, 1
-        /// on drift or another diagnostic error, 2 on a missing or
-        /// unreadable path.
+        /// on drift or another ordinary diagnostic error, 2 on a release
+        /// refusal or a missing or unreadable path.
         #[arg(long)]
         check: bool,
     },
@@ -385,9 +391,107 @@ enum CheckFormat {
     Sarif,
 }
 
+#[derive(clap::Subcommand)]
+enum ToolchainCommand {
+    /// Install a release, or the current workspace pin when VERSION is omitted.
+    Install {
+        /// The exact MAJOR.MINOR.PATCH release to install.
+        version: Option<String>,
+    },
+    /// List version directories in ascending release order, including damaged copies.
+    List,
+    /// Select the highest compatible installed or running release for a workspace.
+    Which {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Print the schema-1 selection report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+fn run_toolchain(command: ToolchainCommand) -> ExitCode {
+    use ridl_cli::toolchain::{self, WhichStatus};
+    use ridl_core::release::{MIN_PINNABLE_RELEASE, parse_release};
+    let execute = || -> std::io::Result<(u8, String)> {
+        let environment = std::env::vars_os()
+            .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
+            .collect::<BTreeMap<_, _>>();
+        let home = environment.get("HOME").map(PathBuf::from);
+        let root = toolchain::toolchain_root(std::env::consts::OS, &environment, home.as_deref())?;
+        match command {
+            ToolchainCommand::Install { version } => {
+                let release = match version {
+                    Some(text) => parse_release(&text).filter(|v| *v >= MIN_PINNABLE_RELEASE).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("release must be MAJOR.MINOR.PATCH at or above {MIN_PINNABLE_RELEASE}")))?,
+                    None => toolchain::workspace_pin(Path::new("."))?,
+                };
+                let binary = toolchain::install(
+                    &root,
+                    release,
+                    env!("RIDL_BUILD_TARGET"),
+                    toolchain::RELEASE_BASE_URL,
+                )?;
+                Ok((0, format!("{}\n", binary.display())))
+            }
+            ToolchainCommand::List => {
+                let mut text = String::new();
+                for installed in toolchain::list(&root)? {
+                    text.push_str(&format!(
+                        "{}\t{}{}\n",
+                        installed.release,
+                        installed.directory.display(),
+                        if installed.damaged { " (damaged)" } else { "" }
+                    ));
+                }
+                Ok((0, text))
+            }
+            ToolchainCommand::Which { path, json } => {
+                let report = toolchain::which(
+                    &path,
+                    &root,
+                    ridlc::running_release(),
+                    &std::env::current_exe()?,
+                    env!("RIDL_BUILD_TARGET"),
+                )?;
+                let text = if json {
+                    format!("{}\n", serde_json::to_string(&report)?)
+                } else if let Some(path) = &report.path {
+                    format!("{}\n", path.display())
+                } else {
+                    match report.status {
+                        WhichStatus::Missing => errprintln!(
+                            "No compatible ridl toolchain is installed; run `ridl toolchain install {}`.",
+                            report.pin.as_deref().unwrap_or_default()
+                        ),
+                        WhichStatus::Invalid => {
+                            if let Some(diagnostic) = &report.diagnostic {
+                                errprintln!("{}: {}", diagnostic.code, diagnostic.message);
+                            }
+                        }
+                        _ => {}
+                    }
+                    String::new()
+                };
+                Ok((report.exit_code(), text))
+            }
+        }
+    };
+    match execute() {
+        Ok((code, text)) => match out::write(&text) {
+            Ok(()) => ExitCode::from(code),
+            Err(code) => code,
+        },
+        Err(error) => {
+            errprintln!("error: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
+        Command::Toolchain { command } => run_toolchain(command),
         Command::Check {
             path,
             frozen,
@@ -491,11 +595,58 @@ fn main() -> ExitCode {
     }
 }
 
+/// Reads distinct input roots without loading sources or members.
+fn release_preflight(entries: &[PathBuf]) -> std::io::Result<Option<(Vec<Diagnostic>, SourceMap)>> {
+    let mut seen = std::collections::BTreeSet::new();
+    let mut sources = SourceMap::new();
+    let mut diagnostics = Vec::new();
+    for entry in entries {
+        let root = ridl_core::read_root_release(entry, None)?;
+        let (Some(manifest), Some(text)) = (root.manifest, root.text) else {
+            continue;
+        };
+        if !seen.insert(manifest.canonicalize()?) {
+            continue;
+        }
+        let file = sources.file_id(&manifest.to_string_lossy(), &text);
+        if let Some(diagnostic) =
+            ridl_core::release::check_release_pin(file, &text, ridlc::running_release())
+        {
+            diagnostics.push(diagnostic);
+        }
+    }
+    Ok((!diagnostics.is_empty()).then_some((diagnostics, sources)))
+}
+
+/// Prints a pin-only refusal, or an I/O error, before command-specific work.
+fn release_preflight_exit(entries: &[PathBuf]) -> Option<ExitCode> {
+    match release_preflight(entries) {
+        Ok(Some((diagnostics, sources))) => {
+            errprint!("{}", render(&diagnostics, &sources));
+            Some(ExitCode::from(2))
+        }
+        Err(err) => {
+            errprintln!("error: {err}");
+            Some(ExitCode::from(2))
+        }
+        Ok(None) => None,
+    }
+}
+
 /// `ridl describe`: read, verify (identifier, version, whole-buffer walk),
 /// render. Every failure means the tool could not answer: exit 2 with the
 /// cause named (ADR-0010 decision 1;
 /// `docs/archive/2026-09-13-runtime-descriptors-design.md`, D-8).
 fn run_describe(path: &Path) -> ExitCode {
+    // Preserve describe's input-path I/O message before the shared root reader
+    // can wrap a metadata error. Descriptor bytes are still read after preflight.
+    if let Err(err) = std::fs::metadata(path) {
+        errprintln!("error: {}: {err}", path.display());
+        return ExitCode::from(2);
+    }
+    if let Some(code) = release_preflight_exit(&[path.to_path_buf()]) {
+        return code;
+    }
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(err) => {
@@ -805,6 +956,10 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         }
     };
 
+    if run.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        return finish_check(run, format);
+    }
+
     // A lint at `deny` is an Error by level, not a compile error: the IR it
     // runs over is whole, so it does not stop the desk check (see
     // docs/book/cli-reference.md). The lint diagnostics are left out of the
@@ -936,6 +1091,9 @@ fn run_baseline(
     repair_context: bool,
     reset_history: bool,
 ) -> ExitCode {
+    if let Some(code) = release_preflight_exit(&[path.to_path_buf()]) {
+        return code;
+    }
     let out_dir = out
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_baseline_dir(path));
@@ -3237,11 +3395,12 @@ fn dotted_text(node: &ridl_syntax::SyntaxNode) -> Option<String> {
 }
 
 /// The exit-code rule every `check`/`build` run turns its outcome into: 2 on a
-/// bad flag value (ADR-0010 decision 1), 1 when any diagnostic is an error, 0
-/// otherwise. Shared by [`finish`] and [`finish_check`]'s JSON arm so the rule
-/// is stated once. `check` never reports a bad flag value this way.
+/// release refusal or bad flag value (ADR-0010 decision 1), 1 when an ordinary
+/// diagnostic is an error, 0 otherwise. Shared by [`finish`] and
+/// [`finish_check`]'s JSON arm so the rule is stated once. `check` never reports
+/// a bad flag value this way.
 fn exit_code(run: &CliRun) -> ExitCode {
-    if run.usage_error {
+    if run.diagnostics.iter().any(ridl_core::is_release_refusal) || run.usage_error {
         ExitCode::from(2)
     } else if run.has_error() {
         ExitCode::FAILURE
@@ -3289,7 +3448,7 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
 }
 
 /// Renders a check/build run's diagnostics to stderr and turns the outcome into
-/// an exit code: 2 on an I/O error or a bad flag value, 1 when any diagnostic
+/// an exit code: 2 on a release refusal, I/O error or bad flag value, 1 when any other diagnostic
 /// is an error, 0 otherwise.
 fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     match run {
@@ -3316,6 +3475,9 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
 /// of every manifest root it meets, and a `path` that is such a `vendor/` or
 /// lies under it is refused with exit 2.
 fn run_fmt(path: &Path, check: bool) -> ExitCode {
+    if let Some(code) = release_preflight_exit(&[path.to_path_buf()]) {
+        return code;
+    }
     let mut sources = SourceMap::new();
     let mut diagnostics = Vec::new();
     let mut any_would_change = false;
@@ -3328,13 +3490,17 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let files = match collect_source_files(path) {
+    let (files, roots) = match collect_source_files_and_roots(path) {
         Ok(files) => files,
         Err((dir, err)) => {
             errprintln!("error: cannot read {}: {err}", dir.display());
             return ExitCode::from(2);
         }
     };
+
+    if let Some(code) = release_preflight_exit(&roots) {
+        return code;
+    }
 
     for file in files {
         let text = match std::fs::read_to_string(&file) {
@@ -3386,14 +3552,27 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
 /// "absent" or "unreadable" any other way, and treating those as zero files
 /// is what let `ridl fmt` report success over a tree it never read.
 fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::Error)> {
+    collect_source_files_and_roots(path).map(|(files, _)| files)
+}
+
+type SourceDiscovery = (Vec<PathBuf>, Vec<PathBuf>);
+
+/// Retains manifest paths too, so even an empty root is checked before formatting writes.
+fn collect_source_files_and_roots(
+    path: &Path,
+) -> Result<SourceDiscovery, (PathBuf, std::io::Error)> {
     // A failed type probe of `path` itself is not hidden by `is_file`: the
     // `read_dir` below fails on the same path and reports it.
     if path.is_file() {
-        return Ok(vec![path.to_path_buf()]);
+        return Ok((vec![path.to_path_buf()], Vec::new()));
     }
     let mut files = Vec::new();
+    let mut roots = Vec::new();
     let mut stack = vec![path.to_path_buf()];
     while let Some(dir) = stack.pop() {
+        if dir.join("ridl.toml").is_file() {
+            roots.push(dir.join("ridl.toml"));
+        }
         let entries = std::fs::read_dir(&dir).map_err(|err| (dir.clone(), err))?;
         for entry in entries.flatten() {
             let child = entry.path();
@@ -3420,7 +3599,8 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
         }
     }
     files.sort();
-    Ok(files)
+    roots.sort();
+    Ok((files, roots))
 }
 
 #[cfg(test)]

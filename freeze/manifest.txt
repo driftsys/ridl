@@ -17,9 +17,11 @@ limits.kind table<integer>
 lints table<string>
 package table
 package.name string
+package.ridl-version string
 package.version string
 ridl.lock.entries.*.sha256 string
 ridl.lock.entries.*.tree string
 vendor <manifest root>/vendor/<key>/
 workspace table
 workspace.members array<string>
+workspace.ridl-version string

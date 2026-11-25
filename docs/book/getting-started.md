@@ -85,11 +85,35 @@ irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex
 
 Both scripts read the same environment variables:
 
-| Variable              | Effect                                                                                         |
-| --------------------- | ---------------------------------------------------------------------------------------------- |
-| `RIDL_INSTALL_DIR`    | Directory to install into. Default `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows). |
-| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                                   |
-| `RIDL_VERSION`        | The release tag to install, instead of the newest `editor-v*` one.                             |
+| Variable              | Effect                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| `RIDL_INSTALL_DIR`    | Directory for the PATH copy. Default `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows). |
+| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                                     |
+| `RIDL_VERSION`        | A release such as `0.23.0` or `editor-v0.23.0`, instead of the newest editor release.            |
+
+For `ridl` 0.23.0 and later, both scripts first install into the shared
+[toolchain directory](release-pin.md#installing-and-selecting-toolchains), then
+copy the binary to the PATH directory. That chapter owns the platform roots and
+`RIDL_TOOLCHAIN_DIR` override; the
+[directory protocol](../design/toolchain-directory.md) defines the shared
+layout, completion marker and installation transaction. Complete releases are
+reused without downloading. Older `ridl` releases and
+`RIDL_INSTALL_BINARY=ridlc` keep a flat install in the PATH directory.
+
+Set an explicit version in CI so a newly published release does not change the
+compiler used by the job:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/driftsys/ridl/main/install.sh | RIDL_VERSION=0.23.0 bash
+```
+
+```powershell
+$env:RIDL_VERSION = '0.23.0'
+irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex
+```
+
+See [workspace release pins](release-pin.md) for the manifest compatibility
+rule.
 
 When the install directory is not on your `PATH`, the script prints the command
 that adds it.
@@ -110,13 +134,15 @@ or call it by path. `cargo install --path crates/ridl` installs `ridl` alone.
 
 **VS Code.** The RIDL extension is published to the VS Code Marketplace under
 the name "RIDL". It highlights `.typl`, `.ridl` and `.rsdl` files and runs the
-language server. It bundles a `ridl` binary and starts it as `ridl lsp`, so it
-needs no separate install. The command **RIDL: Install ridl to PATH** copies the
-bundled binary to `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows).
-When that directory is not on your `PATH`, the command warns and offers a
-command that adds it. The setting `ridl.serverPath` names a different `ridl`
-binary to run, for both `ridl lsp` and `ridl mcp`; empty, the default, uses the
-bundled binary, or `ridl` on `PATH` when none is bundled. The setting
+language server. Its bundled `ridl` binary selects and installs the release for
+each RIDL workspace; the selected binary runs `ridl lsp`. See
+[Editors and agent tools](release-pin.md#editors-and-agent-tools) for release
+selection and installation. The command **RIDL: Install ridl to PATH** copies
+the bundled binary to `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on
+Windows). When that directory is not on your `PATH`, the command warns and
+offers a command that adds it. The setting `ridl.serverPath` names a different
+`ridl` binary to run, for both `ridl lsp` and `ridl mcp`, bypassing workspace
+release selection; empty, the default, enables that selection. The setting
 `ridl.trace.server` (`off`, `messages` or `verbose`) traces the traffic between
 the editor and the server. The
 [extension README](https://github.com/driftsys/ridl/blob/main/editors/vscode/README.md)

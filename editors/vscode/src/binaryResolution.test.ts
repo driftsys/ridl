@@ -5,6 +5,7 @@ import {
   bundledBinaryPath,
   clientDocumentSelector,
   isLegacyServerName,
+  normalizeAbsolutePath,
   resolveBinary,
   resolveLspCommand,
   resolveMcpDefinition,
@@ -109,4 +110,35 @@ test("the language client is scoped to typl, ridl and rsdl files", () => {
     { scheme: "file", language: "ridl" },
     { scheme: "file", language: "rsdl" },
   ]);
+});
+
+test("root_selectors_exclude_nested_clients", () => {
+  const root = path.resolve("/work/a[1]{x}");
+  const selectors = clientDocumentSelector(root, [path.join(root, "nested")]);
+  assert.equal(selectors.length, 4);
+  assert.equal(selectors[0].pattern, root.replace(/\\/g, "/").replace(/[\[\]{}*?!()]/g, "[$&]") + "/**/*");
+  assert.deepEqual(selectors[3], {
+    scheme: "file",
+    language: "*",
+    pattern: root.replace(/\\/g, "/").replace(/[\[\]{}*?!()]/g, "[$&]") + "/ridl.toml",
+  });
+});
+test("mcp_selected_command_passes_through", () => {
+  assert.equal(
+    resolveMcpDefinition({
+      configuredPath: undefined,
+      extensionPath: EXT,
+      platform: "linux",
+      exists: () => true,
+      extensionVersion: "1.0.0",
+      workspaceFolder: "/work",
+      selectedCommand: "/selected/ridl",
+    }).command,
+    "/selected/ridl",
+  );
+});
+
+test("windows_verbatim_paths_match_editor_drive_and_unc_paths", () => {
+  assert.equal(normalizeAbsolutePath("\\\\?\\C:\\work\\ridl.toml", "win32"), "C:\\work\\ridl.toml");
+  assert.equal(normalizeAbsolutePath("\\\\?\\UNC\\host\\share\\ridl.toml", "win32"), "\\\\host\\share\\ridl.toml");
 });

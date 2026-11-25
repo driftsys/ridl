@@ -100,8 +100,9 @@
       "properties": {
         "ridl.serverPath": {
           "type": "string",
+          "scope": "resource",
           "default": "",
-          "description": "Path to the ridl binary, which the extension runs as ridl lsp and ridl mcp. Empty (the default) uses the binary bundled in the extension, or ridl found on PATH when none is bundled."
+          "description": "Explicit path to the ridl binary for ridl lsp and ridl mcp; bypasses workspace release selection. Empty (the default) selects the workspace release through the bundled binary, or ridl on PATH when none is bundled."
         },
         "ridl.trace.server": {
           "type": "string",
@@ -112,6 +113,12 @@
           ],
           "default": "off",
           "description": "Trace the JSON-RPC communication between VS Code and the ridl language server."
+        },
+        "ridl.toolchain.autoInstall": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Automatically install a missing workspace RIDL release."
         }
       }
     }
@@ -120,7 +127,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js out/clientLifecycle.test.js out/runOnce.test.js"
+    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js out/clientLifecycle.test.js out/runOnce.test.js out/toolchainSelection.test.js out/workspaceClients.test.js out/extension.test.js"
   },
   "dependencies": {
     "vscode-languageclient": "10.1.0"
@@ -129,6 +136,10 @@
     "@types/node": "22.20.1",
     "@types/vscode": "1.109.0",
     "@vscode/vsce": "3.9.2",
+    "minimatch": "10.2.5",
     "typescript": "5.9.2"
-  }
+  },
+  "activationEvents": [
+    "workspaceContains:**/ridl.toml"
+  ]
 }

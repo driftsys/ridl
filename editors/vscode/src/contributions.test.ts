@@ -100,3 +100,17 @@ test("the typl grammar highlights `open` only directly before enum or enumset", 
   assert.deepEqual(matches("struct S { open : bool }"), []);
   assert.deepEqual(matches("open enumerate"), []);
 });
+
+test("auto_install_is_application_scoped_and_trust_capability_is_absent", () => {
+  const manifest = readJson("package.json");
+  assert.deepEqual(manifest.contributes.configuration.properties["ridl.toolchain.autoInstall"], {
+    type: "boolean",
+    default: true,
+    scope: "application",
+    description: "Automatically install a missing workspace RIDL release.",
+  });
+  assert.equal(manifest.capabilities?.untrustedWorkspaces, undefined);
+});
+test("manifest_workspace_activation_enables_pin_actions", () => {
+  assert.ok(readJson("package.json").activationEvents?.includes("workspaceContains:**/ridl.toml"));
+});

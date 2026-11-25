@@ -128,10 +128,32 @@ pub fn snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolE
 /// itself and must see such a lint when a project sets it.
 pub fn lookup_snapshot(path: &str, overlays: &[OverlayInput]) -> Result<Snapshot, ToolError> {
     let mut snap = snapshot(path, overlays)?;
+    snap.require_compatible_release()?;
     ridl_core::lint::drop_allowed_by_default(&mut snap.output.diagnostics);
     Ok(snap)
 }
+fn release_refusal_error(output: &ridlc::WorkspaceOutput) -> Option<ToolError> {
+    let diagnostic = output
+        .diagnostics
+        .iter()
+        .find(|d| ridl_core::release::is_release_refusal(d))?;
+    Some(ToolError::Request(format!(
+        "{}: {}",
+        diagnostic.code.as_str(),
+        diagnostic.message
+    )))
+}
+
 impl Snapshot {
+    /// Stops workspace queries at a root release refusal. Diagnostic consumers
+    /// keep the snapshot so that they can report its original span and code.
+    pub fn require_compatible_release(&self) -> Result<(), ToolError> {
+        match release_refusal_error(&self.output) {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+
     /// Reports the lint directives of the workspace over `output.diagnostics`
     /// (ADR-0024 decision 19), as `ridlc::run_check` does: over the
     /// diagnostics of the whole workspace, then back to the report scope. It
@@ -343,6 +365,24 @@ pub(crate) mod tests {
         assert_eq!(fs::read_to_string(&path).unwrap(), disk);
         assert!(disk.contains("signal speed: Speed"));
     }
+    #[test]
+    fn a_member_manifest_overlay_is_refused() {
+        let copy = TempWorkspace::copy("ws");
+        let manifest = copy.0.join("b/ridl.toml");
+        let disk = fs::read_to_string(&manifest).unwrap();
+        let result = snapshot(
+            copy.0.join("b").to_str().unwrap(),
+            &[OverlayInput {
+                path: manifest.to_str().unwrap().into(),
+                source: disk.clone(),
+            }],
+        );
+        assert!(
+            matches!(result, Err(ToolError::Request(ref message)) if message.contains("is not a `.typl`") && message.contains(manifest.to_str().unwrap()))
+        );
+        assert_eq!(fs::read_to_string(manifest).unwrap(), disk);
+    }
+
     #[test]
     fn an_empty_overlay_is_checked_like_an_empty_file() {
         let snap = snapshot(

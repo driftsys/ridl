@@ -33,13 +33,11 @@
 //!
 //! # Parsing strategy
 //!
-//! The text is deserialized three times: once into a typed shape with
-//! [`toml::Spanned`] leaves (for the values and their spans), once into a
-//! key-to-spanned-value map (to enumerate the keys the typed shape silently
-//! drops, so unknown keys can warn), and once into the `[lints]` table with
-//! spanned keys (so each MANI-010 can point at its key). All three read the
-//! same valid TOML; the second cannot fail once the first has, and the third
-//! fails only when `lints` is not a table, which is MANI-010.
+//! Separate deserialization passes read the typed shape, the keys it drops,
+//! release pins, lint keys, limits and backend tables. [`toml::Spanned`] leaves
+//! retain value and key ranges for diagnostics. The number of passes depends
+//! on the tables and their shapes; collectors may read additional maps to
+//! recover spans or report malformed tables.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
@@ -279,6 +277,10 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
             return (None, diags);
         }
     };
+
+    if let Err(diagnostic) = crate::release::parse_release_pin(file_id, text) {
+        diags.push(diagnostic);
+    }
 
     // Exactly one mode section must be present (ADR-0002 §4).
     if raw.package.is_some() && raw.workspace.is_some() {
@@ -1130,9 +1132,19 @@ pub const KNOWN_KEYS: &[(&str, &[KnownKey])] = &[
     ),
     (
         "package",
-        &[("name", "string", ""), ("version", "string", "")],
+        &[
+            ("name", "string", ""),
+            ("version", "string", ""),
+            ("ridl-version", "string", ""),
+        ],
     ),
-    ("workspace", &[("members", "array<string>", "")]),
+    (
+        "workspace",
+        &[
+            ("members", "array<string>", ""),
+            ("ridl-version", "string", ""),
+        ],
+    ),
     (
         "defaults",
         &[
@@ -2580,7 +2592,11 @@ version = \"1.0.0\"
             };
             text.push_str(&format!("[{header}]\n"));
             for key in known_keys(section) {
-                text.push_str(&format!("{key} = 1\n"));
+                if key == "ridl-version" {
+                    text.push_str(&format!("{key} = \"0.23.0\"\n"));
+                } else {
+                    text.push_str(&format!("{key} = 1\n"));
+                }
             }
         }
         text
@@ -2661,13 +2677,17 @@ version = \"1.0.0\"
 
     /// The codes a value of the wrong type draws: MANI-001 from the typed
     /// parse, MANI-010 from `[lints]` and MANI-015 from `[backend]`.
-    const TYPE_CODES: [&str; 3] = ["MANI-001", "MANI-010", "MANI-015"];
+    const TYPE_CODES: [&str; 4] = ["MANI-001", "MANI-010", "MANI-015", "MANI-024"];
 
     #[test]
     fn known_key_types_are_the_types_the_reader_accepts() {
         for (section, keys) in KNOWN_KEYS {
             for (key, value_type, _) in *keys {
-                let (right, wrong) = type_samples(value_type);
+                let (right, wrong) = if *key == "ridl-version" {
+                    (&["\"0.23.0\""][..], &["42", "[]"][..])
+                } else {
+                    type_samples(value_type)
+                };
                 for value in right {
                     let text = manifest_with(section, key, value);
                     let (_, diags) = parse(&text);

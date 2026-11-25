@@ -147,11 +147,45 @@ impl std::fmt::Display for DiffSideError {
         }
     }
 }
+
+fn source_release_preflight(entry: &Path, overlays: &[Overlay]) -> Result<(), DiffSideError> {
+    let manifest = ridl_core::find_root(entry).map(|root| root.join("ridl.toml"));
+    let overlay = manifest.as_ref().and_then(|manifest| {
+        overlays.iter().find(|overlay| {
+            overlay
+                .path
+                .canonicalize()
+                .ok()
+                .is_some_and(|path| Some(path) == manifest.canonicalize().ok())
+        })
+    });
+    let root =
+        ridl_core::read_root_release(entry, overlay).map_err(|error| DiffSideError::SourceIo {
+            path: entry.to_path_buf(),
+            error,
+        })?;
+    if let (Some(manifest), Some(text)) = (&root.manifest, &root.text) {
+        let file = root
+            .sources
+            .id_of(&manifest.to_string_lossy())
+            .expect("root source");
+        if let Some(diagnostic) =
+            ridl_core::release::check_release_pin(file, text, crate::running_release())
+        {
+            return Err(DiffSideError::Compile {
+                diagnostics: vec![diagnostic],
+                sources: root.sources,
+            });
+        }
+    }
+    Ok(())
+}
 impl std::error::Error for DiffSideError {}
 
 /// Loads a source path or a flat JSON snapshot set. Overlays apply only to source.
 ///
-/// An active or interrupted publication marker is refused before the other directory refusals.
+/// A source release refusal precedes publication/context validation. For snapshot
+/// inputs, an active or interrupted publication marker precedes other directory refusals.
 ///
 /// The source predicate also accepts `.rsdl` files; the restored historical
 /// note below lists the earlier `.typl` and `.ridl` source extensions.
@@ -189,9 +223,27 @@ pub fn load_diff_side(
         return Err(DiffSideError::NonJsonIr(entry.to_path_buf()));
     }
     if entry.is_dir() {
+        let direct_source = is_source_dir(entry);
+        let snapshots = snapshot_files(entry)?;
+        if snapshots.is_empty() {
+            if direct_source {
+                source_release_preflight(entry, overlays)?;
+            } else {
+                let context_path = entry.join(crate::baseline_context::CONTEXT_FILE);
+                if !ridl_core::fs_probe::exists(&context_path).map_err(|error| {
+                    DiffSideError::SourceIo {
+                        path: context_path,
+                        error,
+                    }
+                })? && first_non_json_ir_in(entry).is_none()
+                    && first_nested_snapshot_dir(entry)?.is_none()
+                {
+                    source_release_preflight(entry, overlays)?;
+                }
+            }
+        }
         crate::baseline_context::refuse_interrupted_publication(entry)
             .map_err(DiffSideError::InterruptedPublication)?;
-        let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
             refuse_snapshot_overlay(entry, overlays)?;
             let packages = load_snapshots(&snapshots)?;
@@ -203,7 +255,7 @@ pub fn load_diff_side(
                 remote_context,
             });
         }
-        if !is_source_dir(entry) {
+        if !direct_source {
             if let Some(context) = read_context(entry, &[]).map_err(DiffSideError::Context)? {
                 let remote_context = context.remote_context();
                 return Ok(DiffSide {
