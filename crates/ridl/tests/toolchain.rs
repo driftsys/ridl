@@ -435,7 +435,7 @@ fn toolchain_install_requires_a_valid_signature() {
             "old-release" => (&expected, Some(format!("ridl 0.22.9 {TARGET}"))),
             "other-target" => (
                 &expected,
-                Some("ridl 0.23.0 x86_64-pc-windows-msvc".to_string()),
+                Some("ridl 0.23.0 x86_64-unknown-linux-gnu".to_string()),
             ),
             "prefix" => (&expected, Some(format!("{expected} extra"))),
             "missing" => {
@@ -852,7 +852,7 @@ fn toolchain_install_child() {
         release("0.23.0"),
         support::TARGET,
         &std::env::var("RIDL_TEST_SOURCE").unwrap(),
-        // The child process generated its own key pair; the parent's key signed the fixture.
+        // The parent's key signed the fixture; the child receives that public key through the environment.
         &std::env::var("RIDL_TEST_PUBLIC_KEY").unwrap(),
     )
     .unwrap();

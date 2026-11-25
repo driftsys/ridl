@@ -143,11 +143,12 @@ verifies consistency with the origin's record only.
 The `.minisig` file is a minisign signature of the archive. Only prehashed
 signatures verify; a legacy signature is refused. The library takes the public
 key as a parameter (`public_key`), and the CLI passes `RELEASE_PUBLIC_KEY`. An
-undecodable key is an error before any download, and the error does not name the
-origin. The signature's trusted comment must equal `ridl <version> <target>`
-exactly, with the version in `MAJOR.MINOR.PATCH` form. This stops a signed
-archive of an older release, or of another target, from being served under the
-requested name. Archives of `ridlc` are not signed.
+undecodable key is an error before any download of a release that is not yet
+installed, and the error does not name the origin. The signature's trusted
+comment must equal `ridl <version> <target>` exactly, with the version in
+`MAJOR.MINOR.PATCH` form. This stops a signed archive of an older release, or of
+another target, from being served under the requested name. Archives of `ridlc`
+are not signed.
 
 ## CLI installation transaction
 
