@@ -66,16 +66,16 @@ Commands:
   check      Type-check a file, package, or workspace (defaults to the current directory)
   baseline   Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that would lose the record of an interaction's ordinal (RIDL-408) is refused and leaves the published snapshots as they were
   build      Compile to the selected artifacts (defaults to the current directory)
-  test       Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal or a compile error
+  test       Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal that is not handed off to another release, or a compile error
   fmt        Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff       Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
-  lock       Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
+  lock       Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal that is not handed off to another release, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
   lsp        Run the language server over stdio: exit 0 after `shutdown` then `exit`, 1 when the client ends the session without `shutdown`, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp        Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   init       Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
   new        Create a directory, with its parents, and scaffold a new unit in it, as `ridl init` does. Exits 2 without writing anything when the path exists
   describe   Print a catalog or deployment descriptor as strict JSON, after verifying it
-  vendor     Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a release refusal, missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
+  vendor     Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a release refusal that is not handed off to another release, missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -1455,7 +1455,7 @@ ridl test --help
 ```
 
 ```text
-Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal or a compile error
+Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal that is not handed off to another release, or a compile error
 
 Usage: ridl test [OPTIONS] [PATH]
 
@@ -1789,12 +1789,13 @@ artifacts but no `.ir.json` snapshot and no source — no `ridl.toml` and no
 a source tree; and a directory with no source whose `.ir.json` snapshots sit one
 level below it, which is a path aimed one level too high. A directory is also
 exit 2, naming the entry, when an entry inside it named like a snapshot cannot
-be stat'ed (a root release refusal, MANI-026, replaces that message when the
-directory lies in a workspace whose pin the running release does not satisfy) —
-a symlink to a file that is gone — because skipping the entry would compare
-against a set one snapshot short; this is checked before the directory is read
-as a source tree, so a source directory holding such an entry is refused too.
-Every other input reaches the source compiler. Omit both and pass
+be stat'ed — a symlink to a file that is gone — because skipping the entry would
+compare against a set one snapshot short; this is checked before the directory
+is read as a source tree, so a source directory holding such an entry is refused
+too. When the directory lies in a workspace whose root the running release
+refuses (a root release refusal: MANI-024, MANI-025 or MANI-026), that refusal
+replaces the message, and the command never hands it to another release. Every
+other input reaches the source compiler. Omit both and pass
 `--explain <CATEGORY>` instead to print that category's classification rule
 without comparing anything.
 
@@ -2254,7 +2255,7 @@ ridl lock --help
 ```
 
 ```text
-Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
+Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal that is not handed off to another release, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
 
 Usage: ridl lock [OPTIONS] [PATH]
        ridl lock <COMMAND>
@@ -2610,6 +2611,10 @@ and stdout. The
 documents input and output schemas, tool errors and the read-only workspace
 contract. The command takes no flag of its own.
 
+Before it starts the server, `ridl mcp` replaces itself with a compatible
+installed release when the workspace root of the current directory pins a
+release that the running one does not satisfy (MANI-026); it never installs one
+([release pin](release-pin.md#running-the-pinned-release-from-a-terminal)).
 Workspace [release refusals](release-pin.md#editors-and-agent-tools) are tool
 results: path-mode check reports the root diagnostic, metrics and lookups return
 a tool error, and source-side diff retains its structured diagnostics. A root
@@ -2835,7 +2840,7 @@ ridl vendor --help
 ```
 
 ```text
-Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a release refusal, missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
+Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a release refusal that is not handed off to another release, missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
 
 Usage: ridl vendor [OPTIONS] [PATH]
 
@@ -2843,7 +2848,7 @@ Arguments:
   [PATH]  A unit directory, a workspace root, or a file; the manifest root above it is the one vendored [default: .]
 
 Options:
-      --check  Compare `vendor/` with `[imports]` and `ridl.lock` instead of writing: no network, no write. Exit 0 when `vendor/` matches, 1 on drift or another ordinary diagnostic error, 2 on a release refusal or a missing or unreadable path
+      --check  Compare `vendor/` with `[imports]` and `ridl.lock` instead of writing: no network, no write. Exit 0 when `vendor/` matches, 1 on drift or another ordinary diagnostic error, 2 on a release refusal that is not handed off to another release, or a missing or unreadable path
   -h, --help   Print help
 ```
 

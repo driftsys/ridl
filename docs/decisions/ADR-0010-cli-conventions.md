@@ -193,8 +193,9 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    following clauses postdate the original construction:
 
    - 2026-11-25: root release refusals (MANI-024 through MANI-026) exit 2 before
-     command work. `crates/ridl/tests/release_pin.rs` and
-     `crates/ridlc/tests/release_pin.rs` construct invalid, below-floor and
+     command work, except a MANI-026 refusal that a command hands off to another
+     release (the exit-2 paragraph above). `crates/ridl/tests/release_pin.rs`
+     and `crates/ridlc/tests/release_pin.rs` construct invalid, below-floor and
      incompatible roots against the built binaries, including member entries,
      and assert exclusive refusals and preserved outputs. The fmt tests also
      assert that preflight checks all roots and reports each root once.
@@ -374,16 +375,18 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    `vendor_writes_nothing_on_an_error` (MANI-101). `ridl vendor` applies no
    `[lints]` levels, as `ridl lock` does (ADR-0024 decision 8).
 
-   **`ridl toolchain install`, `list` and `which` earned their rows on
-   2026-11-25**, verified against the built binary by
-   `toolchain_cli_streams_and_exit_codes` in `crates/ridl/tests/toolchain.rs`.
-   Install returns 0 with the installed path for a completed release and 2 for
-   absent or invalid pins, invalid releases and unsupported input. List returns
-   0 for empty inventory and for complete and damaged entries. Which returns 0
-   with a selected path, 1 for missing or invalid pins, and 2 for missing paths
-   or malformed manifests. The same test checks stdout and stderr in text and
-   JSON modes. `toolchain_cli_unreadable_inputs_and_broken_stdout_exit_two`
-   covers I/O and output failures.
+   **`ridl toolchain install`, `list`, `which` and `uninstall` earned their rows
+   on 2026-11-25**, verified against the built binary by
+   `toolchain_cli_streams_and_exit_codes` and
+   `toolchain_uninstall_cli_streams_and_exit_codes` in
+   `crates/ridl/tests/toolchain.rs`. Install returns 0 with the installed path
+   for a completed release and 2 for absent or invalid pins, invalid releases
+   and unsupported input. List returns 0 for empty inventory and for complete
+   and damaged entries. Which returns 0 with a selected path, 1 for missing or
+   invalid pins, and 2 for missing paths or malformed manifests. The same test
+   checks stdout and stderr in text and JSON modes.
+   `toolchain_cli_unreadable_inputs_and_broken_stdout_exit_two` covers I/O and
+   output failures.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 
@@ -627,7 +630,8 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
 
    _Amended (2026-11-25, driftsys/ridl#1476)._ The root `ridl-version` pin is
    checked before other workspace validation. MANI-024 through MANI-026 are
-   cannot-answer refusals, exit 2, and suppress other workspace diagnostics. The
+   cannot-answer refusals, exit 2, and suppress other workspace diagnostics,
+   except a MANI-026 refusal that a command hands off (decision 1). The
    [release pin chapter](../book/release-pin.md) owns the compatibility, minimum
    release and command coverage rules. A member pin is only MANI-027; raising it
    to `deny` remains an ordinary diagnostic error, exit 1. Releases before

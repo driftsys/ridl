@@ -302,8 +302,8 @@ crate the workspace holds — see `AGENTS.md` for that.
   range strategies on the contract plane. The package also exposes a `ridl-cli`
   library target. Its `toolchain/paths.rs` resolves roots and archive targets,
   `toolchain/selection.rs` owns inventory and schema-1 selection, and
-  `toolchain/install.rs` owns verified publication. The `ridl toolchain`
-  subcommands call that library; see the
+  `toolchain/install.rs` owns verified publication, and `toolchain/uninstall.rs`
+  removes a release. The `ridl toolchain` subcommands call that library; see the
   [toolchain directory record](../design/toolchain-directory.md).
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware

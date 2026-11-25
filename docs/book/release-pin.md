@@ -69,9 +69,11 @@ invalid pin or invalid TOML is an input error, exit 2. This command reads the
 pin without enforcing compatibility with the running binary.
 
 The toolchain root is the nonempty `RIDL_TOOLCHAIN_DIR` environment variable, or
-the platform data directory below. `ridl` refuses a relative override, exit 2,
-and `install.sh` and `install.ps1` refuse it with a failure status of 1, the
-status they use for every error. Empty environment values count as unset.
+the platform data directory below. `ridl` refuses a relative override, exit 2.
+`install.sh` and `install.ps1` refuse it with a failure status of 1, the status
+they use for every error, when they install a versioned release (0.23.0 or
+later); an older release or `ridlc` ignores the variable. Empty environment
+values count as unset.
 
 | Platform | Default root                                                                |
 | -------- | --------------------------------------------------------------------------- |
@@ -152,11 +154,13 @@ the refusal, and exits 2. No manifest key enables automatic installation.
 Only MANI-026 hands off. A run that reports MANI-024 or MANI-025 anywhere, even
 beside a MANI-026, prints its refusals and exits 2. `ridl toolchain` commands,
 `init`, `new`, `lock merge`, snapshot-only `diff`, standalone descriptors and
-`ridl lsp` never hand off. `ridl toolchain which` still selects without running.
-`ridl mcp` is not a workspace command, but it hands off the same way, from the
-current directory's workspace root, before it reads standard input or starts the
-server. It never installs a release, even when `RIDL_TOOLCHAIN_AUTO_INSTALL` is
-`1`.
+`ridl lsp` never hand off. A snapshot input that cannot be read, in a workspace
+whose root the running release refuses, reports that refusal and exits 2: the
+refusal never reaches a hand-off and never starts an installation.
+`ridl toolchain which` still selects without running. `ridl mcp` is not a
+workspace command, but it hands off the same way, from the current directory's
+workspace root, before it reads standard input or starts the server. It never
+installs a release, even when `RIDL_TOOLCHAIN_AUTO_INSTALL` is `1`.
 
 ## Editors and agent tools
 

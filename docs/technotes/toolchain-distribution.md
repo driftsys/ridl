@@ -179,7 +179,9 @@ release with the install scripts or a newer binary.
 absolute PATH entry. The pure `toolchainSelection.ts` validates the CLI
 selection report and manages installation through that bootstrap binary.
 `workspaceClients.ts` associates document directories with discovered roots and
-owns their client lifecycles. `extension.ts` connects these modules to VS Code
+owns their client lifecycles. `restrictedMode.ts` holds the prompts of
+Restricted Mode, which report a missing pinned release and install nothing
+without the user's answer. `extension.ts` connects these modules to VS Code
 document events, manifest watching, notifications and the MCP registry.
 
 The [release pin chapter](../book/release-pin.md#editors-and-agent-tools) owns
@@ -229,8 +231,9 @@ retain flat installation in that PATH directory.
 `just install-check` first runs the ignored toolchain HTTP test, then checks the
 scripts with fixture releases at `editor-v0.23.0`: bare/tag normalization,
 shared layout, offline reuse, damaged-directory preservation, checksum and
-archive refusal, platform roots and paths containing spaces. It also checks flat
-`ridlc` and historical `ridl` installation, invalid binary selection, dry runs
-and Deno ZIP verification. Bash fixtures use `file://`; the optional PowerShell
-branch uses a local HTTP server. The full recipe requires permission to bind
-local TCP listeners, including when `pwsh` is absent.
+archive refusal, platform roots, paths containing spaces, a relative toolchain
+directory and old script stages. It also checks flat `ridlc` and historical
+`ridl` installation, invalid binary selection, dry runs and Deno ZIP
+verification. Bash fixtures use `file://`; the optional PowerShell branch uses a
+local HTTP server. The full recipe requires permission to bind local TCP
+listeners, including when `pwsh` is absent.

@@ -81,8 +81,8 @@ build target, prints `installed ridl <pin> at <path>`, and runs the binary that
 2. A selection error counts as nothing selected, so under the opt-in with one
 pin it leads to the installation attempt. `ridl mcp` calls `handoff::mcp()` as
 the first statement of `run_mcp`, before the Tokio runtime exists and before
-standard input is read. It reads the root manifest of the current directory,
-requires MANI-026, and passes `Install::Never`.
+standard input is read. It reads the root manifest at or above the current
+directory, requires MANI-026, and passes `Install::Never`.
 
 **Guard.** `RIDL_TOOLCHAIN_HANDOFF` is set for the child to the release that
 handed off. A process with the variable present, whatever its value, does not
@@ -112,13 +112,17 @@ after the refusal is known and before anything is written:
 - `ridl build`, on the run that `ridlc` returns, before the result is printed.
 - The shared preflight of the root manifests, used by `describe`, `baseline` and
   both root checks of `fmt`.
-- The report of a source side of `diff`, when the side failed to compile.
+- The report of a source side of `diff`, when the side failed to compile. A root
+  release refusal that the diff probe finds while it reports an unreadable
+  snapshot input (the refusal replaces that error) is marked as not handed off,
+  so it never reaches the hand-off and never starts an installation.
 - `ridl lock`, `ridl test` and `ridl vendor`, on the diagnostics of the
-  workspace compile, which loads remote units without the frozen mode.
+  workspace compile. `lock` and `test` load remote units in the frozen mode;
+  only `vendor` refreshes them.
 - `ridl vendor --check`, on the diagnostics of the frozen workspace load.
 - `ridl mcp`, in its start-up decision (see "Automatic install" above): it reads
-  the root manifest of the current directory, not diagnostics of a command run,
-  and never installs.
+  the root manifest at or above the current directory, not diagnostics of a
+  command run, and never installs.
 
 `ridlc` keeps its refusals, and no site reads standard input.
 
@@ -128,8 +132,9 @@ unreachable import and an output directory. It checks that the selected release
 receives the arguments, the working directory, the standard input and the guard,
 that the workspace tree and the toolchain root are unchanged, and that the home
 directory stays empty. Further tests cover the guard, the selection across two
-pins, a refusal that is not MANI-026, arguments and paths with spaces, and an
-`exec` failure.
+pins, a refusal that is not MANI-026, arguments and paths with spaces, an `exec`
+failure, a selection error under the opt-in, an unreadable snapshot input that
+never hands off or installs, and `ridl mcp` from a subdirectory.
 
 ## `which --json`, schema 1
 
@@ -249,12 +254,14 @@ resolver. Success prints the canonical absolute installed binary path. Failures
 return exit 2.
 
 1. Validate release and target, create `versions/` and canonicalize it.
-2. Open `.<version>.lock` and acquire its OS file lock; waiting for another
-   installer or an uninstall is part of this step. Then inspect the destination.
-   Reuse a complete entry without downloading; the lock guarantees only that the
-   destination is not inspected or reused while an uninstall holds it. An
-   uninstall that runs after install releases the lock can still remove the
-   entry before the caller uses the path. Refuse an existing damaged entry
+2. Open `.<version>.lock`, creating it when absent, and acquire its OS file
+   lock; waiting for another installer or an uninstall is part of this step. The
+   lock file is opened even when the release is already installed, so an install
+   needs write access to `versions/` in every case. Then inspect the
+   destination. Reuse a complete entry without downloading; the lock guarantees
+   only that the destination is not inspected or reused while an uninstall holds
+   it. An uninstall that runs after install releases the lock can still remove
+   the entry before the caller uses the path. Refuse an existing damaged entry
    without modifying it.
 3. While holding that version's lock, remove only directories named
    `.tmp-<version>-<digits>`, with a nonempty ASCII decimal suffix. Preserve
@@ -289,11 +296,14 @@ is complete or damaged. The root must be an absolute path: a relative
    installed; the command does not create it.
 2. Refuse the running release: when the canonical running executable lies under
    the canonical entry, the command fails and leaves the entry unchanged. An
-   entry that does not resolve skips this check.
-3. Open `.<version>.lock` and acquire its OS file lock, as the CLI installer
-   does, and remove the stale `.tmp-<version>-<digits>` stages under that lock.
-4. Inspect the entry without following symbolic links. An absent entry means the
-   release is not installed.
+   entry that does not resolve, or a running executable path that cannot be
+   resolved, skips this check.
+3. Inspect the entry without following symbolic links. An absent entry means the
+   release is not installed, and no lock file is created.
+4. Open `.<version>.lock` and acquire its OS file lock, as the CLI installer
+   does, then inspect the entry again, because another process can have removed
+   it while this one waited. Remove the stale `.tmp-<version>-<digits>` stages
+   under that lock.
 5. Rename the entry to `.tmp-<version>-<pid>`, so no reader sees a partly
    removed release, then remove the stage. A real directory is removed
    recursively; a symbolic link or a regular file is removed itself, and the
@@ -338,12 +348,17 @@ If another installer publishes first, the script reuses the appeared directory
 only if it is complete, then removes its own stage. A damaged destination is
 reported and preserved. A failed or skipped rename is followed by the same
 completion check. When the rename fails and no destination appeared, the script
-reports `could not move the staged release` with the `mv` exit status. Failure
-cleanup removes only the operation's claimed paths. `install.ps1` skips reparse
-points when it removes old stages.
+reports `could not move the staged release` with the `mv` exit status.
+`install.ps1` throws `toolchain directory could not be published` instead.
+Failure cleanup removes only the operation's claimed paths. Removing an old
+stage is best effort in both scripts: a failure prints a warning on standard
+error and the install continues. `install.sh` skips symbolic links and
+`install.ps1` skips reparse points when it removes old stages.
 
-The scripts require an absolute `RIDL_TOOLCHAIN_DIR` and refuse a relative value
-with `RIDL_TOOLCHAIN_DIR must be an absolute path`, the same rule as the CLI.
+For a versioned install (`ridl` 0.23.0 or later) the scripts require an absolute
+`RIDL_TOOLCHAIN_DIR` and refuse a relative value with
+`RIDL_TOOLCHAIN_DIR must be an absolute path`, the same rule as the CLI. An
+older `ridl` or `ridlc` install ignores the variable.
 
 After reuse or publication, the script copies the binary through a temporary
 regular file in the PATH destination directory, then renames it into place. The
@@ -385,7 +400,10 @@ The following tests cover the implemented contracts:
 - `toolchain_uninstall_removes_complete_and_damaged_entries`,
   `toolchain_uninstall_removes_a_symlink_entry_without_following_it`,
   `toolchain_uninstall_refuses_the_running_release`,
-  `toolchain_uninstall_waits_for_the_version_lock` and
+  `toolchain_uninstall_waits_for_the_version_lock`,
+  `toolchain_uninstall_of_an_absent_release_creates_no_lock_file`,
+  `toolchain_uninstall_without_a_running_executable_path_still_removes`,
+  `toolchain_uninstall_renames_the_entry_before_removing_it` and
   `toolchain_uninstall_cli_streams_and_exit_codes` cover removal, and
   `toolchain_cli_refuses_a_relative_root` covers the absolute-root rule.
 - `install_bare_and_tag_versions_share_layout`,
@@ -393,6 +411,9 @@ The following tests cover the implemented contracts:
   `install_refuses_a_relative_toolchain_dir`,
   `install_removes_only_its_own_stale_script_stage`,
   `install_removes_old_script_stages_of_its_version`,
+  `install_keeps_a_stage_whose_name_has_a_newline`,
+  `install_keeps_an_aged_symlinked_stage_and_its_target`,
+  `install_continues_when_an_old_stage_cannot_be_removed`,
   `install_reports_a_failed_mv` and
   `install_reuses_complete_directory_appearing_at_rename` are fixture cases in
   `just install-check`. The PowerShell variants run only where `pwsh` is
