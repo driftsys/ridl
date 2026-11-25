@@ -100,6 +100,7 @@
       "properties": {
         "ridl.serverPath": {
           "type": "string",
+          "scope": "resource",
           "default": "",
           "description": "Explicit path to the ridl binary for ridl lsp and ridl mcp; bypasses workspace release selection. Empty (the default) selects the workspace release through the bundled binary, or ridl on PATH when none is bundled."
         },

@@ -366,6 +366,24 @@ pub(crate) mod tests {
         assert!(disk.contains("signal speed: Speed"));
     }
     #[test]
+    fn a_member_manifest_overlay_is_refused() {
+        let copy = TempWorkspace::copy("ws");
+        let manifest = copy.0.join("b/ridl.toml");
+        let disk = fs::read_to_string(&manifest).unwrap();
+        let result = snapshot(
+            copy.0.join("b").to_str().unwrap(),
+            &[OverlayInput {
+                path: manifest.to_str().unwrap().into(),
+                source: disk.clone(),
+            }],
+        );
+        assert!(
+            matches!(result, Err(ToolError::Request(ref message)) if message.contains("is not a `.typl`") && message.contains(manifest.to_str().unwrap()))
+        );
+        assert_eq!(fs::read_to_string(manifest).unwrap(), disk);
+    }
+
+    #[test]
     fn an_empty_overlay_is_checked_like_an_empty_file() {
         let snap = snapshot(
             &fixture("ws"),

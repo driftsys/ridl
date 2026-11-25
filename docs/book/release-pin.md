@@ -133,15 +133,19 @@ are replaced when valid discovery succeeds. Routing prevents a parent or
 manifestless client from handling a nested root's document traffic, diagnostics
 or edits.
 
-Opening a RIDL source or `ridl.toml` starts its client. The manifest is selected
-by filename in any language mode, so the pin action works before a source is
-opened and without a separate TOML extension. Other TOML files do not start
-clients. Saved manifest create/change/delete events are forwarded to the servers
-and run discovery again. A client is replaced when its selected binary or
-discovery key changes, including when a manifestless document acquires a root
-manifest. Unsaved manifest changes reload the current server without selecting a
-release from unsaved text. Removing a VS Code folder stops clients no longer
-used by another mapping, and deactivation stops every client.
+A RIDL source activates the extension through its language contribution. A
+`ridl.toml` found inside an opened VS Code folder activates it through
+`workspaceContains:**/ridl.toml`; opening a manifest alone in a window without a
+folder does not activate it. Once the extension is active, opening a RIDL source
+or a manifest starts its client. The manifest is selected by filename in any
+language mode, so the pin action works before a source is opened and without a
+separate TOML extension. Other TOML files do not start clients. Saved manifest
+create/change/delete events are forwarded to the servers and run discovery
+again. A client is replaced when its selected binary or discovery key changes,
+including when a manifestless document acquires a root manifest. Unsaved
+manifest changes reload the current server without selecting a release from
+unsaved text. Removing a VS Code folder stops clients no longer used by another
+mapping, and deactivation stops every client.
 
 The extension declares no support for untrusted workspaces. VS Code therefore
 keeps it inactive in Restricted Mode: no server or installer runs. Granting
@@ -162,8 +166,8 @@ the manifest exists on disk. Deleting the disk manifest unloads the workspace
 and clears its diagnostics; edits to its open buffer do not load it again. A
 watched create event after the file is restored, including by saving it, reloads
 the workspace with the current buffer text. Fixing the buffer or the saved pin
-clears the refusal without restarting the server. Member manifest buffers do not
-replace the root or become source overlays.
+clears the refusal without restarting the server. Member manifest events do not
+reload the workspace, replace the root or become source overlays.
 
 On an unpinned root manifest, the server offers the `refactor.rewrite` code
 action **Pin this workspace to ridl &lt;running release&gt;**. It inserts the
@@ -178,4 +182,6 @@ member path. Metrics and the five name/dependency lookup tools return a tool
 error containing the refusal code and message. Source-side `ridl_diff` retains
 its diagnostic-bearing error result. Root manifest overlays are checked before
 source overlays. Source-text-only `ridl_check`, `ridl_explain` and snapshot diff
-inputs remain independent of workspace pins. No tool name or schema changes.
+inputs remain independent of workspace pins. The
+[MCP contract](../../crates/ridl-mcp/README.md#tools) records the schema
+structure and overlay description changes.

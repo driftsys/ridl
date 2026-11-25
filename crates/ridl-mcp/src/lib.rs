@@ -507,12 +507,17 @@ mod tests {
 
     #[tokio::test]
     async fn release_refusal_is_reported_by_every_workspace_tool() {
+        let running = ridlc::running_release();
+        let pin = format!("{}.{}.0", running.major, running.minor + 1);
         let copy = snapshot::tests::TempWorkspace::copy("ws");
         let manifest = copy.0.join("ridl.toml");
         let text = std::fs::read_to_string(&manifest).unwrap();
         std::fs::write(
             &manifest,
-            text.replace("[workspace]", "[workspace]\nridl-version = \"0.24.0\""),
+            text.replace(
+                "[workspace]",
+                &format!("[workspace]\nridl-version = \"{pin}\""),
+            ),
         )
         .unwrap();
         let server = RidlMcp::new();
@@ -580,7 +585,7 @@ mod tests {
                 let serialized = serde_json::to_string(&result).unwrap();
                 assert!(serialized.contains("MANI-026"), "{serialized}");
                 assert!(
-                    serialized.contains("ridl toolchain install 0.24.0"),
+                    serialized.contains(&format!("ridl toolchain install {pin}")),
                     "{serialized}"
                 );
             }
@@ -611,13 +616,15 @@ mod tests {
 
     #[tokio::test]
     async fn release_refusal_from_root_overlay_precedes_source_validation() {
+        let running = ridlc::running_release();
+        let pin = format!("{}.{}.0", running.major, running.minor + 1);
         let copy = snapshot::tests::TempWorkspace::copy("ws");
         let manifest = copy.0.join("ridl.toml");
         let disk = std::fs::read_to_string(&manifest).unwrap();
         let params = json!({
             "path": copy.0.join("b"),
             "overlays": [
-                {"path": manifest, "source": disk.replace("[workspace]", "[workspace]\nridl-version = \"0.24.0\"")},
+                {"path": manifest, "source": disk.replace("[workspace]", &format!("[workspace]\nridl-version = \"{pin}\""))},
                 {"path": copy.0.join("invalid.txt"), "source": "not a language source"}
             ]
         });

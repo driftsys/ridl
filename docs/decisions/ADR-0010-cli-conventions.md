@@ -65,6 +65,10 @@ the entry first. The probes that decide whether a path exists use
 `ridl_core::fs_probe`, which returns an error other than "not found" instead of
 treating the path as absent.
 
+Amended 2026-11-25 by [ADR-0036](ADR-0036-workspace-toolchain-pins.md): decision
+1 gains the three `ridl toolchain` rows and the root release refusal clause.
+Their dated construction and tests are recorded under that decision.
+
 ## Context
 
 Issue driftsys/ridl#194, found while writing the book's CLI reference (PR
@@ -176,6 +180,12 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    the original eight — by direct construction against the built binary. The
    following clauses postdate the original construction:
 
+   - 2026-11-25: root release refusals (MANI-024 through MANI-026) exit 2 before
+     command work. `crates/ridl/tests/release_pin.rs` and
+     `crates/ridlc/tests/release_pin.rs` construct invalid, below-floor and
+     incompatible roots against the built binaries, including member entries,
+     and assert exclusive refusals and preserved outputs. The fmt tests also
+     assert that preflight checks all roots and reports each root once.
    - 2026-11-10: stdout report write failures for `ridl check` JSON and SARIF,
      `ridl test`, `ridl diff`, `ridl lock` and `ridl vendor`, verified in
      `crates/ridl/tests/closed_stdout.rs`;
@@ -351,6 +361,17 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    `vendor_check_without_a_manifest_exits_2` and the fetch-failure assertion of
    `vendor_writes_nothing_on_an_error` (MANI-101). `ridl vendor` applies no
    `[lints]` levels, as `ridl lock` does (ADR-0024 decision 8).
+
+   **`ridl toolchain install`, `list` and `which` earned their rows on
+   2026-11-25**, verified against the built binary by
+   `toolchain_cli_streams_and_exit_codes` in `crates/ridl/tests/toolchain.rs`.
+   Install returns 0 with the installed path for a completed release and 2 for
+   absent or invalid pins, invalid releases and unsupported input. List returns
+   0 for empty inventory and for complete and damaged entries. Which returns 0
+   with a selected path, 1 for missing or invalid pins, and 2 for missing paths
+   or malformed manifests. The same test checks stdout and stderr in text and
+   JSON modes. `toolchain_cli_unreadable_inputs_and_broken_stdout_exit_two`
+   covers I/O and output failures.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 

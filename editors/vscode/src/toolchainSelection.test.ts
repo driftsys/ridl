@@ -242,3 +242,12 @@ test("unknown_schema_after_install_logs_without_an_error_notification", async ()
   assert.equal(f.logs.length, 1);
   assert.deepEqual(f.errors, []);
 });
+
+
+test("install_errors_are_reported_once_for_each_release", async () => {
+  const f = fixture(["0.23.0", "0.23.0", "0.24.0"].flatMap((pin) => [
+    response({ ...missing, pin }), response("", 2),
+  ]));
+  for (let i = 0; i < 3; i++) assert.equal((await f.selector.select(input)).command, bundled);
+  assert.deepEqual(f.errors, ["install:0.23.0", "install:0.24.0"]);
+});

@@ -96,6 +96,8 @@ let provider: any, mcpChanges = 0;
 let command = "/selected/a", whichCalls = 0, installCalls = 0;
 let autoInstall = true, missingRelease = false, nestedRoot = true;
 let acceptInstall: ((button: string | undefined) => void) | undefined;
+const folderServerPaths = new Map<string, string>();
+const installPrompts: string[][] = [];
 const configurationReads: [string, string | undefined][] = [];
 const folders = [{ uri: uri("/work"), name: "work", index: 0 }];
 const documents: ReturnType<typeof document>[] = [];
@@ -119,12 +121,14 @@ const host: any = {
     createOutputChannel: () => ({ warn() {}, error() {}, info() {}, dispose() {} }),
     showWarningMessage: async () => undefined,
     showErrorMessage: async () => undefined,
-    showInformationMessage: async (message: string) =>
-      message.includes("required by this workspace")
+    showInformationMessage: async (message: string, ...buttons: string[]) => {
+      if (message.includes("required by this workspace")) installPrompts.push(buttons);
+      return message.includes("required by this workspace")
         ? new Promise<string | undefined>((resolve) => {
           acceptInstall = resolve;
         })
-        : undefined,
+        : undefined;
+    },
     withProgress: async (_: any, work: any) => work(),
   },
   commands: { registerCommand: () => ({ dispose() {} }) },
@@ -135,7 +139,12 @@ const host: any = {
     getConfiguration: (_namespace: string, resource: any) => ({
       get: (name: string, fallback: any) => {
         configurationReads.push([name, resource?.fsPath]);
-        return name === "serverPath" ? "" : name === "toolchain.autoInstall" ? autoInstall : fallback;
+        if (name === "serverPath") {
+          const scope = require("../package.json").contributes.configuration.properties["ridl.serverPath"].scope;
+          const folder = resource && host.workspace.getWorkspaceFolder(resource);
+          return scope === "resource" && folder ? folderServerPaths.get(folder.uri.fsPath) ?? "" : "";
+        }
+        return name === "toolchain.autoInstall" ? autoInstall : fallback;
       },
     }),
     onDidChangeConfiguration: register("config"),
@@ -336,6 +345,9 @@ function resetHost(): void {
   missingRelease = true;
   nestedRoot = true;
   acceptInstall = undefined;
+  installPrompts.splice(0);
+  folderServerPaths.clear();
+  folders.splice(0, folders.length, { uri: uri("/work"), name: "work", index: 0 });
 }
 test("application_policy_starts_fallback_before_install_button_is_answered", async () => {
   resetHost();
@@ -564,4 +576,61 @@ test("creating_a_nested_root_moves_existing_formatting_registration_to_its_clien
     edits,
   );
   await extension.deactivate();
+});
+
+test("folder_server_path_is_used_for_each_folders_document", async () => {
+  resetHost();
+  missingRelease = false;
+  folders.push({ uri: uri("/other"), name: "other", index: 1 });
+  folderServerPaths.set(abs("/work"), "/custom/work-ridl");
+  folderServerPaths.set(abs("/other"), "/custom/other-ridl");
+  documents.splice(0, documents.length, document("/work/src/a.ridl"), document("/other/src/b.ridl"));
+  const before = whichCalls;
+  try {
+    await extension.activate({
+      extensionPath: "/nonexistent-extension",
+      extension: { packageJSON: { version: "0.23.0" } },
+      subscriptions: [],
+    } as any);
+    assert.deepEqual(clients.map((client) => client.serverOptions.command), ["/custom/work-ridl", "/custom/other-ridl"]);
+    assert.equal(whichCalls, before, "folder overrides bypass release selection");
+  } finally {
+    await extension.deactivate();
+    folderServerPaths.clear();
+  }
+});
+
+test("activation_auto_install_true_installs_a_missing_release", async () => {
+  resetHost();
+  autoInstall = true;
+  const before = installCalls;
+  try {
+    await extension.activate({
+      extensionPath: "/nonexistent-extension",
+      extension: { packageJSON: { version: "0.23.0" } },
+      subscriptions: [],
+    } as any);
+    assert.equal(installCalls, before + 1);
+    assert.equal(clients[0].serverOptions.command, command);
+    assert.deepEqual(installPrompts, [], "automatic installation needs no Install button");
+  } finally {
+    await extension.deactivate();
+  }
+});
+
+test("activation_auto_install_false_offers_install_without_running_it", async () => {
+  resetHost();
+  const before = installCalls;
+  try {
+    await extension.activate({
+      extensionPath: "/nonexistent-extension",
+      extension: { packageJSON: { version: "0.23.0" } },
+      subscriptions: [],
+    } as any);
+    assert.equal(installCalls, before);
+    assert.deepEqual(installPrompts, [["Install"]]);
+    assert.equal(clients[0].serverOptions.command, "ridl");
+  } finally {
+    await extension.deactivate();
+  }
 });

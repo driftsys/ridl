@@ -4,6 +4,7 @@ mod version;
 fn main() {
     println!("cargo:rerun-if-env-changed=RIDL_BUILD_VERSION");
     let value = std::env::var("RIDL_BUILD_VERSION").unwrap_or_default();
+    println!("cargo:rustc-env=RIDL_BUILD_VERSION_INPUT={}", value.trim());
     let version = version::normalise_version(&value);
     println!("cargo:rustc-env=RIDL_BUILD_VERSION={version}");
 }

@@ -47,7 +47,8 @@ path. Metrics and the five name/dependency lookup tools return a tool error with
 the refusal code and message. Source-side `ridl_diff` returns the existing error
 with structured diagnostics. `ridl_explain`, source-text-only `ridl_check` and
 snapshot diff inputs remain available. A root manifest overlay is checked before
-any source overlays. Tool names and schemas are unchanged.
+any source overlays. Tool names and input/output schema structures are
+unchanged; the `OverlayInput` descriptions now document root manifest overlays.
 
 Workspace results carry `workspace: {root, errors, warnings, notes}`. Locations
 are `{path, start, end}` with 1-based `{line, column}` and an exclusive end. The

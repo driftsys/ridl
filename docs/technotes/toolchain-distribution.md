@@ -5,6 +5,10 @@ the extension finds the binary once it is there. Informative: the normative
 decisions are ADR-0007 decision 14 and its 2026-09-13 amendment (the release
 train and the maintainer acts) and ADR-0005's resolved host-coverage question
 (which agent hosts are first-class, and the VS Code version floor that follows).
+[ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md) governs workspace
+pins and editor selection;
+[ADR-0010 decision 8](../decisions/ADR-0010-cli-conventions.md) governs version
+stamps.
 
 ## Two release trains, disjoint tag namespaces
 

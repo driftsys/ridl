@@ -52,6 +52,14 @@ fn read_download(reader: impl Read, url: &str, limit: u64) -> io::Result<Vec<u8>
     Ok(bytes)
 }
 
+fn download_config(url: &str) -> ureq::config::Config {
+    ureq::Agent::config_builder()
+        .https_only(url.starts_with("https://"))
+        .timeout_connect(Some(Duration::from_secs(30)))
+        .timeout_global(Some(Duration::from_secs(10 * 60)))
+        .build()
+}
+
 fn download(url: &str, limit: u64) -> io::Result<Vec<u8>> {
     if let Some(path) = url.strip_prefix("file://") {
         if !Path::new(path).is_absolute() {
@@ -61,10 +69,7 @@ fn download(url: &str, limit: u64) -> io::Result<Vec<u8>> {
             File::open(path).map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
         return read_download(file, url, limit);
     }
-    let config = ureq::Agent::config_builder()
-        .timeout_connect(Some(Duration::from_secs(30)))
-        .timeout_global(Some(Duration::from_secs(10 * 60)))
-        .build();
+    let config = download_config(url);
     let mut response = ureq::Agent::new_with_config(config)
         .get(url)
         .call()
@@ -209,4 +214,29 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
     drop(stage);
     drop(lock);
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn https_download_policy_refuses_http_including_redirect_targets() {
+        let config = download_config("https://github.com/driftsys/ridl/releases/download");
+        assert!(
+            config.https_only(),
+            "HTTPS origins must prohibit a redirect downgrade"
+        );
+        let result = ureq::Agent::new_with_config(config)
+            .get("http://127.0.0.1:1/archive")
+            .call();
+        assert!(
+            matches!(result, Err(ureq::Error::RequireHttpsOnly(_))),
+            "{result:?}"
+        );
+        assert!(
+            !download_config("http://127.0.0.1:1").https_only(),
+            "HTTP fixture origins remain available"
+        );
+    }
 }

@@ -2563,6 +2563,25 @@ mod tests {
     }
 
     #[test]
+    fn a_member_manifest_overlay_is_refused() {
+        let (dir, _) = overlay_fixture();
+        dir.write("ridl.toml", "[workspace]\nmembers = [\"p\"]\n");
+        let member_manifest = dir.path().join("p/ridl.toml");
+        let result = load_workspace_with(
+            &mut RidlDatabase::default(),
+            &dir.path().join("p"),
+            &[overlay(
+                member_manifest.clone(),
+                "[package]\nname = \"p\"\n",
+            )],
+            TEST_RELEASE,
+        );
+        assert!(
+            matches!(result, Err(LoadError::OverlayNotSource(path)) if path == member_manifest)
+        );
+    }
+
+    #[test]
     fn single_file_mode_takes_an_overlay_for_the_entry() {
         let dir = TempDir::new("overlay-single");
         let path = dir.write("x.typl", "package x\n");

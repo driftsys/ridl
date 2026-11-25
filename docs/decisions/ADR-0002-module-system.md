@@ -300,7 +300,8 @@ An entry inside a workspace member therefore loads the whole workspace: the
 root's `[lints]`, `[defaults].timing`, `[defaults].command_timing`,
 `[defaults].query_timing` and `[imports]` apply to the member, and its imports
 of sibling members resolve. A command that reports diagnostics reports those of
-the files under the member only.
+the files under the member only, except for a
+[root release refusal](../book/release-pin.md).
 
 **Workspace release requirement** (amended 2026-11-25,
 [ADR-0036](ADR-0036-workspace-toolchain-pins.md)). Both manifest modes accept

@@ -439,3 +439,37 @@ fn release_diff_snapshot_directory_with_stray_source_ignores_parent_pin() {
     assert!(output.stderr.is_empty(), "{output:?}");
     assert_eq!(tree(dir.path()), before);
 }
+
+#[test]
+fn release_fmt_reports_one_refusal_for_a_root_with_a_member() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("workspace");
+    let member = root.join("member");
+    fs::create_dir_all(&member).unwrap();
+    fs::write(
+        root.join("ridl.toml"),
+        "[workspace]\nmembers = [\"member\"]\nridl-version = \"0.24.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        member.join("ridl.toml"),
+        "[package]\nname = \"member\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        member.join("a.typl"),
+        "package member\ntype A:integer[0..1]\n",
+    )
+    .unwrap();
+    let before = tree(dir.path());
+    let output = run(dir.path(), &["fmt", "."], "0.23.2");
+    assert_refusal(&output, "MANI-026");
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr)
+            .matches("error[MANI-026]")
+            .count(),
+        1,
+        "{output:?}"
+    );
+    assert_eq!(tree(dir.path()), before);
+}

@@ -925,11 +925,11 @@ fn toolchain_cli_streams_and_exit_codes() {
     assert!(o.stderr.is_empty());
     let json: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
     assert_eq!(json["status"], "missing");
-    output(
-        &cli(w.path(), root.path(), &["toolchain", "which"]),
-        1,
-        "",
-        true,
+    let missing = cli(w.path(), root.path(), &["toolchain", "which"]);
+    output(&missing, 1, "", true);
+    assert_eq!(
+        String::from_utf8_lossy(&missing.stderr),
+        "No compatible ridl toolchain is installed; run `ridl toolchain install 0.24.0`.\n"
     );
     for version in ["bad", "v0.23.0", "0.23.0-rc.1", "0.22.0"] {
         output(
@@ -959,12 +959,18 @@ fn toolchain_cli_streams_and_exit_codes() {
             assert!(o.stderr.is_empty());
             let value: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
             assert_eq!(value["status"], "invalid");
-            output(
-                &cli(w.path(), root.path(), &["toolchain", "which"]),
-                1,
-                "",
-                true,
-            );
+            let invalid = cli(w.path(), root.path(), &["toolchain", "which"]);
+            output(&invalid, 1, "", true);
+            let expected = if text.contains("bad") {
+                "MANI-024: `ridl-version` must be a string of the form MAJOR.MINOR.PATCH\n"
+                    .to_string()
+            } else {
+                format!(
+                    "MANI-025: `ridl-version` 0.22.0 is below the minimum pinnable release {}\n",
+                    ridl_core::release::MIN_PINNABLE_RELEASE
+                )
+            };
+            assert_eq!(String::from_utf8_lossy(&invalid.stderr), expected);
         } else {
             output(
                 &cli(w.path(), root.path(), &["toolchain", "which", "--json"]),
@@ -1004,7 +1010,14 @@ fn toolchain_cli_streams_and_exit_codes() {
     assert!(listing.status.success());
     assert!(listing.stderr.is_empty());
     let listing = String::from_utf8(listing.stdout).unwrap();
-    assert!(listing.lines().last().unwrap().ends_with("(damaged)"));
+    assert_eq!(
+        listing,
+        format!(
+            "0.23.0\t{}\n0.23.4\t{} (damaged)\n",
+            expected.parent().unwrap().display(),
+            damaged.parent().unwrap().display()
+        )
+    );
     output(
         &cli(
             w.path(),

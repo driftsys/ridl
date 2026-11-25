@@ -139,8 +139,9 @@ The behaviour that is not in the README:
 1. Paths compare by key: the canonicalised parent directory joined with the file
    name. The parent must exist; the file need not. A parent that does not exist
    is `OverlayOutsideWorkspace` with `missing_directory`, and its message says
-   to create the directory first. The canonicalisation runs only when there is
-   an overlay.
+   to create the directory first. Every load with a root manifest canonicalises
+   that manifest's key, even without overlays. Source keys are canonicalised
+   when overlays are present.
 2. One overlay may substitute the root `ridl.toml` text. Root discovery still
    uses the disk. The root release pin is checked before source overlays or
    other workspace validation; a refusal returns an empty workspace and the root
@@ -236,7 +237,8 @@ Source-side diff keeps its diagnostic-bearing error route. Root manifest
 overlays take precedence over disk text before source overlays are validated.
 `ridl_explain`, source-text-only check and snapshot diff inputs are independent
 of root pins. The [release pin chapter](../book/release-pin.md) defines the
-compatibility rule. The tool surface is unchanged.
+compatibility rule. The [MCP contract](../../crates/ridl-mcp/README.md#tools)
+records the schema structure and overlay description changes.
 
 ### 5.2 A wrong request is a tool error
 

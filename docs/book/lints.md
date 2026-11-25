@@ -78,16 +78,18 @@ the `path` of the MCP tool `ridl_check` loads the workspace whose `members`
 lists the member. The workspace root's `[lints]` table applies to the member,
 and the member's own table is applied over it, as in a check from the root. The
 `[defaults]` keys and `[imports]` behave the same way. The command reports only
-the diagnostics of files under the member; check from the workspace root to see
+the diagnostics of files under the member, except for a
+[root release refusal](release-pin.md). Check from the workspace root to see
 every member's diagnostics. A package that no workspace lists stays standalone,
 and the search for a workspace stops at the first `[workspace]` manifest and at
 a directory that holds `.git`.
 
-**Known limitations of the language server.** The language server reads the
-`[lints]` tables once, when it loads the workspace: at start, or when the first
-file is opened. An edit to a `[lints]` table takes effect in the editor after
-the server restarts. The language server publishes the diagnostics of every
-loaded member, also when the editor is opened on one member.
+**Language server configuration.** Edits to the root `[lints]` table take effect
+through the
+[root manifest reload contract](release-pin.md#editors-and-agent-tools). Edits
+to a member's table require a server restart. The language server publishes the
+diagnostics of every loaded member, also when the editor is opened on one
+member.
 
 ## Where levels apply
 
@@ -293,8 +295,10 @@ The language server sizes the workspace under the encodings and the `[limits]`
 tables that it loaded, and a file open outside the workspace under FlatBuffers
 and the default ceilings. It publishes the diagnostics of a `[limits]` table
 (RIDL-152 and MANI-022) for the `ridl.toml` that holds it, and reads the table
-when it loads the workspace, so an edit to a `[limits]` table or to a
-`[backend.<name>]` table takes effect after the server restarts.
+when it loads the workspace. Edits to root `[limits]` and `[backend.<name>]`
+tables take effect through the
+[root manifest reload contract](release-pin.md#editors-and-agent-tools). Edits
+to a member's `[limits]` table require a server restart.
 
 `podbuf-padding-order` (RIDL-156) reports a struct whose declared field order
 lays out in a larger podbuf head than the same fields sorted by descending

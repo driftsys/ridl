@@ -13,3 +13,15 @@ fn release_stamp_normalises_binary_tags() {
     assert_eq!(normalise("editor-veditor-v0.23.0"), "editor-v0.23.0");
     assert_eq!(normalise("v9.9.9-test"), "9.9.9-test");
 }
+
+#[test]
+fn compiled_build_stamp_is_the_normalised_plain_release() {
+    let stamp = env!("RIDL_BUILD_VERSION");
+    let release = ridl_core::release::parse_release(stamp);
+    assert!(
+        release.is_some(),
+        "compiled build stamp must be a plain release: {stamp:?}"
+    );
+    let input = env!("RIDL_BUILD_VERSION_INPUT");
+    assert_eq!(stamp, ridlc_version::normalise_version(input));
+}

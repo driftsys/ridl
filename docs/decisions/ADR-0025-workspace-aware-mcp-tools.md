@@ -62,7 +62,8 @@ and schemas are a frozen surface from 0.10.0, checked by `just freeze-check`.
 
 Amended 2026-11-25 (driftsys/ridl#1476): decisions 2, 5 and 7 account for root
 [release refusals](../book/release-pin.md#editors-and-agent-tools) and root
-manifest overlays. The tool names and schemas remain unchanged.
+manifest overlays. The [MCP contract](../../crates/ridl-mcp/README.md#tools)
+records the schema structure and overlay description changes.
 
 ## Context
 

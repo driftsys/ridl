@@ -206,8 +206,7 @@ entry.
 
 ## Regression evidence
 
-These existing tests identify the implemented contracts; this documentation
-change adds no application test:
+The following tests cover the implemented contracts:
 
 - `release_pin_accepts_only_three_decimal_components`,
   `release_compatibility_uses_major_minor_and_patch` and

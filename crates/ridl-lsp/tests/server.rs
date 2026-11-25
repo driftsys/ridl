@@ -8600,3 +8600,52 @@ fn root_manifest_deletion_ignores_buffer_until_watched_create() {
     shut_down(&client, 903);
     server.join().unwrap().unwrap();
 }
+
+#[test]
+fn member_manifest_events_do_not_reload_the_workspace() {
+    let dir = TempDir::new("member-manifest-events");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"p\"]\n");
+    std::fs::create_dir(dir.path().join("p")).unwrap();
+    let text = "[package]\nname = \"demo\"\nversion = \"1.0.0\"\n";
+    let member = uri_of(&dir.write("p/ridl.toml", text));
+    let source = uri_of(&dir.write("p/lib.typl", "package demo\ntype Value: integer\n"));
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    release_publications(&client);
+    // If member events trigger a reload, this disk change becomes visible.
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"p\"]\nridl-version = \"0.24.0\"\n",
+    );
+    release_open(&client, &member, text);
+    release_change(&client, &member, text);
+    notify::<lt::notification::DidCloseTextDocument>(
+        &client,
+        lt::DidCloseTextDocumentParams {
+            text_document: lt::TextDocumentIdentifier {
+                uri: member.clone(),
+            },
+        },
+    );
+    notify::<lt::notification::DidChangeWatchedFiles>(
+        &client,
+        lt::DidChangeWatchedFilesParams {
+            changes: vec![lt::FileEvent {
+                uri: member,
+                typ: lt::FileChangeType::CHANGED,
+            }],
+        },
+    );
+    let publications = release_publications(&client);
+    assert!(
+        !publications
+            .iter()
+            .any(|p| codes(&p.diagnostics).contains(&"MANI-026")),
+        "{publications:?}"
+    );
+    assert!(
+        hover_at(&client, 910, source, pos(1, 6)).is_some(),
+        "member events retain workspace analysis"
+    );
+    shut_down(&client, 911);
+    server.join().unwrap().unwrap();
+}

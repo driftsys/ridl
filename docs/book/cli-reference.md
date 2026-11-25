@@ -123,16 +123,17 @@ is refused as `PATH` when no `ridl.toml` is at or above it, as the next
 paragraph says. A `PATH` inside a workspace member loads the whole workspace
 whose `members` lists the member (ADR-0002 §4): the root's `[lints]`, the
 `[defaults]` keys and `[imports]` apply, imports of sibling members resolve, and
-the report holds only the diagnostics of files under the member. `ridl build` on
-a member also writes the whole workspace. An error in another member makes it
-exit 1 with one error that says so; it then writes nothing, or, for an RSDL-7xx
-error, leaves that deployment out of the system. The workspace root's
-`.ridl/baseline/` and `ridl.lock` serve a member entry too. `--frozen` is the
-same flag [`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged;
-the two commands share one implementation and render byte-identical diagnostics
-on the same input. It now carries this description word for word under `ridl`
-too — before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank
-line where the description belongs.
+the report holds only the diagnostics of files under the member, except for a
+[root release refusal](release-pin.md). `ridl build` on a member also writes the
+whole workspace. An error in another member makes it exit 1 with one error that
+says so; it then writes nothing, or, for an RSDL-7xx error, leaves that
+deployment out of the system. The workspace root's `.ridl/baseline/` and
+`ridl.lock` serve a member entry too. `--frozen` is the same flag
+[`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged; the two
+commands share one implementation and render byte-identical diagnostics on the
+same input. It now carries this description word for word under `ridl` too —
+before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank line
+where the description belongs.
 
 The loader compiles the `.typl`, `.ridl` and `.rsdl` files of a package
 directory. A `.rxdl` or `.rmdl` file there is not compiled, because the rxdl and
@@ -2546,16 +2547,8 @@ changes: after a `ridl check` that fetches a unit or rewrites `ridl.lock`,
 restart the server. It publishes no diagnostics for a file of a remote unit; it
 shows the errors of a remote unit once per load, in one window message.
 
-The server publishes root
-[release refusals](release-pin.md#editors-and-agent-tools) on `ridl.toml` and
-suspends source analysis while refused. Root manifest buffer open/change/close
-events and watched disk create/change/delete events reload the workspace; an
-open manifest buffer takes precedence only while the disk file exists. Deleting
-the disk manifest unloads the workspace and clears its diagnostics. Once the
-disk file is restored, a watched create event or a manifest buffer change
-reloads it. Open source text survives the reload. An unpinned valid root
-manifest offers the code action **Pin this workspace to ridl &lt;running
-release&gt;**, without a diagnostic.
+The [release pin chapter](release-pin.md#editors-and-agent-tools) owns root
+manifest reloads, release refusals, recovery and the pin code action.
 
 **Flags.** `--stdio` and `--clientProcessId=<PID>` are accepted and change
 nothing. The LSP specification (3.17, "Implementation Considerations")
@@ -3005,8 +2998,9 @@ Options:
 ```
 
 See [workspace release pins](release-pin.md#installing-and-selecting-toolchains)
-for selection rules, text output, the `--json` schema, exit codes and input
-errors.
+for selection rules, text output, exit codes and input errors. The
+[toolchain directory record](../design/toolchain-directory.md#which---json-schema-1)
+owns the `--json` schema.
 
 ## `ridlc`
 

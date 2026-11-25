@@ -33,13 +33,11 @@
 //!
 //! # Parsing strategy
 //!
-//! The text is deserialized three times: once into a typed shape with
-//! [`toml::Spanned`] leaves (for the values and their spans), once into a
-//! key-to-spanned-value map (to enumerate the keys the typed shape silently
-//! drops, so unknown keys can warn), and once into the `[lints]` table with
-//! spanned keys (so each MANI-010 can point at its key). All three read the
-//! same valid TOML; the second cannot fail once the first has, and the third
-//! fails only when `lints` is not a table, which is MANI-010.
+//! Separate deserialization passes read the typed shape, the keys it drops,
+//! release pins, lint keys, limits and backend tables. [`toml::Spanned`] leaves
+//! retain value and key ranges for diagnostics. The number of passes depends
+//! on the tables and their shapes; collectors may read additional maps to
+//! recover spans or report malformed tables.
 
 use std::collections::BTreeMap;
 use std::ops::Range;
