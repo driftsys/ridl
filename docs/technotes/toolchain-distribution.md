@@ -84,6 +84,14 @@ without a pull request.
    `npm-release.yml` and `vscode-release.yaml`. The Marketplace job then waits
    for approval in the `marketplace` environment.
 
+An `editor-v` tag needs the repository secrets `RIDL_RELEASE_SIGNING_KEY` and
+`RIDL_RELEASE_SIGNING_KEY_PASSWORD`, and `RELEASE_PUBLIC_KEY` has to hold the
+matching public key (see "Signed release archives"). Without them the `release`
+job fails at its signing step and creates no GitHub release, and the
+`publish-vsce` job, which needs `release`, does not run, so the Marketplace
+receives nothing. The crates.io and npm workflows start from the `v` tag and are
+unaffected.
+
 A tag is not moved after it is pushed. A publish workflow that starts from a tag
 runs that tag's commit, and a re-run of it also uses the workflow file of that
 commit, so a fix on `main` cannot reach it. A failure in a publish workflow
@@ -114,15 +122,17 @@ is compiled out of release builds. See
 
 ## Versioned toolchains
 
-`ridl toolchain install`, `list` and `which` manage and inspect a shared
-versions directory independently of workspace compilation. The
+`ridl toolchain install`, `uninstall`, `list` and `which` manage and inspect a
+shared versions directory independently of workspace compilation. The
 [release pin chapter](../book/release-pin.md#installing-and-selecting-toolchains)
 owns root precedence and command usage. The
 [toolchain directory record](../design/toolchain-directory.md) owns layout,
 selection schema and installation protocol. The installer uses the build target
 exported by Cargo, and the fixed GitHub `editor-v<version>` release origin. Its
-alternate download source is a library test parameter, with no CLI, manifest or
-environment override.
+alternate download source is a library test parameter. Release builds have no
+CLI, manifest or environment override. Debug builds read
+`RIDL_TEST_RELEASE_ORIGIN` and `RIDL_TEST_RELEASE_PUBLIC_KEY` in integration
+tests, as they read `RIDL_TEST_RUNNING_RELEASE`.
 
 `just install-check` also runs the ignored
 `toolchain_ureq_path_verifies_and_installs` local HTTP test, exercising the
@@ -131,15 +141,48 @@ extraction, cleanup, damaged directories and concurrent installers without a
 network listener. The install scripts below produce the shared layout for
 pinnable `ridl` releases.
 
+## Signed release archives
+
+The `release` job of `.github/workflows/vscode-release.yaml` signs every
+`ridl-<target>.tar.gz` that the build jobs produced, after it installs the
+Ubuntu `minisign` package and before it uploads the release assets. Each
+signature is a prehashed minisign signature in `ridl-<target>.tar.gz.minisig`
+with the trusted comment `ridl <version> <target>`, where `<version>` is the tag
+without `editor-v`. `ridlc` archives are not signed. The build runners never see
+the secret key.
+
+The step reads two repository secrets, `RIDL_RELEASE_SIGNING_KEY` (the minisign
+secret key file) and `RIDL_RELEASE_SIGNING_KEY_PASSWORD`. It fails, and the
+release is not created, when either secret is empty, when no `ridl` archive
+exists, or while `crates/ridl/src/toolchain/mod.rs` still contains the marker
+`RIDL-RELEASE-KEY-PLACEHOLDER`.
+
+The matching public key is the constant `RELEASE_PUBLIC_KEY` in
+`crates/ridl/src/toolchain/mod.rs`. `ridl toolchain install` verifies every
+download against it; the
+[toolchain directory record](../design/toolchain-directory.md#targets-and-download-source)
+owns the verification rules. The install scripts do not verify signatures.
+
+A lost signing key is handled the same way as a rotation: generate a new key
+pair, put the new public key in `RELEASE_PUBLIC_KEY`, and sign the next release
+with the new secret key. The new public key ships in that release's binary.
+Rotation uses a new key for the next release. A binary verifies only releases
+that are signed with the key it embeds, so a binary built before the rotation
+keeps verifying earlier releases and refuses later ones. No release is signed
+with two keys. After a rotation, a user of an older binary installs a newer
+release with the install scripts or a newer binary.
+
 ## Editor toolchain selection
 
 `editors/vscode/src/binaryResolution.ts` resolves the bootstrap binary from
-`ridl.serverPath`, the bundled `bin/ridl` (`bin/ridl.exe` on Windows), or PATH.
-The pure `toolchainSelection.ts` validates the CLI selection report and manages
-installation through that bootstrap binary. `workspaceClients.ts` associates
-document directories with discovered roots and owns their client lifecycles.
-`extension.ts` connects these modules to VS Code document events, manifest
-watching, notifications and the MCP registry.
+`ridl.serverPath`, the bundled `bin/ridl` (`bin/ridl.exe` on Windows), or an
+absolute PATH entry. The pure `toolchainSelection.ts` validates the CLI
+selection report and manages installation through that bootstrap binary.
+`workspaceClients.ts` associates document directories with discovered roots and
+owns their client lifecycles. `restrictedMode.ts` holds the prompts of
+Restricted Mode, which report a missing pinned release and install nothing
+without the user's answer. `extension.ts` connects these modules to VS Code
+document events, manifest watching, notifications and the MCP registry.
 
 The [release pin chapter](../book/release-pin.md#editors-and-agent-tools) owns
 the editor's selection, installation policy, routing, override and trust
@@ -188,8 +231,9 @@ retain flat installation in that PATH directory.
 `just install-check` first runs the ignored toolchain HTTP test, then checks the
 scripts with fixture releases at `editor-v0.23.0`: bare/tag normalization,
 shared layout, offline reuse, damaged-directory preservation, checksum and
-archive refusal, platform roots and paths containing spaces. It also checks flat
-`ridlc` and historical `ridl` installation, invalid binary selection, dry runs
-and Deno ZIP verification. Bash fixtures use `file://`; the optional PowerShell
-branch uses a local HTTP server. The full recipe requires permission to bind
-local TCP listeners, including when `pwsh` is absent.
+archive refusal, platform roots, paths containing spaces, a relative toolchain
+directory and old script stages. It also checks flat `ridlc` and historical
+`ridl` installation, invalid binary selection, dry runs and Deno ZIP
+verification. Bash fixtures use `file://`; the optional PowerShell branch uses a
+local HTTP server. The full recipe requires permission to bind local TCP
+listeners, including when `pwsh` is absent.

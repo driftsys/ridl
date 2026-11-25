@@ -390,6 +390,8 @@ mod tests {
         for line in [
             "ridl toolchain install",
             "ridl toolchain list",
+            "ridl toolchain uninstall",
+            "ridl toolchain uninstall arg 1 <VERSION> required",
             "ridl toolchain which",
             "ridl toolchain which --json switch",
             "ridl toolchain which arg 1 <PATH> optional",

@@ -36,6 +36,7 @@ fn existing(directory: &Path, release: Release, binary: &str) -> io::Result<Opti
 
 const ARCHIVE_LIMIT: u64 = 256 * 1024 * 1024;
 const CHECKSUM_LIMIT: u64 = 4 * 1024;
+const SIGNATURE_LIMIT: u64 = 4 * 1024;
 
 fn read_download(reader: impl Read, url: &str, limit: u64) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::new();
@@ -105,6 +106,40 @@ fn verify(bytes: &[u8], record: &[u8], archive: &str) -> io::Result<()> {
     Ok(())
 }
 
+fn verify_signature(
+    bytes: &[u8],
+    minisig: &[u8],
+    public_key: &str,
+    expected_comment: &str,
+) -> io::Result<()> {
+    let key = minisign_verify::PublicKey::from_base64(public_key).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid release public key: {e}"),
+        )
+    })?;
+    let bad = |reason: String| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("invalid release signature: {reason}"),
+        )
+    };
+    let text = std::str::from_utf8(minisig).map_err(|e| bad(e.to_string()))?;
+    let signature = minisign_verify::Signature::decode(text).map_err(|e| bad(e.to_string()))?;
+    key.verify(bytes, &signature, false)
+        .map_err(|e| bad(e.to_string()))?;
+    if signature.trusted_comment() != expected_comment {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "release signature is for `{}`, expected `{expected_comment}`",
+                signature.trusted_comment()
+            ),
+        ));
+    }
+    Ok(())
+}
+
 fn extract(bytes: &[u8], stage: &Path, binary: &str) -> io::Result<()> {
     let required = [binary, "LICENSE", "THIRD-PARTY-NOTICES.txt"];
     let mut seen = BTreeSet::new();
@@ -146,9 +181,35 @@ fn extract(bytes: &[u8], stage: &Path, binary: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Removes the stage directories that earlier runs of CLI installs left for
+/// `release`. The caller holds the version's lock, which excludes every
+/// cooperating owner of those stages.
+pub(super) fn remove_stale_stages(versions: &Path, release: Release) -> io::Result<()> {
+    let stage_prefix = format!(".tmp-{release}-");
+    for entry in fs::read_dir(versions)? {
+        let entry = entry?;
+        if entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.strip_prefix(&stage_prefix))
+            .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|byte| byte.is_ascii_digit()))
+            && entry.file_type()?.is_dir()
+        {
+            fs::remove_dir_all(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 /// Installs one verified release without modifying an existing version directory.
 /// Production callers pass the fixed release origin; tests may pass a file source.
-pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> io::Result<PathBuf> {
+pub fn install(
+    root: &Path,
+    release: Release,
+    target: &str,
+    base_url: &str,
+    public_key: &str,
+) -> io::Result<PathBuf> {
     if release < MIN_PINNABLE_RELEASE {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -161,9 +222,6 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
     fs::create_dir_all(&versions)?;
     let versions = versions.canonicalize()?;
     let directory = versions.join(release.to_string());
-    if let Some(binary) = existing(&directory, release, binary)? {
-        return Ok(binary);
-    }
     let lock = OpenOptions::new()
         .read(true)
         .write(true)
@@ -175,20 +233,13 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
     if let Some(binary) = existing(&directory, release, binary)? {
         return Ok(binary);
     }
-    // Holding this version's lock excludes every cooperating owner of its stages.
-    let stage_prefix = format!(".tmp-{release}-");
-    for entry in fs::read_dir(&versions)? {
-        let entry = entry?;
-        if entry
-            .file_name()
-            .to_str()
-            .and_then(|name| name.strip_prefix(&stage_prefix))
-            .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|byte| byte.is_ascii_digit()))
-            && entry.file_type()?.is_dir()
-        {
-            fs::remove_dir_all(entry.path())?;
-        }
-    }
+    minisign_verify::PublicKey::from_base64(public_key).map_err(|e| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("invalid release public key: {e}"),
+        )
+    })?;
+    remove_stale_stages(&versions, release)?;
     let stage_path = versions.join(format!(".tmp-{release}-{}", std::process::id()));
     fs::create_dir(&stage_path)?;
     let stage = Stage(stage_path);
@@ -200,6 +251,14 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
     let bytes = download(base_url, &url, ARCHIVE_LIMIT)?;
     let checksum = download(base_url, &format!("{url}.sha256"), CHECKSUM_LIMIT)?;
     verify(&bytes, &checksum, &archive)?;
+    let minisig = download(base_url, &format!("{url}.minisig"), SIGNATURE_LIMIT)?;
+    verify_signature(
+        &bytes,
+        &minisig,
+        public_key,
+        &format!("ridl {release} {target}"),
+    )
+    .map_err(|e| io::Error::new(e.kind(), format!("{archive}: {e}")))?;
     extract(&bytes, &stage.0, binary)?;
     File::create_new(stage.0.join(".complete"))?;
     // Cooperating installers use the same lock; never replace a directory found now.
@@ -236,5 +295,30 @@ mod tests {
             !download_config("http://127.0.0.1:1").https_only(),
             "HTTP fixture origins remain available"
         );
+    }
+
+    const REAL_KEY: &str = "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3";
+    const REAL_SIGNATURE: &str = "untrusted comment: signature from minisign secret key
+RUQf6LRCGA9i559r3g7V1qNyJDApGip8MfqcadIgT9CuhV3EMhHoN1mGTkUidF/z7SrlQgXdy8ofjb7bNJJylDOocrCo8KLzZwo=
+trusted comment: timestamp:1633700835\tfile:test\tprehashed
+wLMDjy9FLAuxZ3q4NlEvkgtyhrr0gtTu6KC4KBJdITbbOeAi1zBIYo0v4iTgt8jJpIidRJnp94ABQkJAgAooBQ==";
+    const LEGACY_SIGNATURE: &str = "untrusted comment: signature from minisign secret key
+RWQf6LRCGA9i59SLOFxz6NxvASXDJeRtuZykwQepbDEGt87ig1BNpWaVWuNrm73YiIiJbq71Wi+dP9eKL8OC351vwIasSSbXxwA=
+trusted comment: timestamp:1555779966\tfile:test
+QtKMXWyYcwdpZAlPF7tE2ENJkRd1ujvKjlj1m9RtHTBnZPa5WKU5uWRs5GoP5M/VqE81QFuMKI5k/SfNQUaOAA==";
+
+    #[test]
+    fn signature_verifies_a_real_minisign_signature() {
+        let comment = "timestamp:1633700835\tfile:test\tprehashed";
+        let result = verify_signature(b"test", REAL_SIGNATURE.as_bytes(), REAL_KEY, comment);
+        assert!(result.is_ok(), "{result:?}");
+        assert!(verify_signature(b"test", REAL_SIGNATURE.as_bytes(), REAL_KEY, "x").is_err());
+    }
+
+    #[test]
+    fn signature_refuses_a_legacy_signature() {
+        let comment = "timestamp:1555779966\tfile:test";
+        let result = verify_signature(b"test", LEGACY_SIGNATURE.as_bytes(), REAL_KEY, comment);
+        assert!(result.is_err(), "{result:?}");
     }
 }

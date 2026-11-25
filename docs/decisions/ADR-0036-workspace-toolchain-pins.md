@@ -8,6 +8,13 @@ comes from the maintainer's amendment of 2026-11-24 and the remaining decisions
 delegated on 2026-11-25. It records that design and the resulting behavior; it
 does not claim a separate maintainer approval of this ADR.
 
+Amended 2026-11-25 by
+[driftsys/ridl#1477](https://github.com/driftsys/ridl/issues/1477): decisions 6,
+8, 9 and 10, new decision 11, the Restricted Mode alternative, four new
+alternatives and the consequences. The amendment follows the same delegation.
+Decision 8 and the Restricted Mode alternative name the earlier position where
+the difference matters.
+
 Scope: root release requirements, their enforcement by workspace consumers,
 versioned toolchain management and VS Code selection. Amends
 [ADR-0002](ADR-0002-module-system.md) §4,
@@ -56,14 +63,26 @@ the source of side-by-side installations without another manifest or proxy.
    receive a numeric running release explicitly; they do not read the process
    environment.
 6. **Toolchains share immutable version directories.** `ridl toolchain install`,
-   `list` and `which` operate independently of workspace compilation. The
-   [directory record](../design/toolchain-directory.md) owns the layout,
-   completion test, preservation of damage, schema-1 selection and transaction
-   ordering. Production CLI downloads use one fixed GitHub editor release origin
-   with SHA-256 verification, without a manifest, CLI or environment mirror
-   override. Checksums detect altered bytes relative to that record; they do not
-   authenticate a publisher independently of the release origin. Installation
-   does not modify an existing damaged directory. Releases live under
+   `uninstall`, `list` and `which` operate independently of workspace
+   compilation. The [directory record](../design/toolchain-directory.md) owns
+   the layout, completion test, preservation of damage, schema-1 selection and
+   transaction ordering. Production CLI downloads use one fixed GitHub editor
+   release origin with SHA-256 verification, without a manifest, CLI or
+   environment mirror override. Checksums detect altered bytes relative to that
+   record; they do not authenticate a publisher independently of the release
+   origin. Each `ridl` archive therefore also carries a minisign signature that
+   `ridl toolchain
+   install` verifies against a public key embedded in the
+   binary, after the checksum and before extraction; a missing or invalid
+   signature is an install error. The directory record owns the verification
+   rules, and the
+   [distribution record](../technotes/toolchain-distribution.md#signed-release-archives)
+   owns signing, key rotation and key loss. Installation does not modify an
+   existing damaged directory. `ridl toolchain uninstall <version>` removes one
+   version directory, complete or damaged, and is the explicit repair path for a
+   damaged one. The toolchain root has to be an absolute path: a relative
+   `RIDL_TOOLCHAIN_DIR` is an error in the CLI, and in the scripts when they
+   install a versioned `ridl` release (0.23.0 or later). Releases live under
    `<root>/versions/<version>/`; scripts use the separate
    [`.tmp-script-<version>-<pid>` stage](../design/toolchain-directory.md#install-scripts-and-the-path-copy)
    and do not take the CLI lock.
@@ -77,27 +96,58 @@ the source of side-by-side installations without another manifest or proxy.
    installation; its server still enforces pins. The
    [editor behavior](../book/release-pin.md#editors-and-agent-tools) owns
    installation policy, fallback, routing and lifecycle details.
-8. **Workspace Trust gates the whole extension.** It declares no support for
-   untrusted workspaces, so Restricted Mode starts neither servers nor
-   installers. The delegated ruling keeps VS Code's own trust prompt instead of
-   activating the extension to show an install prompt: activation would also
-   start a server and honor an untrusted workspace's `ridl.serverPath`. Granting
-   trust enables normal activation. Automatic installation is an
+8. **Workspace Trust gates servers and installers, and allows one prompt.** The
+   extension declares limited support for untrusted workspaces.
+   `ridl.serverPath` and `ridl.toolchain.autoInstall` are restricted
+   configurations. In Restricted Mode the extension starts no language client
+   and registers no MCP definition. It only runs `ridl toolchain which --json`
+   with the bundled binary, which reads the manifest and executes no candidate,
+   and shows a prompt when the pinned release is missing. The prompt has the
+   buttons Install and Manage Workspace Trust, and nothing installs until the
+   user presses Install. It runs nothing when it has no bundled binary. In
+   normal activation the extension resolves a PATH binary only from absolute
+   entries. Granting trust enables normal activation. The first version of this
+   decision (#1476) declared no support and left Restricted Mode with VS Code's
+   own prompt, because activation could start a server and honor an untrusted
+   workspace's `ridl.serverPath`; the limited form avoids both by running no
+   server and reading neither setting. Automatic installation is an
    application-scoped boolean, default `true`; workspace settings cannot enable
    or redirect downloads.
 9. **The window has one MCP definition.** Its binary is selected for the first
    VS Code workspace folder, independently of document-open order, and changes
    when that selection changes. It does not provide one MCP server per RIDL
-   root. Terminal-side `ridl mcp` does not hand off to another release.
+   root. Terminal-side `ridl mcp` hands off, before it serves, to an installed
+   release that satisfies the pin of the current directory's root (decision 11).
+   It never installs, so an MCP host that has no Workspace Trust cannot start a
+   download.
 10. **Follow-ups are bounded and explicit.**
-    [driftsys/ridl#1477](https://github.com/driftsys/ridl/issues/1477) tracks
+    [driftsys/ridl#1477](https://github.com/driftsys/ridl/issues/1477) tracked
     terminal and MCP hand-off, terminal auto-install, uninstall, signed
-    releases, the Workspace Trust install prompt and smaller review items.
-    Plugin release pins and automatic pin updates remain outside this change.
+    releases, the Workspace Trust install prompt and smaller review items; they
+    are implemented by decisions 6, 8, 9 and 11. Plugin release pins and
+    automatic pin updates remain outside this change.
     [driftsys/ridl#1478](https://github.com/driftsys/ridl/issues/1478) tracks CI
     running the current extension against the minimum pinnable release; that job
     is due with the first release after **0.23.0**. It is not recorded as
     implemented here.
+11. **A workspace command hands off at its refusal site.** Only MANI-026 hands
+    off, and only when every release refusal of the run is MANI-026. The command
+    runs the highest complete installed release that is compatible with every
+    pin among the run's MANI-026 refusals, with its own arguments, working
+    directory, environment and standard streams. The hand-off itself prints
+    nothing, so output and exit status are the selected release's, except for
+    the lines of an automatic install. The child receives
+    `RIDL_TOOLCHAIN_HANDOFF` set to the releasing parent's release; a process
+    that has the variable never hands off and never installs, so a chain of
+    hand-offs cannot form. With `RIDL_TOOLCHAIN_AUTO_INSTALL=1`, the guard
+    absent and exactly one distinct pin, a command with no installed release
+    installs the pinned release and then hands off. `ridl mcp` hands off from
+    its current directory before it serves and never installs. `ridl lsp`
+    neither hands off nor installs. No manifest key enables an install. The
+    [release pin chapter](../book/release-pin.md#running-the-pinned-release-from-a-terminal)
+    owns the user rules, and the
+    [directory record](../design/toolchain-directory.md#terminal-hand-off) owns
+    the mechanism on each platform and the sites.
 
 ## Alternatives considered
 
@@ -113,14 +163,47 @@ the source of side-by-side installations without another manifest or proxy.
   that accepts warnings.
 - **Allow workspace-controlled download sources or installation policy.**
   Rejected: opening a workspace must not redirect executable downloads.
-- **Activate in Restricted Mode just to prompt for installation.** Deferred by
-  decision 8; the current extension remains inactive until trust is granted.
+- **Activate in Restricted Mode just to prompt for installation.** Chosen in a
+  limited form by decision 8: the extension activates in Restricted Mode, starts
+  no server and shows only the install prompt. The #1476 text deferred it.
+- **Run the bundled server in Restricted Mode.** Rejected: the server loads the
+  workspace, including remote imports and lockfiles, which is more than a prompt
+  needs.
+- **Hand off before dispatch, from the command's path arguments.** Rejected: it
+  would copy the argument-to-root rules of about ten commands and drift from
+  them. The refusal site already knows the pins of the run.
+- **GitHub artifact attestations instead of minisign.** Rejected for the CLI:
+  verification needs the Sigstore trust root, a certificate chain and a log
+  client, which is a large dependency tree, or a runtime dependency on `gh` and
+  a login. The release workflow can add attestations later without changing the
+  embedded-key check.
+- **Sign the `.sha256` record instead of the archive.** Rejected: it gives the
+  same assurance through one more indirection.
+- **Verify the signature in `install.sh` and `install.ps1`.** Rejected: a script
+  is fetched from the same repository as the archives, so verifying inside it
+  adds no trust that is independent of the archive origin. The scripts keep the
+  checksum check.
+- **Add a user configuration file for automatic installation.** Rejected: the
+  environment variable `RIDL_TOOLCHAIN_AUTO_INSTALL`, set in the user's shell
+  profile, is the user-level opt-in, and a new file would add a surface that
+  needs its own discovery rules. A manifest key is excluded for the reason given
+  for workspace-controlled download sources.
+- **Hand off for `ridl lsp` and `ridlc`.** Rejected: the extension already
+  starts the selected binary as the language server, and the versions directory
+  holds only `ridl`. Other editors keep the refusal.
 
 ## Consequences
 
 - A pin gives a checked release boundary to workspace consumers, while several
-  releases can remain installed on one machine. The terminal user invokes the
-  selected path explicitly until hand-off is implemented.
+  releases can remain installed on one machine, and a terminal command that the
+  running release refuses runs the compatible installed one itself. The release
+  workflow's Windows build compiles the Windows branch of the hand-off, but no
+  test compiles or runs it or the Windows paths of the toolchain tests; the
+  follow-up is driftsys/ridl#1480.
+- Every `ridl` archive of a pinnable release needs a signature, so a release
+  cannot ship without the signing secrets. The
+  [distribution record](../technotes/toolchain-distribution.md#signed-release-archives)
+  owns the procedure and the key rotation.
 - Damaged installations need an explicit user action to preserve or move them;
   an installer does not repair them automatically.
 - New manifest keys, diagnostic codes and CLI/schema entries extend frozen

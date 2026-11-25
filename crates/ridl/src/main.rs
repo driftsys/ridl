@@ -5,7 +5,8 @@
 //! `ridl fmt` formats `.typl`, `.ridl` and `.rsdl` files, resolving the width
 //! from `.editorconfig` per file. The exit
 //! code is 0 clean, 1 on a diagnostic error (or, for `fmt --check`, a file that
-//! would change), and 2 on a release refusal, input/output or usage error.
+//! would change), and 2 on a release refusal that is not handed off to another release, or an
+//! input/output or usage error.
 //!
 //! `ridl diff` compares two IR snapshots or source trees through the
 //! `ridl-diff` engine. It carries its own exit contract — 0 compatible
@@ -56,6 +57,7 @@ use std::process::ExitCode;
 mod out;
 mod baseline;
 mod catalogs;
+mod handoff;
 mod lock;
 mod podbuf_padding;
 mod property;
@@ -172,8 +174,8 @@ enum Command {
     },
     /// Run the property suite over a workspace: the range self-corpora and the
     /// contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on
-    /// a self-corpus failure or an evaluation error, 2 on a release refusal or
-    /// a compile error.
+    /// a self-corpus failure or an evaluation error, 2 on a release refusal that
+    /// is not handed off to another release, or a compile error.
     Test {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -225,7 +227,8 @@ enum Command {
     /// none and write the root `instances.lock`; with `--rename` or
     /// `--retire`, rewrite entries in place instead. Exit 0 when the files
     /// are written or nothing changes, 1 on a diagnostic error, 2 on a release
-    /// refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the
+    /// refusal that is not handed off to another release, a bad flag or a path
+    /// or I/O failure. `ridl lock merge` is the
     /// git merge driver for both files.
     #[command(args_conflicts_with_subcommands = true)]
     Lock {
@@ -312,7 +315,8 @@ enum Command {
     /// removed; files and hidden entries are left. Exit 0 when `vendor/` was
     /// written or there was nothing to change, 1 on a diagnostic error
     /// (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a
-    /// release refusal, missing or unreadable path, a fetch failure, or an I/O failure. With
+    /// release refusal that is not handed off to another release, missing or
+    /// unreadable path, a fetch failure, or an I/O failure. With
     /// `--check`, compare `vendor/` with the imports and `ridl.lock` instead,
     /// writing nothing.
     Vendor {
@@ -323,7 +327,8 @@ enum Command {
         /// Compare `vendor/` with `[imports]` and `ridl.lock` instead of
         /// writing: no network, no write. Exit 0 when `vendor/` matches, 1
         /// on drift or another ordinary diagnostic error, 2 on a release
-        /// refusal or a missing or unreadable path.
+        /// refusal that is not handed off to another release, or a missing or
+        /// unreadable path.
         #[arg(long)]
         check: bool,
     },
@@ -398,6 +403,11 @@ enum ToolchainCommand {
         /// The exact MAJOR.MINOR.PATCH release to install.
         version: Option<String>,
     },
+    /// Remove an installed release directory, complete or damaged.
+    Uninstall {
+        /// The exact MAJOR.MINOR.PATCH release to remove.
+        version: String,
+    },
     /// List version directories in ascending release order, including damaged copies.
     List,
     /// Select the highest compatible installed or running release for a workspace.
@@ -414,24 +424,35 @@ fn run_toolchain(command: ToolchainCommand) -> ExitCode {
     use ridl_cli::toolchain::{self, WhichStatus};
     use ridl_core::release::{MIN_PINNABLE_RELEASE, parse_release};
     let execute = || -> std::io::Result<(u8, String)> {
-        let environment = std::env::vars_os()
-            .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
-            .collect::<BTreeMap<_, _>>();
-        let home = environment.get("HOME").map(PathBuf::from);
-        let root = toolchain::toolchain_root(std::env::consts::OS, &environment, home.as_deref())?;
+        let root = toolchain::process_toolchain_root()?;
         match command {
             ToolchainCommand::Install { version } => {
                 let release = match version {
                     Some(text) => parse_release(&text).filter(|v| *v >= MIN_PINNABLE_RELEASE).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("release must be MAJOR.MINOR.PATCH at or above {MIN_PINNABLE_RELEASE}")))?,
                     None => toolchain::workspace_pin(Path::new("."))?,
                 };
+                let (base_url, public_key) = handoff::release_origin();
                 let binary = toolchain::install(
                     &root,
                     release,
                     env!("RIDL_BUILD_TARGET"),
-                    toolchain::RELEASE_BASE_URL,
+                    &base_url,
+                    &public_key,
                 )?;
                 Ok((0, format!("{}\n", binary.display())))
+            }
+            ToolchainCommand::Uninstall { version } => {
+                let release = parse_release(&version).filter(|v| *v >= MIN_PINNABLE_RELEASE).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("release must be MAJOR.MINOR.PATCH at or above {MIN_PINNABLE_RELEASE}")))?;
+                match toolchain::uninstall(&root, release, std::env::current_exe().ok().as_deref())?
+                {
+                    Some(removed) => Ok((0, format!("{}\n", removed.display()))),
+                    None => {
+                        let versions = root.join("versions");
+                        let versions = versions.canonicalize().unwrap_or(versions);
+                        errprintln!("ridl {release} is not installed in {}", versions.display());
+                        Ok((1, String::new()))
+                    }
+                }
             }
             ToolchainCommand::List => {
                 let mut text = String::new();
@@ -460,7 +481,7 @@ fn run_toolchain(command: ToolchainCommand) -> ExitCode {
                 } else {
                     match report.status {
                         WhichStatus::Missing => errprintln!(
-                            "No compatible ridl toolchain is installed; run `ridl toolchain install {}`.",
+                            "No compatible ridl toolchain is installed; run `ridl toolchain install {}`, or set RIDL_TOOLCHAIN_AUTO_INSTALL=1 so that a workspace command installs it.",
                             report.pin.as_deref().unwrap_or_default()
                         ),
                         WhichStatus::Invalid => {
@@ -622,6 +643,9 @@ fn release_preflight(entries: &[PathBuf]) -> std::io::Result<Option<(Vec<Diagnos
 fn release_preflight_exit(entries: &[PathBuf]) -> Option<ExitCode> {
     match release_preflight(entries) {
         Ok(Some((diagnostics, sources))) => {
+            if let Some(code) = handoff::refusal(&diagnostics, &sources) {
+                return Some(code);
+            }
             errprint!("{}", render(&diagnostics, &sources));
             Some(ExitCode::from(2))
         }
@@ -639,8 +663,24 @@ fn release_preflight_exit(entries: &[PathBuf]) -> Option<ExitCode> {
 /// `docs/archive/2026-09-13-runtime-descriptors-design.md`, D-8).
 fn run_describe(path: &Path) -> ExitCode {
     // Preserve describe's input-path I/O message before the shared root reader
-    // can wrap a metadata error. Descriptor bytes are still read after preflight.
+    // can wrap a metadata error. A root release refusal still precedes that
+    // message, found from the nearest existing ancestor directory of the input.
+    // Descriptor bytes are still read after preflight.
     if let Err(err) = std::fs::metadata(path) {
+        let ancestor = path
+            .ancestors()
+            .skip(1)
+            .find(|ancestor| !ancestor.as_os_str().is_empty() && ancestor.is_dir())
+            .unwrap_or(Path::new("."));
+        // Only a release refusal replaces the input's own error; a failure of
+        // the probe itself leaves that error unchanged.
+        if let Ok(Some((diagnostics, sources))) = release_preflight(&[ancestor.to_path_buf()]) {
+            if let Some(code) = handoff::refusal(&diagnostics, &sources) {
+                return code;
+            }
+            errprint!("{}", render(&diagnostics, &sources));
+            return ExitCode::from(2);
+        }
         errprintln!("error: {}: {err}", path.display());
         return ExitCode::from(2);
     }
@@ -746,6 +786,9 @@ fn run_lsp() -> ExitCode {
 /// so this builds the only Tokio runtime the binary ever has — no other
 /// subcommand is async, and none pays for this one.
 fn run_mcp() -> ExitCode {
+    if let Some(code) = handoff::mcp() {
+        return code;
+    }
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -867,7 +910,13 @@ fn report_diff_side_error(error: ridlc::DiffSideError) -> ExitCode {
         ridlc::DiffSideError::Compile {
             diagnostics,
             sources,
-        } => errprint!("{}", render(&diagnostics, &sources)),
+            hand_off,
+        } => {
+            if hand_off && let Some(code) = handoff::refusal(&diagnostics, &sources) {
+                return code;
+            }
+            errprint!("{}", render(&diagnostics, &sources));
+        }
         error => errprintln!("error: {error}"),
     }
     ExitCode::from(2)
@@ -957,6 +1006,9 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     };
 
     if run.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        if let Some(code) = handoff::refusal(&run.diagnostics, &run.sources) {
+            return code;
+        }
         return finish_check(run, format);
     }
 
@@ -1053,7 +1105,12 @@ fn run_build(
     match run {
         Err(BuildFailure::Exit(code)) => code,
         Err(BuildFailure::Io(err)) => finish(Err(err)),
-        Ok(run) => finish(Ok(run)),
+        Ok(run) => {
+            if let Some(code) = handoff::refusal(&run.diagnostics, &run.sources) {
+                return code;
+            }
+            finish(Ok(run))
+        }
     }
 }
 

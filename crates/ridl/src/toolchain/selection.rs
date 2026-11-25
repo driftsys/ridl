@@ -86,6 +86,37 @@ fn list_for_target(root: &Path, target: &str) -> io::Result<Vec<InstalledRelease
     Ok(out)
 }
 
+/// The target triple this binary was built for.
+pub const BUILD_TARGET: &str = env!("RIDL_BUILD_TARGET");
+
+/// Selects the highest complete installed release that is compatible with every pin.
+///
+/// Damaged entries are skipped. The result is the release and the canonical path
+/// of its binary. No pins select nothing.
+pub fn select_installed(
+    root: &Path,
+    pins: &[Release],
+    target: &str,
+) -> io::Result<Option<(Release, PathBuf)>> {
+    if pins.is_empty() {
+        return Ok(None);
+    }
+    let selected = list_for_target(root, target)?
+        .into_iter()
+        .rev()
+        .find(|installed| {
+            !installed.damaged && pins.iter().all(|pin| compatible(installed.release, *pin))
+        });
+    if selected.is_some() {
+        // Same rule as `which`: a candidate needs a target with a published archive.
+        release_target(target)?;
+    }
+    Ok(selected.map(|installed| {
+        let binary = installed.directory.join(binary_name(target));
+        (installed.release, binary)
+    }))
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum WhichStatus {

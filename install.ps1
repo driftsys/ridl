@@ -66,8 +66,25 @@ function ConvertTo-ReleaseVersion {
     return [string]($parts -join '.')
 }
 
+# Windows PowerShell 5.1 has no IsPathFullyQualified. On Windows a rooted path
+# without a drive or a UNC prefix, such as \dir or C:dir, depends on the
+# current directory and is not absolute.
+function Test-AbsolutePath {
+    param([string]$Path)
+    if (-not [IO.Path]::IsPathRooted($Path)) { return $false }
+    if ([IO.Path]::DirectorySeparatorChar -eq '\') {
+        return ($Path -match '^[A-Za-z]:[\\/]' -or $Path -match '^[\\/]{2}')
+    }
+    return $true
+}
+
 function Get-ToolchainRoot {
-    if ($env:RIDL_TOOLCHAIN_DIR) { return [IO.Path]::GetFullPath($env:RIDL_TOOLCHAIN_DIR) }
+    if ($env:RIDL_TOOLCHAIN_DIR) {
+        if (-not (Test-AbsolutePath $env:RIDL_TOOLCHAIN_DIR)) {
+            throw "RIDL_TOOLCHAIN_DIR must be an absolute path, not '$($env:RIDL_TOOLCHAIN_DIR)'"
+        }
+        return [IO.Path]::GetFullPath($env:RIDL_TOOLCHAIN_DIR)
+    }
     if (-not $env:LOCALAPPDATA) { throw 'toolchain directory requires LOCALAPPDATA' }
     return [IO.Path]::GetFullPath((Join-Path $env:LOCALAPPDATA 'ridl'))
 }
@@ -178,6 +195,19 @@ function Main {
         if (-not $source) {
             if ($versioned) {
                 New-Item -ItemType Directory -Path $versions -Force | Out-Null
+                # Remove script stages of this version that a killed run left
+                # behind. A stage is old when it has not changed for 24 hours.
+                $stagePrefix = ".tmp-script-$normalized-"
+                $cutoff = (Get-Date).ToUniversalTime().AddHours(-24)
+                foreach ($old in @(Get-ChildItem -LiteralPath $versions -Directory -Force -Filter "$stagePrefix*")) {
+                    $suffix = $old.Name.Substring($stagePrefix.Length)
+                    if ($old.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
+                    if ($suffix -match '^[0-9]+$' -and $old.LastWriteTimeUtc -lt $cutoff) {
+                        # Removal is best effort: a locked stage stays.
+                        try { Remove-Item -LiteralPath $old.FullName -Recurse -Force }
+                        catch { Write-Warning "could not remove the old stage $($old.FullName): $_" }
+                    }
+                }
                 # A previous directory for this PID is stale; other stages may be live.
                 $candidate = Join-Path $versions ".tmp-script-$normalized-$PID"
                 if (Test-Path -LiteralPath $candidate) {

@@ -251,3 +251,17 @@ test("install_errors_are_reported_once_for_each_release", async () => {
   for (let i = 0; i < 3; i++) assert.equal((await f.selector.select(input)).command, bundled);
   assert.deepEqual(f.errors, ["install:0.23.0", "install:0.24.0"]);
 });
+
+test("no_binary_is_reported_once_and_returns_the_fallback", async () => {
+  const f = fixture([]);
+  const none: SelectInput = { resolver: { command: bundled, source: "none" }, directory, autoInstall: true };
+  const first = await f.selector.select(none);
+  const second = await f.selector.select(none);
+  assert.equal(first.command, bundled);
+  assert.equal(second.command, bundled);
+  assert.deepEqual(f.calls, []);
+  assert.deepEqual(f.errors, ["no-binary"]);
+  assert.deepEqual(f.logs, Array(2).fill(
+    "No ridl binary: the extension has no bundled binary and no absolute PATH entry holds ridl.",
+  ));
+});

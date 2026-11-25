@@ -66,16 +66,16 @@ Commands:
   check      Type-check a file, package, or workspace (defaults to the current directory)
   baseline   Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that would lose the record of an interaction's ordinal (RIDL-408) is refused and leaves the published snapshots as they were
   build      Compile to the selected artifacts (defaults to the current directory)
-  test       Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal or a compile error
+  test       Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal that is not handed off to another release, or a compile error
   fmt        Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff       Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
-  lock       Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
+  lock       Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal that is not handed off to another release, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
   lsp        Run the language server over stdio: exit 0 after `shutdown` then `exit`, 1 when the client ends the session without `shutdown`, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp        Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   init       Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
   new        Create a directory, with its parents, and scaffold a new unit in it, as `ridl init` does. Exits 2 without writing anything when the path exists
   describe   Print a catalog or deployment descriptor as strict JSON, after verifying it
-  vendor     Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a release refusal, missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
+  vendor     Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a release refusal that is not handed off to another release, missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
   help       Print this message or the help of the given subcommand(s)
 
 Options:
@@ -131,7 +131,9 @@ deployment out of the system. The workspace root's `.ridl/baseline/` and
 `ridl.lock` serve a member entry too. `--frozen` is the same flag
 [`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged; the two
 commands share one implementation and render byte-identical diagnostics on the
-same input. It now carries this description word for word under `ridl` too —
+same input, except for a MANI-026 refusal that `ridl`
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal) and
+`ridlc` prints. It now carries this description word for word under `ridl` too —
 before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank line
 where the description belongs.
 
@@ -198,7 +200,9 @@ or `MANI-104` (the pin is neither in `vendor/` nor in the cache). A `ridl.lock`
 written before the `tree` hash existed gives them `MANI-108` too, and the same
 `ridl check` adds the hash.
 
-A [release refusal](release-pin.md) exits 2 without writing files.
+A [release refusal](release-pin.md) exits 2 without writing files, except a
+MANI-026 refusal that is
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal).
 
 **Exit codes.** 0 when nothing is wrong — a clean run prints nothing at all, to
 either stream. 1 when an ordinary diagnostic is an error, for example a range
@@ -724,7 +728,9 @@ publication because it is the directory being written. RIDL-411 still refuses a
 first publication that holds a provisional interface number, because RIDL-411
 reads the fresh snapshot alone.
 
-A [release refusal](release-pin.md) exits 2 without writing files.
+A [release refusal](release-pin.md) exits 2 without writing files, except a
+MANI-026 refusal that is
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal).
 
 **Exit codes.** 0 on a clean publish. 1 when an ordinary diagnostic is an error,
 or when the publication gate above refuses the replacement — in both cases the
@@ -1410,7 +1416,9 @@ out/speed.ir.json
 out/speed.rs
 ```
 
-A [release refusal](release-pin.md) exits 2 without writing files.
+A [release refusal](release-pin.md) exits 2 without writing files, except a
+MANI-026 refusal that is
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal).
 
 **Exit codes.** 0 when the build compiles clean and every requested artifact is
 written. 1 when an ordinary diagnostic is an error — nothing is written for a
@@ -1447,7 +1455,7 @@ ridl test --help
 ```
 
 ```text
-Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal or a compile error
+Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal that is not handed off to another release, or a compile error
 
 Usage: ridl test [OPTIONS] [PATH]
 
@@ -1784,7 +1792,10 @@ exit 2, naming the entry, when an entry inside it named like a snapshot cannot
 be stat'ed — a symlink to a file that is gone — because skipping the entry would
 compare against a set one snapshot short; this is checked before the directory
 is read as a source tree, so a source directory holding such an entry is refused
-too. Every other input reaches the source compiler. Omit both and pass
+too. When the directory lies in a workspace whose root the running release
+refuses (a root release refusal: MANI-024, MANI-025 or MANI-026), that refusal
+replaces the message, and the command never hands it to another release. Every
+other input reaches the source compiler. Omit both and pass
 `--explain <CATEGORY>` instead to print that category's classification rule
 without comparing anything.
 
@@ -2244,7 +2255,7 @@ ridl lock --help
 ```
 
 ```text
-Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
+Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal that is not handed off to another release, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
 
 Usage: ridl lock [OPTIONS] [PATH]
        ridl lock <COMMAND>
@@ -2600,6 +2611,10 @@ and stdout. The
 documents input and output schemas, tool errors and the read-only workspace
 contract. The command takes no flag of its own.
 
+Before it starts the server, `ridl mcp` replaces itself with a compatible
+installed release when the workspace root of the current directory pins a
+release that the running one does not satisfy (MANI-026); it never installs one
+([release pin](release-pin.md#running-the-pinned-release-from-a-terminal)).
 Workspace [release refusals](release-pin.md#editors-and-agent-tools) are tool
 results: path-mode check reports the root diagnostic, metrics and lookups return
 a tool error, and source-side diff retains its structured diagnostics. A root
@@ -2825,7 +2840,7 @@ ridl vendor --help
 ```
 
 ```text
-Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a release refusal, missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
+Copy every remote unit of the workspace's `[imports]` into `vendor/` at the manifest root, so a `--frozen` build needs no network and no cache. Every directory in `vendor/` that no `[imports]` key names is removed; files and hidden entries are left. Exit 0 when `vendor/` was written or there was nothing to change, 1 on a diagnostic error (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a release refusal that is not handed off to another release, missing or unreadable path, a fetch failure, or an I/O failure. With `--check`, compare `vendor/` with the imports and `ridl.lock` instead, writing nothing
 
 Usage: ridl vendor [OPTIONS] [PATH]
 
@@ -2833,7 +2848,7 @@ Arguments:
   [PATH]  A unit directory, a workspace root, or a file; the manifest root above it is the one vendored [default: .]
 
 Options:
-      --check  Compare `vendor/` with `[imports]` and `ridl.lock` instead of writing: no network, no write. Exit 0 when `vendor/` matches, 1 on drift or another ordinary diagnostic error, 2 on a release refusal or a missing or unreadable path
+      --check  Compare `vendor/` with `[imports]` and `ridl.lock` instead of writing: no network, no write. Exit 0 when `vendor/` matches, 1 on drift or another ordinary diagnostic error, 2 on a release refusal that is not handed off to another release, or a missing or unreadable path
   -h, --help   Print help
 ```
 
@@ -2885,7 +2900,7 @@ that no longer matches its `tree` hash is `MANI-107` and names `ridl vendor`.
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | `vendor/` was written, or there was nothing to change                                                                                                                                                                                                                                                                                          |
 | 1    | a diagnostic error, including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit; `vendor/` is left untouched, while `ridl.lock` may be updated, as it is by every command that reads remote units without `--frozen`: it is rewritten when every remote unit was fetched and verified, even if a source error follows |
-| 2    | a root release refusal (MANI-024 through MANI-026), a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure including a failed stdout write, or a fetch failure (MANI-101)                                                                                                                                     |
+| 2    | a root release refusal (MANI-024 through MANI-026, except a MANI-026 that is [handed off](release-pin.md#running-the-pinned-release-from-a-terminal)), a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure including a failed stdout write, or a fetch failure (MANI-101)                                  |
 
 `ridl vendor` applies no `[lints]` levels, and a lint that is `allow` by default
 is left out of its output, as for `ridl lock`.
@@ -2905,11 +2920,11 @@ clean `vendor/`.
 
 **`ridl vendor --check` exit codes.**
 
-| Exit | Meaning                                                                                                                             |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `vendor/` matches                                                                                                                   |
-| 1    | drift (MANI-107, MANI-109 or MANI-110), a unit that `ridl.lock` does not verify (MANI-103 or MANI-108), or another diagnostic error |
-| 2    | a root release refusal (MANI-024 through MANI-026), a missing or unreadable path, no `ridl.toml` at or above it, or a bad flag      |
+| Exit | Meaning                                                                                                                                                                                                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `vendor/` matches                                                                                                                                                                                                                 |
+| 1    | drift (MANI-107, MANI-109 or MANI-110), a unit that `ridl.lock` does not verify (MANI-103 or MANI-108), or another diagnostic error                                                                                               |
+| 2    | a root release refusal (MANI-024 through MANI-026, except a MANI-026 that is [handed off](release-pin.md#running-the-pinned-release-from-a-terminal)), a missing or unreadable path, no `ridl.toml` at or above it, or a bad flag |
 
 ### `ridl toolchain`
 
@@ -2926,10 +2941,11 @@ Install and select versioned RIDL toolchains
 Usage: ridl toolchain <COMMAND>
 
 Commands:
-  install  Install a release, or the current workspace pin when VERSION is omitted
-  list     List version directories in ascending release order, including damaged copies
-  which    Select the highest compatible installed or running release for a workspace
-  help     Print this message or the help of the given subcommand(s)
+  install    Install a release, or the current workspace pin when VERSION is omitted
+  uninstall  Remove an installed release directory, complete or damaged
+  list       List version directories in ascending release order, including damaged copies
+  which      Select the highest compatible installed or running release for a workspace
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help  Print help
@@ -2959,6 +2975,31 @@ Options:
 Print the installed binary path, followed by a newline. An omitted version uses
 the current root pin without comparing it against the running release. Existing
 complete installations need no download. Errors go to stderr and exit 2.
+
+### `ridl toolchain uninstall`
+
+```sh
+ridl toolchain uninstall --help
+```
+
+```text
+Remove an installed release directory, complete or damaged
+
+Usage: ridl toolchain uninstall <VERSION>
+
+Arguments:
+  <VERSION>  The exact MAJOR.MINOR.PATCH release to remove
+
+Options:
+  -h, --help  Print help
+```
+
+Print the removed directory, followed by a newline, and exit 0. A release that
+is not installed prints `ridl <version> is not installed in <directory>` on
+stderr and exits 1. An invalid version, a version below 0.23.0, the running
+release, a failed lock and an I/O failure exit 2. The
+[toolchain directory record](../design/toolchain-directory.md#uninstall) defines
+the removal steps.
 
 ### `ridl toolchain list`
 
@@ -3067,7 +3108,8 @@ workspace, renders diagnostics to stderr, and touches no file.
 
 **Exit codes.** 0 clean, 1 an ordinary diagnostic is an error, 2 a release
 refusal, input/output or usage error — identical in shape to `ridl check`, and,
-on the same input, identical in rendered text:
+on the same input, identical in rendered text (except for a MANI-026 refusal
+that `ridl` hands off and `ridlc` prints):
 
 ```sh
 ridlc check .
@@ -3180,7 +3222,8 @@ and add nothing to the compile itself; what they add is humane defaults (`PATH`
 defaults to `.`, `ridl build`'s `--out-dir` defaults to `out`) and, on `check`
 only, the baseline desk check described [above](#ridl-check), which has no
 `ridlc` equivalent. On identical input the two render byte-identical
-diagnostics, confirmed earlier on this page.
+diagnostics, confirmed earlier on this page, except for a MANI-026 refusal that
+`ridl` hands off and `ridlc` prints.
 
 `ridl baseline`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`,
 `ridl describe`, and `ridl vendor` have no `ridlc` counterpart at all —
@@ -3204,14 +3247,18 @@ stable, default-free flags.
 | `ridl describe`              | the descriptor was printed                                                                                          |                                                                                                                                                                                                                                                                                                                                          | a missing or unreadable path; a file that is not a catalog or deployment descriptor; a version this toolchain does not read; a malformed buffer; an I/O failure writing to stdout; a root release refusal (MANI-024, MANI-025 or MANI-026)                                                                                                                                                                                                                                                                                                              |
 | `ridl vendor`                | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108)                                          | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/` or stdout, or a fetch failure (MANI-101); a root release refusal (MANI-024, MANI-025 or MANI-026)                                                                                                                                                                                                                                                                                                                                             |
 | `ridl toolchain`             | help requested                                                                                                      |                                                                                                                                                                                                                                                                                                                                          | no subcommand, bad flag or stdout failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `ridl toolchain install`     | absolute binary path printed; installed or already present                                                          |                                                                                                                                                                                                                                                                                                                                          | invalid version or pin, no pin, unsupported target, download/checksum/archive error, damaged directory, or I/O failure                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `ridl toolchain install`     | absolute binary path printed; installed or already present                                                          |                                                                                                                                                                                                                                                                                                                                          | invalid version or pin, no pin, unsupported target, download, checksum, signature or archive error, damaged directory, or I/O failure                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `ridl toolchain uninstall`   | removed directory printed                                                                                           | release not installed                                                                                                                                                                                                                                                                                                                    | invalid or below-floor version, running release, lock or I/O failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `ridl toolchain list`        | inventory printed, including an empty inventory                                                                     |                                                                                                                                                                                                                                                                                                                                          | directory read or stdout failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `ridl toolchain which`       | compatible release or unpinned workspace                                                                            | missing compatible release or invalid pin                                                                                                                                                                                                                                                                                                | missing entry, unreadable or malformed manifest, unsupported installed target, directory read or stdout failure                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 A [root release pin](release-pin.md) is checked before workspace analysis.
 MANI-024, MANI-025 and MANI-026 exit 2 and suppress other diagnostics for that
-root. Source and output files are preserved. `fmt` checks all discovered roots
-before writing, and `describe` follows the descriptor input path rather than the
+root, except that a MANI-026 refusal which is
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal) to an
+installed release gives that release's exit code and output. Otherwise source
+and output files are preserved. `fmt` checks all discovered roots before
+writing, and `describe` follows the descriptor input path rather than the
 current directory. Snapshot-only `diff`, standalone descriptors, `init`, `new`
 and `lock merge` retain their existing contracts.
 

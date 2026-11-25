@@ -115,9 +115,16 @@ export class ToolchainSelector {
     const directory = path.resolve(input.directory);
     const fallback = { key: `folder:${directory}`, manifest: null, root: directory, command: input.resolver.command };
     if (input.resolver.source === "setting") return fallback;
+    if (input.resolver.source === "none") {
+      this.report(
+        "no-binary",
+        "No ridl binary: the extension has no bundled binary and no absolute PATH entry holds ridl.",
+      );
+      return fallback;
+    }
     let report: WhichReport;
     try {
-      report = await this.probe(input);
+      report = await this.which(input.resolver.command, input.directory);
     } catch (error) {
       const message = `Could not select a RIDL toolchain: ${String(error)}`;
       if (error instanceof UnknownWhichSchema) this.effects.log(message);
@@ -135,18 +142,8 @@ export class ToolchainSelector {
     const pin = report.pin;
     try {
       if (!input.autoInstall && !(await this.effects.offerInstall(pin))) return selection(input.resolver.command);
-      let install = this.installs.get(pin);
-      if (!install) {
-        install = this.effects.progress(`Installing RIDL ${pin}`, async () => {
-          const result = await this.runner.run(input.resolver.command, ["toolchain", "install", pin], directory);
-          if (result.exitCode !== 0) throw new Error(result.stderr || `install exited ${result.exitCode}`);
-        });
-        this.installs.set(pin, install);
-        // Remove only this operation, so a later document open can retry a failure.
-        void install.then(() => this.installs.delete(pin), () => this.installs.delete(pin));
-      }
-      await install;
-      const fresh = await this.probe(input);
+      await this.install(input.resolver.command, pin, directory);
+      const fresh = await this.which(input.resolver.command, input.directory);
       if (fresh.status !== "compatible" && fresh.status !== "unpinned") {
         throw new Error("toolchain is still unavailable after installation");
       }
@@ -160,12 +157,9 @@ export class ToolchainSelector {
     }
   }
 
-  private async probe(input: SelectInput): Promise<WhichReport> {
-    const result = await this.runner.run(
-      input.resolver.command,
-      ["toolchain", "which", "--json", input.directory],
-      input.directory,
-    );
+  /** Run `ridl toolchain which --json` with the given binary and validate the report. */
+  async which(command: string, directory: string): Promise<WhichReport> {
+    const result = await this.runner.run(command, ["toolchain", "which", "--json", directory], directory);
     const value: unknown = JSON.parse(result.stdout);
     if (record(value) && value.schema !== undefined && value.schema !== 1) {
       throw new UnknownWhichSchema(`unsupported toolchain which schema: ${String(value.schema)}`);
@@ -177,6 +171,20 @@ export class ToolchainSelector {
       throw new Error(`toolchain which exit ${result.exitCode} disagrees with ${report.status}`);
     }
     return report;
+  }
+  /** Install a pinned release with the given binary; concurrent calls for one pin share one install. */
+  async install(command: string, pin: string, directory: string): Promise<void> {
+    let install = this.installs.get(pin);
+    if (!install) {
+      install = this.effects.progress(`Installing RIDL ${pin}`, async () => {
+        const result = await this.runner.run(command, ["toolchain", "install", pin], directory);
+        if (result.exitCode !== 0) throw new Error(result.stderr || `install exited ${result.exitCode}`);
+      });
+      this.installs.set(pin, install);
+      // Remove only this operation, so a later document open can retry a failure.
+      void install.then(() => this.installs.delete(pin), () => this.installs.delete(pin));
+    }
+    await install;
   }
   private report(key: string, message: string): void {
     this.effects.log(message);

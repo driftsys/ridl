@@ -19,12 +19,23 @@
     "Programming Languages"
   ],
   "main": "./out/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "In Restricted Mode, RIDL starts no language server and no MCP server. It only checks whether the release a workspace pins is installed, and offers to install it.",
+      "restrictedConfigurations": [
+        "ridl.serverPath",
+        "ridl.toolchain.autoInstall"
+      ]
+    }
+  },
   "contributes": {
     "commands": [
       {
         "command": "ridl.installToPath",
         "title": "Install ridl to PATH",
-        "category": "RIDL"
+        "category": "RIDL",
+        "enablement": "isWorkspaceTrusted"
       }
     ],
     "chatSkills": [
@@ -127,7 +138,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js out/clientLifecycle.test.js out/runOnce.test.js out/toolchainSelection.test.js out/workspaceClients.test.js out/extension.test.js"
+    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js out/clientLifecycle.test.js out/runOnce.test.js out/toolchainSelection.test.js out/restrictedMode.test.js out/workspaceClients.test.js out/extension.test.js"
   },
   "dependencies": {
     "vscode-languageclient": "10.1.0"

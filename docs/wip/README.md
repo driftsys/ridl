@@ -436,3 +436,13 @@ is not a merge or release claim.
 [ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md),
 [`../design/toolchain-directory.md`](../design/toolchain-directory.md) and
 [the release pin chapter](../book/release-pin.md) are their durable records.
+
+The toolchain follow-ups design and plan
+(`2026-11-25-toolchain-followups-{design,plan}.md`) were archived on 2026-11-25,
+after the implementation tests passed on the development branch
+(driftsys/ridl#1477, pull request driftsys/ridl#1481); this is not a merge or
+release claim. [ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md),
+[`../design/toolchain-directory.md`](../design/toolchain-directory.md),
+[the release pin chapter](../book/release-pin.md) and
+[the distribution technote](../technotes/toolchain-distribution.md) are their
+durable records.

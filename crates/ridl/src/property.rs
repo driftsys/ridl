@@ -206,6 +206,9 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
         }
     };
     if output.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        if let Some(code) = crate::handoff::refusal(&output.diagnostics, &output.sources) {
+            return code;
+        }
         errprint!(
             "{}",
             ridl_core::render(&output.diagnostics, &output.sources)

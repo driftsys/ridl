@@ -37,18 +37,22 @@ The diagnostic points to the value. MANI-026 names both releases and the command
 MANI-024 through MANI-026 stop loading before members, source parsing, headers,
 remote imports, lockfiles or lint directives. They are the only diagnostics
 reported for that root. The batch commands listed below exit **2** without
-writing workspace or output files. Invalid TOML syntax remains MANI-001.
-MANI-027 raised to `deny` is an ordinary diagnostic error and exits **1** in
-commands that apply levels.
+writing workspace or output files, unless a MANI-026 refusal is
+[handed off](#running-the-pinned-release-from-a-terminal). Invalid TOML syntax
+remains MANI-001. MANI-027 raised to `deny` is an ordinary diagnostic error and
+exits **1** in commands that apply levels.
 
 `check`, `build`, `fmt`, `lock`, source inputs to `diff`, `baseline`, `test`,
 `vendor`, `describe`, and `ridlc check/build` enforce the root pin. Formatting
 checks every discovered root before any write, without compiling sources.
 `describe` checks the descriptor input's root without compiling sources.
-Explicit snapshot inputs to `diff`, standalone descriptors, `init`, `new` and
-`lock merge` keep their existing contracts, independent of the current
-directory's pin. `lsp` and `mcp` still start their servers and report refusals
-through their protocols, as described below.
+`describe` and a `diff` directory input report a root release refusal before an
+I/O error of the input. Explicit snapshot inputs to `diff`, standalone
+descriptors, `init`, `new` and `lock merge` keep their existing contracts,
+independent of the current directory's pin. `lsp` starts its server and reports
+refusals through its protocol. `mcp` hands off a MANI-026 refusal of the current
+directory's root to a compatible installed release, and otherwise starts its
+server and reports refusals through its protocol, as described below.
 
 Releases before 0.23.0 cannot enforce pins: they read the key as unknown
 (MANI-005) and may continue. Pin support begins with 0.23.0.
@@ -65,8 +69,11 @@ invalid pin or invalid TOML is an input error, exit 2. This command reads the
 pin without enforcing compatibility with the running binary.
 
 The toolchain root is the nonempty `RIDL_TOOLCHAIN_DIR` environment variable, or
-the platform data directory below. A relative override is resolved against the
-current directory. Empty environment values count as unset.
+the platform data directory below. `ridl` refuses a relative override, exit 2.
+`install.sh` and `install.ps1` refuse it with a failure status of 1, the status
+they use for every error, when they install a versioned release (0.23.0 or
+later); an older release or `ridlc` ignores the variable. Empty environment
+values count as unset.
 
 | Platform | Default root                                                                |
 | -------- | --------------------------------------------------------------------------- |
@@ -76,9 +83,18 @@ current directory. Empty environment values count as unset.
 
 A missing home directory or required Windows variable is an error. Releases
 remain side by side; an existing damaged installation is reported and preserved.
-The [directory and installation protocol](../design/toolchain-directory.md)
-defines completion, archive verification, locking, separate CLI/script staging
-and cleanup ownership.
+Install verifies the SHA-256 checksum and the minisign signature of the archive
+before it extracts anything. The
+[directory and installation protocol](../design/toolchain-directory.md) defines
+completion, archive verification, locking, separate CLI/script staging and
+cleanup ownership.
+
+`ridl toolchain uninstall VERSION` removes the version directory of an exact
+release of at least 0.23.0, complete or damaged, and prints the removed path. It
+refuses the running release, exits 1 when the release is not installed, and
+waits for the version's lock. The
+[directory record](../design/toolchain-directory.md#uninstall) defines the
+steps.
 
 `ridl toolchain list` prints one `<version>\t<directory>` line per canonical
 version directory, in numeric order. Damaged lines end with `(damaged)`.
@@ -94,8 +110,57 @@ targets without published archives.
 Text output is the absolute binary path on stdout for success, or a sentence on
 stderr for a negative answer. `--json` provides the
 [schema-1 selection report](../design/toolchain-directory.md#which---json-schema-1),
-including all status, nullability and exit mappings. Selecting a binary does not
-run it; invoke the returned path explicitly in terminal workflows.
+including all status, nullability and exit mappings. `which` selects a binary
+without running it; to run the pinned release from a terminal, see the next
+section.
+
+## Running the pinned release from a terminal
+
+When the running release refuses a root pin (MANI-026) and a compatible release
+is installed, `check`, `build`, `fmt`, `lock`, `baseline`, `test`, `vendor`,
+`describe` and the source inputs of `diff` run that release instead of printing
+the refusal. The running process replaces itself with the selected binary on
+Unix. On Windows it starts the binary, waits, and exits with the binary's exit
+code.
+
+The selected release is the highest complete, undamaged installed release that
+is compatible with every MANI-026 pin of the run. The running binary is never a
+candidate. `fmt` can report several pins when it walks several roots; one
+release has to satisfy all of them. When no installed release qualifies and
+automatic installation (below) does not apply, the refusal is printed and the
+command exits 2.
+
+The selected binary receives the same arguments, working directory and
+environment, and the same three standard streams, with one addition: the
+variable `RIDL_TOOLCHAIN_HANDOFF`, whose value is the release that handed off.
+The hand-off itself prints nothing, and the exit status and output are the
+selected release's; only an automatic installation before it prints the two
+lines described below. If the binary cannot be started, the message
+`error: could not run ridl <version> at <path>: <error>` is printed and the
+command exits 2.
+
+A process whose environment has `RIDL_TOOLCHAIN_HANDOFF`, with any value
+including an empty one, never hands off. This stops a chain of hand-offs.
+
+When no installed release qualifies, the environment variable
+`RIDL_TOOLCHAIN_AUTO_INSTALL` can install one. Automatic installation runs only
+when the variable's value is exactly `1`, the run has exactly one distinct
+MANI-026 pin, and `RIDL_TOOLCHAIN_HANDOFF` is absent. The command prints
+`installing ridl <pin>…` and then `installed ridl <pin> at <path>` on standard
+error, installs the release as `ridl toolchain install <pin>` does, and hands
+off to it. If the installation fails, the command prints `error: <cause>`, then
+the refusal, and exits 2. No manifest key enables automatic installation.
+
+Only MANI-026 hands off. A run that reports MANI-024 or MANI-025 anywhere, even
+beside a MANI-026, prints its refusals and exits 2. `ridl toolchain` commands,
+`init`, `new`, `lock merge`, snapshot-only `diff`, standalone descriptors and
+`ridl lsp` never hand off. A snapshot directory that cannot be read, in a
+workspace whose root the running release refuses, reports that refusal and exits
+2: the refusal never reaches a hand-off and never starts an installation.
+`ridl toolchain which` still selects without running. `ridl mcp` is not a
+workspace command, but it hands off the same way, from the current directory's
+workspace root, before it reads standard input or starts the server. It never
+installs a release, even when `RIDL_TOOLCHAIN_AUTO_INSTALL` is `1`.
 
 ## Editors and agent tools
 
@@ -136,20 +201,29 @@ or edits.
 A RIDL source activates the extension through its language contribution. A
 `ridl.toml` found inside an opened VS Code folder activates it through
 `workspaceContains:**/ridl.toml`; opening a manifest alone in a window without a
-folder does not activate it. Once the extension is active, opening a RIDL source
-or a manifest starts its client. The manifest is selected by filename in any
-language mode, so the pin action works before a source is opened and without a
-separate TOML extension. Other TOML files do not start clients. Saved manifest
-create/change/delete events are forwarded to the servers and run discovery
-again. A client is replaced when its selected binary or discovery key changes,
-including when a manifestless document acquires a root manifest. Unsaved
-manifest changes reload the current server without selecting a release from
-unsaved text. Removing a VS Code folder stops clients no longer used by another
-mapping, and deactivation stops every client.
+folder does not activate it. In a trusted workspace, once the extension is
+active, opening a RIDL source or a manifest starts its client. In Restricted
+Mode it only checks for a missing pinned release. The manifest is selected by
+filename in any language mode, so the pin action works before a source is opened
+and without a separate TOML extension. Other TOML files do not start clients.
+Saved manifest create/change/delete events are forwarded to the servers and run
+discovery again. A client is replaced when its selected binary or discovery key
+changes, including when a manifestless document acquires a root manifest.
+Unsaved manifest changes reload the current server without selecting a release
+from unsaved text. Removing a VS Code folder stops clients no longer used by
+another mapping, and deactivation stops every client.
 
-The extension declares no support for untrusted workspaces. VS Code therefore
-keeps it inactive in Restricted Mode: no server or installer runs. Granting
-Workspace Trust enables normal activation. The MCP definition uses the release
+The extension supports untrusted workspaces in a limited way. In Restricted Mode
+it starts no language client and registers no MCP definition, and it never
+installs a release by itself. It runs `ridl toolchain which --json` with the
+bundled binary for each `ridl.toml` directory and each opened RIDL document.
+When a release is missing, it shows one prompt for each release, with the
+buttons Install and Manage Workspace Trust. Install runs
+`ridl toolchain install` with the bundled binary; the CLI verifies the release
+signature. `ridl.serverPath` and `ridl.toolchain.autoInstall` are restricted
+configurations, and the extension reads neither in Restricted Mode. Granting
+Workspace Trust enables normal activation. When no bundled binary exists, the
+extension runs nothing in Restricted Mode. The MCP definition uses the release
 selected for the first VS Code workspace folder, independently of document-open
 order. There is one MCP definition per window; a selection change updates it.
 

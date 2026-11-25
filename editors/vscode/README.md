@@ -57,7 +57,11 @@ Install ridl to PATH** to use `ridl` from a terminal, Claude Code, or Codex too.
 
 ## Build from source
 
-`ridl` on `PATH` is enough for a development launch (F5 in `editors/vscode`):
+`ridl` in an absolute `PATH` entry is enough for a development launch (F5 in
+`editors/vscode`). The extension skips empty, relative and drive-relative `PATH`
+entries and any `ridl` that is not an executable file, so it never runs a `ridl`
+from the working directory. On Windows, an entry must start with a drive letter
+and a separator, or with a UNC share:
 
 ```sh
 cargo install --path crates/ridl
@@ -74,6 +78,16 @@ The [selection protocol](../../docs/design/toolchain-directory.md) defines the
 schema consumed by the extension;
 [ADR-0036](../../docs/decisions/ADR-0036-workspace-toolchain-pins.md) records
 the per-root selection and Workspace Trust decisions.
+
+## Restricted Mode
+
+In a workspace that is not trusted, the extension starts no language server and
+no MCP server, and it installs nothing by itself. It uses the bundled `ridl`
+binary to check whether the release that a workspace pins is installed. When the
+release is missing, one prompt per release offers **Install** and **Manage
+Workspace Trust**. The settings `ridl.serverPath` and
+`ridl.toolchain.autoInstall` are restricted: Restricted Mode ignores workspace
+values for them. Granting trust starts the normal activation.
 
 ## Settings
 

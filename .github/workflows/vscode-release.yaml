@@ -9,7 +9,8 @@ name: vscode-release
 # binaries' tarballs, and runs the Marketplace publish in the `marketplace`
 # environment, which a maintainer must configure with required reviewers. The
 # release job does not depend on the publish job, so a publish failure never
-# blocks the release.
+# blocks the release. The publish job depends on the release job, so a failed
+# signing step publishes neither the release nor the extension.
 #
 # Packaging runs through `just package-vsix` (ADR-0009: the justfile defines
 # it; this file only invokes it), the same recipe `just package-vscode` calls
@@ -257,6 +258,53 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      # The Ubuntu package reads the key password from standard input and needs
+      # no build.
+      - name: install minisign
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign
+          minisign -v
+      # Only this job holds the signing secret; the build runners never see it.
+      # `ridlc` archives are not signed.
+      - name: sign the ridl archives
+        env:
+          RIDL_RELEASE_SIGNING_KEY: ${{ secrets.RIDL_RELEASE_SIGNING_KEY }}
+          RIDL_RELEASE_SIGNING_KEY_PASSWORD: ${{ secrets.RIDL_RELEASE_SIGNING_KEY_PASSWORD }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          : "${RIDL_RELEASE_SIGNING_KEY:?the RIDL_RELEASE_SIGNING_KEY secret is required to sign a release}"
+          : "${RIDL_RELEASE_SIGNING_KEY_PASSWORD:?the RIDL_RELEASE_SIGNING_KEY_PASSWORD secret is required to sign a release}"
+          if grep -qF RIDL-RELEASE-KEY-PLACEHOLDER crates/ridl/src/toolchain/mod.rs; then
+            echo "error: crates/ridl/src/toolchain/mod.rs still holds the RIDL-RELEASE-KEY-PLACEHOLDER public key; a release signed now could not be verified" >&2
+            exit 1
+          fi
+          # The embedded public key has to decode to a minisign public key: 42
+          # bytes, the algorithm `Ed`, an 8-byte key id and the 32-byte key.
+          public_key="$(sed -n 's/^pub const RELEASE_PUBLIC_KEY: &str = "\(.*\)";$/\1/p' crates/ridl/src/toolchain/mod.rs)"
+          decoded="$(printf '%s' "$public_key" | base64 -d 2>/dev/null | od -An -tx1 | tr -d ' \n' || true)"
+          if [ "${#decoded}" != 84 ] || [ "${decoded:0:4}" != 4564 ]; then
+            echo "error: the RELEASE_PUBLIC_KEY in crates/ridl/src/toolchain/mod.rs is not a minisign public key; a release signed now could not be verified" >&2
+            exit 1
+          fi
+          version="${RELEASE_TAG#editor-v}"
+          key="$(mktemp "${TMPDIR:-/tmp}/ridl-signing-key.XXXXXX")"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$RIDL_RELEASE_SIGNING_KEY" > "$key"
+          shopt -s nullglob
+          archives=(artifacts/ridl-*.tar.gz)
+          if [ "${#archives[@]}" -eq 0 ]; then
+            echo "error: no ridl archive to sign in artifacts/" >&2
+            exit 1
+          fi
+          for archive in "${archives[@]}"; do
+            name="${archive##*/}"
+            target="${name#ridl-}"
+            target="${target%.tar.gz}"
+            printf '%s\n' "$RIDL_RELEASE_SIGNING_KEY_PASSWORD" \
+              | minisign -S -s "$key" -m "$archive" -t "ridl $version $target" -x "$archive.minisig"
+          done
       # The ridl-authoring skill, for Claude Code and Codex; the VSIX already
       # carries it for GitHub Copilot.
       - name: package the skill
@@ -271,12 +319,13 @@ jobs:
           files: |
             artifacts/*.tar.gz
             artifacts/*.sha256
+            artifacts/*.minisig
             artifacts/*.vsix
             artifacts/*.zip
 
   publish-vsce:
     name: publish to the VS Code Marketplace
-    needs: package-vsix
+    needs: [package-vsix, release]
     runs-on: ubuntu-latest
     environment: marketplace
     steps:

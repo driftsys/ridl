@@ -1,10 +1,14 @@
 import { strict as assert } from "node:assert";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import {
   bundledBinaryPath,
   clientDocumentSelector,
+  findOnPath,
   isLegacyServerName,
+  isUsableBinary,
   normalizeAbsolutePath,
   resolveBinary,
   resolveLspCommand,
@@ -18,6 +22,7 @@ test("tier 1: an explicit setting wins even when a bundled binary exists", () =>
   const resolved = resolveBinary({
     configuredPath: "/opt/ridl/bin/ridl",
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "linux",
     exists: () => true,
   });
@@ -29,6 +34,7 @@ test("tier 2: the bundled binary when it exists and no setting is given", () => 
   const resolved = resolveBinary({
     configuredPath: undefined,
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "darwin",
     exists: (file) => file === bundled,
   });
@@ -43,20 +49,75 @@ test("tier 3: PATH lookup when nothing is bundled (the development launch)", () 
   const resolved = resolveBinary({
     configuredPath: undefined,
     extensionPath: EXT,
+    pathValue: "/usr/bin:/opt/ridl",
     platform: "linux",
-    exists: () => false,
+    exists: (file) => file === "/opt/ridl/ridl",
   });
-  assert.deepEqual(resolved, { command: "ridl", source: "path" });
+  assert.deepEqual(resolved, { command: "/opt/ridl/ridl", source: "path" });
+});
+
+test("path_lookup_uses_only_absolute_entries", () => {
+  assert.equal(
+    findOnPath(".:bin::/abs", "linux", (f) => f !== "/abs/ridl" ? f === "bin/ridl" || f === "ridl" : true),
+    "/abs/ridl",
+  );
+  assert.equal(
+    findOnPath(".;C:\\tools;relative", "win32", (f) => f === "C:\\tools\\ridl.exe" || f === "ridl.exe"),
+    "C:\\tools\\ridl.exe",
+  );
+  assert.equal(findOnPath(".;relative", "win32", () => true), undefined);
+  assert.equal(findOnPath(undefined, "linux", () => true), undefined);
+  // Drive-less rooted and drive-relative Windows entries depend on the current drive or directory.
+  assert.equal(findOnPath("\\tools;C:tools;\\\\host\\share\\bin", "win32", () => true), "\\\\host\\share\\bin\\ridl.exe");
+  assert.equal(findOnPath("\\tools;C:tools", "win32", () => true), undefined);
+  assert.equal(findOnPath("C:/tools", "win32", () => true), "C:\\tools\\ridl.exe");
+});
+
+test("path_lookup_skips_candidates_that_are_not_usable", () => {
+  // A directory or a non-executable file named ridl earlier on PATH is skipped.
+  const usable = (file: string) => file === "/c/ridl";
+  assert.equal(findOnPath("/a:/b:/c", "linux", usable), "/c/ridl");
+  const resolved = resolveBinary({
+    configuredPath: undefined,
+    extensionPath: EXT,
+    pathValue: "/a:/c",
+    platform: "linux",
+    exists: () => true,
+    usable,
+  });
+  assert.deepEqual(resolved, { command: bundledBinaryPath(EXT, "linux"), source: "bundled" });
+  assert.deepEqual(
+    resolveBinary({
+      configuredPath: undefined,
+      extensionPath: EXT,
+      pathValue: "/a:/c",
+      platform: "linux",
+      exists: (file) => file !== bundledBinaryPath(EXT, "linux"),
+      usable,
+    }),
+    { command: "/c/ridl", source: "path" },
+  );
+  const base = {
+    configuredPath: undefined,
+    extensionPath: EXT,
+    pathValue: undefined,
+    platform: "linux" as const,
+  };
+  assert.deepEqual(resolveBinary({ ...base, pathValue: ".", exists: () => false }), {
+    command: bundledBinaryPath(base.extensionPath, base.platform),
+    source: "none",
+  });
 });
 
 test("a blank setting counts as unset", () => {
   const resolved = resolveBinary({
     configuredPath: "   ",
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "linux",
     exists: () => false,
   });
-  assert.equal(resolved.source, "path");
+  assert.equal(resolved.source, "none");
 });
 
 test("the old ridl-lsp binary name is recognised so the user gets a warning", () => {
@@ -70,6 +131,7 @@ test("the MCP definition spawns the same binary with the mcp subcommand", () => 
   const definition = resolveMcpDefinition({
     configuredPath: undefined,
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "linux",
     exists: (file) => file === bundled,
     extensionVersion: "0.1.0",
@@ -89,6 +151,7 @@ test("the LSP command spawns the same binary with the lsp subcommand", () => {
   const resolved = resolveLspCommand({
     configuredPath: undefined,
     extensionPath: EXT,
+    pathValue: undefined,
     platform: "linux",
     exists: (file) => file === bundled,
   });
@@ -128,6 +191,7 @@ test("mcp_selected_command_passes_through", () => {
     resolveMcpDefinition({
       configuredPath: undefined,
       extensionPath: EXT,
+      pathValue: undefined,
       platform: "linux",
       exists: () => true,
       extensionVersion: "1.0.0",
@@ -141,4 +205,38 @@ test("mcp_selected_command_passes_through", () => {
 test("windows_verbatim_paths_match_editor_drive_and_unc_paths", () => {
   assert.equal(normalizeAbsolutePath("\\\\?\\C:\\work\\ridl.toml", "win32"), "C:\\work\\ridl.toml");
   assert.equal(normalizeAbsolutePath("\\\\?\\UNC\\host\\share\\ridl.toml", "win32"), "\\\\host\\share\\ridl.toml");
+});
+
+test("is_usable_binary_checks_the_real_filesystem", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "ridl-usable-"));
+  try {
+    const directory = path.join(base, "dir"), plain = path.join(base, "plain"), runnable = path.join(base, "run");
+    fs.mkdirSync(directory);
+    fs.writeFileSync(plain, "", { mode: 0o644 });
+    fs.writeFileSync(runnable, "", { mode: 0o755 });
+    assert.equal(isUsableBinary(path.join(base, "missing")), false);
+    assert.equal(isUsableBinary(directory), false);
+    assert.equal(isUsableBinary(runnable), true);
+    if (process.platform !== "win32") assert.equal(isUsableBinary(plain), false);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("path_lookup_through_the_real_predicate_skips_a_directory_and_a_plain_file", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "ridl-lookup-"));
+  try {
+    const name = process.platform === "win32" ? "ridl.exe" : "ridl";
+    const [first, second, third] = ["a", "b", "c"].map((d) => path.join(base, d));
+    for (const d of [first, second, third]) fs.mkdirSync(d);
+    fs.mkdirSync(path.join(first, name));
+    fs.writeFileSync(path.join(second, name), "", { mode: 0o644 });
+    fs.writeFileSync(path.join(third, name), "", { mode: 0o755 });
+    const pathValue = [first, second, third].join(process.platform === "win32" ? ";" : ":");
+    const found = findOnPath(pathValue, process.platform, isUsableBinary);
+    // On Windows a file without the execute bit is still usable, so the second entry wins there.
+    assert.equal(found, path.join(process.platform === "win32" ? second : third, name));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });
