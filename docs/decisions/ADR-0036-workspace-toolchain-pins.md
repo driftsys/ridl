@@ -179,6 +179,18 @@ the source of side-by-side installations without another manifest or proxy.
   embedded-key check.
 - **Sign the `.sha256` record instead of the archive.** Rejected: it gives the
   same assurance through one more indirection.
+- **Verify the signature in `install.sh` and `install.ps1`.** Rejected: a script
+  is fetched from the same repository as the archives, so verifying inside it
+  adds no trust that is independent of the archive origin. The scripts keep the
+  checksum check.
+- **Add a user configuration file for automatic installation.** Rejected: the
+  environment variable `RIDL_TOOLCHAIN_AUTO_INSTALL`, set in the user's shell
+  profile, is the user-level opt-in, and a new file would add a surface that
+  needs its own discovery rules. A manifest key is excluded for the reason given
+  for workspace-controlled download sources.
+- **Hand off for `ridl lsp` and `ridlc`.** Rejected: the extension already
+  starts the selected binary as the language server, and the versions directory
+  holds only `ridl`. Other editors keep the refusal.
 
 ## Consequences
 

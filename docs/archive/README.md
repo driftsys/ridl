@@ -1102,3 +1102,20 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md), and
   [the distribution technote](../technotes/toolchain-distribution.md). Deferred
   items are tracked in driftsys/ridl#1477 and driftsys/ridl#1478.
+- **2026-11-25-toolchain-followups-design.md** and
+  **2026-11-25-toolchain-followups-plan.md** — the design/plan pair for the
+  follow-ups of the toolchain pins (driftsys/ridl#1477): terminal and `ridl mcp`
+  hand-off, opt-in automatic install, `ridl toolchain uninstall`, minisign
+  signed release archives, the Workspace Trust install prompt and the smaller
+  review items. Archived verbatim on 2026-11-25, after the implementation tests
+  passed on the development branch (pull request driftsys/ridl#1481). This is
+  not a merge or release claim. The plan's tasks and code listings are not a
+  description of the as-built code. The durable records are the 2026-11-25
+  amendment of [ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md)
+  (decisions 6, 8, 9, 10 and 11 and the alternatives), the amendments of
+  [ADR-0010](../decisions/ADR-0010-cli-conventions.md),
+  [the toolchain directory record](../design/toolchain-directory.md),
+  [the release pin chapter](../book/release-pin.md) and
+  [the distribution technote](../technotes/toolchain-distribution.md). The
+  production public key is a placeholder until the owner supplies the release
+  key, and the signing secrets must exist before the next editor release.
