@@ -141,7 +141,8 @@ member; rsdl is the apex.
                          temporary pin file: a matching zip passes, and a
                          different zip, an absent target and a malformed pin
                          each fail. It also runs the ignored local-HTTP
-                         toolchain installation test outside sandbox runs
+                         toolchain installation test unconditionally; the recipe
+                         requires permission to bind a local TCP listener
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just book-check      mdbook build on a copy of docs/ and of the
                          examples/**/*.rs and examples/**/*.ridl sources —

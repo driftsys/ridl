@@ -12,7 +12,7 @@ use tempfile::TempDir;
 use toolchain_support as support;
 
 #[test]
-#[ignore = "requires a local TCP listener; run by just install-check outside the sandbox"]
+#[ignore = "requires a local TCP listener; run unconditionally by just install-check"]
 fn toolchain_ureq_path_verifies_and_installs() {
     let assets = TempDir::new().unwrap();
     let root = TempDir::new().unwrap();

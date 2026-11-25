@@ -8,7 +8,7 @@ use std::{
 };
 use tempfile::TempDir;
 
-const TARGET: &str = "aarch64-apple-darwin";
+const TARGET: &str = support::TARGET;
 fn release(s: &str) -> Release {
     parse_release(s).unwrap()
 }
@@ -106,6 +106,39 @@ fn toolchain_roots_follow_platform_precedence() {
 }
 
 #[test]
+fn toolchain_roots_windows_names_are_case_insensitive() {
+    let home = TempDir::new().unwrap();
+    let mut env = BTreeMap::from([(
+        "LocalAppData".into(),
+        home.path().join("data").into_os_string(),
+    )]);
+    let result = toolchain_root("windows", &env, None);
+    assert!(
+        result.is_ok(),
+        "mixed-case LocalAppData lookup failed: {result:?}"
+    );
+    assert_eq!(result.unwrap(), home.path().join("data/ridl"));
+    env.insert(
+        "Ridl_Toolchain_Dir".into(),
+        home.path().join("override").into_os_string(),
+    );
+    assert_eq!(
+        toolchain_root("windows", &env, None).unwrap(),
+        home.path().join("override")
+    );
+    // Unix environment names retain their case-sensitive semantics.
+    assert_eq!(
+        toolchain_root("linux", &env, Some(home.path())).unwrap(),
+        home.path().join(".local/share/ridl")
+    );
+    env.insert("Ridl_Toolchain_Dir".into(), OsString::new());
+    assert_eq!(
+        toolchain_root("windows", &env, None).unwrap(),
+        home.path().join("data/ridl")
+    );
+}
+
+#[test]
 fn toolchain_which_selects_highest_compatible_including_running() {
     let t = TempDir::new().unwrap();
     let workspace = TempDir::new().unwrap();
@@ -132,16 +165,19 @@ fn toolchain_which_selects_highest_compatible_including_running() {
     installed(t.path(), "0.23.99");
     fs::remove_file(t.path().join("versions/0.23.99").join(binary_name())).unwrap();
     assert_eq!(select("0.23.2", TARGET).unwrap().path, Some(expected));
+    let unsupported = if cfg!(windows) {
+        "x86_64-pc-windows-gnu"
+    } else {
+        "x86_64-unknown-linux-musl"
+    };
     assert!(
-        select("0.22.0", "x86_64-unknown-linux-musl")
+        select("0.22.0", unsupported)
             .unwrap_err()
             .to_string()
-            .contains("x86_64-unknown-linux-musl")
+            .contains(unsupported)
     );
     assert_eq!(
-        select("0.23.2", "x86_64-unknown-linux-musl")
-            .unwrap()
-            .source,
+        select("0.23.2", unsupported).unwrap().source,
         Some(WhichSource::Running)
     );
     let empty = TempDir::new().unwrap();
@@ -401,10 +437,86 @@ fn toolchain_install_verifies_and_publishes_complete_release() {
 }
 
 #[test]
+fn toolchain_install_and_which_use_the_target_binary_name() {
+    use sha2::{Digest, Sha256};
+    for (target, binary) in [
+        ("x86_64-pc-windows-msvc", "ridl.exe"),
+        ("aarch64-apple-darwin", "ridl"),
+        ("x86_64-apple-darwin", "ridl"),
+        ("aarch64-unknown-linux-gnu", "ridl"),
+        ("x86_64-unknown-linux-gnu", "ridl"),
+    ] {
+        let root = TempDir::new().unwrap();
+        let workspace = TempDir::new().unwrap();
+        pin(workspace.path(), "0.23.0");
+        let assets = TempDir::new().unwrap();
+        let dir = support::fixture(
+            assets.path(),
+            &[
+                (binary, b'0', support::BINARY),
+                ("LICENSE", b'0', support::LICENSE),
+                ("THIRD-PARTY-NOTICES.txt", b'0', support::NOTICES),
+            ],
+        );
+        let bytes = fs::read(dir.join(support::archive_name())).unwrap();
+        let archive = format!("ridl-{target}.tar.gz");
+        fs::write(dir.join(&archive), &bytes).unwrap();
+        fs::write(
+            dir.join(format!("{archive}.sha256")),
+            format!("{:x}  {archive}\n", Sha256::digest(&bytes)),
+        )
+        .unwrap();
+        let result = install(
+            root.path(),
+            release("0.23.0"),
+            target,
+            &support::source(assets.path()),
+        )
+        .unwrap();
+        assert_eq!(result.file_name().unwrap(), binary);
+        let selected = which(
+            workspace.path(),
+            root.path(),
+            release("0.22.0"),
+            &running(),
+            target,
+        )
+        .unwrap();
+        assert_eq!(selected.status, WhichStatus::Compatible, "{target}");
+        assert_eq!(selected.path, Some(result));
+        assert_eq!(selected.source, Some(WhichSource::Installed));
+        let unsupported = if binary == "ridl.exe" {
+            "x86_64-pc-windows-gnu"
+        } else {
+            "x86_64-unknown-linux-musl"
+        };
+        let refused = which(
+            workspace.path(),
+            root.path(),
+            release("0.22.0"),
+            &running(),
+            unsupported,
+        );
+        assert!(
+            refused.is_err(),
+            "unsupported target was not refused: {unsupported}"
+        );
+        assert!(refused.unwrap_err().to_string().contains(unsupported));
+        if target == env!("RIDL_BUILD_TARGET") {
+            let inventory = list(root.path()).unwrap();
+            assert_eq!(inventory.len(), 1);
+            assert!(!inventory[0].damaged);
+        }
+    }
+}
+
+#[test]
 fn toolchain_install_rejects_checksum_and_unsafe_archive() {
     let root = TempDir::new().unwrap();
     let assets = TempDir::new().unwrap();
-    let sentinel = root.path().join("outside");
+    let versions = root.path().join("versions");
+    fs::create_dir(&versions).unwrap();
+    let sentinel = versions.join("outside");
     fs::write(&sentinel, b"unchanged").unwrap();
     let reject = || {
         assert!(
@@ -419,6 +531,16 @@ fn toolchain_install_rejects_checksum_and_unsafe_archive() {
         assert!(!root.path().join("versions/0.23.0").exists());
         support::assert_no_stage(root.path());
         assert_eq!(fs::read(&sentinel).unwrap(), b"unchanged");
+        let entries: Vec<_> = fs::read_dir(&versions)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .filter(|n| n != ".0.23.0.lock")
+            .collect();
+        assert_eq!(
+            entries,
+            [OsString::from("outside")],
+            "archive escaped staging"
+        );
     };
     let dir = support::fixture(assets.path(), &support::regular_files());
     let sha = dir.join(format!("{}.sha256", support::archive_name()));
@@ -442,6 +564,7 @@ fn toolchain_install_rejects_checksum_and_unsafe_archive() {
     for (name, kind) in [
         (".complete", b'0'),
         ("../outside", b'0'),
+        ("../escaped", b'0'),
         ("/absolute", b'0'),
         ("nested/ridl", b'0'),
         ("LICENSE", b'0'),
@@ -464,6 +587,33 @@ fn toolchain_install_rejects_checksum_and_unsafe_archive() {
     entries.push((".complete", b'0', b""));
     support::fixture(assets.path(), &entries);
     reject();
+}
+
+#[test]
+fn toolchain_install_rejects_absolute_archive_path() {
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    let outside = TempDir::new().unwrap();
+    let escaped = outside.path().join("escaped");
+    let escaped_name = escaped.to_str().unwrap();
+    let mut entries = support::regular_files();
+    entries.push((escaped_name, b'0', b"unsafe"));
+    support::fixture(assets.path(), &entries);
+    let result = install(
+        root.path(),
+        release("0.23.0"),
+        support::TARGET,
+        &support::source(assets.path()),
+    );
+    assert!(result.is_err());
+    assert!(!escaped.exists(), "absolute archive path escaped staging");
+    assert!(fs::read_dir(outside.path()).unwrap().next().is_none());
+    assert!(!root.path().join("versions/0.23.0").exists());
+    support::assert_no_stage(root.path());
+    assert_eq!(
+        fs::read_dir(root.path().join("versions")).unwrap().count(),
+        1
+    );
 }
 
 #[test]
@@ -495,28 +645,91 @@ fn toolchain_install_missing_asset_cleans_only_its_stage() {
         .is_err()
     );
     support::assert_no_stage(root.path());
+}
+
+#[test]
+fn toolchain_install_removes_stale_stages_under_lock() {
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
     support::fixture(assets.path(), &support::regular_files());
-    let stage = root
-        .path()
-        .join(format!("versions/.tmp-0.23.0-{}", std::process::id()));
-    fs::create_dir(&stage).unwrap();
-    fs::write(stage.join("owned-by-someone-else"), b"preserve").unwrap();
-    let stage_before = directory_bytes(&stage);
+    let versions = root.path().join("versions");
+    fs::create_dir(&versions).unwrap();
+    let stale_names = [
+        format!(".tmp-0.23.0-{}", std::process::id()),
+        ".tmp-0.23.0-killed".into(),
+    ];
+    for name in &stale_names {
+        fs::create_dir(versions.join(name)).unwrap();
+        fs::write(versions.join(name).join("incomplete"), b"stale bytes").unwrap();
+    }
+    for name in [".tmp-0.24.0-1", ".tmp-0.23.00-1"] {
+        fs::create_dir(versions.join(name)).unwrap();
+        fs::write(versions.join(name).join("preserve"), b"other version").unwrap();
+    }
+    let result = install(
+        root.path(),
+        release("0.23.0"),
+        support::TARGET,
+        &support::source(assets.path()),
+    );
     assert!(
-        install(
-            root.path(),
-            release("0.23.0"),
-            support::TARGET,
-            &support::source(assets.path())
-        )
-        .is_err()
+        result.is_ok(),
+        "stale stage prevented installation: {result:?}"
     );
-    assert_eq!(
-        fs::read(stage.join("owned-by-someone-else")).unwrap(),
-        b"preserve"
+    support::assert_complete(&result.unwrap());
+    for name in &stale_names {
+        assert!(!versions.join(name).exists(), "stale stage remains: {name}");
+    }
+    for name in [".tmp-0.24.0-1", ".tmp-0.23.00-1"] {
+        assert_eq!(
+            fs::read(versions.join(name).join("preserve")).unwrap(),
+            b"other version"
+        );
+    }
+}
+
+#[test]
+fn toolchain_install_limits_archive_size() {
+    assert_download_size_limit(false, 256 * 1024 * 1024);
+}
+
+#[test]
+fn toolchain_install_limits_checksum_size() {
+    assert_download_size_limit(true, 4 * 1024);
+}
+
+fn assert_download_size_limit(checksum: bool, limit: u64) {
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    let dir = support::fixture(assets.path(), &support::regular_files());
+    let name = if checksum {
+        format!("{}.sha256", support::archive_name())
+    } else {
+        support::archive_name()
+    };
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .open(dir.join(&name))
+        .unwrap();
+    file.set_len(limit + 1).unwrap();
+    let result = install(
+        root.path(),
+        release("0.23.0"),
+        support::TARGET,
+        &support::source(assets.path()),
     );
-    assert_eq!(directory_bytes(&stage), stage_before);
+    assert!(result.is_err(), "oversized download accepted: {name}");
+    let error = result.unwrap_err().to_string();
+    assert!(
+        error.contains("exceeds") && error.contains(&limit.to_string()),
+        "wrong size refusal: {error}"
+    );
     assert!(!root.path().join("versions/0.23.0").exists());
+    support::assert_no_stage(root.path());
+    assert_eq!(
+        fs::read_dir(root.path().join("versions")).unwrap().count(),
+        1
+    );
 }
 
 // Child processes exercise OS file locking, rather than thread-local serialization.

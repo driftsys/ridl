@@ -299,7 +299,12 @@ crate the workspace holds — see `AGENTS.md` for that.
   each unit's list of compatible catalogs into its descriptor and codegen model
   (`catalogs.rs`); `ridl check --baseline` is the desk-time ordinal-drift check
   over the snapshots; `property.rs` is the `ridl test` runner, which spends the
-  range strategies on the contract plane.
+  range strategies on the contract plane. The package also exposes a `ridl-cli`
+  library target. Its `toolchain` module resolves platform data directories,
+  installs verified releases under per-version file locks, lists installations
+  and selects a binary from the workspace release pin. The `ridl toolchain`
+  subcommands call that library; see
+  [release pins](../book/release-pin.md#installing-and-selecting-toolchains).
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware
   (comments are preserved and re-anchored), total (input with parse errors is

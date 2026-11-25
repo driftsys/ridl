@@ -11,7 +11,16 @@ pub fn toolchain_root(
     env: &BTreeMap<String, OsString>,
     home: Option<&Path>,
 ) -> io::Result<PathBuf> {
-    let value = |key: &str| env.get(key).filter(|v| !v.is_empty()).map(PathBuf::from);
+    let value = |key: &str| {
+        let value = if platform == "windows" {
+            env.iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case(key))
+                .map(|(_, value)| value)
+        } else {
+            env.get(key)
+        };
+        value.filter(|v| !v.is_empty()).map(PathBuf::from)
+    };
     let home = || {
         home.filter(|h| !h.as_os_str().is_empty())
             .ok_or_else(|| io::Error::other("toolchain directory requires a home directory"))
@@ -52,6 +61,10 @@ pub fn release_target(target: &str) -> io::Result<&str> {
     }
 }
 
-pub(super) fn binary_name() -> &'static str {
-    if cfg!(windows) { "ridl.exe" } else { "ridl" }
+pub(super) fn binary_name(target: &str) -> &'static str {
+    if target.contains("-windows-") {
+        "ridl.exe"
+    } else {
+        "ridl"
+    }
 }

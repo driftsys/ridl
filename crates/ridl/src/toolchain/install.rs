@@ -1,12 +1,16 @@
-use super::{paths::release_target, selection::inspect};
+use super::{
+    paths::{binary_name, release_target},
+    selection::inspect,
+};
 use flate2::read::GzDecoder;
 use ridl_core::release::{MIN_PINNABLE_RELEASE, Release};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     fs::{self, File, OpenOptions},
-    io,
+    io::{self, Read},
     path::{Path, PathBuf},
+    time::Duration,
 };
 
 /// Removes only the stage exclusively claimed by this operation.
@@ -30,19 +34,42 @@ fn existing(directory: &Path, release: Release, binary: &str) -> io::Result<Opti
     Ok(Some(directory.join(binary).canonicalize()?))
 }
 
-fn download(url: &str) -> io::Result<Vec<u8>> {
+const ARCHIVE_LIMIT: u64 = 256 * 1024 * 1024;
+const CHECKSUM_LIMIT: u64 = 4 * 1024;
+
+fn read_download(reader: impl Read, url: &str, limit: u64) -> io::Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    reader
+        .take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| io::Error::new(e.kind(), format!("download {url}: {e}")))?;
+    if bytes.len() as u64 > limit {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("download {url} exceeds {limit} bytes"),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn download(url: &str, limit: u64) -> io::Result<Vec<u8>> {
     if let Some(path) = url.strip_prefix("file://") {
         if !Path::new(path).is_absolute() {
             return Err(io::Error::other("file source must be absolute"));
         }
-        return fs::read(path).map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")));
+        let file =
+            File::open(path).map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
+        return read_download(file, url, limit);
     }
-    let mut response = ureq::get(url)
+    let config = ureq::Agent::config_builder()
+        .timeout_connect(Some(Duration::from_secs(30)))
+        .timeout_global(Some(Duration::from_secs(10 * 60)))
+        .build();
+    let mut response = ureq::Agent::new_with_config(config)
+        .get(url)
         .call()
         .map_err(|e| io::Error::other(format!("download {url}: {e}")))?;
-    let mut bytes = Vec::new();
-    io::Read::read_to_end(&mut response.body_mut().as_reader(), &mut bytes)?;
-    Ok(bytes)
+    read_download(response.body_mut().as_reader(), url, limit)
 }
 
 fn verify(bytes: &[u8], record: &[u8], archive: &str) -> io::Result<()> {
@@ -124,11 +151,7 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
         ));
     }
     let target = release_target(target)?;
-    let binary = if target.ends_with("windows-msvc") {
-        "ridl.exe"
-    } else {
-        "ridl"
-    };
+    let binary = binary_name(target);
     let versions = root.join("versions");
     fs::create_dir_all(&versions)?;
     let versions = versions.canonicalize()?;
@@ -147,6 +170,19 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
     if let Some(binary) = existing(&directory, release, binary)? {
         return Ok(binary);
     }
+    // Holding this version's lock excludes every cooperating owner of its stages.
+    let stage_prefix = format!(".tmp-{release}-");
+    for entry in fs::read_dir(&versions)? {
+        let entry = entry?;
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| name.starts_with(&stage_prefix))
+            && entry.file_type()?.is_dir()
+        {
+            fs::remove_dir_all(entry.path())?;
+        }
+    }
     let stage_path = versions.join(format!(".tmp-{release}-{}", std::process::id()));
     fs::create_dir(&stage_path)?;
     let stage = Stage(stage_path);
@@ -155,8 +191,8 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
         "{}/editor-v{release}/{archive}",
         base_url.trim_end_matches('/')
     );
-    let bytes = download(&url)?;
-    let checksum = download(&format!("{url}.sha256"))?;
+    let bytes = download(&url, ARCHIVE_LIMIT)?;
+    let checksum = download(&format!("{url}.sha256"), CHECKSUM_LIMIT)?;
     verify(&bytes, &checksum, &archive)?;
     extract(&bytes, &stage.0, binary)?;
     File::create_new(stage.0.join(".complete"))?;

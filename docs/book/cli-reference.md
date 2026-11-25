@@ -3001,20 +3001,9 @@ Options:
   -h, --help  Print help
 ```
 
-Read the root pin and select the highest compatible installed or running
-release, preferring the running binary on an equal version. Without a pin, use
-the running binary. Text output is only the binary path on success, or a
-sentence on stderr for a negative answer.
-
-With `--json`, write one schema-1 object, including explicit nulls: `schema`,
-`manifest`, `pin`, `running`, `status`, `path`, `source` and `diagnostic`.
-Status is `compatible`, `unpinned`, `missing` or `invalid`; source is
-`installed`, `running` or null. The `invalid` diagnostic holds `code` and
-`message` for MANI-024 or MANI-025. Invalid TOML or an unreadable manifest is an
-input error, exit 2, with no JSON on stdout.
-
 See [workspace release pins](release-pin.md#installing-and-selecting-toolchains)
-for the directory layout, integrity checks and selection rules.
+for selection rules, text output, the `--json` schema, exit codes and input
+errors.
 
 ## `ridlc`
 

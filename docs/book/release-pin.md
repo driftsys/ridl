@@ -82,9 +82,12 @@ its SHA-256 record from the fixed GitHub editor release origin. The record must
 name that archive and its digest must match. Only the three root-level regular
 files above are accepted; links, nested paths, duplicates and archive-provided
 completion markers are refused. A per-version file lock serializes installers.
-The installer rechecks under the lock, extracts into its own temporary
-directory, then creates the marker and renames the directory into place.
-Failures remove only that operation's temporary directory. An existing complete
+The installer rechecks under the lock and removes stale temporary directories
+for that version before staging. It extracts into its own temporary directory,
+then creates the marker and renames the directory into place. Failures remove
+that operation's temporary directory. Downloads have a 30-second connection
+timeout and a 10-minute overall timeout per request. Archives larger than 256
+MiB and checksum records larger than 4 KiB are refused. An existing complete
 release works offline. Unsupported release targets produce a named error.
 
 `ridl toolchain list` prints one `<version>\t<directory>` line per canonical

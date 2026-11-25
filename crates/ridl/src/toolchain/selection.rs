@@ -49,6 +49,10 @@ pub(super) fn inspect(
 
 /// Lists canonical version directories numerically, retaining damaged entries.
 pub fn list(root: &Path) -> io::Result<Vec<InstalledRelease>> {
+    list_for_target(root, env!("RIDL_BUILD_TARGET"))
+}
+
+fn list_for_target(root: &Path, target: &str) -> io::Result<Vec<InstalledRelease>> {
     let versions = root.join("versions");
     let entries = match fs::read_dir(&versions) {
         Ok(entries) => entries,
@@ -73,7 +77,7 @@ pub fn list(root: &Path) -> io::Result<Vec<InstalledRelease>> {
         if !entry.file_type()?.is_dir() {
             continue;
         }
-        if let Some(mut installed) = inspect(&entry.path(), release, binary_name())? {
+        if let Some(mut installed) = inspect(&entry.path(), release, binary_name(target))? {
             installed.directory = installed.directory.canonicalize()?;
             out.push(installed);
         }
@@ -203,7 +207,7 @@ pub fn which(
         report.path = Some(running_exe.canonicalize()?);
         report.source = Some(WhichSource::Running);
     }
-    for installed in list(root)? {
+    for installed in list_for_target(root, target)? {
         if installed.damaged || !compatible(installed.release, pin.release) {
             continue;
         }
@@ -215,7 +219,12 @@ pub fn which(
         }
         if best.is_none_or(|v| installed.release > v) {
             best = Some(installed.release);
-            report.path = Some(installed.directory.join(binary_name()).canonicalize()?);
+            report.path = Some(
+                installed
+                    .directory
+                    .join(binary_name(target))
+                    .canonicalize()?,
+            );
             report.source = Some(WhichSource::Installed);
         }
     }
