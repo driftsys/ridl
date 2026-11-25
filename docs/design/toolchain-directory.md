@@ -148,11 +148,12 @@ input errors. Neither form compiles sources or enforces compatibility with the
 resolver. Success prints the canonical absolute installed binary path. Failures
 return exit 2.
 
-1. Validate release and target, create `versions/` and canonicalize it. Inspect
-   the destination. Reuse a complete entry immediately, without downloading;
-   refuse an existing damaged entry without modifying it.
-2. Open `.<version>.lock` and acquire its OS file lock. Recheck the destination
-   after waiting: another cooperating installer may have completed it.
+1. Validate release and target, create `versions/` and canonicalize it.
+2. Open `.<version>.lock` and acquire its OS file lock; waiting for another
+   installer or an uninstall is part of this step. Then inspect the destination.
+   Reuse a complete entry without downloading, so a reported path is never one
+   that a concurrent uninstall removes afterwards; refuse an existing damaged
+   entry without modifying it.
 3. While holding that version's lock, remove only directories named
    `.tmp-<version>-<digits>`, with a nonempty ASCII decimal suffix. Preserve
    other versions, script stages, similarly prefixed names and non-directories.
@@ -192,7 +193,10 @@ is complete or damaged. The root must be an absolute path: a relative
 5. Rename the entry to `.tmp-<version>-<pid>`, so no reader sees a partly
    removed release, then remove the stage. A real directory is removed
    recursively; a symbolic link or a regular file is removed itself, and the
-   target of a link is never followed.
+   target of a link is never followed. On Windows, when `remove_file` fails for
+   a stage that is not a real directory, the stage is removed with `remove_dir`,
+   which is how Windows removes a directory symbolic link or junction. That
+   branch has no automated test.
 
 Success prints the removed path under the canonical `versions/` directory. A
 release that is not installed exits 1; every other failure exits 2. The lock

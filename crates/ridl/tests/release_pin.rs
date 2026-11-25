@@ -614,3 +614,38 @@ fn release_diff_refusal_precedes_snapshot_input_errors() {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn release_diff_refusal_precedes_a_nested_snapshot_read_error() {
+    use std::os::unix::fs::PermissionsExt;
+    // A directory with no snapshot and no source, whose subdirectory cannot be
+    // listed, is read while looking for snapshots one level too low.
+    let fixture = |parent: &Path| {
+        let sub = parent.join("d/sub");
+        fs::create_dir_all(&sub).unwrap();
+        fs::set_permissions(&sub, fs::Permissions::from_mode(0o000)).unwrap();
+    };
+    let restore = |parent: &Path| {
+        fs::set_permissions(parent.join("d/sub"), fs::Permissions::from_mode(0o755)).unwrap();
+    };
+    let pinned = workspace("\"0.24.0\"");
+    let control = tempfile::tempdir().unwrap();
+    fixture(pinned.path());
+    fixture(control.path());
+    let refused = run(pinned.path(), &["diff", "d", "d"], "0.23.2");
+    let control_output = run(control.path(), &["diff", "d", "d"], "0.23.2");
+    let as_root = fs::read_dir(control.path().join("d/sub")).is_ok();
+    restore(pinned.path());
+    restore(control.path());
+    if as_root {
+        return;
+    }
+    assert_refusal(&refused, "MANI-026");
+    assert_eq!(control_output.status.code(), Some(2));
+    assert!(
+        stderr(&control_output).starts_with("error: "),
+        "{control_output:?}"
+    );
+    assert!(!stderr(&control_output).contains("MANI-026"));
+}

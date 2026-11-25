@@ -1781,10 +1781,12 @@ artifacts but no `.ir.json` snapshot and no source — no `ridl.toml` and no
 a source tree; and a directory with no source whose `.ir.json` snapshots sit one
 level below it, which is a path aimed one level too high. A directory is also
 exit 2, naming the entry, when an entry inside it named like a snapshot cannot
-be stat'ed — a symlink to a file that is gone — because skipping the entry would
-compare against a set one snapshot short; this is checked before the directory
-is read as a source tree, so a source directory holding such an entry is refused
-too. Every other input reaches the source compiler. Omit both and pass
+be stat'ed (a root release refusal, MANI-026, replaces that message when the
+directory lies in a workspace whose pin the running release does not satisfy) —
+a symlink to a file that is gone — because skipping the entry would compare
+against a set one snapshot short; this is checked before the directory is read
+as a source tree, so a source directory holding such an entry is refused too.
+Every other input reaches the source compiler. Omit both and pass
 `--explain <CATEGORY>` instead to print that category's classification rule
 without comparing anything.
 

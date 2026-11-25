@@ -11,7 +11,8 @@ use std::{
 /// Returns the removed path under the canonical `versions` directory, or `None`
 /// when `<root>/versions` or the entry does not exist. The entry is renamed to a
 /// stage name first, so a reader never sees a half-removed directory, and a
-/// symbolic link is removed without following it. The release that `running_exe`
+/// symbolic link is removed without following it; on Windows a directory link
+/// is removed with `remove_dir`. The release that `running_exe`
 /// belongs to is refused.
 pub fn uninstall(root: &Path, release: Release, running_exe: &Path) -> io::Result<Option<PathBuf>> {
     let versions = match root.join("versions").canonicalize() {
@@ -45,8 +46,14 @@ pub fn uninstall(root: &Path, release: Release, running_exe: &Path) -> io::Resul
     fs::rename(&entry, &stage)?;
     if fs::symlink_metadata(&stage)?.is_dir() {
         fs::remove_dir_all(&stage)?;
-    } else {
-        fs::remove_file(&stage)?;
+    } else if let Err(error) = fs::remove_file(&stage) {
+        // Windows removes a directory symbolic link or junction with
+        // `remove_dir`, not `remove_file`. Neither call follows the link.
+        if cfg!(windows) {
+            fs::remove_dir(&stage)?;
+        } else {
+            return Err(error);
+        }
     }
     drop(lock);
     Ok(Some(entry))

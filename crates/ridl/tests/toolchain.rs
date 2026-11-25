@@ -804,6 +804,40 @@ fn finish(child: &mut Child) {
 }
 
 #[test]
+fn toolchain_install_reuses_a_complete_entry_only_under_the_lock() {
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    support::fixture(assets.path(), &support::regular_files());
+    installed(root.path(), "0.23.0");
+    let versions = root.path().join("versions");
+    let directory = versions.canonicalize().unwrap().join("0.23.0");
+    // An uninstall-like holder owns the lock while the entry is still complete.
+    let lock = fs::File::create(versions.join(".0.23.0.lock")).unwrap();
+    lock.lock().unwrap();
+    let ready = root.path().join("ready");
+    let result = root.path().join("result");
+    let mut c = child(
+        root.path(),
+        &support::source(assets.path()),
+        &ready,
+        &result,
+    );
+    wait_until(|| ready.exists());
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert!(
+        c.0.try_wait().unwrap().is_none() && !result.exists(),
+        "install reported a complete entry without holding the lock"
+    );
+    fs::remove_dir_all(&directory).unwrap();
+    lock.unlock().unwrap();
+    finish(&mut c);
+    let reported = PathBuf::from(fs::read_to_string(&result).unwrap());
+    assert_eq!(reported, directory.join(binary_name()));
+    support::assert_complete(&reported);
+    assert_ne!(fs::read(&reported).unwrap(), b"installed binary");
+}
+
+#[test]
 fn toolchain_install_waits_rechecks_and_preserves_damage() {
     let root = TempDir::new().unwrap();
     let assets = TempDir::new().unwrap();
@@ -900,6 +934,7 @@ fn output(output: &std::process::Output, code: i32, stdout: &str, has_error: boo
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
 #[test]
 fn toolchain_cli_refuses_a_relative_root() {
     let w = TempDir::new().unwrap();

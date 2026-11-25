@@ -114,8 +114,8 @@ is compiled out of release builds. See
 
 ## Versioned toolchains
 
-`ridl toolchain install`, `list` and `which` manage and inspect a shared
-versions directory independently of workspace compilation. The
+`ridl toolchain install`, `uninstall`, `list` and `which` manage and inspect a
+shared versions directory independently of workspace compilation. The
 [release pin chapter](../book/release-pin.md#installing-and-selecting-toolchains)
 owns root precedence and command usage. The
 [toolchain directory record](../design/toolchain-directory.md) owns layout,

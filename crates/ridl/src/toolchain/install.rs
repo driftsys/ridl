@@ -181,9 +181,6 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
     fs::create_dir_all(&versions)?;
     let versions = versions.canonicalize()?;
     let directory = versions.join(release.to_string());
-    if let Some(binary) = existing(&directory, release, binary)? {
-        return Ok(binary);
-    }
     let lock = OpenOptions::new()
         .read(true)
         .write(true)
