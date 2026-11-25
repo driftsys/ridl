@@ -5,6 +5,7 @@ import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { test } from "node:test";
 import Module = require("node:module");
+import { minimatch } from "minimatch";
 
 // Replace only the host and process boundaries. Selection, routing and lifecycle
 // remain the production implementations used by activate().
@@ -36,6 +37,12 @@ class FakeClient {
     capabilities: {
       textDocumentSync: { openClose: true, change: 2 },
       hoverProvider: true,
+      completionProvider: { triggerCharacters: ["."] },
+      definitionProvider: true,
+      referencesProvider: true,
+      inlayHintProvider: true,
+      documentFormattingProvider: true,
+      documentSymbolProvider: true,
       renameProvider: { prepareProvider: true },
       codeActionProvider: { codeActionKinds: ["refactor.rewrite"] },
     },
@@ -51,7 +58,9 @@ class FakeClient {
         register(data) {
           this.registrations.push(data);
         },
-        unregister() {},
+        unregister(id) {
+          this.registrations = this.registrations.filter((r) => r.id !== id);
+        },
       };
       this.features.set(method, feature);
     }
@@ -85,7 +94,7 @@ class FakeClient {
 }
 let provider: any, mcpChanges = 0;
 let command = "/selected/a", whichCalls = 0, installCalls = 0;
-let autoInstall = true, missingRelease = false;
+let autoInstall = true, missingRelease = false, nestedRoot = true;
 let acceptInstall: ((button: string | undefined) => void) | undefined;
 const configurationReads: [string, string | undefined][] = [];
 const folders = [{ uri: uri("/work"), name: "work", index: 0 }];
@@ -192,7 +201,7 @@ loader._load = function (id: string, ...rest: any[]) {
           );
           return;
         }
-        const root = d.startsWith(abs("/work/nested"))
+        const root = nestedRoot && d.startsWith(abs("/work/nested"))
           ? abs("/work/nested")
           : fs.existsSync(path.join(d, "ridl.toml"))
           ? fs.realpathSync.native(d)
@@ -246,9 +255,9 @@ test("activation_wires_toml_roots_watchers_mcp_and_deactivation", async () => {
   await extension.activate(context);
   assert.equal(clients.length, 1, "an opened root TOML starts the pin-action client");
   assert.ok(
-    clients[0].clientOptions.documentSelector.some((entry: any) =>
-      entry.language === "*" && entry.pattern?.endsWith("/ridl.toml")
-    ),
+    clients[0].getFeature("textDocument/codeAction").registrations.at(-1).registerOptions.documentSelector.some((
+      entry: any,
+    ) => entry.language === "*" && entry.pattern?.endsWith("/ridl.toml")),
     "manifest providers register in plaintext as well as TOML mode",
   );
   assert.equal(clients[0].serverOptions.command, "/selected/a");
@@ -325,6 +334,7 @@ function resetHost(): void {
   documents.splice(0, documents.length, document("/work/ridl.toml", "plaintext"));
   autoInstall = false;
   missingRelease = true;
+  nestedRoot = true;
   acceptInstall = undefined;
 }
 test("application_policy_starts_fallback_before_install_button_is_answered", async () => {
@@ -412,7 +422,7 @@ test("symlink_aliases_keep_scoped_providers_canonical_buffers_and_one_client", a
     assert.equal(client.stops, 0);
     assert.ok(
       client.getFeature("textDocument/hover").registrations.at(-1).registerOptions.documentSelector.some((s: any) =>
-        s.pattern === second.replace(/\\/g, "/") + "/**/*"
+        s.pattern === second.replace(/\\/g, "/") + "/new.ridl"
       ),
     );
     assert.ok(
@@ -464,5 +474,94 @@ test("manifestless_client_initialization_does_not_inherit_the_window_root", asyn
   );
   assert.equal(clients[0].initialized.rootUri, null);
   assert.equal(clients[0].initialized.workspaceFolders, null);
+  await extension.deactivate();
+});
+
+test("parent_registering_after_nested_root_preserves_every_document_provider", async () => {
+  resetHost();
+  autoInstall = true;
+  missingRelease = false;
+  const nested = document("/work/nested/a.ridl");
+  documents.splice(0, documents.length, nested);
+  await extension.activate({
+    extensionPath: "/nonexistent-extension",
+    extension: { packageJSON: { version: "0.23.0" } },
+    subscriptions: [],
+  } as any);
+  const parentDocument = document("/work/b.ridl");
+  documents.push(parentDocument);
+  await fire("open", parentDocument);
+  assert.deepEqual(clients.map((c) => c.serverOptions.command), ["/selected/nested", command]);
+  const methods = [
+    "textDocument/formatting",
+    "textDocument/hover",
+    "textDocument/completion",
+    "textDocument/definition",
+    "textDocument/references",
+    "textDocument/rename",
+    "textDocument/codeAction",
+    "textDocument/inlayHint",
+    "textDocument/documentSymbol",
+  ];
+  // VS Code gives matching absolute patterns the same score and prefers the
+  // most recently registered formatter. Exercise the selectors we register.
+  const matches = (selector: any[], doc: ReturnType<typeof document>) =>
+    selector.some((s) =>
+      s.scheme === doc.uri.scheme && (s.language === "*" || s.language === doc.languageId) &&
+      (!s.pattern || minimatch(doc.uri.fsPath.replace(/\\/g, "/"), s.pattern))
+    );
+  for (const method of methods) {
+    const candidates = clients.filter((client) =>
+      matches(client.clientOptions.documentSelector, nested) ||
+      client.getFeature(method).registrations.some((r) => matches(r.registerOptions.documentSelector, nested))
+    );
+    assert.deepEqual(candidates.map((c) => c.serverOptions.command), ["/selected/nested"], method);
+    if (method === "textDocument/formatting") {
+      const chosen = candidates.at(-1)!;
+      const edits = [{ newText: "formatted by nested" }];
+      const result = await chosen.clientOptions.middleware.sendRequest(
+        method,
+        { textDocument: { uri: nested.uri.toString() } },
+        undefined,
+        async () => edits,
+      );
+      assert.deepEqual(result, edits);
+    }
+  }
+  await extension.deactivate();
+});
+
+test("creating_a_nested_root_moves_existing_formatting_registration_to_its_client", async () => {
+  resetHost();
+  autoInstall = true;
+  missingRelease = false;
+  nestedRoot = false;
+  const source = document("/work/nested/a.ridl");
+  documents.splice(0, documents.length, source);
+  await extension.activate({
+    extensionPath: "/nonexistent-extension",
+    extension: { packageJSON: { version: "0.23.0" } },
+    subscriptions: [],
+  } as any);
+  assert.equal(clients[0].serverOptions.command, command);
+  nestedRoot = true;
+  await fire("create", uri("/work/nested/ridl.toml"));
+  const providers = clients.filter((client) =>
+    client.state === 2 &&
+    client.getFeature("textDocument/formatting").registrations.some((r) =>
+      r.registerOptions.documentSelector.some((s: any) => minimatch(source.uri.fsPath.replace(/\\/g, "/"), s.pattern))
+    )
+  );
+  assert.deepEqual(providers.map((client) => client.serverOptions.command), ["/selected/nested"]);
+  const edits = [{ newText: "formatted after root creation" }];
+  assert.deepEqual(
+    await providers[0].clientOptions.middleware.sendRequest(
+      "textDocument/formatting",
+      { textDocument: { uri: source.uri.toString() } },
+      undefined,
+      async () => edits,
+    ),
+    edits,
+  );
   await extension.deactivate();
 });

@@ -78,6 +78,9 @@ code --install-extension editors/vscode/ridl-lang-<version>.vsix
 | `ridl.toolchain.autoInstall` | `true`  | Automatically install a missing workspace release. Application setting; workspace settings cannot change it.                  |
 | `ridl.trace.server`          | `"off"` | Trace level for JSON-RPC traffic between VS Code and `ridl lsp`: `off`, `messages`, or `verbose`.                             |
 
+If `ridl.serverPath` names the retired `ridl-lsp` binary, the extension warns;
+set it to the `ridl` binary, which runs as `ridl lsp`.
+
 ## Development
 
 ```sh

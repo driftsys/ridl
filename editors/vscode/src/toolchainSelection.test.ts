@@ -105,7 +105,6 @@ test("install_failure_uses_bundled_and_reports_once", async () => {
 test("unknown_schema_and_malformed_results_fall_back_once", async () => {
   for (
     const result of [
-      response({ ...compatible, schema: 2 }),
       response("not json"),
       response("unsupported command", 2),
       new Error("ENOENT"),
@@ -221,4 +220,25 @@ test("concurrent_roots_share_install_and_progress", async () => {
   assert.equal((await b).command, installed);
   assert.equal(installs, 1);
   assert.equal(progress, 1);
+});
+
+test("unknown_schema_logs_a_warning_without_an_error_notification_or_install", async () => {
+  const f = fixture([response({ ...compatible, schema: 2 })]);
+  const selected = await f.selector.select(input);
+  assert.equal(selected.command, bundled);
+  assert.equal(f.calls.length, 1);
+  assert.equal(f.progress.length, 0);
+  assert.equal(f.offers.length, 0);
+  assert.equal(f.logs.length, 1);
+  assert.deepEqual(f.errors, []);
+  assert.match(f.logs[0], /schema/i);
+});
+
+test("unknown_schema_after_install_logs_without_an_error_notification", async () => {
+  const f = fixture([response(missing), response(installed), response({ ...compatible, schema: 2 })]);
+  assert.equal((await f.selector.select(input)).command, bundled);
+  assert.equal(f.calls.length, 3);
+  assert.equal(f.progress.length, 1);
+  assert.equal(f.logs.length, 1);
+  assert.deepEqual(f.errors, []);
 });

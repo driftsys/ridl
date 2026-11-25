@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { CancellationToken } from "vscode-languageserver-protocol";
+import { CancellationToken, LSPErrorCodes, ResponseError } from "vscode-languageserver-protocol";
 import type { Middleware } from "vscode-languageclient/node";
 import { ClientLifecycle, LifecycleClient } from "./clientLifecycle";
 import { clientDocumentSelector, normalizeAbsolutePath } from "./binaryResolution";
@@ -150,6 +150,7 @@ export class WorkspaceClients<C extends LifecycleClient> {
       }
       entry.generation = Math.max(entry.generation, generation);
       await this.prune();
+      await this.onChange?.();
       // A newer selection may arrive while a previous client is stopping.
       if (this.stopped || this.generations.get(directory) !== generation) return false;
       await entry.lifecycle.startIfNeeded();
@@ -237,15 +238,17 @@ export function routingMiddleware(owns: (file: string) => boolean): Middleware {
       if (
         object(param) && object(param.textDocument) && typeof param.textDocument.uri === "string" &&
         !allowedUri(param.textDocument.uri)
-      ) return null as any;
+      ) throw new ResponseError(LSPErrorCodes.RequestCancelled, "Document ownership changed.");
       const result = await next(type, param, token);
       // Check again after awaiting: routing may have changed during the request.
       if (
         object(param) && object(param.textDocument) && typeof param.textDocument.uri === "string" &&
         !allowedUri(param.textDocument.uri)
-      ) return null as any;
+      ) throw new ResponseError(LSPErrorCodes.RequestCancelled, "Document ownership changed.");
       const method = typeof type === "string" ? type : type.method;
-      if (method === "textDocument/rename" && !editsAllowed(result)) return null as any;
+      if (method === "textDocument/rename" && !editsAllowed(result)) {
+        throw new ResponseError(LSPErrorCodes.RequestCancelled, "Document ownership changed.");
+      }
       if (method === "textDocument/codeAction" && Array.isArray(result)) {
         return result.filter((action) => !object(action) || editsAllowed(action.edit)) as typeof result;
       }
@@ -276,7 +279,7 @@ export function canonicalFile(file: string): string {
   }
 }
 
-/** Add alias-scoped providers through the library's public registration API. */
+/** Register owned-document providers through the library's public registration API. */
 export function aliasRegistrations(
   capabilities: import("vscode-languageserver-protocol").ServerCapabilities,
   selector: ReturnType<typeof clientDocumentSelector>,

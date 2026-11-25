@@ -104,6 +104,8 @@ export function parseWhichReport(value: unknown): WhichReport | undefined {
   return value as unknown as WhichReport;
 }
 
+class UnknownWhichSchema extends Error {}
+
 export class ToolchainSelector {
   private readonly installs = new Map<string, Promise<void>>();
   private readonly notified = new Set<string>();
@@ -117,7 +119,9 @@ export class ToolchainSelector {
     try {
       report = await this.probe(input);
     } catch (error) {
-      this.report("discovery", `Could not select a RIDL toolchain: ${String(error)}`);
+      const message = `Could not select a RIDL toolchain: ${String(error)}`;
+      if (error instanceof UnknownWhichSchema) this.effects.log(message);
+      else this.report("discovery", message);
       return fallback;
     }
     const selection = (command: string): Selection => ({
@@ -149,7 +153,9 @@ export class ToolchainSelector {
       report = fresh;
       return selection(fresh.path);
     } catch (error) {
-      this.report(`install:${pin}`, `Could not install RIDL ${pin}: ${String(error)}`);
+      const message = `Could not install RIDL ${pin}: ${String(error)}`;
+      if (error instanceof UnknownWhichSchema) this.effects.log(message);
+      else this.report(`install:${pin}`, message);
       return selection(input.resolver.command);
     }
   }
@@ -160,7 +166,11 @@ export class ToolchainSelector {
       ["toolchain", "which", "--json", input.directory],
       input.directory,
     );
-    const report = parseWhichReport(JSON.parse(result.stdout));
+    const value: unknown = JSON.parse(result.stdout);
+    if (record(value) && value.schema !== undefined && value.schema !== 1) {
+      throw new UnknownWhichSchema(`unsupported toolchain which schema: ${String(value.schema)}`);
+    }
+    const report = parseWhichReport(value);
     if (!report) throw new Error("unsupported or malformed toolchain which JSON");
     const expected = report.status === "compatible" || report.status === "unpinned" ? 0 : 1;
     if (result.exitCode !== expected) {

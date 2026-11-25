@@ -186,19 +186,20 @@ test("middleware_blocks_nested_open_change_diagnostics_requests_and_edits", asyn
     requested++;
     return { changes: { [pathToFileURL(child).href]: [] } };
   };
-  const blocked = await m.sendRequest?.(
-    "textDocument/rename",
-    { textDocument: { uri: pathToFileURL(parent).href } },
-    undefined,
-    request as any,
-  );
-  await m.sendRequest?.(
-    "textDocument/hover",
-    { textDocument: { uri: pathToFileURL(child).href } },
-    undefined,
-    request as any,
-  );
-  assert.equal(blocked, null);
+  await assert.rejects(async () =>
+    m.sendRequest?.(
+      "textDocument/rename",
+      { textDocument: { uri: pathToFileURL(parent).href } },
+      undefined,
+      request as any,
+    ), { code: -32800 });
+  await assert.rejects(async () =>
+    m.sendRequest?.(
+      "textDocument/hover",
+      { textDocument: { uri: pathToFileURL(child).href } },
+      undefined,
+      request as any,
+    ), { code: -32800 });
   const rejected = await m.workspace?.handleApplyEdit?.(
     { edit: { changes: { [pathToFileURL(child).href]: [] } } },
     () => {
@@ -344,4 +345,40 @@ test("explicit_folder_override_also_routes_symlink_documents", async () => {
   } finally {
     fs.rmSync(base, { recursive: true, force: true });
   }
+});
+
+test("late_discovery_with_an_obsolete_manifest_key_cannot_replace_the_latest_root", async () => {
+  const old = deferred<Selection>();
+  let calls = 0;
+  const f = fixture(async () => ++calls === 1 ? old.promise : selection("/work/nested", "new"));
+  const opening = f.manager.open(abs("/work/nested/src"));
+  await f.manager.refresh(abs("/work/nested/ridl.toml"));
+  old.resolve(selection("/work", "old"));
+  await opening;
+  assert.deepEqual(f.clients.map((c) => c.selected.command), ["new"]);
+  assert.equal(f.clients[0].stops, 0);
+  assert.equal(f.manager.owns(selection("/work/nested").key, abs("/work/nested/src/a.ridl")), true);
+});
+
+test("selection_superseded_while_stopping_does_not_start_its_obsolete_key", async () => {
+  let selected = selection("/work", "original");
+  const f = fixture(async () => selected);
+  await f.manager.open(abs("/work/nested/src"));
+  const stopping = deferred<void>(), releaseStop = deferred<void>();
+  const first = f.clients[0];
+  const stop = first.stop.bind(first);
+  first.stop = async () => {
+    stopping.resolve();
+    await releaseStop.promise;
+    await stop();
+  };
+  selected = selection("/work/nested", "obsolete");
+  const replacing = f.manager.refresh(abs("/work/nested/ridl.toml"));
+  await stopping.promise;
+  selected = selection("/work/nested/src", "latest");
+  const latest = f.manager.refresh(abs("/work/nested/ridl.toml"));
+  releaseStop.resolve();
+  await Promise.all([replacing, latest]);
+  assert.deepEqual(f.clients.map((c) => c.selected.command), ["original", "latest"]);
+  assert.equal(f.clients[1].starts, 1);
 });

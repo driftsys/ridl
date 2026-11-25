@@ -150,10 +150,11 @@ disabled, the resolver server starts immediately and a notification offers an
 An installation failure keeps the resolver server, which reports MANI-026 when
 its release is incompatible. The extension reports the installation error once
 per release during the activation; a later open can retry. An unsupported JSON
-schema, malformed response, unsupported toolchain command or failed discovery
-also keeps the resolver binary and logs a warning. Discovery notifications are
-shown once during the activation. A successful installation with no usable
-selection is treated as a failure, without an installation loop.
+schema keeps the resolver binary and logs a warning without an error
+notification. A malformed response, unsupported toolchain command or failed
+discovery also keeps the resolver binary and logs a warning; its error
+notification is shown once during the activation. A successful installation with
+no usable selection is treated as a failure, without an installation loop.
 
 `ridl.serverPath` is an explicit developer override, read for the applicable VS
 Code folder. It bypasses discovery and installation and uses that folder as the
@@ -169,10 +170,11 @@ Opening a RIDL source or `ridl.toml` starts its client. The manifest is selected
 by filename in any language mode, so the pin action works before a source is
 opened and without a separate TOML extension. Other TOML files do not start
 clients. Saved manifest create/change/delete events are forwarded to the servers
-and run discovery again; a client is replaced only when its binary changes.
-Unsaved manifest changes reload the current server without selecting a release
-from unsaved text. Removing a VS Code folder stops clients no longer used by
-another mapping, and deactivation stops every client.
+and run discovery again. A client is replaced when its selected binary or
+discovery key changes, including when a manifestless document acquires a root
+manifest. Unsaved manifest changes reload the current server without selecting a
+release from unsaved text. Removing a VS Code folder stops clients no longer
+used by another mapping, and deactivation stops every client.
 
 The extension declares no support for untrusted workspaces. VS Code therefore
 keeps it inactive in Restricted Mode: no server or installer runs. Granting

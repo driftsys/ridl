@@ -14,7 +14,6 @@ import {
   TransportKind,
 } from "vscode-languageclient/node";
 import {
-  clientDocumentSelector,
   isLegacyServerName,
   resolveBinary,
   resolveMcpDefinition,
@@ -75,12 +74,11 @@ class RidlLanguageClient extends LanguageClient {
   private aliasRegistrations: { method: string; id: string }[] = [];
   private aliasSequence = 0;
 
-  syncAliases(roots: readonly string[]): void {
-    const signature = JSON.stringify(roots);
+  syncAliases(selector: Parameters<typeof aliasRegistrations>[1]): void {
+    const signature = JSON.stringify(selector);
     if (this.phase() !== "running" || this.aliasSignature === signature) return;
     const previous = this.aliasRegistrations;
     this.aliasRegistrations = [];
-    const selector = roots.flatMap((root) => clientDocumentSelector(root));
     if (selector.length > 0 && this.initializeResult) {
       for (const registration of aliasRegistrations(this.initializeResult.capabilities, selector)) {
         // All methods here implement the public document registration interface.
@@ -206,19 +204,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       (file) => manager.owns(selection.key, file),
       (file) => manager.hostPath(selection.key, file),
     );
-    client.refreshAliases = () => client.syncAliases(manager.selectorRoots(selection.key).slice(1));
+    client.refreshAliases = () =>
+      client.syncAliases(
+        vscode.workspace.textDocuments.filter((document) =>
+          isRidlDocument(document) && manager.owns(selection.key, document.uri.fsPath)
+        ).map((document) => ({
+          scheme: "file",
+          language: path.basename(document.uri.fsPath) === "ridl.toml" ? "*" : document.languageId,
+          pattern: document.uri.fsPath.replace(/\\/g, "/").replace(/[\[\]{}*?!()]/g, "[$&]"),
+        })),
+      );
     active.set(client, selection);
     return client;
   });
   clients = manager;
   manager.onChange = async () => {
+    // Update every selector before awaiting buffer synchronization. A provider
+    // must never compete with another root for the same open document.
+    for (const client of active.keys()) {
+      if (manager.hasClient(client)) client.refreshAliases?.();
+    }
     for (const [client, selection] of active) {
       if (!manager.hasClient(client)) {
         active.delete(client);
         continue;
       }
       if (client.phase() !== "running") continue;
-      client.refreshAliases?.();
       // Remove diagnostics and open overlays whose ownership has moved to a nested root.
       client.diagnostics?.forEach((uri) => {
         if (!manager.owns(selection.key, uri.fsPath)) client.diagnostics?.delete(uri);
@@ -364,11 +375,11 @@ function createClient(
   hostPath: (file: string) => string,
 ): RidlLanguageClient {
   const serverOptions: ServerOptions = { command: selection.command, args: ["lsp"], transport: TransportKind.stdio };
-  const documentSelector = clientDocumentSelector(selection.root === null ? undefined : canonicalFile(selection.root));
-  if (selection.root === null) documentSelector.push({ scheme: "file", language: "*", pattern: "**/ridl.toml" });
   const middleware = routingMiddleware(owns);
   const clientOptions: LanguageClientOptions = {
-    documentSelector,
+    // Providers are registered for owned open documents after discovery. Root
+    // globs overlap at equal scores in VS Code, including for formatting.
+    documentSelector: [],
     outputChannel,
     middleware,
     uriConverters: {
