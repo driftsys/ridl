@@ -280,6 +280,16 @@ fn release_job_installs_minisign_then_signs_before_upload() {
 }
 
 #[test]
+fn marketplace_publish_waits_for_the_signed_release() {
+    let workflow = workflow();
+    let (_, job) = workflow.split_once("\n  publish-vsce:\n").unwrap();
+    assert!(
+        job.contains("needs: [package-vsix, release]"),
+        "publish-vsce must need the release job"
+    );
+}
+
+#[test]
 fn minisign_verify_notice_accompanies_the_dependency() {
     let notices = fs::read_to_string(repo().join("THIRD-PARTY-NOTICES.txt")).unwrap();
     assert!(notices.contains(concat!(

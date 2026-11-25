@@ -9,7 +9,8 @@ name: vscode-release
 # binaries' tarballs, and runs the Marketplace publish in the `marketplace`
 # environment, which a maintainer must configure with required reviewers. The
 # release job does not depend on the publish job, so a publish failure never
-# blocks the release.
+# blocks the release. The publish job depends on the release job, so a failed
+# signing step publishes neither the release nor the extension.
 #
 # Packaging runs through `just package-vsix` (ADR-0009: the justfile defines
 # it; this file only invokes it), the same recipe `just package-vscode` calls
@@ -316,7 +317,7 @@ jobs:
 
   publish-vsce:
     name: publish to the VS Code Marketplace
-    needs: package-vsix
+    needs: [package-vsix, release]
     runs-on: ubuntu-latest
     environment: marketplace
     steps:
