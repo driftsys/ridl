@@ -144,7 +144,8 @@ member; rsdl is the apex.
                          byte-identical PATH copy, bare and tag version forms,
                          offline reuse, preserved damage,
                          checksum refusal, platform roots and paths with spaces,
-                         flat ridlc and historical ridl installs);
+                         relative root refusal, removal of old script stages,
+                         a failed `mv`, flat ridlc and historical ridl installs);
                          it also runs scripts/verify-deno-zip.sh against a
                          temporary pin file: a matching zip passes, and a
                          different zip, an absent target and a malformed pin

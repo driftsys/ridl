@@ -318,16 +318,26 @@ CLI accepts components through 18446744073709551615 (`u64`), so a release
 accepted by the CLI can exceed the scripts' component limit.
 
 Their stage name is **`.tmp-script-<version>-<pid>`**, separate from CLI stages.
-A script removes only a leftover stage with its own exact name before
-exclusively creating and claiming it. PowerShell extracts directly into this
-stage. Bash extracts into its `<version>/` child, so BSD and GNU `mv -n` can
-publish to the `versions/` parent without nesting files inside an appeared
-destination. Both create the marker locally before publication.
+Before creating its stage, a script removes its own leftover stage with the
+exact name. It also removes each directory directly under `versions/` whose name
+is `.tmp-script-<version>-` followed by one or more digits, for its own version
+only, when the directory was last modified more than 24 hours ago. A younger
+stage can belong to a running script. A regular file, a name with another suffix
+and a stage of another version stay. The script then exclusively creates and
+claims its own stage. PowerShell extracts directly into this stage. Bash
+extracts into its `<version>/` child, so BSD and GNU `mv -n` can publish to the
+`versions/` parent without nesting files inside an appeared destination. Both
+create the marker locally before publication.
 
 If another installer publishes first, the script reuses the appeared directory
 only if it is complete, then removes its own stage. A damaged destination is
 reported and preserved. A failed or skipped rename is followed by the same
-completion check. Cleanup removes only the operation's claimed paths.
+completion check. When the rename fails and no destination appeared, the script
+reports `could not move the staged release` with the `mv` exit status. Cleanup
+removes only the operation's claimed paths.
+
+The scripts require an absolute `RIDL_TOOLCHAIN_DIR` and refuse a relative value
+with `RIDL_TOOLCHAIN_DIR must be an absolute path`, the same rule as the CLI.
 
 After reuse or publication, the script copies the binary through a temporary
 regular file in the PATH destination directory, then renames it into place. The
@@ -374,9 +384,13 @@ The following tests cover the implemented contracts:
   `toolchain_cli_refuses_a_relative_root` covers the absolute-root rule.
 - `install_bare_and_tag_versions_share_layout`,
   `install_preserves_damaged_version`,
-  `install_removes_only_its_own_stale_script_stage` and
+  `install_refuses_a_relative_toolchain_dir`,
+  `install_removes_only_its_own_stale_script_stage`,
+  `install_removes_old_script_stages_of_its_version`,
+  `install_reports_a_failed_mv` and
   `install_reuses_complete_directory_appearing_at_rename` are fixture cases in
-  `just install-check`.
+  `just install-check`. The PowerShell variants run only where `pwsh` is
+  installed.
 - `schema_one_validates_every_state_and_nullability`,
   `missing_installs_requeries_then_starts`,
   `two_ridl_roots_inside_one_folder_get_two_clients`,

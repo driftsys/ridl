@@ -69,8 +69,9 @@ invalid pin or invalid TOML is an input error, exit 2. This command reads the
 pin without enforcing compatibility with the running binary.
 
 The toolchain root is the nonempty `RIDL_TOOLCHAIN_DIR` environment variable, or
-the platform data directory below. `ridl` refuses a relative override, exit 2.
-Empty environment values count as unset.
+the platform data directory below. `ridl` refuses a relative override, exit 2,
+and so do `install.sh` and `install.ps1`. Empty environment values count as
+unset.
 
 | Platform | Default root                                                                |
 | -------- | --------------------------------------------------------------------------- |

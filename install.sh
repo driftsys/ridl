@@ -84,6 +84,10 @@ toolchain_root() {
   local root
   if [ -n "${RIDL_TOOLCHAIN_DIR:-}" ]; then
     root="$RIDL_TOOLCHAIN_DIR"
+    case "$root" in
+      /*) ;;
+      *) echo "error: RIDL_TOOLCHAIN_DIR must be an absolute path, not '$root'" >&2; return 1 ;;
+    esac
   else
     case "$(uname -s)" in
       Linux)
@@ -95,6 +99,18 @@ toolchain_root() {
   fi
   case "$root" in /*) ;; *) root="$PWD/$root" ;; esac
   printf '%s\n' "$root"
+}
+
+# Remove script stages of this version that a killed run left behind. A stage
+# is old when it has not changed for more than 24 hours; younger stages may
+# belong to a live run. Only names ending in a nonempty digit suffix are stages.
+remove_old_script_stages() {
+  local dir suffix
+  while IFS= read -r dir; do
+    suffix="${dir##*/.tmp-script-"$normalized"-}"
+    case "$suffix" in ''|*[!0-9]*) continue ;; esac
+    rm -rf "$dir"
+  done < <(find "$root/versions" -mindepth 1 -maxdepth 1 -type d -name ".tmp-script-$normalized-*" -mmin +1440)
 }
 
 # An existing directory is never repaired or replaced.
@@ -181,6 +197,7 @@ main() {
   if [ -z "${source:-}" ]; then
     if [ -n "$versioned" ]; then
       mkdir -p "$root/versions"
+      remove_old_script_stages
       # A previous directory for this PID is stale. Other script stages may be live.
       local candidate="$root/versions/.tmp-script-$normalized-$$"
       rm -rf "$candidate"
@@ -200,9 +217,15 @@ main() {
       extract_release "$payload"
       : > "$payload/.complete"
       if ! complete_release; then
-        if ! mv -n "$payload" "$root/versions/" || [ -d "$payload" ]; then
+        local mv_status=0
+        mv -n "$payload" "$root/versions/" || mv_status=$?
+        if [ "$mv_status" -ne 0 ] || [ -d "$payload" ]; then
           if ! complete_release; then
-            echo "error: toolchain directory appeared: $release_dir" >&2
+            if [ -e "$release_dir" ] || [ -L "$release_dir" ]; then
+              echo "error: toolchain directory appeared: $release_dir" >&2
+            else
+              echo "error: could not move the staged release to $root/versions/ (mv exit $mv_status)" >&2
+            fi
             return 1
           fi
         fi

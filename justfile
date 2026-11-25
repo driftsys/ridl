@@ -3007,8 +3007,11 @@ install-check:
         done
         env -u RIDL_TOOLCHAIN_DIR -u XDG_DATA_HOME TEST_OS=Linux PATH="$scratch/uname:$PATH" bash install.sh
         test -f "$HOME/.local/share/ridl/versions/0.23.0/.complete"
-        (cd "$scratch" && RIDL_TOOLCHAIN_DIR="relative root" bash "$repo/install.sh")
-        test -f "$scratch/relative root/versions/0.23.0/.complete"
+    }
+    install_refuses_a_relative_toolchain_dir() {
+        if (cd "$scratch" && RIDL_TOOLCHAIN_DIR="relative root" bash "$repo/install.sh") 2>"$scratch/relative.err"; then return 1; fi
+        grep -qF "RIDL_TOOLCHAIN_DIR must be an absolute path" "$scratch/relative.err"
+        test ! -e "$scratch/relative root"
     }
     install_rejects_invalid_archives() {
         local kind root dest
@@ -3082,6 +3085,37 @@ install-check:
         test -f "$root/versions/0.23.0/.complete"
         cmp "$root/versions/0.23.0/ridl" "$dest/ridl"
     }
+    install_removes_old_script_stages_of_its_version() {
+        local root="$scratch/old stages root" dest="$scratch/old stages path" versions name
+        versions="$root/versions"
+        mkdir -p "$versions/.tmp-script-0.23.0-111" "$versions/.tmp-script-0.23.0-222" \
+            "$versions/.tmp-script-0.22.9-333" "$versions/.tmp-script-0.23.0-4x4" \
+            "$versions/.tmp-0.23.0-555"
+        : > "$versions/.tmp-script-0.23.0-666"
+        for name in .tmp-script-0.23.0-111 .tmp-script-0.22.9-333 .tmp-script-0.23.0-4x4 .tmp-0.23.0-555 .tmp-script-0.23.0-666; do
+            python3 -c 'import os,sys,time; t=time.time()-25*3600; os.utime(sys.argv[1],(t,t))' "$versions/$name"
+        done
+        RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh
+        test ! -e "$versions/.tmp-script-0.23.0-111"
+        for name in .tmp-script-0.23.0-222 .tmp-script-0.22.9-333 .tmp-script-0.23.0-4x4 .tmp-0.23.0-555 .tmp-script-0.23.0-666; do
+            test -e "$versions/$name" || {
+                echo "install-check: $name was removed" >&2
+                return 1
+            }
+        done
+        test -f "$versions/0.23.0/.complete"
+    }
+    install_reports_a_failed_mv() {
+        local root="$scratch/failed mv root" dest="$scratch/failed mv path"
+        mkdir -p "$scratch/fail-mv"
+        printf '#!/bin/sh\n[ "$1" = -n ] && exit 1\nexec /bin/mv "$@"\n' > "$scratch/fail-mv/mv"
+        chmod +x "$scratch/fail-mv/mv"
+        if PATH="$scratch/fail-mv:$PATH" RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh 2>"$scratch/mv.err"; then return 1; fi
+        grep -qF "could not move the staged release" "$scratch/mv.err"
+        ! grep -qF "appeared" "$scratch/mv.err"
+        test ! -e "$root/versions/0.23.0"; test ! -e "$dest/ridl"
+        test -z "$(find "$root/versions" -name '.tmp-*')"
+    }
     install_reuses_complete_directory_appearing_at_rename() {
         local status root dest
         mkdir -p "$scratch/race-mv"
@@ -3118,7 +3152,7 @@ install-check:
         done
     }
     # Cases are functions so failures identify the behavior under test.
-    for case in install_bare_and_tag_versions_share_layout install_reuses_complete_release_without_download install_preserves_damaged_version install_tamper_leaves_no_version_or_path_copy install_ridlc_remains_flat install_older_release_remains_flat install_platform_roots_and_spaces install_rejects_invalid_archives install_preserves_directory_appearing_before_publish install_removes_only_its_own_stale_script_stage install_reuses_complete_directory_appearing_at_rename; do
+    for case in install_bare_and_tag_versions_share_layout install_reuses_complete_release_without_download install_preserves_damaged_version install_tamper_leaves_no_version_or_path_copy install_ridlc_remains_flat install_older_release_remains_flat install_platform_roots_and_spaces install_refuses_a_relative_toolchain_dir install_rejects_invalid_archives install_preserves_directory_appearing_before_publish install_removes_only_its_own_stale_script_stage install_removes_old_script_stages_of_its_version install_reports_a_failed_mv install_reuses_complete_directory_appearing_at_rename; do
         echo "install-check: $case"
         "$case"
     done
@@ -3181,6 +3215,12 @@ install-check:
                 $env:RIDL_VERSION = "editor-v0.22.9"; ./install.ps1
                 Assert (-not (Test-Path $env:RIDL_TOOLCHAIN_DIR)) "old release used versions"
                 $env:RIDL_VERSION = "0.23.0"
+                Write-Host "install-check: PowerShell install_refuses_a_relative_toolchain_dir"
+                $env:RIDL_TOOLCHAIN_DIR = "relative root"
+                $failure = $null
+                try { ./install.ps1 } catch { $failure = $_ }
+                Assert ($null -ne $failure -and $failure.ToString().Contains("RIDL_TOOLCHAIN_DIR must be an absolute path")) "relative root accepted"
+                Assert (-not (Test-Path -LiteralPath "relative root")) "relative root created"
                 Write-Host "install-check: PowerShell install_platform_roots_and_spaces"
                 Remove-Item Env:RIDL_TOOLCHAIN_DIR; Remove-Item Env:RIDL_INSTALL_DIR
                 ./install.ps1
@@ -3210,6 +3250,26 @@ install-check:
                 Assert (Test-Path (Join-Path $versions "0.23.0/.complete")) "missing release"
                 Assert ((Get-FileHash (Join-Path $versions "0.23.0/ridl.exe")).Hash -eq (Get-FileHash (Join-Path $dest "ridl.exe")).Hash) "PATH copy"
 
+                Write-Host "install-check: PowerShell install_removes_old_script_stages_of_its_version"
+                $oldRoot = "$root-old stages"; $env:RIDL_TOOLCHAIN_DIR = $oldRoot; $InstallDir = "$dest-old stages"
+                $oldVersions = Join-Path $oldRoot "versions"
+                New-Item -ItemType Directory -Path $oldVersions -Force | Out-Null
+                $aged = @(".tmp-script-0.23.0-111", ".tmp-script-0.22.9-333", ".tmp-script-0.23.0-4x4", ".tmp-0.23.0-555")
+                foreach ($name in $aged + @(".tmp-script-0.23.0-222")) {
+                    New-Item -ItemType Directory -Path (Join-Path $oldVersions $name) | Out-Null
+                }
+                New-Item -ItemType File -Path (Join-Path $oldVersions ".tmp-script-0.23.0-666") | Out-Null
+                foreach ($name in $aged + @(".tmp-script-0.23.0-666")) {
+                    (Get-Item -LiteralPath (Join-Path $oldVersions $name) -Force).LastWriteTimeUtc = (Get-Date).ToUniversalTime().AddHours(-25)
+                }
+                Main
+                Assert (-not (Test-Path -LiteralPath (Join-Path $oldVersions ".tmp-script-0.23.0-111"))) "old stage remains"
+                foreach ($name in @(".tmp-script-0.23.0-222", ".tmp-script-0.22.9-333", ".tmp-script-0.23.0-4x4", ".tmp-0.23.0-555", ".tmp-script-0.23.0-666")) {
+                    Assert (Test-Path -LiteralPath (Join-Path $oldVersions $name)) "$name was removed"
+                }
+                Assert (Test-Path (Join-Path $oldVersions "0.23.0/.complete")) "missing release"
+
+                $env:RIDL_TOOLCHAIN_DIR = $root; $InstallDir = $dest
                 $savedComplete = ${function:Test-CompleteRelease}
                 foreach ($kind in @("complete", "damaged")) {
                     Write-Host "install-check: PowerShell install_directory_appearing_at_rename $kind"
