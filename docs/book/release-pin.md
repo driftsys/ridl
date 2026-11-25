@@ -1,5 +1,9 @@
 # Pinning the workspace release
 
+The [decisions](../decisions/ADR-0036-workspace-toolchain-pins.md) explain the
+scope. The [toolchain directory record](../design/toolchain-directory.md) owns
+the directory layout, selection schema and installation protocol.
+
 A root `ridl.toml` can require a RIDL release. Set `ridl-version` in its
 `[package]` or `[workspace]` table. This TOML fragment shows the key:
 
@@ -70,33 +74,11 @@ current directory. Empty environment values count as unset.
 | macOS    | `~/Library/Application Support/ridl`                                        |
 | Windows  | `%LOCALAPPDATA%\ridl`                                                       |
 
-A missing home directory or required Windows variable is an error. Each release
-lives in `<root>/versions/<MAJOR.MINOR.PATCH>/`, containing `ridl` (`ridl.exe`
-on Windows), `LICENSE`, `THIRD-PARTY-NOTICES.txt` and an empty `.complete` file.
-A missing binary or missing, non-file or nonempty marker makes the directory
-damaged. Installation reports that path and preserves it; it does not repair or
-delete existing directories.
-
-Installation uses the running binary's build target to download an archive and
-its SHA-256 record from the fixed GitHub editor release origin. The record must
-name that archive and its digest must match. Only the three root-level regular
-files above are accepted; links, nested paths, duplicates and archive-provided
-completion markers are refused. A per-version file lock serializes
-`ridl toolchain install` processes. The CLI rechecks under the lock and removes
-only its stale `.tmp-<version>-<digits>` directories before staging. It extracts
-into its own temporary directory, then creates the marker and renames the
-directory into place. Failures remove that operation's temporary directory.
-Downloads have a 30-second connection timeout and a 10-minute overall timeout
-per request. Archives larger than 256 MiB and checksum records larger than 4 KiB
-are refused. An existing complete release works offline. Unsupported release
-targets produce a named error.
-
-The install scripts use the same release directory without taking the CLI's
-lock. They stage in `.tmp-script-<version>-<pid>`, which CLI cleanup preserves.
-Before staging, a script removes only a leftover directory with its own exact
-stage name. At publication, a script reuses a complete release directory that
-another installer has created and removes its own stage. If the appeared
-directory is damaged, the script reports its path and preserves it.
+A missing home directory or required Windows variable is an error. Releases
+remain side by side; an existing damaged installation is reported and preserved.
+The [directory and installation protocol](../design/toolchain-directory.md)
+defines completion, archive verification, locking, separate CLI/script staging
+and cleanup ownership.
 
 `ridl toolchain list` prints one `<version>\t<directory>` line per canonical
 version directory, in numeric order. Damaged lines end with `(damaged)`.
@@ -110,25 +92,10 @@ workspaces use the running binary. Compatible running binaries remain usable on
 targets without published archives.
 
 Text output is the absolute binary path on stdout for success, or a sentence on
-stderr for a negative answer. `--json` writes a schema-1 object with eight keys:
-`schema`, `manifest`, `pin`, `running`, `status`, `path`, `source`,
-`diagnostic`. Manifest and binary paths are canonical absolute paths. Absent
-values are null.
-
-| Status       | Exit | Path and source                           | Diagnostic                                 |
-| ------------ | ---- | ----------------------------------------- | ------------------------------------------ |
-| `compatible` | 0    | selected binary; `installed` or `running` | null                                       |
-| `unpinned`   | 0    | running binary; `running`                 | null                                       |
-| `missing`    | 1    | null                                      | null                                       |
-| `invalid`    | 1    | null                                      | `code` and `message`, MANI-024 or MANI-025 |
-
-An invalid string has a null pin. A parsed below-floor pin retains its canonical
-string. No manifest means a null manifest; an unpinned manifest remains present.
-A missing entry, unreadable manifest, invalid TOML or wrong-type mode table
-exits 2, with no successful JSON on stdout. These management commands do not
-enforce the running binary's pin compatibility and never report MANI-026 as an
-invalid selection answer. Selecting a binary does not run it; invoke the
-returned path explicitly in terminal workflows.
+stderr for a negative answer. `--json` provides the
+[schema-1 selection report](../design/toolchain-directory.md#which---json-schema-1),
+including all status, nullability and exit mappings. Selecting a binary does not
+run it; invoke the returned path explicitly in terminal workflows.
 
 ## Editors and agent tools
 
@@ -199,9 +166,9 @@ clears the refusal without restarting the server. Member manifest buffers do not
 replace the root or become source overlays.
 
 On an unpinned root manifest, the server offers the `refactor.rewrite` code
-action **Pin this workspace to ridl <running release>**. It inserts the key
-without rewriting existing bytes or line endings. It supports explicit tables,
-inline tables and dotted keys. It requires valid TOML with exactly one
+action **Pin this workspace to ridl &lt;running release&gt;**. It inserts the
+key without rewriting existing bytes or line endings. It supports explicit
+tables, inline tables and dotted keys. It requires valid TOML with exactly one
 `[package]` or `[workspace]` mode and a running release of at least 0.23.0. An
 existing key, including an invalid value, suppresses the action. The action
 needs no diagnostic and respects the client's requested code action kinds.

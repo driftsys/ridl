@@ -2554,8 +2554,8 @@ open manifest buffer takes precedence only while the disk file exists. Deleting
 the disk manifest unloads the workspace and clears its diagnostics. Once the
 disk file is restored, a watched create event or a manifest buffer change
 reloads it. Open source text survives the reload. An unpinned valid root
-manifest offers the code action **Pin this workspace to ridl
-<running release>**, without a diagnostic.
+manifest offers the code action **Pin this workspace to ridl &lt;running
+release&gt;**, without a diagnostic.
 
 **Flags.** `--stdio` and `--clientProcessId=<PID>` are accepted and change
 nothing. The LSP specification (3.17, "Implementation Considerations")
@@ -2919,6 +2919,9 @@ clean `vendor/`.
 | 2    | a root release refusal (MANI-024 through MANI-026), a missing or unreadable path, no `ridl.toml` at or above it, or a bad flag      |
 
 ### `ridl toolchain`
+
+The [toolchain directory record](../design/toolchain-directory.md) defines the
+selection report schema and install transaction.
 
 ```sh
 ridl toolchain --help

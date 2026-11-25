@@ -70,6 +70,11 @@ just package-vscode
 code --install-extension editors/vscode/ridl-lang-<version>.vsix
 ```
 
+The [selection protocol](../../docs/design/toolchain-directory.md) defines the
+schema consumed by the extension;
+[ADR-0036](../../docs/decisions/ADR-0036-workspace-toolchain-pins.md) records
+the per-root selection and Workspace Trust decisions.
+
 ## Settings
 
 | Setting                      | Default | Description                                                                                                                   |

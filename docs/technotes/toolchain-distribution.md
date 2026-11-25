@@ -109,10 +109,12 @@ the display string is not a plain release. See
 `ridl toolchain install`, `list` and `which` manage and inspect a shared
 versions directory independently of workspace compilation. The
 [release pin chapter](../book/release-pin.md#installing-and-selecting-toolchains)
-owns the root precedence, directory layout, integrity rules and selection
-contract. The installer uses the build target exported by Cargo, and the fixed
-GitHub `editor-v<version>` release origin. Its alternate download source is a
-library test parameter, with no CLI, manifest or environment override.
+owns root precedence and command usage. The
+[toolchain directory record](../design/toolchain-directory.md) owns layout,
+selection schema and installation protocol. The installer uses the build target
+exported by Cargo, and the fixed GitHub `editor-v<version>` release origin. Its
+alternate download source is a library test parameter, with no CLI, manifest or
+environment override.
 
 `just install-check` also runs the ignored
 `toolchain_ureq_path_verifies_and_installs` local HTTP test, exercising the
@@ -165,13 +167,15 @@ resolved URL without creating directories or downloading.
 
 For `ridl` 0.23.0 and later, the scripts download the target archive and SHA-256
 record, verify the digest and archive contents, and install into the shared
-[toolchain directory](../book/release-pin.md#installing-and-selecting-toolchains).
-That chapter owns the roots, directory layout and completion rules. Complete
-releases are reused offline; damaged directories are preserved and named in the
-error. The scripts then copy the binary to `RIDL_INSTALL_DIR`, defaulting to
-`$HOME/.local/bin` or `%LOCALAPPDATA%\Programs\ridl`. PATH entries are regular
-files. Older releases, historical tags without a plain release version, and
-`RIDL_INSTALL_BINARY=ridlc` retain flat installation in that PATH directory.
+[toolchain directory](../design/toolchain-directory.md). That record owns the
+layout and completion rules; the
+[book](../book/release-pin.md#installing-and-selecting-toolchains) owns root
+configuration. Complete releases are reused offline; damaged directories are
+preserved and named in the error. The scripts then copy the binary to
+`RIDL_INSTALL_DIR`, defaulting to `$HOME/.local/bin` or
+`%LOCALAPPDATA%\Programs\ridl`. PATH entries are regular files. Older releases,
+historical tags without a plain release version, and `RIDL_INSTALL_BINARY=ridlc`
+retain flat installation in that PATH directory.
 
 `just install-check` first runs the ignored toolchain HTTP test, then checks the
 scripts with fixture releases at `editor-v0.23.0`: bare/tag normalization,

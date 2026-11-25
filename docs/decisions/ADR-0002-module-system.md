@@ -82,6 +82,9 @@ Amended 2026-11-18 by [ADR-0034](ADR-0034-service-declaration-names.md) decision
 one package name, such as `a.b/` and `a/b/`, are an error when the unit loads,
 and the directory reached second in the walk is not loaded.
 
+Amended 2026-11-25 by [ADR-0036](ADR-0036-workspace-toolchain-pins.md): §4 gains
+the optional root release requirement and its early refusal boundary.
+
 ## Context
 
 RIDL is an interface description language whose source files declare contracts
@@ -298,6 +301,12 @@ root's `[lints]`, `[defaults].timing`, `[defaults].command_timing`,
 `[defaults].query_timing` and `[imports]` apply to the member, and its imports
 of sibling members resolve. A command that reports diagnostics reports those of
 the files under the member only.
+
+**Workspace release requirement** (amended 2026-11-25,
+[ADR-0036](ADR-0036-workspace-toolchain-pins.md)). Both manifest modes accept
+`ridl-version`; the ADR owns its root-only meaning and compatibility rule.
+[Pinning the workspace release](../book/release-pin.md) documents the value,
+diagnostics and command coverage.
 
 **The `[lints]` table** (amended 2026-10-04, lint foundation design, ADR-0024)
 sets the level of a lint, in both modes. Each key is a lint name, the name a

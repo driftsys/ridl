@@ -93,9 +93,11 @@ Both scripts read the same environment variables:
 
 For `ridl` 0.23.0 and later, both scripts first install into the shared
 [toolchain directory](release-pin.md#installing-and-selecting-toolchains), then
-copy the binary to the PATH directory. That chapter owns the platform roots,
-`RIDL_TOOLCHAIN_DIR` override, side-by-side layout and `.complete` marker rules.
-Complete releases are reused without downloading. Older `ridl` releases and
+copy the binary to the PATH directory. That chapter owns the platform roots and
+`RIDL_TOOLCHAIN_DIR` override; the
+[directory protocol](../design/toolchain-directory.md) defines the shared
+layout, completion marker and installation transaction. Complete releases are
+reused without downloading. Older `ridl` releases and
 `RIDL_INSTALL_BINARY=ridlc` keep a flat install in the PATH directory.
 
 Set an explicit version in CI so a newly published release does not change the

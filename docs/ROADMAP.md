@@ -36,6 +36,12 @@ steps above. ADR-0004 records both changes in its 2026-09-12 amendment, and
 [ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
 16's own V1 framing is amended there for the same reason.
 
+## Workspace toolchain pins
+
+| Item                                                                       | Implementation status                                                                                                      | Remaining work                                                                                                                                                                                                                         |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Workspace toolchain pins](decisions/ADR-0036-workspace-toolchain-pins.md) | Implemented for #1476: loader enforcement, CLI management, server refusals, install scripts and editor per-root selection. | [#1477](https://github.com/driftsys/ridl/issues/1477) tracks deferred behavior and review items; [#1478](https://github.com/driftsys/ridl/issues/1478) tracks minimum-release extension CI, with timing owned by ADR-0036 decision 10. |
+
 ## What this repository is, and is not
 
 **The core is domain-agnostic.** No automotive, avionics or medical vocabulary

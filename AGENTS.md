@@ -56,6 +56,9 @@ and `rmdl` stays a Proposed draft with no implementation. See
     a skill.
   - ADR-0035 and `docs/design/authoring-skill.md` — before changing the
     `ridl-authoring` skill, its gates, or the eval runner's tasks or scoring.
+  - ADR-0036 and `docs/design/toolchain-directory.md` — before changing
+    workspace release pins, toolchain selection or installation, or editor
+    per-root clients. See `docs/decisions/ADR-0036-workspace-toolchain-pins.md`.
   - ADR-0008 — read its `## Status` before editing it.
   - ADR-0009 (toolchain pin and gate parity) and ADR-0010 (CLI conventions) —
     bind every contributor and every subcommand.

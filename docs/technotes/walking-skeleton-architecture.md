@@ -91,7 +91,7 @@ crate the workspace holds — see `AGENTS.md` for that.
   for `wasm32-unknown-unknown` with `--no-default-features` (ADR-0007 decision
   5). The `catalog_history` module reads and writes the `<unit>.catalogs` file
   that `ridl baseline` publishes: the catalog hashes of a unit's published
-  baselines, newest first. The pure `release` module parses root release pins
+  baselines, newest first. The pure `release.rs` module parses root release pins
   and compares numeric releases. Workspace loaders take the running release
   explicitly and refuse before source overlays, members, headers, lockfiles or
   remotes. One root manifest overlay is accepted before this check; other
@@ -300,11 +300,11 @@ crate the workspace holds — see `AGENTS.md` for that.
   (`catalogs.rs`); `ridl check --baseline` is the desk-time ordinal-drift check
   over the snapshots; `property.rs` is the `ridl test` runner, which spends the
   range strategies on the contract plane. The package also exposes a `ridl-cli`
-  library target. Its `toolchain` module resolves platform data directories,
-  installs verified releases under per-version file locks, lists installations
-  and selects a binary from the workspace release pin. The `ridl toolchain`
-  subcommands call that library; see
-  [release pins](../book/release-pin.md#installing-and-selecting-toolchains).
+  library target. Its `toolchain/paths.rs` resolves roots and archive targets,
+  `toolchain/selection.rs` owns inventory and schema-1 selection, and
+  `toolchain/install.rs` owns verified publication. The `ridl toolchain`
+  subcommands call that library; see the
+  [toolchain directory record](../design/toolchain-directory.md).
 
 - **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware
   (comments are preserved and re-anchored), total (input with parse errors is
@@ -460,6 +460,12 @@ crate the workspace holds — see `AGENTS.md` for that.
 
 - **`editors/vscode`** — the VS Code extension: an LSP client plus TextMate
   grammars for `.typl`, `.ridl` and `.rsdl`, built with npm/tsc.
+  `toolchainSelection.ts` validates resolver subprocess results;
+  `workspaceClients.ts` owns per-root client lifecycles; `extension.ts` wires
+  document and manifest events, scoped routing and the window MCP definition.
+  See
+  [editor module ownership](toolchain-distribution.md#editor-toolchain-selection)
+  and [ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md).
 
 - **`xtask`** — `cargo xtask codegen`, the typed-AST generator over
   `family.ungram`, and `cargo xtask descriptor-codegen`, which generates
