@@ -3210,7 +3210,7 @@ install-check:
                 Assert (Test-Path (Join-Path $versions "0.23.0/.complete")) "missing release"
                 Assert ((Get-FileHash (Join-Path $versions "0.23.0/ridl.exe")).Hash -eq (Get-FileHash (Join-Path $dest "ridl.exe")).Hash) "PATH copy"
 
-                $savedComplete = $function:Test-CompleteRelease
+                $savedComplete = ${function:Test-CompleteRelease}
                 foreach ($kind in @("complete", "damaged")) {
                     Write-Host "install-check: PowerShell install_directory_appearing_at_rename $kind"
                     $env:RIDL_TOOLCHAIN_DIR = "$root-$kind"; $InstallDir = "$dest-$kind"
@@ -3248,7 +3248,7 @@ install-check:
                         Assert ((Get-Content (Join-Path $release "ridl.exe") -Raw).Trim() -eq "concurrent release") "modified concurrent binary"
                         Assert (@(Get-ChildItem -LiteralPath (Split-Path $release) -Force -Filter ".tmp-*").Count -eq 0) "stage remains after race"
                     } finally {
-                        $function:Test-CompleteRelease = $savedComplete
+                        ${function:Test-CompleteRelease} = $savedComplete
                     }
                 }
             '
