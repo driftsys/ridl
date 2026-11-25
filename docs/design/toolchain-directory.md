@@ -14,10 +14,11 @@ and the early refusal belong to `crates/ridl-core/src/workspace.rs`.
 `crates/ridl/src/toolchain/paths.rs` resolves the toolchain root and validates
 archive targets; `selection.rs` inventories and selects releases; `install.rs`
 downloads and publishes them; `uninstall.rs` removes them.
-`crates/ridl/src/toolchain/mod.rs` defines the production origin constant;
-`main.rs` passes it with the current executable, running release and build
-target, and maps results to command output. Core, IR and descriptor crates do
-not install toolchains.
+`crates/ridl/src/toolchain/mod.rs` defines the production origin and public key
+constants; `main.rs` calls `handoff::release_origin()` for the origin and the
+public key, and passes them with the current executable, running release and
+build target, and maps results to command output. Core, IR and descriptor crates
+do not install toolchains.
 
 Given the
 [configured root](../book/release-pin.md#installing-and-selecting-toolchains),
@@ -100,8 +101,9 @@ registered handler is not inherited, so the child receives the event normally),
 starts the child, waits, and exits with the child's exit code. A failure to
 create, configure or join the job, or to start the child, prints the same
 message with the failed step named and exits 2, and no child is started without
-the job. The Windows branch is not compiled by any gate; no Windows job exists
-yet.
+the job. No test job runs on Windows, so the Windows branch is compiled only by
+the release workflow's Windows build and is never tested; the follow-up is
+driftsys/ridl#TBD-windows-ci.
 
 **Sites.** The hand-off is called from these places in the `ridl` binary, each
 after the refusal is known and before anything is written:

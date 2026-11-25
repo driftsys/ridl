@@ -84,6 +84,12 @@ without a pull request.
    `npm-release.yml` and `vscode-release.yaml`. The Marketplace job then waits
    for approval in the `marketplace` environment.
 
+Before the first `editor-v` tag that contains the signing step, the repository
+secrets `RIDL_RELEASE_SIGNING_KEY` and `RIDL_RELEASE_SIGNING_KEY_PASSWORD` have
+to exist, and `RELEASE_PUBLIC_KEY` has to hold the matching public key (see
+"Signed release archives"). Without them the `release` job fails at its signing
+step and publishes nothing.
+
 A tag is not moved after it is pushed. A publish workflow that starts from a tag
 runs that tag's commit, and a re-run of it also uses the workflow file of that
 commit, so a fix on `main` cannot reach it. A failure in a publish workflow
@@ -132,6 +138,34 @@ actual ureq path and checksum refusal. File-based fixture tests cover
 extraction, cleanup, damaged directories and concurrent installers without a
 network listener. The install scripts below produce the shared layout for
 pinnable `ridl` releases.
+
+## Signed release archives
+
+The `release` job of `.github/workflows/vscode-release.yaml` signs every
+`ridl-<target>.tar.gz` that the build jobs produced, after it installs the
+Ubuntu `minisign` package and before it uploads the release assets. Each
+signature is a prehashed minisign signature in `ridl-<target>.tar.gz.minisig`
+with the trusted comment `ridl <version> <target>`, where `<version>` is the tag
+without `editor-v`. `ridlc` archives are not signed. The build runners never see
+the secret key.
+
+The step reads two repository secrets, `RIDL_RELEASE_SIGNING_KEY` (the minisign
+secret key file) and `RIDL_RELEASE_SIGNING_KEY_PASSWORD`. It fails, and the
+release is not created, when either secret is empty, when no `ridl` archive
+exists, or while `crates/ridl/src/toolchain/mod.rs` still contains the marker
+`RIDL-RELEASE-KEY-PLACEHOLDER`.
+
+The matching public key is the constant `RELEASE_PUBLIC_KEY` in
+`crates/ridl/src/toolchain/mod.rs`. `ridl toolchain install` verifies every
+download against it; the
+[toolchain directory record](../design/toolchain-directory.md#targets-and-download-source)
+owns the verification rules. The install scripts do not verify signatures.
+
+Rotation uses a new key for the next release. A binary verifies only releases
+that are signed with the key it embeds, so a binary built before the rotation
+keeps verifying earlier releases and refuses later ones. No release is signed
+with two keys. After a rotation, a user of an older binary installs a newer
+release with the install scripts or a newer binary.
 
 ## Editor toolchain selection
 

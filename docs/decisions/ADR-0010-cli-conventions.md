@@ -69,6 +69,10 @@ Amended 2026-11-25 by [ADR-0036](ADR-0036-workspace-toolchain-pins.md): decision
 1 gains the three `ridl toolchain` rows and the root release refusal clause.
 Their dated construction and tests are recorded under that decision.
 
+Amended 2026-11-25 by [ADR-0036](ADR-0036-workspace-toolchain-pins.md) decision
+11: decision 1 states the exit status of a command that hands off to another
+release.
+
 ## Context
 
 Issue driftsys/ridl#194, found while writing the book's CLI reference (PR
@@ -129,6 +133,11 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    - **2** — the tool could not answer: a missing or unreadable path, a bad
      flag, an I/O failure while reading or writing, or a root release refusal
      (MANI-024, MANI-025 or MANI-026).
+
+   A command that hands off to another release (ADR-0036 decision 11) is
+   replaced by that release or waits for it, so its exit code and output are the
+   selected release's. When the hand-off cannot start the release, the command
+   prints `error: could not run ridl <version> at <path>: <error>` and exits 2.
 
    In `ridl check`, `ridl build`, `ridlc check` and `ridlc build`, a lint raised
    to `deny` in `[lints]` is a diagnostic error, so it exits 1. The other
