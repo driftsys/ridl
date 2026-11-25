@@ -146,6 +146,26 @@ fn extract(bytes: &[u8], stage: &Path, binary: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Removes the stage directories that earlier runs of CLI installs left for
+/// `release`. The caller holds the version's lock, which excludes every
+/// cooperating owner of those stages.
+pub(super) fn remove_stale_stages(versions: &Path, release: Release) -> io::Result<()> {
+    let stage_prefix = format!(".tmp-{release}-");
+    for entry in fs::read_dir(versions)? {
+        let entry = entry?;
+        if entry
+            .file_name()
+            .to_str()
+            .and_then(|name| name.strip_prefix(&stage_prefix))
+            .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|byte| byte.is_ascii_digit()))
+            && entry.file_type()?.is_dir()
+        {
+            fs::remove_dir_all(entry.path())?;
+        }
+    }
+    Ok(())
+}
+
 /// Installs one verified release without modifying an existing version directory.
 /// Production callers pass the fixed release origin; tests may pass a file source.
 pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> io::Result<PathBuf> {
@@ -175,20 +195,7 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
     if let Some(binary) = existing(&directory, release, binary)? {
         return Ok(binary);
     }
-    // Holding this version's lock excludes every cooperating owner of its stages.
-    let stage_prefix = format!(".tmp-{release}-");
-    for entry in fs::read_dir(&versions)? {
-        let entry = entry?;
-        if entry
-            .file_name()
-            .to_str()
-            .and_then(|name| name.strip_prefix(&stage_prefix))
-            .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|byte| byte.is_ascii_digit()))
-            && entry.file_type()?.is_dir()
-        {
-            fs::remove_dir_all(entry.path())?;
-        }
-    }
+    remove_stale_stages(&versions, release)?;
     let stage_path = versions.join(format!(".tmp-{release}-{}", std::process::id()));
     fs::create_dir(&stage_path)?;
     let stage = Stage(stage_path);

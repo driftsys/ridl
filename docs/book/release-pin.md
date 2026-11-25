@@ -45,10 +45,11 @@ commands that apply levels.
 `vendor`, `describe`, and `ridlc check/build` enforce the root pin. Formatting
 checks every discovered root before any write, without compiling sources.
 `describe` checks the descriptor input's root without compiling sources.
-Explicit snapshot inputs to `diff`, standalone descriptors, `init`, `new` and
-`lock merge` keep their existing contracts, independent of the current
-directory's pin. `lsp` and `mcp` still start their servers and report refusals
-through their protocols, as described below.
+`describe` and a `diff` directory input report a root release refusal before an
+I/O error of the input. Explicit snapshot inputs to `diff`, standalone
+descriptors, `init`, `new` and `lock merge` keep their existing contracts,
+independent of the current directory's pin. `lsp` and `mcp` still start their
+servers and report refusals through their protocols, as described below.
 
 Releases before 0.23.0 cannot enforce pins: they read the key as unknown
 (MANI-005) and may continue. Pin support begins with 0.23.0.
@@ -65,8 +66,8 @@ invalid pin or invalid TOML is an input error, exit 2. This command reads the
 pin without enforcing compatibility with the running binary.
 
 The toolchain root is the nonempty `RIDL_TOOLCHAIN_DIR` environment variable, or
-the platform data directory below. A relative override is resolved against the
-current directory. Empty environment values count as unset.
+the platform data directory below. `ridl` refuses a relative override, exit 2.
+Empty environment values count as unset.
 
 | Platform | Default root                                                                |
 | -------- | --------------------------------------------------------------------------- |
@@ -79,6 +80,13 @@ remain side by side; an existing damaged installation is reported and preserved.
 The [directory and installation protocol](../design/toolchain-directory.md)
 defines completion, archive verification, locking, separate CLI/script staging
 and cleanup ownership.
+
+`ridl toolchain uninstall VERSION` removes the version directory of an exact
+release of at least 0.23.0, complete or damaged, and prints the removed path. It
+refuses the running release, exits 1 when the release is not installed, and
+waits for the version's lock. The
+[directory record](../design/toolchain-directory.md#uninstall) defines the
+steps.
 
 `ridl toolchain list` prints one `<version>\t<directory>` line per canonical
 version directory, in numeric order. Damaged lines end with `(damaged)`.

@@ -228,6 +228,12 @@ ridl toolchain list --help switch
 ridl toolchain list -h switch
 ridl toolchain list requires
 ridl toolchain requires <COMMAND>
+ridl toolchain uninstall
+ridl toolchain uninstall --help optional
+ridl toolchain uninstall --help switch
+ridl toolchain uninstall -h switch
+ridl toolchain uninstall arg 1 <VERSION> required
+ridl toolchain uninstall requires <VERSION>
 ridl toolchain which
 ridl toolchain which --help optional
 ridl toolchain which --help switch

@@ -6,6 +6,7 @@ use std::{
 };
 
 /// Resolves the platform data directory without consulting process environment.
+/// A `RIDL_TOOLCHAIN_DIR` override must be an absolute path.
 pub fn toolchain_root(
     platform: &str,
     env: &BTreeMap<String, OsString>,
@@ -26,7 +27,16 @@ pub fn toolchain_root(
             .ok_or_else(|| io::Error::other("toolchain directory requires a home directory"))
     };
     let path = if let Some(path) = value("RIDL_TOOLCHAIN_DIR") {
-        path
+        if !path.is_absolute() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!(
+                    "RIDL_TOOLCHAIN_DIR must be an absolute path, not `{}`",
+                    path.display()
+                ),
+            ));
+        }
+        return Ok(path);
     } else {
         match platform {
             "linux" => match value("XDG_DATA_HOME") {
@@ -45,6 +55,15 @@ pub fn toolchain_root(
         }
     };
     std::path::absolute(path)
+}
+
+/// Resolves the toolchain root from the process environment.
+pub fn process_toolchain_root() -> io::Result<PathBuf> {
+    let environment = std::env::vars_os()
+        .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
+        .collect::<BTreeMap<_, _>>();
+    let home = environment.get("HOME").map(PathBuf::from);
+    toolchain_root(std::env::consts::OS, &environment, home.as_deref())
 }
 
 /// Rejects triples for which the editor release publishes no binary archive.

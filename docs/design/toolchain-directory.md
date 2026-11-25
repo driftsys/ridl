@@ -13,10 +13,11 @@ install transaction; it introduces no separate compatibility rule.
 and the early refusal belong to `crates/ridl-core/src/workspace.rs`.
 `crates/ridl/src/toolchain/paths.rs` resolves the toolchain root and validates
 archive targets; `selection.rs` inventories and selects releases; `install.rs`
-downloads and publishes them. `crates/ridl/src/toolchain/mod.rs` defines the
-production origin constant; `main.rs` passes it with the current executable,
-running release and build target, and maps results to command output. Core, IR
-and descriptor crates do not install toolchains.
+downloads and publishes them; `uninstall.rs` removes them.
+`crates/ridl/src/toolchain/mod.rs` defines the production origin constant;
+`main.rs` passes it with the current executable, running release and build
+target, and maps results to command output. Core, IR and descriptor crates do
+not install toolchains.
 
 Given the
 [configured root](../book/release-pin.md#installing-and-selecting-toolchains),
@@ -173,6 +174,31 @@ The lock serializes CLI installers. It does not serialize the scripts or
 external filesystem writers. If a destination appears at the CLI's final check,
 the CLI returns an error and preserves it.
 
+## Uninstall
+
+`ridl toolchain uninstall <version>` removes one version directory, whether it
+is complete or damaged. The root must be an absolute path: a relative
+`RIDL_TOOLCHAIN_DIR` is an input error before any command runs.
+
+1. Canonicalize `versions/`. An absent directory means the release is not
+   installed; the command does not create it.
+2. Refuse the running release: when the canonical running executable lies under
+   the canonical entry, the command fails and leaves the entry unchanged. An
+   entry that does not resolve skips this check.
+3. Open `.<version>.lock` and acquire its OS file lock, as the CLI installer
+   does, and remove the stale `.tmp-<version>-<digits>` stages under that lock.
+4. Inspect the entry without following symbolic links. An absent entry means the
+   release is not installed.
+5. Rename the entry to `.tmp-<version>-<pid>`, so no reader sees a partly
+   removed release, then remove the stage. A real directory is removed
+   recursively; a symbolic link or a regular file is removed itself, and the
+   target of a link is never followed.
+
+Success prints the removed path under the canonical `versions/` directory. A
+release that is not installed exits 1; every other failure exits 2. The lock
+serializes CLI installers and uninstalls only. The install scripts take no lock,
+so uninstall does not serialize against them.
+
 ## Install scripts and the PATH copy
 
 `install.sh` and `install.ps1` use the same root and completion contract for
@@ -229,6 +255,12 @@ The following tests cover the implemented contracts:
   and transaction boundaries. The ignored
   `toolchain_ureq_path_verifies_and_installs` exercises HTTP through
   `just install-check`.
+- `toolchain_uninstall_removes_complete_and_damaged_entries`,
+  `toolchain_uninstall_removes_a_symlink_entry_without_following_it`,
+  `toolchain_uninstall_refuses_the_running_release`,
+  `toolchain_uninstall_waits_for_the_version_lock` and
+  `toolchain_uninstall_cli_streams_and_exit_codes` cover removal, and
+  `toolchain_cli_refuses_a_relative_root` covers the absolute-root rule.
 - `install_bare_and_tag_versions_share_layout`,
   `install_preserves_damaged_version`,
   `install_removes_only_its_own_stale_script_stage` and

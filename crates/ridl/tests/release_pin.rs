@@ -522,3 +522,95 @@ fn release_fmt_reports_one_refusal_for_a_root_with_a_member() {
     );
     assert_eq!(tree(dir.path()), before);
 }
+
+fn stderr(output: &Output) -> String {
+    String::from_utf8_lossy(&output.stderr).into_owned()
+}
+
+#[test]
+fn release_describe_refusal_precedes_a_missing_input() {
+    let pinned = workspace("\"0.24.0\"");
+    let control_dir = tempfile::tempdir().unwrap();
+    for input in ["missing.catalog.binfb", "gone/missing.catalog.binfb"] {
+        let refused = run(pinned.path(), &["describe", input], "0.23.2");
+        assert_refusal(&refused, "MANI-026");
+        assert!(!stderr(&refused).contains("No such file"), "{refused:?}");
+        let control = run(control_dir.path(), &["describe", input], "0.23.2");
+        assert_eq!(control.status.code(), Some(2));
+        assert!(
+            stderr(&control).starts_with(&format!("error: {input}: ")),
+            "{control:?}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn release_diff_refusal_precedes_snapshot_input_errors() {
+    use std::os::unix::fs::PermissionsExt;
+    let built = tempfile::tempdir().unwrap();
+    fs::write(
+        built.path().join("original.typl"),
+        "package p\ntype A: integer [0..1]\n",
+    )
+    .unwrap();
+    let output = run(
+        built.path(),
+        &[
+            "build",
+            "original.typl",
+            "--emit",
+            "ir-json",
+            "--out-dir",
+            "snapshots",
+        ],
+        "0.23.2",
+    );
+    assert!(output.status.success(), "{output:?}");
+    let snapshot = fs::read_dir(built.path().join("snapshots"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .find(|path| path.to_string_lossy().ends_with(".ir.json"))
+        .expect("a built snapshot");
+    // Each case is a directory of snapshot inputs that cannot be listed or read.
+    let fixture = |parent: &Path| {
+        let listing = parent.join("listing/snaps");
+        fs::create_dir_all(&listing).unwrap();
+        std::os::unix::fs::symlink("missing", listing.join("x.ir.json")).unwrap();
+        let reading = parent.join("reading/snaps");
+        fs::create_dir_all(&reading).unwrap();
+        fs::copy(&snapshot, reading.join("a.ir.json")).unwrap();
+        fs::copy(&snapshot, reading.join("b.ir.json")).unwrap();
+        fs::set_permissions(reading.join("b.ir.json"), fs::Permissions::from_mode(0o000)).unwrap();
+    };
+    let unreadable_as_root = {
+        let probe = built.path().join("probe");
+        fs::write(&probe, "x").unwrap();
+        fs::set_permissions(&probe, fs::Permissions::from_mode(0o000)).unwrap();
+        fs::read(&probe).is_ok()
+    };
+    let pinned = workspace("\"0.24.0\"");
+    fixture(&pinned.path().join("out"));
+    let control = tempfile::tempdir().unwrap();
+    fixture(control.path());
+    let case =
+        |root: &Path, name: &str| run(&root.join(name), &["diff", "snaps", "snaps"], "0.23.2");
+    let listing = case(&pinned.path().join("out"), "listing");
+    assert_refusal(&listing, "MANI-026");
+    let control_listing = case(control.path(), "listing");
+    assert_eq!(control_listing.status.code(), Some(2));
+    assert!(
+        stderr(&control_listing).starts_with("error: cannot read the snapshot "),
+        "{control_listing:?}"
+    );
+    if !unreadable_as_root {
+        let reading = case(&pinned.path().join("out"), "reading");
+        assert_refusal(&reading, "MANI-026");
+        let control_reading = case(control.path(), "reading");
+        assert_eq!(control_reading.status.code(), Some(2));
+        assert!(
+            stderr(&control_reading).contains("b.ir.json: "),
+            "{control_reading:?}"
+        );
+    }
+}

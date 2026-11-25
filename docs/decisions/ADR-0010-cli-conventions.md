@@ -168,210 +168,216 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    | `ridl init` / `ridl new` | the files are written                                                                                                                       |                                                                                                                                                                                                                                                                                                                                              | a target file exists, `new` was given an existing path, the path is not a directory, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the package directory would make a manifest inside a unit (MANI-013); nothing is written (added 2026-10-10)                                                                                                                                                                                               |
    | `ridl vendor`            | `vendor/` was written, or there was nothing to change; with `--check`, `vendor/` matches                                                    | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110), or a unit that `ridl.lock` does not verify (MANI-103, MANI-108)                                             | a missing or unreadable path, a path with no `ridl.toml` at or above it, a bad flag, an I/O failure, or a fetch failure (MANI-101) (added 2026-10-13); a report write to stdout fails; a root release refusal (MANI-024, MANI-025 or MANI-026)                                                                                                                                                                                                                                                |
    | `ridl toolchain install` | installed binary path printed                                                                                                               |                                                                                                                                                                                                                                                                                                                                              | usage, pin, target, download, integrity, damaged-directory or I/O error                                                                                                                                                                                                                                                                                                                                                                                                                       |
-   | `ridl toolchain list`    | inventory printed, also when empty                                                                                                          |                                                                                                                                                                                                                                                                                                                                              | directory read or stdout error                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-   | `ridl toolchain which`   | compatible or unpinned                                                                                                                      | missing or invalid pin                                                                                                                                                                                                                                                                                                                       | missing entry, unreadable or malformed manifest, unsupported installed target, or I/O error                                                                                                                                                                                                                                                                                                                                                                                                   |
 
-   The claim is scoped to these eight, constructed this way, on this date — not
-   asserted as a property that holds by design of every subcommand a future PR
-   might add. A later subcommand earns a row here when it is added and checked,
-   not by inheriting this table. The same discipline applies within a cell. A
-   clause added to a cell after 2026-07-27 is not covered by that date: it
-   carries its own date and its own verification, constructed the same way as
-   the original eight — by direct construction against the built binary. The
-   following clauses postdate the original construction:
+| `ridl toolchain uninstall`| removed directory printed | release not installed
+| invalid or below-floor version, running release, lock or I/O failure | |
+`ridl toolchain list` | inventory printed, also when empty | | directory read or
+stdout error | | `ridl toolchain which` | compatible or unpinned | missing or
+invalid pin | missing entry, unreadable or malformed manifest, unsupported
+installed target, or I/O error |
 
-   - 2026-11-25: root release refusals (MANI-024 through MANI-026) exit 2 before
-     command work. `crates/ridl/tests/release_pin.rs` and
-     `crates/ridlc/tests/release_pin.rs` construct invalid, below-floor and
-     incompatible roots against the built binaries, including member entries,
-     and assert exclusive refusals and preserved outputs. The fmt tests also
-     assert that preflight checks all roots and reports each root once.
-   - 2026-11-10: stdout report write failures for `ridl check` JSON and SARIF,
-     `ridl test`, `ridl diff`, `ridl lock` and `ridl vendor`, verified in
-     `crates/ridl/tests/closed_stdout.rs`;
-   - the `ridl baseline` exit-1 cell's `reserved`-tombstone clause, added when
-     `ridl baseline` gained the RIDL-408 publication gate, verified via
-     `baseline_refuses_to_publish_an_untombstoned_removal` in
-     `crates/ridl/tests/baseline_gate.rs`, which asserts the refusal exits 1;
-   - the `ridl check` exit-2 cell's empty-baseline clause, added when an
-     explicit `--baseline` holding no snapshot became an input error
-     (driftsys/ridl#235), verified via
-     `an_explicit_baseline_holding_no_snapshot_is_an_input_error` in
-     `crates/ridl/tests/baseline_desk.rs`, which asserts the refusal exits 2;
-   - the `ridl baseline` exit-1 cell's lock clause, added on 2026-09-15 when
-     `ridl baseline` gained the interface level of its gate (lock design §8),
-     verified via `baseline_refuses_a_provisional_number` (RIDL-411) and
-     `baseline_refuses_a_number_dropped_without_a_retired_entry` (RIDL-412) in
-     `crates/ridl/tests/baseline_gate.rs`, each of which asserts the refusal
-     exits 1 and the published snapshot stays byte-identical;
-   - intentional unit removal and history reset, added on 2026-11-11, verified
-     in `crates/ridl/tests/baseline_gate.rs` by
-     `a_current_baseline_refuses_a_gone_unit_and_names_history_reset`,
-     `resetting_a_current_baseline_publishes_after_a_unit_is_removed`,
-     `reset_still_refuses_a_number_lost_in_a_remaining_unit`,
-     `reset_still_refuses_a_package_removed_from_a_remaining_unit`,
-     `resetting_a_legacy_package_removed_from_a_remaining_unit_prints_a_unit_note`,
-     `resetting_after_two_units_are_removed_prints_separate_notes` and
-     `reset_with_a_gone_unit_still_refuses_a_provisional_number_without_a_note`;
-     the
-     [CLI reference](../book/cli-reference.md#baseline-publication-and-recovery)
-     owns the recovery procedure. A package removed from a remaining unit still
-     refuses under reset when its snapshot records the unit; a snapshot
-     published before the IR recorded the unit follows the
-     [legacy snapshot rule](../book/cli-reference.md#legacy-snapshots-and-the-publication-gate);
-   - the `ridl fmt` exit-2 cell's `vendor/` clause, added on 2026-10-13 when
-     `vendor/` became the directory `ridl vendor` writes, verified via
-     `fmt_never_touches_vendor` in `crates/ridl/tests/vendor_cli.rs`, which
-     asserts that an explicit path that is `vendor/` or lies under it exits 2
-     and leaves the vendored file unchanged.
+The claim is scoped to these eight, constructed this way, on this date — not
+asserted as a property that holds by design of every subcommand a future PR
+might add. A later subcommand earns a row here when it is added and checked, not
+by inheriting this table. The same discipline applies within a cell. A clause
+added to a cell after 2026-07-27 is not covered by that date: it carries its own
+date and its own verification, constructed the same way as the original eight —
+by direct construction against the built binary. The following clauses postdate
+the original construction:
 
-   **`ridl lsp` and `ridl mcp` earned their rows on 2026-09-13, when they were
-   added and checked** by `crates/ridl/tests/servers.rs`, which drives both
-   outcomes above against the built `ridl` binary. The one exception is the
-   session-task failure in the `ridl mcp` row, which cannot be provoked through
-   the server: `crates/ridl-mcp` tests its mapping on its own. The 1 column of
-   `ridl mcp` is empty: it answers no question that can come back negative and
-   serves until its client disconnects, so it has two outcomes. The 1 column of
-   `ridl lsp` was empty until 2026-10-25, when it gained the outcome in the
-   amendment note at the top of this record.
+- 2026-11-25: root release refusals (MANI-024 through MANI-026) exit 2 before
+  command work. `crates/ridl/tests/release_pin.rs` and
+  `crates/ridlc/tests/release_pin.rs` construct invalid, below-floor and
+  incompatible roots against the built binaries, including member entries, and
+  assert exclusive refusals and preserved outputs. The fmt tests also assert
+  that preflight checks all roots and reports each root once.
+- 2026-11-10: stdout report write failures for `ridl check` JSON and SARIF,
+  `ridl test`, `ridl diff`, `ridl lock` and `ridl vendor`, verified in
+  `crates/ridl/tests/closed_stdout.rs`;
+- the `ridl baseline` exit-1 cell's `reserved`-tombstone clause, added when
+  `ridl baseline` gained the RIDL-408 publication gate, verified via
+  `baseline_refuses_to_publish_an_untombstoned_removal` in
+  `crates/ridl/tests/baseline_gate.rs`, which asserts the refusal exits 1;
+- the `ridl check` exit-2 cell's empty-baseline clause, added when an explicit
+  `--baseline` holding no snapshot became an input error (driftsys/ridl#235),
+  verified via `an_explicit_baseline_holding_no_snapshot_is_an_input_error` in
+  `crates/ridl/tests/baseline_desk.rs`, which asserts the refusal exits 2;
+- the `ridl baseline` exit-1 cell's lock clause, added on 2026-09-15 when
+  `ridl baseline` gained the interface level of its gate (lock design §8),
+  verified via `baseline_refuses_a_provisional_number` (RIDL-411) and
+  `baseline_refuses_a_number_dropped_without_a_retired_entry` (RIDL-412) in
+  `crates/ridl/tests/baseline_gate.rs`, each of which asserts the refusal exits
+  1 and the published snapshot stays byte-identical;
+- intentional unit removal and history reset, added on 2026-11-11, verified in
+  `crates/ridl/tests/baseline_gate.rs` by
+  `a_current_baseline_refuses_a_gone_unit_and_names_history_reset`,
+  `resetting_a_current_baseline_publishes_after_a_unit_is_removed`,
+  `reset_still_refuses_a_number_lost_in_a_remaining_unit`,
+  `reset_still_refuses_a_package_removed_from_a_remaining_unit`,
+  `resetting_a_legacy_package_removed_from_a_remaining_unit_prints_a_unit_note`,
+  `resetting_after_two_units_are_removed_prints_separate_notes` and
+  `reset_with_a_gone_unit_still_refuses_a_provisional_number_without_a_note`;
+  the
+  [CLI reference](../book/cli-reference.md#baseline-publication-and-recovery)
+  owns the recovery procedure. A package removed from a remaining unit still
+  refuses under reset when its snapshot records the unit; a snapshot published
+  before the IR recorded the unit follows the
+  [legacy snapshot rule](../book/cli-reference.md#legacy-snapshots-and-the-publication-gate);
+- the `ridl fmt` exit-2 cell's `vendor/` clause, added on 2026-10-13 when
+  `vendor/` became the directory `ridl vendor` writes, verified via
+  `fmt_never_touches_vendor` in `crates/ridl/tests/vendor_cli.rs`, which asserts
+  that an explicit path that is `vendor/` or lies under it exits 2 and leaves
+  the vendored file unchanged.
 
-   **`ridl lsp` gained `--stdio` and `--clientProcessId` on 2026-10-01.** The
-   LSP specification (3.17, "Implementation Considerations") recommends that a
-   server accept both, and `vscode-languageclient` appends `--stdio` whenever
-   the transport is stdio. Until then clap refused the flag with exit 2, so the
-   VS Code extension never started its server. Both flags are accepted and
-   change nothing: stdio is the only transport, and `initialize` carries the
-   client's process id. `--clientProcessId` keeps the specification's spelling,
-   because that is what clients send. Any other transport flag (`--pipe`,
-   `--socket`) is still refused with exit 2. Checked by
-   `ridl_lsp_accepts_the_stdio_flag_an_editor_client_passes`,
-   `ridl_lsp_accepts_the_client_process_id_the_lsp_specification_recommends` and
-   `ridl_lsp_refuses_a_transport_other_than_stdio` in
-   `crates/ridl/tests/servers.rs`.
+**`ridl lsp` and `ridl mcp` earned their rows on 2026-09-13, when they were
+added and checked** by `crates/ridl/tests/servers.rs`, which drives both
+outcomes above against the built `ridl` binary. The one exception is the
+session-task failure in the `ridl mcp` row, which cannot be provoked through the
+server: `crates/ridl-mcp` tests its mapping on its own. The 1 column of
+`ridl mcp` is empty: it answers no question that can come back negative and
+serves until its client disconnects, so it has two outcomes. The 1 column of
+`ridl lsp` was empty until 2026-10-25, when it gained the outcome in the
+amendment note at the top of this record.
 
-   **`ridl lock` earned its row on 2026-09-15, when it was added and checked**
-   by `crates/ridl/tests/lock_cli.rs`, one test per clause of its three cells
-   against the built `ridl` binary: the two exit-0 outcomes
-   (`plain_lock_allocates_every_provisional_interface_and_exits_zero`,
-   `plain_lock_with_nothing_to_change_exits_zero_and_writes_nothing`), the two
-   exit-1 diagnostics
-   (`plain_lock_refuses_an_orphan_entry_with_ridl_409_and_writes_nothing`,
-   `a_malformed_lock_is_ridl_410_and_nothing_is_written`), and the exit-2 cases
-   (`a_missing_path_exits_two`, `a_flag_that_does_not_parse_exits_two`,
-   `rename_naming_no_live_entry_exits_two`,
-   `rename_to_a_name_that_is_not_an_unentered_declaration_exits_two`,
-   `retire_of_a_still_declared_interface_exits_two`,
-   `rename_over_more_than_one_unit_exits_two`,
-   `an_unwritable_lock_file_exits_two`, which makes the containing directory
-   read-only). Each test that must write nothing asserts the lock file
-   byte-identical afterwards. `--rename` and `--retire` run with RIDL-409
-   present, since they are that diagnostic's fix; any other compile error, in
-   any package of the workspace, still exits 1 and writes nothing
-   (`rename_with_another_compile_error_exits_one`,
-   `a_compile_error_in_one_package_writes_no_package_file`).
+**`ridl lsp` gained `--stdio` and `--clientProcessId` on 2026-10-01.** The LSP
+specification (3.17, "Implementation Considerations") recommends that a server
+accept both, and `vscode-languageclient` appends `--stdio` whenever the
+transport is stdio. Until then clap refused the flag with exit 2, so the VS Code
+extension never started its server. Both flags are accepted and change nothing:
+stdio is the only transport, and `initialize` carries the client's process id.
+`--clientProcessId` keeps the specification's spelling, because that is what
+clients send. Any other transport flag (`--pipe`, `--socket`) is still refused
+with exit 2. Checked by
+`ridl_lsp_accepts_the_stdio_flag_an_editor_client_passes`,
+`ridl_lsp_accepts_the_client_process_id_the_lsp_specification_recommends` and
+`ridl_lsp_refuses_a_transport_other_than_stdio` in
+`crates/ridl/tests/servers.rs`.
 
-   **`ridl lock merge` earned its row on 2026-09-15, when it was added and
-   checked** by `crates/ridl/tests/lock_merge.rs` against the built `ridl`
-   binary. Exit 0: the five clean rows of the lock design's merge table, each
-   run with the two branches swapped (`both_add_one_number_renumbers_theirs`,
-   `rename_plus_add_merges_clean`, `the_same_change_on_both_sides_is_kept_once`,
-   `both_retire_and_both_re_add_merges_clean`,
-   `retire_versus_add_merges_clean`), plus `an_empty_base_reads_as_next_one` and
-   `next_is_the_maximum_of_the_three_sides_plus_renumbering`. Exit 1: the three
-   conflict rows (`retire_versus_rename_conflicts_on_the_entry`,
-   `two_different_renames_conflict`, `a_live_name_on_two_numbers_conflicts`) and
-   `a_conflict_marks_only_the_disagreeing_entries_and_is_ridl_410_until_resolved`,
-   which also runs `ridl check` over the written file and sees RIDL-410. Exit 2:
-   `an_unreadable_input_exits_two` and
-   `an_input_that_does_not_parse_exits_two_and_leaves_ours_unchanged` and
-   `exhausted_renumbering_exits_two_and_leaves_ours_unchanged`, each asserting
-   OURS byte-identical afterwards; a MARKER_SIZE of 0 or a non-number is refused
-   by the argument parser before any file is read.
-   `the_registered_driver_merges_two_branches_through_git` registers the driver
-   in a temporary repository the way the CLI reference documents it and merges
-   two branches through git itself.
+**`ridl lock` earned its row on 2026-09-15, when it was added and checked** by
+`crates/ridl/tests/lock_cli.rs`, one test per clause of its three cells against
+the built `ridl` binary: the two exit-0 outcomes
+(`plain_lock_allocates_every_provisional_interface_and_exits_zero`,
+`plain_lock_with_nothing_to_change_exits_zero_and_writes_nothing`), the two
+exit-1 diagnostics
+(`plain_lock_refuses_an_orphan_entry_with_ridl_409_and_writes_nothing`,
+`a_malformed_lock_is_ridl_410_and_nothing_is_written`), and the exit-2 cases
+(`a_missing_path_exits_two`, `a_flag_that_does_not_parse_exits_two`,
+`rename_naming_no_live_entry_exits_two`,
+`rename_to_a_name_that_is_not_an_unentered_declaration_exits_two`,
+`retire_of_a_still_declared_interface_exits_two`,
+`rename_over_more_than_one_unit_exits_two`, `an_unwritable_lock_file_exits_two`,
+which makes the containing directory read-only). Each test that must write
+nothing asserts the lock file byte-identical afterwards. `--rename` and
+`--retire` run with RIDL-409 present, since they are that diagnostic's fix; any
+other compile error, in any package of the workspace, still exits 1 and writes
+nothing (`rename_with_another_compile_error_exits_one`,
+`a_compile_error_in_one_package_writes_no_package_file`).
 
-   **`ridl describe` earned its row on 2026-10-04, when it was added and
-   checked** by the six `describe` tests in `crates/ridl/tests/describe_cli.rs`
-   against the built `ridl` binary: `describe_prints_the_descriptor_as_json`
-   (exit 0), `describe_reports_a_missing_path_with_exit_2`,
-   `describe_rejects_a_foreign_file_before_any_read`,
-   `describe_rejects_a_truncated_and_a_flipped_descriptor` (a malformed buffer,
-   three fixtures: truncated, a root offset past the end, and one byte flipped
-   inside the body; the test checks the exit code and the `malformed` cause, not
-   which check rejected the buffer, and `crates/ridl-descriptor/tests/verify.rs`
-   pins the whole-buffer walk),
-   `describe_rejects_a_version_this_toolchain_does_not_read` (a descriptor that
-   `ridl_descriptor::finish` writes with the next schema version, because the
-   built `ridl` writes only the version it reads), and
-   `describe_exits_2_when_the_stdout_reader_has_gone` (a write I/O failure on a
-   pipe whose reader has gone). The other four exit-2 tests also check that
-   stdout is empty. A missing path and an unreadable path take the same
-   read-error path, and every `ridl_descriptor::verify` error takes one exit-2
-   path. Its 1 column is empty, as for `ridl lsp` and `ridl mcp`:
-   `ridl describe` answers no question that can come back negative — it prints
-   the descriptor, or the tool could not answer.
+**`ridl lock merge` earned its row on 2026-09-15, when it was added and
+checked** by `crates/ridl/tests/lock_merge.rs` against the built `ridl` binary.
+Exit 0: the five clean rows of the lock design's merge table, each run with the
+two branches swapped (`both_add_one_number_renumbers_theirs`,
+`rename_plus_add_merges_clean`, `the_same_change_on_both_sides_is_kept_once`,
+`both_retire_and_both_re_add_merges_clean`, `retire_versus_add_merges_clean`),
+plus `an_empty_base_reads_as_next_one` and
+`next_is_the_maximum_of_the_three_sides_plus_renumbering`. Exit 1: the three
+conflict rows (`retire_versus_rename_conflicts_on_the_entry`,
+`two_different_renames_conflict`, `a_live_name_on_two_numbers_conflicts`) and
+`a_conflict_marks_only_the_disagreeing_entries_and_is_ridl_410_until_resolved`,
+which also runs `ridl check` over the written file and sees RIDL-410. Exit 2:
+`an_unreadable_input_exits_two` and
+`an_input_that_does_not_parse_exits_two_and_leaves_ours_unchanged` and
+`exhausted_renumbering_exits_two_and_leaves_ours_unchanged`, each asserting OURS
+byte-identical afterwards; a MARKER_SIZE of 0 or a non-number is refused by the
+argument parser before any file is read.
+`the_registered_driver_merges_two_branches_through_git` registers the driver in
+a temporary repository the way the CLI reference documents it and merges two
+branches through git itself.
 
-   **`ridl init` and `ridl new` earned a row on 2026-10-10, when they were added
-   and checked** by the tests in `crates/ridl/tests/scaffold_cli.rs` against the
-   built `ridl` binary. The 0 cell is `new_creates_a_package_that_checks_clean`
-   and its workspace and `init` variants. The 2 cell has a test per clause, and
-   each asserts exit 2, an empty stdout, the reason text on stderr and the tree
-   unchanged: an existing target
-   (`new_on_an_existing_path_exits_2_and_changes_nothing`,
-   `new_refuses_an_existing_directory_reached_through_a_parent_component`,
-   `new_refuses_a_dangling_symlink`,
-   `init_with_an_existing_manifest_exits_2_and_writes_nothing`,
-   `init_with_an_existing_source_file_exits_2_and_writes_nothing`,
-   `workspace_with_an_existing_member_file_exits_2_and_writes_nothing`,
-   `workspace_with_an_existing_root_manifest_creates_no_member_directory`); a
-   path that is not a directory (`init_refuses_a_missing_directory`,
-   `init_refuses_a_file`, `workspace_with_a_file_at_the_member_path_exits_2`);
-   an illegal or reserved name (`an_illegal_basename_exits_2_and_asks_for_name`,
-   `an_illegal_name_flag_exits_2_and_writes_nothing`,
-   `a_reserved_word_basename_exits_2_and_asks_for_name`,
-   `a_reserved_word_name_flag_exits_2_and_writes_nothing`); and a manifest that
-   would make MANI-013
-   (`init_inside_an_existing_unit_exits_2_and_writes_nothing`,
-   `init_several_levels_below_a_unit_exits_2`,
-   `new_inside_an_existing_workspace_exits_2_and_writes_nothing`,
-   `the_search_for_an_enclosing_unit_does_not_stop_at_a_git_directory`,
-   `the_search_for_an_enclosing_unit_follows_a_symlink`,
-   `init_over_a_directory_that_holds_a_manifest_below_it_exits_2`). The removal
-   of a partly written scaffold after an I/O failure is pinned by
-   `a_failed_write_removes_what_this_command_created`, which makes the workspace
-   root read-only and asserts the tree unchanged. The 1 column is empty: both
-   commands write files or could not answer.
+**`ridl describe` earned its row on 2026-10-04, when it was added and checked**
+by the six `describe` tests in `crates/ridl/tests/describe_cli.rs` against the
+built `ridl` binary: `describe_prints_the_descriptor_as_json` (exit 0),
+`describe_reports_a_missing_path_with_exit_2`,
+`describe_rejects_a_foreign_file_before_any_read`,
+`describe_rejects_a_truncated_and_a_flipped_descriptor` (a malformed buffer,
+three fixtures: truncated, a root offset past the end, and one byte flipped
+inside the body; the test checks the exit code and the `malformed` cause, not
+which check rejected the buffer, and `crates/ridl-descriptor/tests/verify.rs`
+pins the whole-buffer walk),
+`describe_rejects_a_version_this_toolchain_does_not_read` (a descriptor that
+`ridl_descriptor::finish` writes with the next schema version, because the built
+`ridl` writes only the version it reads), and
+`describe_exits_2_when_the_stdout_reader_has_gone` (a write I/O failure on a
+pipe whose reader has gone). The other four exit-2 tests also check that stdout
+is empty. A missing path and an unreadable path take the same read-error path,
+and every `ridl_descriptor::verify` error takes one exit-2 path. Its 1 column is
+empty, as for `ridl lsp` and `ridl mcp`: `ridl describe` answers no question
+that can come back negative — it prints the descriptor, or the tool could not
+answer.
 
-   **`ridl vendor` earned a row on 2026-10-13, when it was added and checked**
-   by the tests in `crates/ridl/tests/vendor_cli.rs` against the built `ridl`
-   binary. The 0 cell is `vendor_writes_the_units_and_is_idempotent` (written,
-   then nothing to change), `vendor_with_nothing_to_vendor_creates_no_directory`
-   and the first assertion of
-   `vendor_check_reports_drift_without_network_or_writes` (`--check` on a
-   matching directory, with an empty stderr). The 1 cell is
-   `vendor_writes_nothing_on_an_error` (a source error in a remote unit and an
-   error in the consumer, each leaving `vendor/` as it was and `ridl.lock`
-   pinning the newly fetched unit), the drift assertions of the `--check` test
-   (MANI-107, MANI-109 and MANI-110),
-   `vendor_check_on_an_unpinned_unit_is_mani_103` and
-   `vendor_check_reports_a_broken_manifest`. The 2 cell is
-   `vendor_on_a_missing_path_exits_2`, `vendor_check_on_a_missing_path_exits_2`,
-   `vendor_without_a_manifest_exits_2`,
-   `vendor_check_without_a_manifest_exits_2` and the fetch-failure assertion of
-   `vendor_writes_nothing_on_an_error` (MANI-101). `ridl vendor` applies no
-   `[lints]` levels, as `ridl lock` does (ADR-0024 decision 8).
+**`ridl init` and `ridl new` earned a row on 2026-10-10, when they were added
+and checked** by the tests in `crates/ridl/tests/scaffold_cli.rs` against the
+built `ridl` binary. The 0 cell is `new_creates_a_package_that_checks_clean` and
+its workspace and `init` variants. The 2 cell has a test per clause, and each
+asserts exit 2, an empty stdout, the reason text on stderr and the tree
+unchanged: an existing target
+(`new_on_an_existing_path_exits_2_and_changes_nothing`,
+`new_refuses_an_existing_directory_reached_through_a_parent_component`,
+`new_refuses_a_dangling_symlink`,
+`init_with_an_existing_manifest_exits_2_and_writes_nothing`,
+`init_with_an_existing_source_file_exits_2_and_writes_nothing`,
+`workspace_with_an_existing_member_file_exits_2_and_writes_nothing`,
+`workspace_with_an_existing_root_manifest_creates_no_member_directory`); a path
+that is not a directory (`init_refuses_a_missing_directory`,
+`init_refuses_a_file`, `workspace_with_a_file_at_the_member_path_exits_2`); an
+illegal or reserved name (`an_illegal_basename_exits_2_and_asks_for_name`,
+`an_illegal_name_flag_exits_2_and_writes_nothing`,
+`a_reserved_word_basename_exits_2_and_asks_for_name`,
+`a_reserved_word_name_flag_exits_2_and_writes_nothing`); and a manifest that
+would make MANI-013 (`init_inside_an_existing_unit_exits_2_and_writes_nothing`,
+`init_several_levels_below_a_unit_exits_2`,
+`new_inside_an_existing_workspace_exits_2_and_writes_nothing`,
+`the_search_for_an_enclosing_unit_does_not_stop_at_a_git_directory`,
+`the_search_for_an_enclosing_unit_follows_a_symlink`,
+`init_over_a_directory_that_holds_a_manifest_below_it_exits_2`). The removal of
+a partly written scaffold after an I/O failure is pinned by
+`a_failed_write_removes_what_this_command_created`, which makes the workspace
+root read-only and asserts the tree unchanged. The 1 column is empty: both
+commands write files or could not answer.
 
-   **`ridl toolchain install`, `list` and `which` earned their rows on
-   2026-11-25**, verified against the built binary by
-   `toolchain_cli_streams_and_exit_codes` in `crates/ridl/tests/toolchain.rs`.
-   Install returns 0 with the installed path for a completed release and 2 for
-   absent or invalid pins, invalid releases and unsupported input. List returns
-   0 for empty inventory and for complete and damaged entries. Which returns 0
-   with a selected path, 1 for missing or invalid pins, and 2 for missing paths
-   or malformed manifests. The same test checks stdout and stderr in text and
-   JSON modes. `toolchain_cli_unreadable_inputs_and_broken_stdout_exit_two`
-   covers I/O and output failures.
+**`ridl vendor` earned a row on 2026-10-13, when it was added and checked** by
+the tests in `crates/ridl/tests/vendor_cli.rs` against the built `ridl` binary.
+The 0 cell is `vendor_writes_the_units_and_is_idempotent` (written, then nothing
+to change), `vendor_with_nothing_to_vendor_creates_no_directory` and the first
+assertion of `vendor_check_reports_drift_without_network_or_writes` (`--check`
+on a matching directory, with an empty stderr). The 1 cell is
+`vendor_writes_nothing_on_an_error` (a source error in a remote unit and an
+error in the consumer, each leaving `vendor/` as it was and `ridl.lock` pinning
+the newly fetched unit), the drift assertions of the `--check` test (MANI-107,
+MANI-109 and MANI-110), `vendor_check_on_an_unpinned_unit_is_mani_103` and
+`vendor_check_reports_a_broken_manifest`. The 2 cell is
+`vendor_on_a_missing_path_exits_2`, `vendor_check_on_a_missing_path_exits_2`,
+`vendor_without_a_manifest_exits_2`, `vendor_check_without_a_manifest_exits_2`
+and the fetch-failure assertion of `vendor_writes_nothing_on_an_error`
+(MANI-101). `ridl vendor` applies no `[lints]` levels, as `ridl lock` does
+(ADR-0024 decision 8).
+
+**`ridl toolchain install`, `list` and `which` earned their rows on
+2026-11-25**, verified against the built binary by
+`toolchain_cli_streams_and_exit_codes` in `crates/ridl/tests/toolchain.rs`.
+Install returns 0 with the installed path for a completed release and 2 for
+absent or invalid pins, invalid releases and unsupported input. List returns 0
+for empty inventory and for complete and damaged entries. Which returns 0 with a
+selected path, 1 for missing or invalid pins, and 2 for missing paths or
+malformed manifests. The same test checks stdout and stderr in text and JSON
+modes. `toolchain_cli_unreadable_inputs_and_broken_stdout_exit_two` covers I/O
+and output failures. `ridl toolchain uninstall` earned its row with
+`toolchain_uninstall_removes_complete_and_damaged_entries`,
+`toolchain_uninstall_removes_a_symlink_entry_without_following_it`,
+`toolchain_uninstall_refuses_the_running_release`,
+`toolchain_uninstall_waits_for_the_version_lock` and
+`toolchain_uninstall_cli_streams_and_exit_codes`, which exercise the library and
+the built binary.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 

@@ -2926,10 +2926,11 @@ Install and select versioned RIDL toolchains
 Usage: ridl toolchain <COMMAND>
 
 Commands:
-  install  Install a release, or the current workspace pin when VERSION is omitted
-  list     List version directories in ascending release order, including damaged copies
-  which    Select the highest compatible installed or running release for a workspace
-  help     Print this message or the help of the given subcommand(s)
+  install    Install a release, or the current workspace pin when VERSION is omitted
+  uninstall  Remove an installed release directory, complete or damaged
+  list       List version directories in ascending release order, including damaged copies
+  which      Select the highest compatible installed or running release for a workspace
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help  Print help
@@ -2959,6 +2960,31 @@ Options:
 Print the installed binary path, followed by a newline. An omitted version uses
 the current root pin without comparing it against the running release. Existing
 complete installations need no download. Errors go to stderr and exit 2.
+
+### `ridl toolchain uninstall`
+
+```sh
+ridl toolchain uninstall --help
+```
+
+```text
+Remove an installed release directory, complete or damaged
+
+Usage: ridl toolchain uninstall <VERSION>
+
+Arguments:
+  <VERSION>  The exact MAJOR.MINOR.PATCH release to remove
+
+Options:
+  -h, --help  Print help
+```
+
+Print the removed directory, followed by a newline, and exit 0. A release that
+is not installed prints `ridl <version> is not installed in <directory>` on
+stderr and exits 1. An invalid version, a version below 0.23.0, the running
+release, a failed lock and an I/O failure exit 2. The
+[toolchain directory record](../design/toolchain-directory.md#uninstall) defines
+the removal steps.
 
 ### `ridl toolchain list`
 
@@ -3205,6 +3231,7 @@ stable, default-free flags.
 | `ridl vendor`                | `vendor/` was written, or there is nothing to change; with `--check`, `vendor/` matches the imports and `ridl.lock` | a diagnostic error (including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit), with `vendor/` left untouched and `ridl.lock` possibly updated; with `--check`, drift (MANI-107, MANI-109, MANI-110) or a unit that `ridl.lock` does not verify (MANI-103, MANI-108)                                          | a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure writing `vendor/` or stdout, or a fetch failure (MANI-101); a root release refusal (MANI-024, MANI-025 or MANI-026)                                                                                                                                                                                                                                                                                                                                             |
 | `ridl toolchain`             | help requested                                                                                                      |                                                                                                                                                                                                                                                                                                                                          | no subcommand, bad flag or stdout failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `ridl toolchain install`     | absolute binary path printed; installed or already present                                                          |                                                                                                                                                                                                                                                                                                                                          | invalid version or pin, no pin, unsupported target, download/checksum/archive error, damaged directory, or I/O failure                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `ridl toolchain uninstall`   | removed directory printed                                                                                           | release not installed                                                                                                                                                                                                                                                                                                                    | invalid or below-floor version, running release, lock or I/O failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `ridl toolchain list`        | inventory printed, including an empty inventory                                                                     |                                                                                                                                                                                                                                                                                                                                          | directory read or stdout failure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `ridl toolchain which`       | compatible release or unpinned workspace                                                                            | missing compatible release or invalid pin                                                                                                                                                                                                                                                                                                | missing entry, unreadable or malformed manifest, unsupported installed target, directory read or stdout failure                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 

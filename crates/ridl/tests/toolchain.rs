@@ -86,10 +86,16 @@ fn toolchain_roots_follow_platform_precedence() {
         "RIDL_TOOLCHAIN_DIR".into(),
         OsString::from("relative tools"),
     );
-    assert_eq!(
-        toolchain_root("linux", &env, None).unwrap(),
-        std::env::current_dir().unwrap().join("relative tools")
-    );
+    for platform in ["linux", "macos", "windows"] {
+        let error = toolchain_root(platform, &env, None).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+        assert!(
+            error
+                .to_string()
+                .contains("RIDL_TOOLCHAIN_DIR must be an absolute path"),
+            "{error}"
+        );
+    }
     env.insert("RIDL_TOOLCHAIN_DIR".into(), OsString::new());
     env.insert("XDG_DATA_HOME".into(), OsString::new());
     env.insert("LOCALAPPDATA".into(), OsString::new());
@@ -895,6 +901,35 @@ fn output(output: &std::process::Output, code: i32, stdout: &str, has_error: boo
     );
 }
 #[test]
+fn toolchain_cli_refuses_a_relative_root() {
+    let w = TempDir::new().unwrap();
+    let env = BTreeMap::from([(
+        "RIDL_TOOLCHAIN_DIR".to_string(),
+        OsString::from("relative tools"),
+    )]);
+    let error = toolchain_root("linux", &env, None).unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+    assert!(
+        error
+            .to_string()
+            .contains("RIDL_TOOLCHAIN_DIR must be an absolute path")
+    );
+    let list = std::process::Command::new(env!("CARGO_BIN_EXE_ridl"))
+        .current_dir(w.path())
+        .env("RIDL_TOOLCHAIN_DIR", "relative tools")
+        .args(["toolchain", "list"])
+        .output()
+        .unwrap();
+    assert_eq!(list.status.code(), Some(2));
+    assert!(list.stdout.is_empty());
+    assert!(
+        String::from_utf8_lossy(&list.stderr)
+            .contains("RIDL_TOOLCHAIN_DIR must be an absolute path")
+    );
+    assert!(!w.path().join("relative tools").exists());
+}
+
+#[test]
 fn toolchain_cli_streams_and_exit_codes() {
     let root = TempDir::new().unwrap();
     let w = TempDir::new().unwrap();
@@ -1132,4 +1167,158 @@ fn toolchain_install_rechecks_the_requested_target_binary() {
     );
     assert!(repeated.is_ok(), "{repeated:?}");
     assert_eq!(repeated.unwrap(), first);
+}
+
+fn names_starting_with(directory: &Path, prefix: &str) -> Vec<String> {
+    fs::read_dir(directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(prefix))
+        .collect()
+}
+
+#[test]
+fn toolchain_uninstall_removes_complete_and_damaged_entries() {
+    let root = TempDir::new().unwrap();
+    let root = root.path();
+    installed(root, "0.23.0");
+    installed(root, "0.23.1");
+    let versions = root.join("versions");
+    let damaged = versions.join("0.23.2");
+    fs::create_dir(&damaged).unwrap();
+    fs::write(damaged.join(binary_name()), b"damaged").unwrap();
+    fs::write(versions.join("0.23.3"), b"regular file").unwrap();
+    for stage in [".tmp-0.23.0-12345", ".tmp-script-0.23.0-1"] {
+        fs::create_dir(versions.join(stage)).unwrap();
+        fs::write(versions.join(stage).join("sentinel"), b"x").unwrap();
+    }
+    let canonical_versions = versions.canonicalize().unwrap();
+    let before_0_23_1 = directory_bytes(&canonical_versions.join("0.23.1"));
+    let removed = uninstall(root, release("0.23.0"), &running()).unwrap();
+    assert_eq!(removed, Some(canonical_versions.join("0.23.0")));
+    assert!(!canonical_versions.join("0.23.0").exists());
+    assert_eq!(
+        uninstall(root, release("0.23.2"), &running()).unwrap(),
+        Some(canonical_versions.join("0.23.2"))
+    );
+    assert_eq!(
+        uninstall(root, release("0.23.3"), &running()).unwrap(),
+        Some(canonical_versions.join("0.23.3"))
+    );
+    assert_eq!(
+        uninstall(root, release("0.23.4"), &running()).unwrap(),
+        None
+    );
+    assert_eq!(
+        directory_bytes(&canonical_versions.join("0.23.1")),
+        before_0_23_1
+    );
+    assert!(!canonical_versions.join(".tmp-0.23.0-12345").exists());
+    assert!(
+        canonical_versions
+            .join(".tmp-script-0.23.0-1/sentinel")
+            .exists()
+    );
+    assert!(names_starting_with(&canonical_versions, ".tmp-0.23.0-").is_empty());
+    let empty_root = TempDir::new().unwrap();
+    let empty_root = empty_root.path();
+    assert_eq!(
+        uninstall(empty_root, release("0.23.0"), &running()).unwrap(),
+        None
+    );
+    assert!(!empty_root.join("versions").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn toolchain_uninstall_removes_a_symlink_entry_without_following_it() {
+    let root = TempDir::new().unwrap();
+    let outside = TempDir::new().unwrap();
+    let outside = outside.path();
+    fs::write(outside.join("sentinel"), b"keep").unwrap();
+    let versions = root.path().join("versions");
+    fs::create_dir(&versions).unwrap();
+    let canonical_versions = versions.canonicalize().unwrap();
+    std::os::unix::fs::symlink(outside, versions.join("0.23.0")).unwrap();
+    let removed = uninstall(root.path(), release("0.23.0"), &running()).unwrap();
+    assert_eq!(removed, Some(canonical_versions.join("0.23.0")));
+    assert!(std::fs::symlink_metadata(canonical_versions.join("0.23.0")).is_err());
+    assert_eq!(fs::read(outside.join("sentinel")).unwrap(), b"keep");
+}
+
+#[test]
+fn toolchain_uninstall_refuses_the_running_release() {
+    let root = TempDir::new().unwrap();
+    let dir = root.path().join("versions/0.23.0");
+    fs::create_dir_all(&dir).unwrap();
+    let copy = dir.join(binary_name());
+    fs::copy(env!("CARGO_BIN_EXE_ridl"), &copy).unwrap();
+    fs::write(dir.join(".complete"), b"").unwrap();
+    let before = directory_bytes(&dir);
+    let cli = std::process::Command::new(&copy)
+        .current_dir(root.path())
+        .env("RIDL_TOOLCHAIN_DIR", root.path())
+        .args(["toolchain", "uninstall", "0.23.0"])
+        .output()
+        .unwrap();
+    assert_eq!(cli.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&cli.stderr).contains("running"));
+    assert_eq!(directory_bytes(&dir), before);
+    assert!(uninstall(root.path(), release("0.23.0"), &copy).is_err());
+    assert_eq!(directory_bytes(&dir), before);
+}
+
+#[test]
+fn toolchain_uninstall_waits_for_the_version_lock() {
+    let root = TempDir::new().unwrap();
+    installed(root.path(), "0.23.0");
+    let versions = root.path().join("versions");
+    let canonical_versions = versions.canonicalize().unwrap();
+    let dir = canonical_versions.join("0.23.0");
+    let lock = fs::File::create(versions.join(".0.23.0.lock")).unwrap();
+    lock.lock().unwrap();
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_ridl"))
+        .current_dir(root.path())
+        .env("RIDL_TOOLCHAIN_DIR", root.path())
+        .args(["toolchain", "uninstall", "0.23.0"])
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    // Process start-up alone can take several hundred milliseconds, so the wait
+    // must exceed it for the child to have reached the lock.
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+    assert!(
+        child.try_wait().unwrap().is_none(),
+        "uninstall did not wait for the lock"
+    );
+    assert!(dir.exists());
+    lock.unlock().unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        format!("{}\n", dir.display())
+    );
+    assert!(!dir.exists());
+}
+
+#[test]
+fn toolchain_uninstall_cli_streams_and_exit_codes() {
+    let root = TempDir::new().unwrap();
+    let w = TempDir::new().unwrap();
+    installed(root.path(), "0.23.0");
+    let absent = cli(w.path(), root.path(), &["toolchain", "uninstall", "0.23.4"]);
+    output(&absent, 1, "", true);
+    assert!(String::from_utf8_lossy(&absent.stderr).contains("ridl 0.23.4 is not installed"));
+    for invalid in ["0.23", "0.22.0", "v0.23.0"] {
+        let result = cli(w.path(), root.path(), &["toolchain", "uninstall", invalid]);
+        output(&result, 2, "", true);
+    }
+    assert!(root.path().join("versions/0.23.0").exists());
 }

@@ -398,6 +398,11 @@ enum ToolchainCommand {
         /// The exact MAJOR.MINOR.PATCH release to install.
         version: Option<String>,
     },
+    /// Remove an installed release directory, complete or damaged.
+    Uninstall {
+        /// The exact MAJOR.MINOR.PATCH release to remove.
+        version: String,
+    },
     /// List version directories in ascending release order, including damaged copies.
     List,
     /// Select the highest compatible installed or running release for a workspace.
@@ -414,11 +419,7 @@ fn run_toolchain(command: ToolchainCommand) -> ExitCode {
     use ridl_cli::toolchain::{self, WhichStatus};
     use ridl_core::release::{MIN_PINNABLE_RELEASE, parse_release};
     let execute = || -> std::io::Result<(u8, String)> {
-        let environment = std::env::vars_os()
-            .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
-            .collect::<BTreeMap<_, _>>();
-        let home = environment.get("HOME").map(PathBuf::from);
-        let root = toolchain::toolchain_root(std::env::consts::OS, &environment, home.as_deref())?;
+        let root = toolchain::process_toolchain_root()?;
         match command {
             ToolchainCommand::Install { version } => {
                 let release = match version {
@@ -432,6 +433,18 @@ fn run_toolchain(command: ToolchainCommand) -> ExitCode {
                     toolchain::RELEASE_BASE_URL,
                 )?;
                 Ok((0, format!("{}\n", binary.display())))
+            }
+            ToolchainCommand::Uninstall { version } => {
+                let release = parse_release(&version).filter(|v| *v >= MIN_PINNABLE_RELEASE).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("release must be MAJOR.MINOR.PATCH at or above {MIN_PINNABLE_RELEASE}")))?;
+                match toolchain::uninstall(&root, release, &std::env::current_exe()?)? {
+                    Some(removed) => Ok((0, format!("{}\n", removed.display()))),
+                    None => {
+                        let versions = root.join("versions");
+                        let versions = versions.canonicalize().unwrap_or(versions);
+                        errprintln!("ridl {release} is not installed in {}", versions.display());
+                        Ok((1, String::new()))
+                    }
+                }
             }
             ToolchainCommand::List => {
                 let mut text = String::new();
@@ -639,8 +652,18 @@ fn release_preflight_exit(entries: &[PathBuf]) -> Option<ExitCode> {
 /// `docs/archive/2026-09-13-runtime-descriptors-design.md`, D-8).
 fn run_describe(path: &Path) -> ExitCode {
     // Preserve describe's input-path I/O message before the shared root reader
-    // can wrap a metadata error. Descriptor bytes are still read after preflight.
+    // can wrap a metadata error. A root release refusal still precedes that
+    // message, found from the nearest existing ancestor directory of the input.
+    // Descriptor bytes are still read after preflight.
     if let Err(err) = std::fs::metadata(path) {
+        let ancestor = path
+            .ancestors()
+            .skip(1)
+            .find(|ancestor| !ancestor.as_os_str().is_empty() && ancestor.is_dir())
+            .unwrap_or(Path::new("."));
+        if let Some(code) = release_preflight_exit(&[ancestor.to_path_buf()]) {
+            return code;
+        }
         errprintln!("error: {}: {err}", path.display());
         return ExitCode::from(2);
     }

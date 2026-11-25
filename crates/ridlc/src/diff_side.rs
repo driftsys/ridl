@@ -224,7 +224,8 @@ pub fn load_diff_side(
     }
     if entry.is_dir() {
         let direct_source = is_source_dir(entry);
-        let snapshots = snapshot_files(entry)?;
+        let snapshots =
+            snapshot_files(entry).map_err(|error| refusal_before_io(entry, overlays, error))?;
         if snapshots.is_empty() {
             if direct_source {
                 source_release_preflight(entry, overlays)?;
@@ -236,7 +237,9 @@ pub fn load_diff_side(
                         error,
                     }
                 })? && first_non_json_ir_in(entry).is_none()
-                    && first_nested_snapshot_dir(entry)?.is_none()
+                    && first_nested_snapshot_dir(entry)
+                        .map_err(|error| refusal_before_io(entry, overlays, error))?
+                        .is_none()
                 {
                     source_release_preflight(entry, overlays)?;
                 }
@@ -246,7 +249,8 @@ pub fn load_diff_side(
             .map_err(DiffSideError::InterruptedPublication)?;
         if !snapshots.is_empty() {
             refuse_snapshot_overlay(entry, overlays)?;
-            let packages = load_snapshots(&snapshots)?;
+            let packages = load_snapshots(&snapshots)
+                .map_err(|error| refusal_before_io(entry, overlays, error))?;
             let context = read_context(entry, &packages).map_err(DiffSideError::Context)?;
             let remote_context = context.map(|context| context.remote_context());
             return Ok(DiffSide {
@@ -270,7 +274,9 @@ pub fn load_diff_side(
                     witness,
                 });
             }
-            if let Some(nested) = first_nested_snapshot_dir(entry)? {
+            if let Some(nested) = first_nested_snapshot_dir(entry)
+                .map_err(|error| refusal_before_io(entry, overlays, error))?
+            {
                 return Err(DiffSideError::NestedDirectory {
                     path: entry.to_path_buf(),
                     nested,
@@ -319,6 +325,22 @@ pub fn load_diff_side(
         system: output.system,
         remote_context: Some(remote_context),
     })
+}
+
+/// Gives a root release refusal precedence over an input I/O error: for an error
+/// from listing or reading the entries of a snapshot directory, returns the
+/// refusal of [`source_release_preflight`] when there is one, else `error`.
+fn refusal_before_io(entry: &Path, overlays: &[Overlay], error: DiffSideError) -> DiffSideError {
+    match error {
+        DiffSideError::SnapshotDirectory { .. }
+        | DiffSideError::SnapshotMetadata { .. }
+        | DiffSideError::SnapshotRead { .. }
+        | DiffSideError::NestedRead { .. } => match source_release_preflight(entry, overlays) {
+            Err(refusal @ DiffSideError::Compile { .. }) => refusal,
+            _ => error,
+        },
+        error => error,
+    }
 }
 
 fn refuse_snapshot_overlay(path: &Path, overlays: &[Overlay]) -> Result<(), DiffSideError> {
