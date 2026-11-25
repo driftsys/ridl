@@ -463,8 +463,18 @@ impl ServerState {
         next.published = std::mem::take(&mut self.published);
         next.cancelled = std::mem::take(&mut self.cancelled);
         next.shown_load_error = self.shown_load_error.clone();
-        let result = next.load_workspace_data(dir, manifest_overlay);
-        if result.is_ok() && !next.refused {
+        let result = if next
+            .root_manifest
+            .as_ref()
+            .is_some_and(|path| !path.is_file())
+        {
+            // A deleted root unloads the workspace. Keep its path and buffers
+            // so a later create or save can load it again.
+            Ok(())
+        } else {
+            next.load_workspace_data(dir, manifest_overlay)
+        };
+        if result.is_ok() && next.loaded && !next.refused {
             for (path, text) in next.source_buffers.clone() {
                 next.open(path, text);
             }
@@ -478,22 +488,6 @@ impl ServerState {
         dir: &Path,
         manifest_overlay: Option<ridl_core::Overlay>,
     ) -> io::Result<()> {
-        // The editor still owns this root buffer if its disk file is deleted.
-        // Check it before disk discovery can classify it as a source overlay.
-        if let Some(overlay) = manifest_overlay.as_ref() {
-            let mut sources = SourceMap::new();
-            let path = overlay.path.to_string_lossy();
-            let file = sources.file_id(&path, &overlay.text);
-            if let Some(diagnostic) =
-                ridl_core::release::check_release_pin(file, &overlay.text, self.running)
-            {
-                self.refused = true;
-                self.loaded = true;
-                self.loader_diagnostics =
-                    convert_loader_diagnostics(&self.db, &self.files, vec![diagnostic], &sources);
-                return Ok(());
-            }
-        }
         let cache = Cache::user_default();
         // `report_scope` is not used: the server publishes the diagnostics of
         // every loaded file of the consumer.
@@ -645,8 +639,10 @@ impl ServerState {
         show_message(connection, lt::MessageType::ERROR, message)
     }
 
-    /// Root changes use the unsaved manifest when one is open, including
-    /// watched disk changes. Member manifests are never source overlays.
+    /// Root changes use the unsaved manifest when one is open and its disk
+    /// file exists, including watched disk changes. Deletion unloads the
+    /// workspace until the disk file returns. Member manifests are never
+    /// source overlays.
     fn reload_for_manifest(&mut self, path: &str, connection: &Connection) -> Result<(), Error> {
         if !is_manifest_path(path) {
             return Ok(());
@@ -1011,9 +1007,6 @@ impl ServerState {
     /// runs once over the workspace afterwards, through the `check_workspace`
     /// that `ridlc` calls too.
     fn analyze(&self) -> Batch {
-        if self.refused {
-            return Batch::default();
-        }
         let db = &self.db;
         let mut sources = SourceMap::new();
         let mut table: HashMap<FileId, (String, String)> = HashMap::new();
@@ -1990,10 +1983,11 @@ fn batch(diagnostics: Vec<Diagnostic>, table: &HashMap<FileId, (String, String)>
 ///
 /// The load-time [`SourceMap`] is the authority: [`SourceMap::path`] reverses
 /// each diagnostic's [`FileId`] to the file the loader interned it for. A
-/// `.typl` file's current text comes from its [`InputFile`]; a manifest's text
-/// is read back from disk (nothing edited it this early). A span the map cannot
-/// resolve (only [`FileId::DETACHED`]) or a manifest that cannot be read drops
-/// its diagnostics from publication — `ridl check` still renders them.
+/// source file's current text comes from its [`InputFile`]; other text comes
+/// from the source map, including a root manifest overlay. Disk text is a
+/// fallback when the map has no text. A span with no mapped path (only
+/// [`FileId::DETACHED`]), or no available text, drops its diagnostics from
+/// publication — `ridl check` still renders them.
 fn convert_loader_diagnostics(
     db: &RidlDatabase,
     files: &HashMap<String, InputFile>,
@@ -2119,5 +2113,31 @@ mod tests {
         assert!(state.line_indexes.is_empty());
         assert!(state.workspace.packages(&state.db).is_empty());
         assert!(state.source_buffers.contains_key(&outside));
+
+        let opened = format!("{outside}.new.typl");
+        state.open(
+            opened.clone(),
+            "package demo\ntype Opened: integer\n".into(),
+        );
+        assert!(
+            state.overlays.is_empty(),
+            "refused open creates no analysis input"
+        );
+        state.change(
+            &opened,
+            &[lt::TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: "package demo\ntype Changed: integer\n".into(),
+            }],
+        );
+        assert!(
+            state.overlays.is_empty(),
+            "refused change creates no analysis input"
+        );
+        assert_eq!(
+            state.source_buffers[&opened],
+            "package demo\ntype Changed: integer\n"
+        );
     }
 }

@@ -2549,7 +2549,10 @@ The server publishes root
 [release refusals](release-pin.md#editors-and-agent-tools) on `ridl.toml` and
 suspends source analysis while refused. Root manifest buffer open/change/close
 events and watched disk create/change/delete events reload the workspace; an
-open manifest buffer takes precedence. Open source text survives the reload. An
+open manifest buffer takes precedence only while the disk file exists. Deleting
+the disk manifest unloads the workspace and clears its diagnostics. Buffer edits
+do not reload it until the disk file is restored and a watched create event is
+received, including after a save. Open source text survives the reload. An
 unpinned valid root manifest offers the code action **Pin this workspace to ridl
 <running release>**, without a diagnostic.
 

@@ -8013,10 +8013,10 @@ fn release_publications(client: &Connection) -> Vec<lt::PublishDiagnosticsParams
             Message::Notification(n) if n.method == "textDocument/publishDiagnostics" => {
                 publications.push(serde_json::from_value(n.params).unwrap());
             }
-            Message::Notification(n) if n.method == "window/showMessage" => {
+            Message::Notification(n) => {
                 assert_ne!(
                     n.method, "window/showMessage",
-                    "refusal must be a diagnostic: {}",
+                    "unexpected window message: {}",
                     n.params
                 );
             }
@@ -8172,6 +8172,47 @@ fn release_refusal_replaces_analysis_and_recovers_from_manifest_buffer() {
         },
     );
     assert!(hover_at(&client, 32, source, pos(1, 6)).is_some());
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn release_refusal_does_not_publish_for_opened_or_changed_sources() {
+    let dir = TempDir::new("release-source-publications");
+    let manifest = uri_of(&dir.write("ridl.toml", &release_manifest("0.24.0")));
+    let source = uri_of(&dir.path().join("unsaved.typl"));
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    release_publications(&client);
+
+    did_open(&client, &source, BROKEN);
+    let publications = release_publications(&client);
+    assert!(
+        publications.iter().all(|p| p.uri != source),
+        "opening a source during refusal must not publish for it: {publications:?}"
+    );
+    assert!(hover_at(&client, 10, source.clone(), pos(1, 6)).is_none());
+
+    let changed = BROKEN.replace("Speed", "Changed");
+    release_change(&client, &source, &changed);
+    let publications = release_publications(&client);
+    assert!(
+        publications.iter().all(|p| p.uri != source),
+        "changing a source during refusal must not publish for it: {publications:?}"
+    );
+    assert!(hover_at(&client, 11, source.clone(), pos(1, 6)).is_none());
+
+    // The same unsaved source must produce diagnostics after recovery; this
+    // also checks that edits made during refusal are retained.
+    release_open(&client, &manifest, &release_manifest("0.23.0"));
+    let publications = release_publications(&client);
+    assert!(
+        publications
+            .iter()
+            .any(|p| p.uri == source && !p.diagnostics.is_empty()),
+        "recovery analyzes the retained source: {publications:?}"
+    );
+    let hover = hover_at(&client, 12, source, pos(1, 6)).expect("recovered source hover");
+    assert!(format!("{hover:?}").contains("Changed"));
     shut_down(&client, 903);
     server.join().unwrap().unwrap();
 }
@@ -8459,11 +8500,16 @@ fn pin_workspace_action_ignores_header_text_inside_string() {
 }
 
 #[test]
-fn root_manifest_deletion_keeps_open_refusal() {
+fn root_manifest_deletion_ignores_buffer_until_watched_create() {
     let dir = TempDir::new("release-delete-buffer");
-    let manifest_path = dir.write("ridl.toml", &release_manifest("0.23.0"));
+    let corrected = release_manifest("0.23.0");
+    let manifest_path = dir.write("ridl.toml", &corrected);
     let manifest = uri_of(&manifest_path);
+    let source_text = "package demo\ntype Value: integer\n";
+    let source = uri_of(&dir.write("lib.typl", source_text));
     let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    release_open(&client, &source, source_text);
+    assert!(hover_at(&client, 10, source.clone(), pos(1, 6)).is_some());
     release_open(&client, &manifest, &release_manifest("0.24.0"));
     release_publications(&client);
     std::fs::remove_file(&manifest_path).unwrap();
@@ -8476,17 +8522,31 @@ fn root_manifest_deletion_keeps_open_refusal() {
             }],
         },
     );
+    // Collect both events before asserting so the regression also checks the
+    // reload error raised when a deleted manifest's buffer becomes compatible.
+    release_change(&client, &manifest, &corrected);
     let publications = release_publications(&client);
-    assert_eq!(
-        codes(
-            &publications
-                .iter()
-                .find(|p| p.uri == manifest)
-                .unwrap()
-                .diagnostics
-        ),
-        ["MANI-026"]
+    assert!(
+        publications
+            .iter()
+            .any(|p| p.uri == manifest && p.diagnostics.is_empty()),
+        "deletion clears the manifest refusal: {publications:?}"
     );
+    assert!(publications.iter().all(|p| p.diagnostics.is_empty()));
+    assert!(hover_at(&client, 11, source.clone(), pos(1, 6)).is_none());
+
+    std::fs::write(&manifest_path, &corrected).unwrap();
+    notify::<lt::notification::DidChangeWatchedFiles>(
+        &client,
+        lt::DidChangeWatchedFilesParams {
+            changes: vec![lt::FileEvent {
+                uri: manifest,
+                typ: lt::FileChangeType::CREATED,
+            }],
+        },
+    );
+    release_publications(&client);
+    assert!(hover_at(&client, 12, source, pos(1, 6)).is_some());
     shut_down(&client, 903);
     server.join().unwrap().unwrap();
 }

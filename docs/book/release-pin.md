@@ -65,9 +65,13 @@ sources. Open source text is retained for recovery.
 
 Opening, changing or closing the root manifest buffer reloads the workspace.
 `workspace/didChangeWatchedFiles` create/change/delete events for that manifest
-also reload it; an open root buffer takes precedence over disk text. Fixing the
-buffer or the saved pin clears the refusal without restarting the server. Member
-manifest buffers do not replace the root or become source overlays.
+also reload it. An open root buffer takes precedence over disk text only while
+the manifest exists on disk. Deleting the disk manifest unloads the workspace
+and clears its diagnostics; edits to its open buffer do not load it again. A
+watched create event after the file is restored, including by saving it, reloads
+the workspace with the current buffer text. Fixing the buffer or the saved pin
+clears the refusal without restarting the server. Member manifest buffers do not
+replace the root or become source overlays.
 
 On an unpinned root manifest, the server offers the `refactor.rewrite` code
 action **Pin this workspace to ridl <running release>**. It inserts the key
