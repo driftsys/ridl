@@ -225,6 +225,19 @@ fn handoff_runs_the_selected_release_for_every_enforcing_command() {
 }
 
 #[test]
+fn handoff_runs_describe_for_a_missing_descriptor() {
+    let fixture = Fixture::new();
+    let ws = fixture.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    fake_release(&fixture.toolchain(), "0.23.4");
+    let args = ["describe", "missing.catalog.binfb"];
+    let out = fixture.run(&ws, &fixture.toolchain(), &args, &[]);
+    assert_eq!(out.status.code(), Some(7), "{out:?}");
+    assert_eq!(out.stderr, b"child stderr\n");
+    assert_eq!(argv(&fixture), args);
+}
+
+#[test]
 fn handoff_skips_under_the_guard() {
     let fixture = Fixture::new();
     let ws = fixture.base.path().join("ws");

@@ -670,6 +670,9 @@ fn run_describe(path: &Path) -> ExitCode {
         // Only a release refusal replaces the input's own error; a failure of
         // the probe itself leaves that error unchanged.
         if let Ok(Some((diagnostics, sources))) = release_preflight(&[ancestor.to_path_buf()]) {
+            if let Some(code) = handoff::refusal(&diagnostics, &sources) {
+                return code;
+            }
             errprint!("{}", render(&diagnostics, &sources));
             return ExitCode::from(2);
         }
