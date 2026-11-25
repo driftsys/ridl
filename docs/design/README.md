@@ -153,3 +153,8 @@ choices, see [`../decisions/`](../decisions/).
   and what is not built (the per-language references and the judge check). The
   decisions behind its choices are
   [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md).
+- **toolchain-directory.md** — versioned toolchains as built: directory layout,
+  completion and damage checks, the schema-1 selection report, release targets,
+  checksum verification, the CLI installation transaction and its lock, and the
+  scripts' staging and PATH copy. The decisions behind its choices are
+  [ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md).

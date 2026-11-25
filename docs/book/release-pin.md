@@ -12,11 +12,11 @@ ridl-version = "0.23.0"
 ```
 
 The value must be a string of three ASCII decimal numbers, `MAJOR.MINOR.PATCH`,
-with no prefix, whitespace, pre-release suffix or build suffix. Leading zeros
-are accepted and releases are compared numerically. The minimum pin is 0.23.0.
-The running release must have the same major and minor and a patch greater than
-or equal to the pin. For example, 0.23.2 accepts a 0.23.0 pin; 0.22.9, 0.24.0
-and 1.23.0 do not.
+with each component fitting `u64` and no prefix, whitespace, pre-release suffix
+or build suffix. Leading zeros are accepted and releases are compared
+numerically. The minimum pin is 0.23.0. The running release must have the same
+major and minor and a patch greater than or equal to the pin. For example,
+0.23.2 accepts a 0.23.0 pin; 0.22.9, 0.24.0 and 1.23.0 do not.
 
 Only the root manifest returned by workspace discovery pins the release. A path
 inside a workspace member still uses the workspace root. A member's key is

@@ -67,7 +67,7 @@ get_version() {
   printf '%s\n' "$version"
 }
 
-# Accept decimal release components in the same u32 range as the CLI.
+# Accept decimal release components from 0 to 4294967295 (u32).
 normalise_version() {
   local value="${1#editor-v}" part result="" IFS=.
   [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1

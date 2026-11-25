@@ -2,11 +2,10 @@
 
 This is the as-built protocol for `ridl toolchain` and the versioned install
 scripts. [ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md) owns the
-decisions and compatibility rule. The
-[release pin chapter](../book/release-pin.md) owns manifest usage, platform root
-precedence, command coverage and editor behavior. This record owns the directory
-layout, selection schema and install transaction; it introduces no separate
-compatibility rule.
+decisions. The [release pin chapter](../book/release-pin.md) owns compatibility
+and selection rules, manifest usage, platform root precedence, command coverage
+and editor behavior. This record owns the directory layout, selection schema and
+install transaction; it introduces no separate compatibility rule.
 
 ## Ownership and layout
 
@@ -14,9 +13,10 @@ compatibility rule.
 and the early refusal belong to `crates/ridl-core/src/workspace.rs`.
 `crates/ridl/src/toolchain/paths.rs` resolves the toolchain root and validates
 archive targets; `selection.rs` inventories and selects releases; `install.rs`
-downloads and publishes them. `main.rs` supplies the production origin, current
-executable, running release and build target, and maps results to command
-output. Core, IR and descriptor crates do not install toolchains.
+downloads and publishes them. `crates/ridl/src/toolchain/mod.rs` defines the
+production origin constant; `main.rs` passes it with the current executable,
+running release and build target, and maps results to command output. Core, IR
+and descriptor crates do not install toolchains.
 
 Given the
 [configured root](../book/release-pin.md#installing-and-selecting-toolchains),
@@ -50,12 +50,10 @@ versions directory is empty inventory; other read errors propagate.
 ## `which --json`, schema 1
 
 `ridl toolchain which [PATH] --json` defaults to the current directory. It reads
-the discovered root pin without enforcing it against the resolver binary. For a
-valid pin, selection compares complete installed candidates and the running
-executable by ADR-0036's rule, chooses the highest numeric release, and prefers
-**running** on an equal-version tie. Damaged entries cannot win. Unpinned inputs
-use the running executable without consulting inventory. No selection downloads
-or executes a candidate.
+the discovered root pin without enforcing it against the resolver binary. The
+[release pin chapter](../book/release-pin.md#installing-and-selecting-toolchains)
+owns candidate selection, tie preference and unpinned behavior. No selection
+executes a candidate.
 
 Every successful JSON answer contains all eight keys; absent values are JSON
 `null`, never omitted. Non-null paths are canonical absolute paths (including
@@ -136,9 +134,10 @@ connect timeout and a 10-minute overall timeout. Downloads are bounded to 256
 MiB for the archive and 4 KiB for the checksum record.
 
 The checksum record is one UTF-8 line: 64 hexadecimal SHA-256 digits, then two
-spaces or `*`, then the exact archive name, with an optional LF or CRLF. The
-computed digest must match, case-insensitively. This verifies consistency with
-the origin's record, not an independently signed publisher identity.
+spaces or a space followed by `*`, then the exact archive name, with an optional
+LF or CRLF. The computed digest must match, case-insensitively. This verifies
+consistency with the origin's record, not an independently signed publisher
+identity.
 
 ## CLI installation transaction
 
@@ -181,6 +180,10 @@ pinnable `ridl` releases. The
 [getting-started instructions](../book/getting-started.md#installing-the-toolchain)
 own version selection and environment settings. Scripts verify the checksum and
 required archive files before publishing. They do not acquire the CLI lock.
+
+The scripts accept decimal release components from 0 to 4294967295 (`u32`). The
+CLI accepts components through 18446744073709551615 (`u64`), so a release
+accepted by the CLI can exceed the scripts' component limit.
 
 Their stage name is **`.tmp-script-<version>-<pid>`**, separate from CLI stages.
 A script removes only a leftover stage with its own exact name before

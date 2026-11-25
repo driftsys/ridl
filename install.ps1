@@ -53,6 +53,7 @@ function Get-Version {
     return $match.tag_name
 }
 
+# Accept decimal release components from 0 to 4294967295 (u32).
 function ConvertTo-ReleaseVersion {
     param([string]$Value)
     $value = $Value -creplace '^editor-v', ''

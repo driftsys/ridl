@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted design — 2026-11-25. This record describes the implementation of
+Accepted — 2026-11-25. This record describes the implementation of
 [driftsys/ridl#1476](https://github.com/driftsys/ridl/issues/1476). Its scope
 comes from the maintainer's amendment of 2026-11-24 and the remaining decisions
 delegated on 2026-11-25. It records that design and the resulting behavior; it
@@ -10,8 +10,11 @@ does not claim a separate maintainer approval of this ADR.
 
 Scope: root release requirements, their enforcement by workspace consumers,
 versioned toolchain management and VS Code selection. Amends
-[ADR-0002](ADR-0002-module-system.md) §4. The command exit contracts are in
-[ADR-0010](ADR-0010-cli-conventions.md); the as-built protocol is in
+[ADR-0002](ADR-0002-module-system.md) §4,
+[ADR-0010](ADR-0010-cli-conventions.md),
+[ADR-0025](ADR-0025-workspace-aware-mcp-tools.md) decisions 2, 5 and 7, and
+[the MCP workspace tools record](../design/mcp-workspace-tools.md). The as-built
+toolchain protocol is in
 [the toolchain directory record](../design/toolchain-directory.md).
 
 ## Context
@@ -28,34 +31,24 @@ the source of side-by-side installations without another manifest or proxy.
 
 ## Decisions
 
-1. **The root manifest may require a release.** `ridl-version` belongs in the
-   root `[package]` or `[workspace]` table. Its string is exactly three nonempty
-   ASCII decimal components, `MAJOR.MINOR.PATCH`, each fitting `u64`; leading
-   zeros are accepted and comparisons are numeric. The running release must have
-   the same major and minor and a patch at least the pin's patch. The minimum
-   pinnable release is **0.23.0**. This is a patch floor within one major/minor,
-   rather than an exact binary version. An absent key preserves existing loading
-   behavior. The [release pin chapter](../book/release-pin.md) gives the
-   user-facing examples and command coverage.
+1. **The root manifest may require a compatible release.** This constrains
+   workspace output while allowing compatible patch updates without changing the
+   pin. The [release pin chapter](../book/release-pin.md) owns the key's syntax,
+   compatibility rule, minimum release and unpinned behavior.
 2. **Only the discovered root constrains the consumer.** Entry paths inside
    members use the workspace root found by the existing discovery rule. Member
    pins are ignored, including invalid values, with warning MANI-027, lint name
    `member-ridl-version`. Remote unit pins do not constrain the consumer.
-3. **A root refusal excludes other diagnostics and work.** MANI-024 means an
-   invalid pin type or form, MANI-025 a pin below the floor, and MANI-026 an
-   incompatible running release. The diagnostic points to the value; a mismatch
-   names both releases and `ridl toolchain install <pin>`. The loader reads the
-   root manifest overlay first, then refuses with an empty workspace and only
-   that diagnostic, before members, sources, header files, remotes, lockfiles or
-   lint directives. Batch consumers return exit **2** without writes. The
-   predicate uses codes, independent of severity; MANI-027 raised to `deny` is
-   an ordinary error, exit **1** where levels apply. Broken TOML remains
-   MANI-001. The
-   [server behavior](../book/release-pin.md#editors-and-agent-tools) keeps LSP
-   and MCP available to report the refusal and recover.
-4. **Pre-pin releases cannot enforce the key.** Releases before 0.23.0 treat it
-   as unknown (MANI-005) and may continue. A new manifest cannot change those
-   binaries. This limitation is accepted rather than represented as enforcement.
+3. **A root refusal excludes other diagnostics and work.** Results from an
+   incompatible compiler would defeat the pin, and later validation could add
+   unrelated diagnostics. The [release pin chapter](../book/release-pin.md) owns
+   refusal diagnostics, loading order and batch exit behavior; its
+   [server behavior](../book/release-pin.md#editors-and-agent-tools) owns
+   reporting and recovery in LSP and MCP.
+4. **Enforcement begins with pin-aware releases.** A new manifest cannot change
+   older binaries, so their lack of enforcement is accepted. The
+   [release pin chapter](../book/release-pin.md) owns the release boundary and
+   older releases' treatment of the key.
 5. **Build stamps identify the running release consistently.** The
    [distribution record](../technotes/toolchain-distribution.md#how-the-binary-learns-its-version)
    owns normalization, display and the fallback used by checks. Core loaders
