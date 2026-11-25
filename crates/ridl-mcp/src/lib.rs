@@ -218,6 +218,7 @@ impl RidlMcp {
     ) -> Result<CallToolResult, ErrorData> {
         let output = tokio::task::spawn_blocking(move || {
             let snap = snapshot(&input.path, &[])?;
+            snap.require_compatible_release()?;
             metrics::metrics(&snap, &input)
         })
         .await
@@ -502,6 +503,150 @@ mod tests {
             "{}\nthe MCP tool surface is an external contract (ADR-0005 §7, as amended by the 1a design); if this change only adds, replace tests/tools.json with the JSON above",
             serde_json::to_string_pretty(&actual).unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn release_refusal_is_reported_by_every_workspace_tool() {
+        let copy = snapshot::tests::TempWorkspace::copy("ws");
+        let manifest = copy.0.join("ridl.toml");
+        let text = std::fs::read_to_string(&manifest).unwrap();
+        std::fs::write(
+            &manifest,
+            text.replace("[workspace]", "[workspace]\nridl-version = \"0.24.0\""),
+        )
+        .unwrap();
+        let server = RidlMcp::new();
+        for path in [copy.0.clone(), copy.0.join("b")] {
+            let path = path.to_str().unwrap();
+            let check = server
+                .ridl_check(Parameters(
+                    serde_json::from_value(json!({"path":path})).unwrap(),
+                ))
+                .await
+                .unwrap();
+            let data = check.structured_content.unwrap();
+            assert_eq!(data["diagnostics"].as_array().unwrap().len(), 1);
+            assert_eq!(data["diagnostics"][0]["code"], "MANI-026");
+            assert_eq!(
+                data["diagnostics"][0]["span"]["path"],
+                manifest.to_str().unwrap()
+            );
+            let results = [
+                server
+                    .ridl_metrics(Parameters(
+                        serde_json::from_value(json!({"path":path})).unwrap(),
+                    ))
+                    .await
+                    .unwrap(),
+                server
+                    .ridl_resolve(Parameters(
+                        serde_json::from_value(json!({"path":path,"name":"Speed"})).unwrap(),
+                    ))
+                    .await
+                    .unwrap(),
+                server
+                    .ridl_describe_type(Parameters(
+                        serde_json::from_value(json!({"path":path,"name":"Speed"})).unwrap(),
+                    ))
+                    .await
+                    .unwrap(),
+                server
+                    .ridl_list_interactions(Parameters(
+                        serde_json::from_value(json!({"path":path,"interface":"Sensor"})).unwrap(),
+                    ))
+                    .await
+                    .unwrap(),
+                server
+                    .ridl_references(Parameters(
+                        serde_json::from_value(json!({"path":path,"name":"Speed"})).unwrap(),
+                    ))
+                    .await
+                    .unwrap(),
+                server
+                    .ridl_dependencies(Parameters(
+                        serde_json::from_value(json!({"path":path})).unwrap(),
+                    ))
+                    .await
+                    .unwrap(),
+                server
+                    .ridl_diff(Parameters(
+                        serde_json::from_value(json!({"old":path,"new":path})).unwrap(),
+                    ))
+                    .await
+                    .unwrap(),
+            ];
+            for result in results {
+                assert_eq!(result.is_error, Some(true), "{result:?}");
+                let serialized = serde_json::to_string(&result).unwrap();
+                assert!(serialized.contains("MANI-026"), "{serialized}");
+                assert!(
+                    serialized.contains("ridl toolchain install 0.24.0"),
+                    "{serialized}"
+                );
+            }
+        }
+        let explained = server
+            .ridl_explain(Parameters(
+                serde_json::from_value(json!({"code":"MANI-026"})).unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_ne!(explained.is_error, Some(true));
+        let checked = server
+            .ridl_check(Parameters(
+                serde_json::from_value(
+                    json!({"source":"package demo\ntype Value: integer\n","profile":"typl"}),
+                )
+                .unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_ne!(checked.is_error, Some(true));
+        assert!(
+            !serde_json::to_string(&checked)
+                .unwrap()
+                .contains("MANI-026")
+        );
+    }
+
+    #[tokio::test]
+    async fn release_refusal_from_root_overlay_precedes_source_validation() {
+        let copy = snapshot::tests::TempWorkspace::copy("ws");
+        let manifest = copy.0.join("ridl.toml");
+        let disk = std::fs::read_to_string(&manifest).unwrap();
+        let params = json!({
+            "path": copy.0.join("b"),
+            "overlays": [
+                {"path": manifest, "source": disk.replace("[workspace]", "[workspace]\nridl-version = \"0.24.0\"")},
+                {"path": copy.0.join("invalid.txt"), "source": "not a language source"}
+            ]
+        });
+        let server = RidlMcp::new();
+        let result = server
+            .ridl_check(Parameters(serde_json::from_value(params.clone()).unwrap()))
+            .await
+            .unwrap();
+        assert_ne!(
+            result.is_error,
+            Some(true),
+            "root refusal is a diagnostic result: {result:?}"
+        );
+        let data = result.structured_content.unwrap();
+        assert_eq!(data["diagnostics"].as_array().map(Vec::len), Some(1));
+        assert_eq!(data["diagnostics"][0]["code"], "MANI-026");
+        assert_eq!(
+            data["diagnostics"][0]["span"]["path"],
+            manifest.to_str().unwrap()
+        );
+        let mut lookup = params;
+        lookup["name"] = json!("Speed");
+        let result = server
+            .ridl_resolve(Parameters(serde_json::from_value(lookup).unwrap()))
+            .await
+            .unwrap();
+        assert_eq!(result.is_error, Some(true));
+        assert!(serde_json::to_string(&result).unwrap().contains("MANI-026"));
+        assert_eq!(std::fs::read_to_string(manifest).unwrap(), disk);
     }
 
     #[tokio::test]

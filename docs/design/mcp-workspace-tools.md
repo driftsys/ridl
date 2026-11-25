@@ -228,6 +228,16 @@ no checked IR, the error names that package and gives the same advice. A
 canonical `pkg.Name` whose package has no IR gets the unknown-name error, with
 no `ridl_check` advice.
 
+A root release refusal (MANI-024 through MANI-026) is an exception: check
+returns only that diagnostic, including its root manifest span, for root and
+member paths. Metrics and all five name/dependency lookups stop at the common
+snapshot refusal guard and return a request error naming the code and message.
+Source-side diff keeps its diagnostic-bearing error route. Root manifest
+overlays take precedence over disk text before source overlays are validated.
+`ridl_explain`, source-text-only check and snapshot diff inputs are independent
+of root pins. The [release pin chapter](../book/release-pin.md) defines the
+compatibility rule. The tool surface is unchanged.
+
 ### 5.2 A wrong request is a tool error
 
 A tool error is an MCP result with `isError: true` and a message that says what
@@ -258,12 +268,12 @@ structured content).
 
 `workspace.notes` carries one note. (A path inside a workspace member loads the
 member's workspace, ADR-0002 §4, so it needs no note; `workspace.errors` and
-`workspace.warnings` then count the diagnostics of files under the member only.)
-The note: when the workspace has `.rsdl` files and no system was lowered, the
-note says that rsdl uses were not counted, because the workspace declares no
-`system` or an error in its closure blocked the lowering, and tells the agent to
-run `ridl_check`. The field is a list of strings, so a later note is not a
-schema change.
+`workspace.warnings` then count the diagnostics of files under the member only,
+except for a root release refusal.) The note: when the workspace has `.rsdl`
+files and no system was lowered, the note says that rsdl uses were not counted,
+because the workspace declares no `system` or an error in its closure blocked
+the lowering, and tells the agent to run `ridl_check`. The field is a list of
+strings, so a later note is not a schema change.
 
 ## 6. Compatibility with `ridl check`
 

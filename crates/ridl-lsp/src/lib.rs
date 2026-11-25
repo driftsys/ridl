@@ -15,7 +15,7 @@
 //! it mints fresh `InputFile` and `Workspace` salsa inputs and re-reads every
 //! file on each call. Driving it on every keystroke would miss unsaved editor
 //! buffers and defeat salsa incrementality (new inputs mean a full
-//! recompute). The server therefore loads the workspace **once**
+//! recompute). The server therefore loads the workspace initially
 //! (`load_workspace_with_remotes`, which reads the remote units of the
 //! manifest's `[imports]` from `vendor/`, then the cache, and never
 //! fetches), holds the
@@ -26,7 +26,11 @@
 //! runs at the first `didOpen` of a file that has a `ridl.toml` at or above it. A file opened from outside the loaded
 //! workspace becomes its own overlay input wrapped in a synthetic single-file
 //! package. Every recompute then goes through the memoized queries, so
-//! editing one file re-checks only the package that file belongs to.
+//! editing one file re-checks only the package that file belongs to. Root
+//! `ridl.toml` buffer events and watched disk changes reload the workspace while
+//! preserving open source text. Root release refusals suspend source analysis
+//! and publish the manifest diagnostic. Manifest buffers are stored separately
+//! and are never parsed as language sources.
 
 pub mod complete;
 pub mod convert;

@@ -520,16 +520,19 @@ the one runtime `ridl mcp` blocks on, and `wasm-check` does not build the `ridl`
 crate at all, so `tokio` never reaches the wasm32 target either.
 
 `ridlc::compile_workspace` is a cold, from-disk compile, so the server does not
-drive it per keystroke. Instead it loads the workspace once — at `initialize`
-from the client's root folder, or, when the client sent no root or that load
-failed, at the first `didOpen` of a file with a `ridl.toml` at or above it —
-holds the `Workspace` handle plus a map of file path → `InputFile`, and on
-`didOpen`/`didChange` calls `set_text` on the existing salsa input — the editor
-buffer overlays the disk state. A file opened from outside the loaded workspace
-becomes its own overlay input in a synthetic single-file package. Every
-recompute then goes through the memoized `parse_file` / `resolve_package` /
-`check_package` queries, so editing one file re-checks only the package that
-file belongs to.
+drive it per keystroke. Instead it loads the workspace initially — at
+`initialize` from the client's root folder, or, when the client sent no root or
+that load failed, at the first `didOpen` of a file with a `ridl.toml` at or
+above it — holds the `Workspace` handle plus a map of file path → `InputFile`,
+and on `didOpen`/`didChange` calls `set_text` on the existing salsa input — the
+editor buffer overlays the disk state. A file opened from outside the loaded
+workspace becomes its own overlay input in a synthetic single-file package.
+Every recompute then goes through the memoized `parse_file` / `resolve_package`
+/ `check_package` queries, so editing one file re-checks only the package that
+file belongs to. Root `ridl.toml` buffer events and watched disk changes reload
+that state while preserving open source text. Release refusals suspend analysis
+and publish the root manifest diagnostic; see
+[release pins](../book/release-pin.md).
 
 `convert.rs` is the single bridge between compiler coordinates (byte-offset
 `TextRange` into UTF-8 text) and LSP coordinates (UTF-16 line/character

@@ -2540,11 +2540,18 @@ the Language Server Protocol over its stdin and stdout.
 The server never fetches. It reads the remote units of `[imports]` from
 `vendor/` at the manifest root and then from the cache, as `ridl check --frozen`
 does, so run `ridl check` or `ridl vendor` once in a fresh clone. It loads the
-remote units once, when it loads the workspace, and does not reload them when
-`ridl.lock` changes: after a `ridl check` that fetches a unit or rewrites
-`ridl.lock`, restart the server. It publishes no diagnostics for a file of a
-remote unit; it shows the errors of a remote unit once per load, in one window
-message.
+remote units with the workspace and does not reload them merely when `ridl.lock`
+changes: after a `ridl check` that fetches a unit or rewrites `ridl.lock`,
+restart the server. It publishes no diagnostics for a file of a remote unit; it
+shows the errors of a remote unit once per load, in one window message.
+
+The server publishes root
+[release refusals](release-pin.md#editors-and-agent-tools) on `ridl.toml` and
+suspends source analysis while refused. Root manifest buffer open/change/close
+events and watched disk create/change/delete events reload the workspace; an
+open manifest buffer takes precedence. Open source text survives the reload. An
+unpinned valid root manifest offers the code action **Pin this workspace to ridl
+<running release>**, without a diagnostic.
 
 **Flags.** `--stdio` and `--clientProcessId=<PID>` are accepted and change
 nothing. The LSP specification (3.17, "Implementation Considerations")
@@ -2595,6 +2602,12 @@ and stdout. The
 [crate README](https://github.com/driftsys/ridl/blob/main/crates/ridl-mcp/README.md)
 documents input and output schemas, tool errors and the read-only workspace
 contract. The command takes no flag of its own.
+
+Workspace [release refusals](release-pin.md#editors-and-agent-tools) are tool
+results: path-mode check reports the root diagnostic, metrics and lookups return
+a tool error, and source-side diff retains its structured diagnostics. A root
+manifest overlay is checked before source overlays. Source-text-only check,
+explain and snapshot diff inputs remain independent of workspace pins.
 
 **Exit codes.** 0 on a clean shutdown: the host closes the server's stdin, which
 is how a stdio host ends an MCP session. 2 when the Tokio runtime fails to

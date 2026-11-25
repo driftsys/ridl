@@ -630,8 +630,14 @@ fn diagnostics_and_code_actions_over_an_in_memory_connection() {
     match &capabilities.code_action_provider {
         Some(lt::CodeActionProviderCapability::Options(options)) => assert_eq!(
             options.code_action_kinds.as_deref(),
-            Some([lt::CodeActionKind::QUICKFIX].as_slice()),
-            "the server advertises quick-fix code actions",
+            Some(
+                [
+                    lt::CodeActionKind::QUICKFIX,
+                    lt::CodeActionKind::REFACTOR_REWRITE
+                ]
+                .as_slice()
+            ),
+            "the server advertises quick fixes and workspace pin actions",
         ),
         other => panic!("expected code action options, got {other:?}"),
     }
@@ -1941,8 +1947,8 @@ fn advertises_the_inlay_hint_capability() {
 /// `initialize`'s result reports `serverInfo` with the given version when the
 /// server is started through `run_with_version` — the entry point `ridl lsp`
 /// uses to report its build version (docs/technotes/toolchain-distribution.md,
-/// "How the binary learns its version"). Every other test in this file
-/// starts the server through the version-less `run`.
+/// "How the binary learns its version"). The display version is retained
+/// independently of the parsed release used by workspace pin checks.
 #[test]
 fn initialize_reports_the_server_version_when_given_one() {
     let (server_side, client) = Connection::memory();
@@ -7951,5 +7957,536 @@ fn service_see_completion_offers_declarations_and_members() {
         assert!(labels(&items).contains(&expected), "{items:?}");
     }
     shut_down(&client, 13);
+    server.join().unwrap().unwrap();
+}
+
+fn start_release(root: lt::Uri, version: &str) -> (Connection, ServerThread) {
+    let (server_side, client) = Connection::memory();
+    let version = version.to_string();
+    let server =
+        std::thread::spawn(move || ridl_lsp::server::run_with_version(server_side, Some(&version)));
+    initialize(&client, Some(root));
+    (client, server)
+}
+
+fn release_open(client: &Connection, uri: &lt::Uri, text: &str) {
+    notify::<lt::notification::DidOpenTextDocument>(
+        client,
+        lt::DidOpenTextDocumentParams {
+            text_document: lt::TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "toml".into(),
+                version: 1,
+                text: text.into(),
+            },
+        },
+    );
+}
+
+fn release_change(client: &Connection, uri: &lt::Uri, text: &str) {
+    notify::<lt::notification::DidChangeTextDocument>(
+        client,
+        lt::DidChangeTextDocumentParams {
+            text_document: lt::VersionedTextDocumentIdentifier {
+                uri: uri.clone(),
+                version: 2,
+            },
+            content_changes: vec![lt::TextDocumentContentChangeEvent {
+                range: None,
+                range_length: None,
+                text: text.into(),
+            }],
+        },
+    );
+}
+
+/// A request barrier collects every preceding publication without waiting for
+/// a notification that an unimplemented handler might never send.
+fn release_publications(client: &Connection) -> Vec<lt::PublishDiagnosticsParams> {
+    client.sender.send(Request::new(900.into(), "textDocument/codeAction".into(), serde_json::json!({
+        "textDocument": {"uri": "file:///release-barrier"}, "range": range((0,0),(0,0)), "context": {"diagnostics": []}
+    })).into()).unwrap();
+    let mut publications = Vec::new();
+    loop {
+        match recv(client) {
+            Message::Response(_) => return publications,
+            Message::Notification(n) if n.method == "textDocument/publishDiagnostics" => {
+                publications.push(serde_json::from_value(n.params).unwrap());
+            }
+            Message::Notification(n) if n.method == "window/showMessage" => {
+                assert_ne!(
+                    n.method, "window/showMessage",
+                    "refusal must be a diagnostic: {}",
+                    n.params
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+fn release_manifest(pin: &str) -> String {
+    format!("[package]\nname = \"demo\"\nversion = \"1.0.0\"\nridl-version = \"{pin}\"\n")
+}
+
+#[test]
+fn release_refusal_is_published_on_manifest_value() {
+    let dir = TempDir::new("release-value");
+    let text = release_manifest("0.24.0");
+    let manifest = uri_of(&dir.write("ridl.toml", &text));
+    dir.write("lib.typl", BROKEN);
+    let (client, server) = start_release(uri_of(dir.path()), "editor-v0.23.2");
+    let publications = release_publications(&client);
+    let published = publications
+        .iter()
+        .find(|p| p.uri == manifest)
+        .expect("manifest diagnostic");
+    assert_eq!(codes(&published.diagnostics), ["MANI-026"]);
+    let span = ridl_lsp::convert::line_index(&text).text_range(published.diagnostics[0].range);
+    assert_eq!(
+        &text[usize::from(span.start())..usize::from(span.end())],
+        "\"0.24.0\""
+    );
+    assert!(
+        published.diagnostics[0]
+            .message
+            .contains("running release is 0.23.2")
+    );
+    assert_eq!(publications.len(), 1);
+    shut_down(&client, 901);
+    server.join().unwrap().unwrap();
+}
+
+fn release_raw(client: &Connection, method: &str, params: serde_json::Value) -> serde_json::Value {
+    client
+        .sender
+        .send(Request::new(902.into(), method.into(), params).into())
+        .unwrap();
+    next_response(client)
+        .response_result
+        .expect("request succeeds")
+}
+
+#[test]
+fn release_refusal_replaces_analysis_and_recovers_from_manifest_buffer() {
+    let dir = TempDir::new("release-buffer");
+    let disk = release_manifest("0.23.0");
+    let manifest = uri_of(&dir.write("ridl.toml", &disk));
+    let source = uri_of(&dir.write("lib.typl", "package demo\ntype Disk: integer\n"));
+    let outside = TempDir::new("release-outside");
+    let overlay = uri_of(&outside.path().join("lib.typl"));
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    release_open(&client, &source, "package demo\ntype Buffer: integer\n");
+    release_open(&client, &overlay, BROKEN);
+    assert!(hover_at(&client, 10, source.clone(), pos(1, 6)).is_some());
+    release_open(&client, &manifest, &disk);
+    release_change(&client, &manifest, &release_manifest("0.24.0"));
+    let publications = release_publications(&client);
+    assert!(
+        publications
+            .iter()
+            .any(|p| p.uri == source && p.diagnostics.is_empty())
+    );
+    assert!(
+        publications
+            .iter()
+            .any(|p| p.uri == overlay && p.diagnostics.is_empty())
+    );
+    assert_eq!(
+        codes(
+            &publications
+                .iter()
+                .rev()
+                .find(|p| p.uri == manifest)
+                .unwrap()
+                .diagnostics
+        ),
+        ["MANI-026"]
+    );
+    assert!(hover_at(&client, 11, source.clone(), pos(1, 6)).is_none());
+    let fresh = uri_of(&dir.path().join("fresh.typl"));
+    release_open(&client, &fresh, BROKEN);
+    release_change(&client, &source, "package demo\ntype Recovered: integer\n");
+    for uri in [&source, &overlay, &fresh] {
+        let position = serde_json::json!({"textDocument": {"uri": uri}, "position": pos(1,6)});
+        for method in [
+            "textDocument/hover",
+            "textDocument/definition",
+            "textDocument/prepareRename",
+        ] {
+            assert!(
+                release_raw(&client, method, position.clone()).is_null(),
+                "{method}"
+            );
+        }
+        for (method, params) in [
+            ("textDocument/completion", position.clone()),
+            (
+                "textDocument/references",
+                serde_json::json!({"textDocument":{"uri":uri},"position":pos(1,6),"context":{"includeDeclaration":true}}),
+            ),
+            (
+                "textDocument/documentSymbol",
+                serde_json::json!({"textDocument":{"uri":uri}}),
+            ),
+            ("workspace/symbol", serde_json::json!({"query":""})),
+            (
+                "textDocument/inlayHint",
+                serde_json::json!({"textDocument":{"uri":uri},"range":range((0,0),(3,0))}),
+            ),
+            (
+                "textDocument/formatting",
+                serde_json::json!({"textDocument":{"uri":uri},"options":{"tabSize":4,"insertSpaces":true}}),
+            ),
+            (
+                "textDocument/rename",
+                serde_json::json!({"textDocument":{"uri":uri},"position":pos(1,6),"newName":"Other"}),
+            ),
+        ] {
+            let value = release_raw(&client, method, params);
+            assert!(
+                value.is_null() || value.as_array().is_some_and(Vec::is_empty),
+                "{method}: {value}"
+            );
+        }
+        assert!(code_actions_at(&client, 20, uri, range((0, 0), (5, 0))).is_empty());
+    }
+    release_change(&client, &manifest, &disk);
+    let publications = release_publications(&client);
+    assert!(
+        publications
+            .iter()
+            .any(|p| p.uri == manifest && p.diagnostics.is_empty())
+    );
+    let hover = hover_at(&client, 30, source.clone(), pos(1, 6)).expect("recovered buffer hover");
+    assert!(format!("{hover:?}").contains("Recovered"));
+    assert!(hover_at(&client, 31, fresh, pos(1, 6)).is_some());
+    assert_eq!(
+        std::fs::read_to_string(dir.path().join("ridl.toml")).unwrap(),
+        disk
+    );
+    notify::<lt::notification::DidCloseTextDocument>(
+        &client,
+        lt::DidCloseTextDocumentParams {
+            text_document: lt::TextDocumentIdentifier { uri: manifest },
+        },
+    );
+    assert!(hover_at(&client, 32, source, pos(1, 6)).is_some());
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn root_manifest_disk_change_reloads_workspace() {
+    let dir = TempDir::new("release-disk");
+    let manifest_path = dir.write("ridl.toml", &release_manifest("0.23.0"));
+    let manifest = uri_of(&manifest_path);
+    let source = uri_of(&dir.write("lib.typl", "package demo\ntype Value: integer\n"));
+    let (client, server) = start_release(uri_of(dir.path()), "v0.23.2");
+    assert!(hover_at(&client, 10, source.clone(), pos(1, 6)).is_some());
+    for (pin, kind, refused) in [
+        ("0.24.0", lt::FileChangeType::CHANGED, true),
+        ("0.23.0", lt::FileChangeType::CREATED, false),
+    ] {
+        std::fs::write(&manifest_path, release_manifest(pin)).unwrap();
+        notify::<lt::notification::DidChangeWatchedFiles>(
+            &client,
+            lt::DidChangeWatchedFilesParams {
+                changes: vec![lt::FileEvent {
+                    uri: manifest.clone(),
+                    typ: kind,
+                }],
+            },
+        );
+        let publications = release_publications(&client);
+        assert!(
+            publications.iter().any(|p| p.uri == manifest),
+            "manifest reload publication"
+        );
+        let published = publications.iter().find(|p| p.uri == manifest).unwrap();
+        assert_eq!(
+            codes(&published.diagnostics),
+            if refused { vec!["MANI-026"] } else { vec![] }
+        );
+        assert_eq!(
+            hover_at(&client, 11, source.clone(), pos(1, 6)).is_none(),
+            refused
+        );
+    }
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn pin_workspace_action_preserves_toml_and_is_idempotent() {
+    for text in [
+        "# keep\n[package] # header\nname = \"demo\"\nversion = \"1.0.0\"\n[imports]\n",
+        "# keep\n[workspace] # header\nmembers = []\n[imports]\n",
+        "workspace = { members = [] } # keep\n[imports]\n",
+        "# keep\nworkspace.members = []\n[imports]\n",
+        "# keep\r\n[workspace] # header\r\nmembers = []\r\n[imports]\r\n",
+        "[workspace] # no final newline",
+    ] {
+        let dir = TempDir::new("pin-action");
+        let manifest = uri_of(&dir.write("ridl.toml", text));
+        let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+        let actions = code_actions_at(&client, 10, &manifest, range((0, 0), (0, 0)));
+        assert_eq!(actions.len(), 1, "{text}");
+        let action = &actions[0];
+        assert_eq!(action.title, "Pin this workspace to ridl 0.23.2");
+        assert_eq!(action.kind, Some(lt::CodeActionKind::REFACTOR_REWRITE));
+        let edit = single_edit(action, &manifest);
+        assert_eq!(edit.range.start, edit.range.end);
+        let offset = usize::from(ridl_lsp::convert::line_index(text).offset(edit.range.start));
+        let mut after = text.to_string();
+        after.insert_str(offset, &edit.new_text);
+        let parsed: toml::Table = toml::from_str(&after).expect("the edit preserves valid TOML");
+        let owner = parsed
+            .get("workspace")
+            .or_else(|| parsed.get("package"))
+            .unwrap();
+        assert_eq!(
+            owner.get("ridl-version").and_then(toml::Value::as_str),
+            Some("0.23.2")
+        );
+        let mut restored = after.clone();
+        restored.replace_range(offset..offset + edit.new_text.len(), "");
+        assert_eq!(restored, text, "all original bytes survive");
+        assert!(edit.new_text.contains("ridl-version = \"0.23.2\""));
+        if text.contains("\r\n") {
+            assert!(!edit.new_text.replace("\r\n", "").contains('\n'));
+        }
+        release_open(&client, &manifest, &after);
+        assert!(code_actions_at(&client, 11, &manifest, range((0, 0), (0, 0))).is_empty());
+        shut_down(&client, 903);
+        server.join().unwrap().unwrap();
+    }
+}
+
+fn assert_no_pin_action(text: &str, version: &str) {
+    let dir = TempDir::new("pin-no-action");
+    let manifest = uri_of(&dir.write("ridl.toml", text));
+    let (client, server) = start_release(uri_of(dir.path()), version);
+    assert!(code_actions_at(&client, 10, &manifest, range((0, 0), (0, 0))).is_empty());
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn pin_workspace_action_rejects_existing_invalid_pin() {
+    assert_no_pin_action("[workspace]\nmembers = []\nridl-version = 42\n", "0.23.2");
+}
+
+#[test]
+fn pin_workspace_action_rejects_invalid_toml() {
+    assert_no_pin_action("[workspace]\nmembers = [\n", "0.23.2");
+}
+
+#[test]
+fn pin_workspace_action_rejects_ambiguous_modes() {
+    assert_no_pin_action(
+        "[workspace]\nmembers = []\n[package]\nname = \"demo\"\n",
+        "0.23.2",
+    );
+}
+
+#[test]
+fn pin_workspace_action_rejects_release_below_floor() {
+    assert_no_pin_action("[workspace]\nmembers = []\n", "0.22.0");
+}
+
+#[test]
+fn pin_workspace_action_rejects_member_manifest() {
+    let dir = TempDir::new("pin-member");
+    write_workspace(&dir);
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    assert!(
+        code_actions_at(
+            &client,
+            10,
+            &uri_of(&dir.path().join("app/ridl.toml")),
+            range((0, 0), (0, 0))
+        )
+        .is_empty()
+    );
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn release_unparsable_display_version_uses_running_release() {
+    let dir = TempDir::new("release-fallback");
+    let running = ridlc::running_release();
+    let pin = format!("{}.0.0", running.major + 1);
+    let manifest = uri_of(&dir.write("ridl.toml", &release_manifest(&pin)));
+    let (client, server) = start_release(uri_of(dir.path()), "editor-v0.23.2-test");
+    let publications = release_publications(&client);
+    let diagnostic = &publications
+        .iter()
+        .find(|p| p.uri == manifest)
+        .unwrap()
+        .diagnostics[0];
+    assert_eq!(codes(std::slice::from_ref(diagnostic)), ["MANI-026"]);
+    assert!(
+        diagnostic
+            .message
+            .contains(&format!("running release is {running}"))
+    );
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn root_manifest_disk_event_uses_open_buffer() {
+    let dir = TempDir::new("release-disk-buffer");
+    let disk = release_manifest("0.23.0");
+    let manifest_path = dir.write("ridl.toml", &disk);
+    let manifest = uri_of(&manifest_path);
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    release_open(&client, &manifest, &release_manifest("0.24.0"));
+    release_publications(&client);
+    std::fs::write(&manifest_path, &disk).unwrap();
+    notify::<lt::notification::DidChangeWatchedFiles>(
+        &client,
+        lt::DidChangeWatchedFilesParams {
+            changes: vec![lt::FileEvent {
+                uri: manifest.clone(),
+                typ: lt::FileChangeType::CHANGED,
+            }],
+        },
+    );
+    let publications = release_publications(&client);
+    assert_eq!(
+        codes(
+            &publications
+                .iter()
+                .find(|p| p.uri == manifest)
+                .unwrap()
+                .diagnostics
+        ),
+        ["MANI-026"]
+    );
+    notify::<lt::notification::DidCloseTextDocument>(
+        &client,
+        lt::DidCloseTextDocumentParams {
+            text_document: lt::TextDocumentIdentifier {
+                uri: manifest.clone(),
+            },
+        },
+    );
+    let publications = release_publications(&client);
+    assert!(
+        publications
+            .iter()
+            .any(|p| p.uri == manifest && p.diagnostics.is_empty())
+    );
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn root_manifest_deletion_clears_analysis() {
+    let dir = TempDir::new("release-delete");
+    let manifest = dir.write("ridl.toml", &release_manifest("0.23.0"));
+    let source = uri_of(&dir.write("lib.typl", "package demo\ntype Value: integer\n"));
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    assert!(hover_at(&client, 10, source.clone(), pos(1, 6)).is_some());
+    std::fs::remove_file(&manifest).unwrap();
+    notify::<lt::notification::DidChangeWatchedFiles>(
+        &client,
+        lt::DidChangeWatchedFilesParams {
+            changes: vec![lt::FileEvent {
+                uri: uri_of(&manifest),
+                typ: lt::FileChangeType::DELETED,
+            }],
+        },
+    );
+    assert!(hover_at(&client, 11, source, pos(1, 6)).is_none());
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn pin_workspace_action_respects_requested_kind() {
+    let dir = TempDir::new("pin-kind");
+    let manifest = uri_of(&dir.write("ridl.toml", "[workspace]\nmembers = []\n"));
+    let (server_side, client) = Connection::memory();
+    let server =
+        std::thread::spawn(move || ridl_lsp::server::run_with_version(server_side, Some("0.23.2")));
+    let caps = initialize(&client, Some(uri_of(dir.path())));
+    let Some(lt::CodeActionProviderCapability::Options(options)) = caps.code_action_provider else {
+        panic!("action kinds advertised");
+    };
+    assert!(
+        options
+            .code_action_kinds
+            .unwrap()
+            .contains(&lt::CodeActionKind::REFACTOR_REWRITE)
+    );
+    for (kind, count) in [
+        ("quickfix", 0),
+        ("source", 0),
+        ("refactor", 1),
+        ("refactor.rewrite", 1),
+    ] {
+        let result = release_raw(
+            &client,
+            "textDocument/codeAction",
+            serde_json::json!({"textDocument":{"uri":manifest},"range":range((0,0),(0,0)),"context":{"diagnostics":[],"only":[kind]}}),
+        );
+        assert_eq!(result.as_array().unwrap().len(), count, "{kind}");
+    }
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn pin_workspace_action_ignores_header_text_inside_string() {
+    let dir = TempDir::new("pin-string-header");
+    let text = "note = '''\n[workspace]\n'''\n[workspace] # real header\nmembers = []\n";
+    let manifest = uri_of(&dir.write("ridl.toml", text));
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    let actions = code_actions_at(&client, 10, &manifest, range((0, 0), (0, 0)));
+    assert_eq!(actions.len(), 1);
+    let edit = single_edit(&actions[0], &manifest);
+    assert_eq!(
+        edit.range.start,
+        pos(4, 0),
+        "insert after the actual table header"
+    );
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+fn root_manifest_deletion_keeps_open_refusal() {
+    let dir = TempDir::new("release-delete-buffer");
+    let manifest_path = dir.write("ridl.toml", &release_manifest("0.23.0"));
+    let manifest = uri_of(&manifest_path);
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    release_open(&client, &manifest, &release_manifest("0.24.0"));
+    release_publications(&client);
+    std::fs::remove_file(&manifest_path).unwrap();
+    notify::<lt::notification::DidChangeWatchedFiles>(
+        &client,
+        lt::DidChangeWatchedFilesParams {
+            changes: vec![lt::FileEvent {
+                uri: manifest.clone(),
+                typ: lt::FileChangeType::DELETED,
+            }],
+        },
+    );
+    let publications = release_publications(&client);
+    assert_eq!(
+        codes(
+            &publications
+                .iter()
+                .find(|p| p.uri == manifest)
+                .unwrap()
+                .diagnostics
+        ),
+        ["MANI-026"]
+    );
+    shut_down(&client, 903);
     server.join().unwrap().unwrap();
 }

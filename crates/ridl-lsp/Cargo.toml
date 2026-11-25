@@ -24,3 +24,4 @@ ridlc.workspace = true
 rowan.workspace = true
 salsa.workspace = true
 serde_json.workspace = true
+toml.workspace = true

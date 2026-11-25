@@ -60,6 +60,10 @@ Amended 2026-10-10 (driftsys/ridl#786): `ridlc` no longer depends on
 Amended 2026-10-11 by [ADR-0029](ADR-0029-stability-policy.md): the tool names
 and schemas are a frozen surface from 0.10.0, checked by `just freeze-check`.
 
+Amended 2026-11-25 (driftsys/ridl#1476): decisions 2, 5 and 7 account for root
+[release refusals](../book/release-pin.md#editors-and-agent-tools) and root
+manifest overlays. The tool names and schemas remain unchanged.
+
 ## Context
 
 Before this work `ridl mcp` exposed one tool, `ridl_check(source, profile)`. It
@@ -89,7 +93,8 @@ pasted-source form.
    imports of sibling members resolve and the root's `[lints]` apply.
    `ridl_check` in path mode then reports only the diagnostics of files under
    the member, and `workspace.errors` and `workspace.warnings` count only those.
-   No note is added for a member path. As designed, the tools loaded the member
+   A root release refusal is always retained, including for a member path. No
+   note is added for a member path. As designed, the tools loaded the member
    alone and reported that in `workspace.notes` (driftsys/ridl#529); ADR-0026
    fixed the loader for every entry point together.
 3. **The lookup tools read the checked IR, not the language server** (design
@@ -118,6 +123,10 @@ pasted-source form.
    and differs from `ridl check <path>` only in what needs the network, the
    lockfile round trip or the baseline (the list is in the crate README). Path
    mode applies the project's `[lints]` levels, as ADR-0024 decision 8 requires.
+   On a root release refusal, path mode returns only that diagnostic. Metrics
+   and all five name/dependency lookup tools return its code and message as a
+   tool error; source-side diff retains its structured diagnostic error. Source
+   mode, explain and snapshot diff inputs remain independent of root pins.
 6. **The tools are read-only and offline** (design D-6). No tool writes a file,
    and no tool fetches a remote import. Amended 2026-10-13 (driftsys/ridl#48):
    the tools read the remote units of `[imports]` as `ridl check --frozen` does,
@@ -135,15 +144,18 @@ pasted-source form.
    package-and-directory law (TYPL-001, TYPL-002, TYPL-010) and interns each
    file's text for diagnostic spans while it reads the file, so an overlay
    applied afterwards would skip those checks and leave spans pointing at the
-   text on disk. An overlay path must end in `.typl`, `.ridl`, `.rsdl`, `.rxdl`
-   or `.rmdl`, and its directory must be a package directory of the loaded
-   workspace; a new file joins the package of its directory as the same file
-   saved to disk would. A `.rxdl` or `.rmdl` overlay is accepted so that the
-   loader treats it as it treats the same file on disk: in a package directory
-   it draws the warning RIDL-417 (`unsupported-source-file`) and is not
-   compiled. A lone `.rxdl` or `.rmdl` file in single-file mode is a load error
-   that names the extension, whether or not an overlay replaces its text.
-   Anything else is a `LoadError` and reaches the agent as a tool error.
+   text on disk. One overlay may replace the discovered root `ridl.toml`; its
+   release pin is checked before source overlays, members and imports. Other
+   manifest overlays are unsupported. A source overlay path must end in `.typl`,
+   `.ridl`, `.rsdl`, `.rxdl` or `.rmdl`, and its directory must be a package
+   directory of the loaded workspace; a new file joins the package of its
+   directory as the same file saved to disk would. A `.rxdl` or `.rmdl` overlay
+   is accepted so that the loader treats it as it treats the same file on disk:
+   in a package directory it draws the warning RIDL-417
+   (`unsupported-source-file`) and is not compiled. A lone `.rxdl` or `.rmdl`
+   file in single-file mode is a load error that names the extension, whether or
+   not an overlay replaces its text. Anything else is a `LoadError` and reaches
+   the agent as a tool error.
 8. **`ridl_references` and `ridl_dependencies` count rsdl component uses**
    (design §4.4, approved 2026-10-03). Components exist only in the lowered
    system (`WorkspaceOutput.system`), not in the package IR. Each named,
@@ -208,7 +220,7 @@ From the design's §10. The numbers are the decisions that reject them.
   call. This is accepted until decision 1's measurement condition is met.
 - An agent that passes a file inside a workspace member checks the member inside
   its workspace, and sees the diagnostics of the member's files only (decision
-  2, as ADR-0026 amends it).
+  2, as ADR-0026 amends it), except that root release refusals are retained.
 - `ridl_references` and `ridl_dependencies` see rsdl uses only for the
   components that the workspace's `system` lists, which is also the set
   `ridl diff` and the IR dump see. A workspace with no lowered system gets the

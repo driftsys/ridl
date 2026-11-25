@@ -2189,6 +2189,7 @@ dependencies = [
  "rowan",
  "salsa",
  "serde_json",
+ "toml",
 ]
 
 [[package]]
