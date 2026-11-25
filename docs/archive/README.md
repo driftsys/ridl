@@ -1084,3 +1084,21 @@ provenance. Nothing here is normative — the current references live in
   are [ADR-0035](../decisions/ADR-0035-authoring-skill-and-evals.md),
   [the authoring skill design record](../design/authoring-skill.md) and the
   amended [ADR-0005](../decisions/ADR-0005-agent-enablement.md).
+- **2026-11-25-toolchain-pin-design.md** and
+  **2026-11-25-toolchain-pin-plan.md** — the design/plan pair for pinning the
+  `ridl` release per workspace (driftsys/ridl#1476): the `ridl-version` key and
+  its four diagnostics, `ridl toolchain install`, `list` and `which`, the
+  versioned install scripts and the extension's per-root binary selection.
+  Archived verbatim on 2026-11-25, after the implementation tests passed on the
+  development branch (pull request driftsys/ridl#1479). This is not a merge or
+  release claim. The plan's tasks and code listings are not a description of the
+  as-built code. The durable records are
+  [ADR-0036](../decisions/ADR-0036-workspace-toolchain-pins.md),
+  [the toolchain directory record](../design/toolchain-directory.md),
+  [the release pin chapter](../book/release-pin.md), the 2026-11-25 amendments
+  of [ADR-0002](../decisions/ADR-0002-module-system.md),
+  [ADR-0010](../decisions/ADR-0010-cli-conventions.md),
+  [ADR-0024](../decisions/ADR-0024-lint-registry-and-levels.md) and
+  [ADR-0025](../decisions/ADR-0025-workspace-aware-mcp-tools.md), and
+  [the distribution technote](../technotes/toolchain-distribution.md). Deferred
+  items are tracked in driftsys/ridl#1477 and driftsys/ridl#1478.

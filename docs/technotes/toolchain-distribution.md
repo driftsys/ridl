@@ -105,7 +105,11 @@ whitespace, and remove one leading `editor-v` or `v`. Absent or blank input uses
 the crate version. The release workflow supplies the `editor-v*` tag, so both
 binaries report its unprefixed version. `ridl --version`, LSP `serverInfo` and
 MCP server info share that display string. Pin checks use the crate version if
-the display string is not a plain release. See
+the display string is not a plain release. A development build of `main` reports
+the previous release until the release commit bumps it, so a debug build reads
+the environment variable `RIDL_TEST_RUNNING_RELEASE` as the running release in
+integration tests (`ridl` takes its running release from `ridlc`). The override
+is compiled out of release builds. See
 [workspace release pins](../book/release-pin.md).
 
 ## Versioned toolchains
