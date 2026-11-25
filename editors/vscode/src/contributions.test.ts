@@ -121,3 +121,12 @@ test("auto_install_is_application_scoped_and_trust_is_limited", () => {
 test("manifest_workspace_activation_enables_pin_actions", () => {
   assert.ok(readJson("package.json").activationEvents?.includes("workspaceContains:**/ridl.toml"));
 });
+
+test("the manifest enables the install-to-PATH command only in a trusted workspace", () => {
+  const manifest = readJson("package.json");
+  const command = manifest.contributes.commands.find(
+    (entry: { command: string }) => entry.command === "ridl.installToPath",
+  );
+  assert.ok(command, "an install-to-PATH command entry");
+  assert.equal(command.enablement, "isWorkspaceTrusted");
+});

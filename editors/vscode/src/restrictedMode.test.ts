@@ -9,17 +9,20 @@ function missing(pin: string, manifest: string): WhichReport {
   return { schema: 1, manifest, running: "0.24.0", status: "missing", pin, path: null, source: null, diagnostic: null };
 }
 
-function harness(reports: Record<string, WhichReport>, bundled: string | null = BUNDLED) {
+function harness(reports: Record<string, WhichReport | Error>, bundled: string | null = BUNDLED) {
   const whichCommands: string[] = [];
   const installs: [string, string, string][] = [];
   const prompts: [string, readonly string[]][] = [];
   const answers: ((button: string | undefined) => void)[] = [];
+  const logs: string[] = [];
   let trustCalls = 0;
   const prompter = new RestrictedPrompts(
     {
       async which(command: string, directory: string) {
         whichCommands.push(command);
-        return reports[directory];
+        const report = reports[directory];
+        if (report instanceof Error) throw report;
+        return report;
       },
       async install(command: string, pin: string, directory: string) {
         installs.push([command, pin, directory]);
@@ -35,10 +38,10 @@ function harness(reports: Record<string, WhichReport>, bundled: string | null = 
       async manageTrust() {
         trustCalls++;
       },
-      log() {},
+      log: (message) => logs.push(message),
     },
   );
-  return { prompter, whichCommands, installs, prompts, answers, trust: () => trustCalls };
+  return { prompter, whichCommands, installs, prompts, answers, logs, trust: () => trustCalls };
 }
 
 test("restricted_missing_release_prompts_without_installing", async () => {
@@ -94,6 +97,21 @@ test("restricted_without_a_bundle_runs_nothing", async () => {
   await h.prompter.check("/a");
   assert.deepEqual(h.whichCommands, []);
   assert.deepEqual(h.prompts, []);
+  assert.deepEqual(h.logs, [
+    "Restricted Mode: the extension has no bundled ridl binary, so no release check runs.",
+  ]);
+});
+
+test("restricted_which_failure_is_logged_and_checking_continues", async () => {
+  const h = harness({
+    "/broken": new Error("which exploded"),
+    "/a": missing("0.23.1", "/a/ridl.toml"),
+  });
+  await h.prompter.check("/broken");
+  assert.deepEqual(h.logs, ["Restricted Mode: Error: which exploded"]);
+  assert.deepEqual(h.prompts, []);
+  await h.prompter.check("/a");
+  assert.equal(h.prompts.length, 1);
 });
 
 test("restricted_compatible_and_invalid_do_not_prompt", async () => {

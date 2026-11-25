@@ -34,7 +34,8 @@
       {
         "command": "ridl.installToPath",
         "title": "Install ridl to PATH",
-        "category": "RIDL"
+        "category": "RIDL",
+        "enablement": "isWorkspaceTrusted"
       }
     ],
     "chatSkills": [

@@ -94,6 +94,7 @@ class FakeClient {
 }
 let provider: any, mcpChanges = 0;
 let trusted = true;
+let outputChannels = 0;
 let findFilesResult: ReturnType<typeof uri>[] = [uri("/work/ridl.toml")];
 const whichBinaries: string[] = [];
 const restrictedPrompts: string[][] = [];
@@ -129,7 +130,10 @@ const host: any = {
   },
   ProgressLocation: { Notification: 15 },
   window: {
-    createOutputChannel: () => ({ warn() {}, error() {}, info() {}, dispose() {} }),
+    createOutputChannel: () => {
+      outputChannels++;
+      return { warn() {}, error() {}, info() {}, dispose() {} };
+    },
     showWarningMessage: async () => undefined,
     showErrorMessage: async () => undefined,
     showInformationMessage: async (message: string, ...buttons: string[]) => {
@@ -367,6 +371,7 @@ async function tickUntil(predicate: () => boolean): Promise<void> {
 }
 function resetHost(): void {
   listeners.clear();
+  outputChannels = 0;
   process.env.PATH = pathDirectory;
   trusted = true;
   findFilesResult = [uri("/work/ridl.toml")];
@@ -764,6 +769,30 @@ test("granting_trust_runs_normal_activation", async () => {
     assert.notEqual(provider, undefined);
     await fire("trust", undefined);
     assert.equal(clients.length, 1, "a second grant event does not activate twice");
+    assert.equal(outputChannels, 1, "a trust grant reuses the Restricted Mode output channel");
+  } finally {
+    await extension.deactivate();
+    cleanup();
+  }
+});
+
+test("restricted_mode_checks_no_document_after_trust_is_granted", async () => {
+  resetHost();
+  trusted = false;
+  missingRelease = false;
+  findFilesResult = [];
+  documents.splice(0);
+  const { extensionPath, cleanup } = bundledExtension();
+  try {
+    await extension.activate(restrictedContext(extensionPath));
+    trusted = true;
+    await fire("trust", undefined);
+    missingRelease = true;
+    const opened = document("/work/a.ridl");
+    documents.push(opened);
+    await fire("open", opened);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(restrictedPrompts, [], "the Restricted Mode check no longer runs");
   } finally {
     await extension.deactivate();
     cleanup();
