@@ -5,7 +5,8 @@
 //! `ridl fmt` formats `.typl`, `.ridl` and `.rsdl` files, resolving the width
 //! from `.editorconfig` per file. The exit
 //! code is 0 clean, 1 on a diagnostic error (or, for `fmt --check`, a file that
-//! would change), and 2 on a release refusal, input/output or usage error.
+//! would change), and 2 on a release refusal that is not handed off to another release, or an
+//! input/output or usage error.
 //!
 //! `ridl diff` compares two IR snapshots or source trees through the
 //! `ridl-diff` engine. It carries its own exit contract — 0 compatible
@@ -173,8 +174,8 @@ enum Command {
     },
     /// Run the property suite over a workspace: the range self-corpora and the
     /// contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on
-    /// a self-corpus failure or an evaluation error, 2 on a release refusal or
-    /// a compile error.
+    /// a self-corpus failure or an evaluation error, 2 on a release refusal that
+    /// is not handed off to another release, or a compile error.
     Test {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -226,7 +227,8 @@ enum Command {
     /// none and write the root `instances.lock`; with `--rename` or
     /// `--retire`, rewrite entries in place instead. Exit 0 when the files
     /// are written or nothing changes, 1 on a diagnostic error, 2 on a release
-    /// refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the
+    /// refusal that is not handed off to another release, a bad flag or a path
+    /// or I/O failure. `ridl lock merge` is the
     /// git merge driver for both files.
     #[command(args_conflicts_with_subcommands = true)]
     Lock {
@@ -313,7 +315,8 @@ enum Command {
     /// removed; files and hidden entries are left. Exit 0 when `vendor/` was
     /// written or there was nothing to change, 1 on a diagnostic error
     /// (`vendor/` is left untouched; `ridl.lock` may be updated), 2 on a
-    /// release refusal, missing or unreadable path, a fetch failure, or an I/O failure. With
+    /// release refusal that is not handed off to another release, missing or
+    /// unreadable path, a fetch failure, or an I/O failure. With
     /// `--check`, compare `vendor/` with the imports and `ridl.lock` instead,
     /// writing nothing.
     Vendor {
@@ -324,7 +327,8 @@ enum Command {
         /// Compare `vendor/` with `[imports]` and `ridl.lock` instead of
         /// writing: no network, no write. Exit 0 when `vendor/` matches, 1
         /// on drift or another ordinary diagnostic error, 2 on a release
-        /// refusal or a missing or unreadable path.
+        /// refusal that is not handed off to another release, or a missing or
+        /// unreadable path.
         #[arg(long)]
         check: bool,
     },
@@ -439,7 +443,8 @@ fn run_toolchain(command: ToolchainCommand) -> ExitCode {
             }
             ToolchainCommand::Uninstall { version } => {
                 let release = parse_release(&version).filter(|v| *v >= MIN_PINNABLE_RELEASE).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("release must be MAJOR.MINOR.PATCH at or above {MIN_PINNABLE_RELEASE}")))?;
-                match toolchain::uninstall(&root, release, &std::env::current_exe()?)? {
+                match toolchain::uninstall(&root, release, std::env::current_exe().ok().as_deref())?
+                {
                     Some(removed) => Ok((0, format!("{}\n", removed.display()))),
                     None => {
                         let versions = root.join("versions");
@@ -905,8 +910,9 @@ fn report_diff_side_error(error: ridlc::DiffSideError) -> ExitCode {
         ridlc::DiffSideError::Compile {
             diagnostics,
             sources,
+            hand_off,
         } => {
-            if let Some(code) = handoff::refusal(&diagnostics, &sources) {
+            if hand_off && let Some(code) = handoff::refusal(&diagnostics, &sources) {
                 return code;
             }
             errprint!("{}", render(&diagnostics, &sources));

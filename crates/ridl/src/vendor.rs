@@ -10,8 +10,9 @@
 //! loaded units. One line per change goes to stdout, diagnostics go to
 //! stderr (ADR-0010 decision 2). The exit codes follow ADR-0010 decision 1:
 //! 0 when `vendor/` was written or there was nothing to change, 1 on any
-//! ordinary diagnostic error, 2 on a release refusal, a missing path, a path with no manifest, a fetch
-//! failure (MANI-101), or an I/O failure. Nothing in `vendor/` changes on
+//! ordinary diagnostic error, 2 on a release refusal that is not handed off to
+//! another release, a missing path, a path with no manifest, a fetch failure
+//! (MANI-101), or an I/O failure. Nothing in `vendor/` changes on
 //! exit 1 or on a fetch failure.
 //!
 //! `ridl vendor --check` ([`run_check`]) compares `vendor/` with the
@@ -56,13 +57,13 @@ pub fn run(path: &Path) -> ExitCode {
             None => diagnostic.severity == Severity::Error,
         })
     };
-    // A fetch failure means the command could not answer (exit 2); any other
-    // error is a negative answer (exit 1). Nothing is written in either case.
     if output.diagnostics.iter().any(ridl_core::is_release_refusal)
         && let Some(code) = crate::handoff::refusal(&output.diagnostics, &output.sources)
     {
         return code;
     }
+    // A fetch failure means the command could not answer (exit 2); any other
+    // error is a negative answer (exit 1). Nothing is written in either case.
     let refused = if output.diagnostics.iter().any(ridl_core::is_release_refusal)
         || has_error(Some(DiagCode::MANI_101))
     {

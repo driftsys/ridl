@@ -32,6 +32,7 @@ pub fn diff(input: &DiffInput) -> Result<serde_json::Value, ToolError> {
         ridlc::DiffSideError::Compile {
             diagnostics,
             sources,
+            ..
         } => ToolError::WithData {
             message: format!("the {side} side does not compile"),
             data: serde_json::json!({ "diagnostics": ridl_core::diag::to_json(&diagnostics, &sources) }),

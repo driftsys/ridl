@@ -12,22 +12,34 @@ use std::{
 /// when `<root>/versions` or the entry does not exist. The entry is renamed to a
 /// stage name first, so a reader never sees a half-removed directory, and a
 /// symbolic link is removed without following it; on Windows a directory link
-/// is removed with `remove_dir`. The release that `running_exe`
-/// belongs to is refused.
-pub fn uninstall(root: &Path, release: Release, running_exe: &Path) -> io::Result<Option<PathBuf>> {
+/// is removed with `remove_dir`. The release that `running_exe` belongs to is
+/// refused; without a running executable path the check is skipped. An absent
+/// entry creates no lock file.
+pub fn uninstall(
+    root: &Path,
+    release: Release,
+    running_exe: Option<&Path>,
+) -> io::Result<Option<PathBuf>> {
     let versions = match root.join("versions").canonicalize() {
         Ok(versions) => versions,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
     };
     let entry = versions.join(release.to_string());
-    if let (Ok(running), Ok(entry)) = (running_exe.canonicalize(), entry.canonicalize())
+    if let (Some(Ok(running)), Ok(entry)) =
+        (running_exe.map(Path::canonicalize), entry.canonicalize())
         && running.starts_with(&entry)
     {
         return Err(io::Error::other(format!(
             "ridl {release} at {} is the running release; run another ridl to remove it",
             entry.display()
         )));
+    }
+    // An absent entry needs no lock; the entry is checked again under the lock.
+    match fs::symlink_metadata(&entry) {
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
     }
     let lock = OpenOptions::new()
         .read(true)

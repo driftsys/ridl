@@ -407,6 +407,19 @@ fn mcp_hands_off_before_reading_standard_input() {
 }
 
 #[test]
+fn mcp_hands_off_from_a_subdirectory_of_the_workspace() {
+    let fixture = Fixture::new();
+    let ws = fixture.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    let sub = ws.join("out");
+    fake_release(&fixture.toolchain(), "0.23.4");
+    let out = fixture.run_with_stdin(&sub, &fixture.toolchain(), &["mcp"], &[], b"probe\n");
+    assert_eq!(out.status.code(), Some(7), "{out:?}");
+    assert_eq!(argv(&fixture), ["mcp"]);
+    assert_eq!(fixture.recorded("stdin"), b"probe\n");
+}
+
+#[test]
 fn mcp_never_installs_and_respects_the_guard() {
     let a = Fixture::new();
     let ws = a.base.path().join("ws");
@@ -561,4 +574,68 @@ fn auto_install_failure_prints_the_error_before_the_refusal() {
         "{text}"
     );
     assert_eq!(out.status.code(), Some(2));
+}
+
+/// A snapshot input never hands off: an unreadable snapshot under a workspace
+/// that pins another release reports the refusal and exits 2, runs no installed
+/// release, and installs nothing, even with the opt-in set.
+#[test]
+fn an_unreadable_snapshot_input_never_hands_off_or_installs() {
+    let fixture = Fixture::new();
+    let ws = fixture.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    let snap = ws.join("snap");
+    fs::create_dir(&snap).unwrap();
+    let file = snap.join("p.ir.json");
+    fs::write(&file, "{}").unwrap();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o000)).unwrap();
+    if fs::read(&file).is_ok() {
+        eprintln!("skipped: the process is not bound by file permissions");
+        return;
+    }
+    fake_release(&fixture.toolchain(), "0.23.1");
+    let installable = fixture.base.path().join("installable");
+    fs::create_dir(&installable).unwrap();
+    let origin = origin_with(&installable, &["0.23.9"]);
+    let out = run_with_origin(
+        &fixture,
+        &ws,
+        &origin,
+        &["diff", "snap", "snap"],
+        &[("RIDL_TOOLCHAIN_AUTO_INSTALL", "1")],
+        b"",
+    );
+    assert_refusal(&out, "MANI-026");
+    assert!(fixture.record_is_empty(), "{out:?}");
+    assert!(!stderr(&out).contains("installing ridl"), "{out:?}");
+    assert!(!fixture.toolchain().join("versions/0.23.9").exists());
+}
+
+/// A selection that fails to read the toolchain directory is not an answer: the
+/// opt-in install is attempted, its error is printed, and the refusal follows.
+#[test]
+fn a_selection_error_under_the_opt_in_attempts_the_install_then_refuses() {
+    let fixture = Fixture::new();
+    let ws = fixture.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    fs::write(fixture.toolchain().join("versions"), "not a directory").unwrap();
+    let origin = origin_with(fixture.base.path(), &["0.23.1"]);
+    let out = run_with_origin(
+        &fixture,
+        &ws,
+        &origin,
+        &["check", "."],
+        &[("RIDL_TOOLCHAIN_AUTO_INSTALL", "1")],
+        b"",
+    );
+    let text = stderr(&out);
+    let lines: Vec<_> = text.lines().collect();
+    assert_eq!(lines[0], "installing ridl 0.23.1\u{2026}", "{text}");
+    assert!(lines[1].starts_with("error: "), "{text}");
+    assert!(
+        lines[2..].iter().any(|l| l.starts_with("error[MANI-026]")),
+        "{text}"
+    );
+    assert_eq!(out.status.code(), Some(2));
+    assert!(fixture.record_is_empty());
 }

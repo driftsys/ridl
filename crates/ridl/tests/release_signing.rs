@@ -59,7 +59,11 @@ const DEFAULT: Setup = Setup {
     key: "fake-key",
     password: "fake-password",
     archives: true,
-    mod_rs: "pub const RELEASE_PUBLIC_KEY: &str = \"RWQexamplekey\";\n",
+    mod_rs: concat!(
+        "pub const RELEASE_PUBLIC_KEY: &str = \"",
+        "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
+        "\";\n"
+    ),
 };
 
 // `minisign` is replaced by a program that records its arguments, one per
@@ -191,6 +195,46 @@ fn signing_step_fails_without_the_secret() {
     );
     assert!(!run.record.exists());
     assert!(run.minisig_files().is_empty());
+}
+
+#[test]
+fn signing_step_fails_without_the_key_password() {
+    let run = run(&Setup {
+        password: "",
+        ..DEFAULT
+    });
+    assert!(!run.output.status.success());
+    assert!(
+        run.stderr().contains("RIDL_RELEASE_SIGNING_KEY_PASSWORD"),
+        "{}",
+        run.stderr()
+    );
+    assert!(!run.record.exists());
+    assert!(run.minisig_files().is_empty());
+}
+
+#[test]
+fn signing_step_fails_when_the_public_key_is_not_a_minisign_key() {
+    for value in [
+        "not base64 !",
+        "RWQexamplekey",
+        // 42 bytes, but not the `Ed` algorithm.
+        "AAAf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
+    ] {
+        let mod_rs = format!("pub const RELEASE_PUBLIC_KEY: &str = \"{value}\";\n");
+        let run = run(&Setup {
+            mod_rs: &mod_rs,
+            ..DEFAULT
+        });
+        assert!(!run.output.status.success(), "{value}");
+        assert!(
+            run.stderr().contains("is not a minisign public key"),
+            "{value}: {}",
+            run.stderr()
+        );
+        assert!(!run.record.exists(), "{value}");
+        assert!(run.minisig_files().is_empty(), "{value}");
+    }
 }
 
 #[test]

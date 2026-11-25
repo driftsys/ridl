@@ -72,6 +72,10 @@ pub enum DiffSideError {
     Compile {
         diagnostics: Vec<Diagnostic>,
         sources: SourceMap,
+        /// Whether the command may hand a release refusal to another release.
+        /// Only a source input hands off: a refusal found while an input that
+        /// may be a snapshot could not be read does not.
+        hand_off: bool,
     },
 }
 
@@ -175,6 +179,7 @@ fn source_release_preflight(entry: &Path, overlays: &[Overlay]) -> Result<(), Di
             return Err(DiffSideError::Compile {
                 diagnostics: vec![diagnostic],
                 sources: root.sources,
+                hand_off: true,
             });
         }
     }
@@ -304,6 +309,7 @@ pub fn load_diff_side(
         return Err(DiffSideError::Compile {
             diagnostics,
             sources: output.sources,
+            hand_off: true,
         });
     }
     // Remote packages resolve local references and remain separate from the
@@ -329,14 +335,24 @@ pub fn load_diff_side(
 
 /// Gives a root release refusal precedence over an input I/O error: for an error
 /// from listing or reading the entries of a snapshot directory, returns the
-/// refusal of [`source_release_preflight`] when there is one, else `error`.
+/// refusal of [`source_release_preflight`] when there is one, else `error`. The
+/// refusal does not hand off: the input may be a snapshot, which no release
+/// selection applies to.
 fn refusal_before_io(entry: &Path, overlays: &[Overlay], error: DiffSideError) -> DiffSideError {
     match error {
         DiffSideError::SnapshotDirectory { .. }
         | DiffSideError::SnapshotMetadata { .. }
         | DiffSideError::SnapshotRead { .. }
         | DiffSideError::NestedRead { .. } => match source_release_preflight(entry, overlays) {
-            Err(refusal @ DiffSideError::Compile { .. }) => refusal,
+            Err(DiffSideError::Compile {
+                diagnostics,
+                sources,
+                ..
+            }) => DiffSideError::Compile {
+                diagnostics,
+                sources,
+                hand_off: false,
+            },
             _ => error,
         },
         error => error,
@@ -932,6 +948,111 @@ mod tests {
             error.to_string(),
             format!("cannot read {}: {io}", nested.display())
         );
+    }
+
+    /// A root release refusal found while a snapshot input could not be read
+    /// replaces the input error and never hands off, for the metadata, read
+    /// and nested-read errors.
+    #[cfg(unix)]
+    #[test]
+    fn a_root_refusal_found_beside_an_unreadable_snapshot_input_does_not_hand_off() {
+        use std::os::unix::fs::PermissionsExt;
+        for case in ["metadata", "read", "nested"] {
+            let ws = tempfile::tempdir().unwrap();
+            fs::write(
+                ws.path().join("ridl.toml"),
+                "[package]\nname = \"p\"\nversion = \"1.0.0\"\nridl-version = \"99.0.0\"\n",
+            )
+            .unwrap();
+            let snap = ws.path().join("snap");
+            fs::create_dir(&snap).unwrap();
+            let locked = match case {
+                "metadata" => {
+                    let private = snap.join("private");
+                    fs::create_dir(&private).unwrap();
+                    let target = snapshot(&private);
+                    std::os::unix::fs::symlink(target, snap.join("p.ir.json")).unwrap();
+                    private
+                }
+                "read" => snapshot(&snap),
+                _ => {
+                    let nested = snap.join("nested");
+                    fs::create_dir(&nested).unwrap();
+                    nested
+                }
+            };
+            let original = fs::metadata(&locked).unwrap().permissions();
+            fs::set_permissions(&locked, fs::Permissions::from_mode(0o000)).unwrap();
+            let readable = if locked.is_dir() {
+                fs::read_dir(&locked).is_ok()
+            } else {
+                fs::read(&locked).is_ok()
+            };
+            let result = load(&snap, &[]);
+            fs::set_permissions(&locked, original).unwrap();
+            if readable {
+                eprintln!("skipped: the process is not bound by permissions");
+                return;
+            }
+            let Err(DiffSideError::Compile {
+                diagnostics,
+                hand_off,
+                ..
+            }) = result
+            else {
+                panic!("{case}: expected the root refusal, got {result:?}")
+            };
+            assert_eq!(diagnostics[0].code, ridl_core::DiagCode::MANI_026, "{case}");
+            assert!(!hand_off, "{case}");
+        }
+    }
+
+    /// A directory that can be searched but not listed holds a manifest whose
+    /// pin is refused; the refusal replaces the listing error.
+    #[cfg(unix)]
+    #[test]
+    fn a_root_refusal_replaces_a_snapshot_directory_listing_error() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("ridl.toml"),
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\nridl-version = \"99.0.0\"\n",
+        )
+        .unwrap();
+        let original = fs::metadata(dir.path()).unwrap().permissions();
+        fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o111)).unwrap();
+        let listable = fs::read_dir(dir.path()).is_ok();
+        let result = load(dir.path(), &[]);
+        fs::set_permissions(dir.path(), original).unwrap();
+        if listable {
+            eprintln!("skipped: the process is not bound by directory permissions");
+            return;
+        }
+        let Err(DiffSideError::Compile {
+            diagnostics,
+            hand_off,
+            ..
+        }) = result
+        else {
+            panic!("expected the root refusal, got {result:?}")
+        };
+        assert_eq!(diagnostics[0].code, ridl_core::DiagCode::MANI_026);
+        assert!(!hand_off);
+    }
+
+    /// A source input's root refusal may hand off.
+    #[test]
+    fn a_root_refusal_of_a_source_input_hands_off() {
+        let (dir, _) = source();
+        fs::write(
+            dir.path().join("ridl.toml"),
+            "[package]\nname = \"p\"\nversion = \"1.0.0\"\nridl-version = \"99.0.0\"\n",
+        )
+        .unwrap();
+        let Err(DiffSideError::Compile { hand_off, .. }) = load(dir.path(), &[]) else {
+            panic!("expected the root refusal")
+        };
+        assert!(hand_off);
     }
 
     /// A directory that can be listed but not searched holds entries whose

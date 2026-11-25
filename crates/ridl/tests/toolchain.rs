@@ -1361,19 +1361,19 @@ fn toolchain_uninstall_removes_complete_and_damaged_entries() {
     }
     let canonical_versions = versions.canonicalize().unwrap();
     let before_0_23_1 = directory_bytes(&canonical_versions.join("0.23.1"));
-    let removed = uninstall(root, release("0.23.0"), &running()).unwrap();
+    let removed = uninstall(root, release("0.23.0"), Some(&running())).unwrap();
     assert_eq!(removed, Some(canonical_versions.join("0.23.0")));
     assert!(!canonical_versions.join("0.23.0").exists());
     assert_eq!(
-        uninstall(root, release("0.23.2"), &running()).unwrap(),
+        uninstall(root, release("0.23.2"), Some(&running())).unwrap(),
         Some(canonical_versions.join("0.23.2"))
     );
     assert_eq!(
-        uninstall(root, release("0.23.3"), &running()).unwrap(),
+        uninstall(root, release("0.23.3"), Some(&running())).unwrap(),
         Some(canonical_versions.join("0.23.3"))
     );
     assert_eq!(
-        uninstall(root, release("0.23.4"), &running()).unwrap(),
+        uninstall(root, release("0.23.4"), Some(&running())).unwrap(),
         None
     );
     assert_eq!(
@@ -1390,7 +1390,7 @@ fn toolchain_uninstall_removes_complete_and_damaged_entries() {
     let empty_root = TempDir::new().unwrap();
     let empty_root = empty_root.path();
     assert_eq!(
-        uninstall(empty_root, release("0.23.0"), &running()).unwrap(),
+        uninstall(empty_root, release("0.23.0"), Some(&running())).unwrap(),
         None
     );
     assert!(!empty_root.join("versions").exists());
@@ -1407,7 +1407,7 @@ fn toolchain_uninstall_removes_a_symlink_entry_without_following_it() {
     fs::create_dir(&versions).unwrap();
     let canonical_versions = versions.canonicalize().unwrap();
     std::os::unix::fs::symlink(outside, versions.join("0.23.0")).unwrap();
-    let removed = uninstall(root.path(), release("0.23.0"), &running()).unwrap();
+    let removed = uninstall(root.path(), release("0.23.0"), Some(&running())).unwrap();
     assert_eq!(removed, Some(canonical_versions.join("0.23.0")));
     assert!(std::fs::symlink_metadata(canonical_versions.join("0.23.0")).is_err());
     assert_eq!(fs::read(outside.join("sentinel")).unwrap(), b"keep");
@@ -1431,8 +1431,65 @@ fn toolchain_uninstall_refuses_the_running_release() {
     assert_eq!(cli.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&cli.stderr).contains("running"));
     assert_eq!(directory_bytes(&dir), before);
-    assert!(uninstall(root.path(), release("0.23.0"), &copy).is_err());
+    assert!(uninstall(root.path(), release("0.23.0"), Some(&copy)).is_err());
     assert_eq!(directory_bytes(&dir), before);
+}
+
+#[test]
+fn toolchain_uninstall_of_an_absent_release_creates_no_lock_file() {
+    let root = TempDir::new().unwrap();
+    installed(root.path(), "0.23.0");
+    let versions = root.path().join("versions").canonicalize().unwrap();
+    assert_eq!(
+        uninstall(root.path(), release("0.23.4"), Some(&running())).unwrap(),
+        None
+    );
+    assert!(names_starting_with(&versions, ".0.23.4.lock").is_empty());
+}
+
+#[test]
+fn toolchain_uninstall_without_a_running_executable_path_still_removes() {
+    let root = TempDir::new().unwrap();
+    installed(root.path(), "0.23.0");
+    let versions = root.path().join("versions").canonicalize().unwrap();
+    assert_eq!(
+        uninstall(root.path(), release("0.23.0"), None).unwrap(),
+        Some(versions.join("0.23.0"))
+    );
+    assert!(!versions.join("0.23.0").exists());
+}
+
+/// A removal that fails part way leaves no partly removed release under its own
+/// name: the entry was renamed to a stage before its contents were removed.
+#[cfg(unix)]
+#[test]
+fn toolchain_uninstall_renames_the_entry_before_removing_it() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = TempDir::new().unwrap();
+    installed(root.path(), "0.23.0");
+    let versions = root.path().join("versions").canonicalize().unwrap();
+    let locked = versions.join("0.23.0/locked");
+    fs::create_dir(&locked).unwrap();
+    fs::write(locked.join("file"), b"x").unwrap();
+    fs::set_permissions(&locked, fs::Permissions::from_mode(0o555)).unwrap();
+    let result = uninstall(root.path(), release("0.23.0"), Some(&running()));
+    let own_name_exists = versions.join("0.23.0").exists();
+    let stages = names_starting_with(&versions, ".tmp-0.23.0-");
+    for stage in &stages {
+        let _ = fs::set_permissions(
+            versions.join(stage).join("locked"),
+            fs::Permissions::from_mode(0o755),
+        );
+    }
+    if result.is_ok() {
+        eprintln!("skipped: the process is not bound by directory permissions");
+        return;
+    }
+    assert!(
+        !own_name_exists,
+        "the failed removal left a partial release"
+    );
+    assert_eq!(stages.len(), 1);
 }
 
 #[test]

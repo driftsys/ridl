@@ -550,6 +550,24 @@ fn release_describe_refusal_precedes_a_missing_input() {
     }
 }
 
+/// The refusal is found from the input's own nearest existing ancestor, not
+/// from the working directory: the command runs outside the pinned workspace.
+#[test]
+fn release_describe_refusal_is_found_from_the_input_not_the_working_directory() {
+    let pinned = workspace("\"0.24.0\"");
+    fs::create_dir(pinned.path().join("gone")).unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    for input in ["missing.catalog.binfb", "gone/missing.catalog.binfb"] {
+        let path = pinned.path().join(input);
+        let refused = run(
+            outside.path(),
+            &["describe", path.to_str().unwrap()],
+            "0.23.2",
+        );
+        assert_refusal(&refused, "MANI-026");
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn release_diff_refusal_precedes_snapshot_input_errors() {

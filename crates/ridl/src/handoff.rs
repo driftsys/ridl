@@ -42,11 +42,16 @@ enum Install {
 /// nonempty value of `RIDL_TEST_RELEASE_ORIGIN` or `RIDL_TEST_RELEASE_PUBLIC_KEY`,
 /// which integration tests use; a release build has no override.
 pub(crate) fn release_origin() -> (String, String) {
-    #[allow(unused_mut)]
+    origin_with(cfg!(debug_assertions), |name| std::env::var(name).ok())
+}
+
+/// The origin and key, where `read` reads a variable and `allow_test_seams`
+/// says whether the two test variables apply. Without the seams the constants
+/// are returned whatever `read` holds.
+fn origin_with(allow_test_seams: bool, read: impl Fn(&str) -> Option<String>) -> (String, String) {
     let mut origin = (RELEASE_BASE_URL.to_owned(), RELEASE_PUBLIC_KEY.to_owned());
-    #[cfg(debug_assertions)]
-    {
-        let read = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
+    if allow_test_seams {
+        let read = |name: &str| read(name).filter(|v| !v.is_empty());
         if let Some(value) = read("RIDL_TEST_RELEASE_ORIGIN") {
             origin.0 = value;
         }
@@ -289,6 +294,27 @@ mod tests {
         let text = format!("[package]\nname = 'p'\nridl-version = '{pin}'\n");
         let file = sources.file_id(name, &text);
         check_release_pin(file, &text, release("0.22.5")).expect("a refusal")
+    }
+
+    #[test]
+    fn a_release_build_ignores_the_test_origin_and_key() {
+        let set = |name: &str| Some(format!("{name}-value"));
+        assert_eq!(
+            origin_with(false, set),
+            (RELEASE_BASE_URL.to_owned(), RELEASE_PUBLIC_KEY.to_owned())
+        );
+        assert_eq!(
+            origin_with(true, set),
+            (
+                "RIDL_TEST_RELEASE_ORIGIN-value".to_owned(),
+                "RIDL_TEST_RELEASE_PUBLIC_KEY-value".to_owned()
+            )
+        );
+        // An empty value is no override.
+        assert_eq!(
+            origin_with(true, |_| Some(String::new())),
+            (RELEASE_BASE_URL.to_owned(), RELEASE_PUBLIC_KEY.to_owned())
+        );
     }
 
     #[test]
