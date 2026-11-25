@@ -394,6 +394,29 @@ fn toolchain_target_rejects_unpublished_triples() {
     );
 }
 
+#[test]
+fn toolchain_select_installed_requires_every_pin() {
+    let t = TempDir::new().unwrap();
+    installed(t.path(), "0.23.3");
+    let bin_0_23_6 = installed(t.path(), "0.23.6");
+    installed(t.path(), "0.24.0");
+    installed(t.path(), "0.23.9");
+    fs::remove_file(t.path().join("versions/0.23.9/.complete")).unwrap();
+    let select = |pins: &[&str]| {
+        let pins: Vec<_> = pins.iter().map(|p| release(p)).collect();
+        select_installed(t.path(), &pins, TARGET).unwrap()
+    };
+    assert_eq!(
+        select(&["0.23.1", "0.23.4"]),
+        Some((release("0.23.6"), bin_0_23_6.clone()))
+    );
+    assert_eq!(select(&["0.23.7"]), None);
+    // 0.24.0 satisfies the second pin and 0.23.6 the first; none satisfies both.
+    assert_eq!(select(&["0.23.1", "0.24.0"]), None);
+    assert_eq!(select(&["0.23.1"]), Some((release("0.23.6"), bin_0_23_6)));
+    assert_eq!(select(&[]), None);
+}
+
 #[allow(dead_code)]
 mod toolchain_support;
 use toolchain_support as support;

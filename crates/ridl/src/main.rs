@@ -56,6 +56,7 @@ use std::process::ExitCode;
 mod out;
 mod baseline;
 mod catalogs;
+mod handoff;
 mod lock;
 mod podbuf_padding;
 mod property;
@@ -636,6 +637,9 @@ fn release_preflight(entries: &[PathBuf]) -> std::io::Result<Option<(Vec<Diagnos
 fn release_preflight_exit(entries: &[PathBuf]) -> Option<ExitCode> {
     match release_preflight(entries) {
         Ok(Some((diagnostics, sources))) => {
+            if let Some(code) = handoff::refusal(&diagnostics, &sources) {
+                return Some(code);
+            }
             errprint!("{}", render(&diagnostics, &sources));
             Some(ExitCode::from(2))
         }
@@ -891,7 +895,12 @@ fn report_diff_side_error(error: ridlc::DiffSideError) -> ExitCode {
         ridlc::DiffSideError::Compile {
             diagnostics,
             sources,
-        } => errprint!("{}", render(&diagnostics, &sources)),
+        } => {
+            if let Some(code) = handoff::refusal(&diagnostics, &sources) {
+                return code;
+            }
+            errprint!("{}", render(&diagnostics, &sources));
+        }
         error => errprintln!("error: {error}"),
     }
     ExitCode::from(2)
@@ -981,6 +990,9 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
     };
 
     if run.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        if let Some(code) = handoff::refusal(&run.diagnostics, &run.sources) {
+            return code;
+        }
         return finish_check(run, format);
     }
 
@@ -1077,7 +1089,12 @@ fn run_build(
     match run {
         Err(BuildFailure::Exit(code)) => code,
         Err(BuildFailure::Io(err)) => finish(Err(err)),
-        Ok(run) => finish(Ok(run)),
+        Ok(run) => {
+            if let Some(code) = handoff::refusal(&run.diagnostics, &run.sources) {
+                return code;
+            }
+            finish(Ok(run))
+        }
     }
 }
 

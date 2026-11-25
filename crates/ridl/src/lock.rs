@@ -124,6 +124,9 @@ pub fn run_lock(path: &Path, renames: &[String], retires: &[String]) -> ExitCode
         }
     };
     if output.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        if let Some(code) = crate::handoff::refusal(&output.diagnostics, &output.sources) {
+            return code;
+        }
         errprint!("{}", render(&output.diagnostics, &output.sources));
         return ExitCode::from(2);
     }

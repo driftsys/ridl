@@ -51,6 +51,16 @@ toml.workspace = true
 # Tokio runtime and blocks on it. No other subcommand is async.
 tokio.workspace = true
 
+# The hand-off on Windows runs the selected release inside a Job Object.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+  "Win32_System_Console",
+  "Win32_Security",
+] }
+
 [dev-dependencies]
 # Generates the in-memory key pairs that sign test fixtures; never signs a release.
 minisign = "0.10"

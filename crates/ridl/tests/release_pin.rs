@@ -59,10 +59,16 @@ fn tree(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     result
 }
 fn run(root: &Path, args: &[&str], running: &str) -> Output {
+    // An empty toolchain directory keeps a release installed on the machine
+    // from receiving the command, so a refusal is always printed.
+    let toolchain = tempfile::tempdir().unwrap();
     Command::new(BIN)
         .current_dir(root)
         .args(args)
         .env("RIDL_TEST_RUNNING_RELEASE", running)
+        .env("RIDL_TOOLCHAIN_DIR", toolchain.path())
+        .env_remove("RIDL_TOOLCHAIN_HANDOFF")
+        .env_remove("RIDL_TOOLCHAIN_AUTO_INSTALL")
         .output()
         .unwrap()
 }

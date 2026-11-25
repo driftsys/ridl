@@ -48,6 +48,65 @@ them numerically. It retains damaged entries for `list`, ignores temporary
 names, locks, symlinks, noncanonical names and version-named files. An absent
 versions directory is empty inventory; other read errors propagate.
 
+## Terminal hand-off
+
+The
+[release pin chapter](../book/release-pin.md#running-the-pinned-release-from-a-terminal)
+owns the user-visible rules. This section records how the binary applies them.
+The code is `crates/ridl/src/handoff.rs`, with `select_installed` in
+`selection.rs`.
+
+**Selection.** `select_installed(root, pins, target)` lists installed releases
+for the target, skips damaged entries, and returns the highest release that
+satisfies `compatible(release, pin)` for every pin, with the canonical path of
+its binary. No pins select nothing. The running binary is not a candidate
+because it already failed the pin.
+
+**Pins.** The hand-off runs where a command detects the refusal, before the
+command renders a diagnostic, writes a file or finishes. It reads no field
+beyond the diagnostics: every release refusal in the run has to be MANI-026, and
+each pin is parsed again from the text of the file that the diagnostic points
+to, with `parse_release_pin`. A diagnostic whose file text is missing, or any
+MANI-024 or MANI-025, ends the attempt. The pins are sorted and deduplicated.
+
+**Guard.** `RIDL_TOOLCHAIN_HANDOFF` is set for the child to the release that
+handed off. A process with the variable present, whatever its value, does not
+hand off.
+
+**Starting the child.** One function builds the command for both platforms: the
+selected binary, the arguments of the current process after the program name,
+and the guard variable. It sets no working directory and no stream, so the child
+inherits them. On Unix the process calls `exec`, so nothing remains of it and no
+output is produced. If `exec` returns, the process prints
+`error: could not run ridl <version> at <path>: <error>` and exits 2. On Windows
+the process creates a Job Object that kills its processes when the job closes,
+starts the child, assigns it to the job, ignores Ctrl+C for itself, waits, and
+exits with the child's exit code. A start failure prints the same message and
+exits 2. The Windows branch is not compiled by any gate; no Windows job exists
+yet.
+
+**Sites.** The hand-off is called from these places in the `ridl` binary, each
+after the refusal is known and before anything is written:
+
+- `ridl check`, before the report is rendered (text, JSON and SARIF).
+- `ridl build`, on the run that `ridlc` returns, before the result is printed.
+- The shared preflight of the root manifests, used by `describe`, `baseline` and
+  both root checks of `fmt`.
+- The report of a source side of `diff`, when the side failed to compile.
+- `ridl lock`, `ridl test`, `ridl vendor` and `ridl vendor --check`, on the
+  diagnostics of the frozen workspace load.
+
+`ridlc` keeps its refusals, and no site reads standard input.
+
+**Evidence.** `crates/ridl/tests/handoff.rs` runs each enforcing command against
+a workspace that has a broken `ridl.lock`, a broken `instances.lock`, an
+unreachable import and an output directory. It checks that the selected release
+receives the arguments, the working directory, the standard input and the guard,
+that the workspace tree and the toolchain root are unchanged, and that the home
+directory stays empty. Further tests cover the guard, the selection across two
+pins, a refusal that is not MANI-026, arguments and paths with spaces, and an
+`exec` failure.
+
 ## `which --json`, schema 1
 
 `ridl toolchain which [PATH] --json` defaults to the current directory. It reads

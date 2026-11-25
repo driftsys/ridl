@@ -58,6 +58,11 @@ pub fn run(path: &Path) -> ExitCode {
     };
     // A fetch failure means the command could not answer (exit 2); any other
     // error is a negative answer (exit 1). Nothing is written in either case.
+    if output.diagnostics.iter().any(ridl_core::is_release_refusal)
+        && let Some(code) = crate::handoff::refusal(&output.diagnostics, &output.sources)
+    {
+        return code;
+    }
     let refused = if output.diagnostics.iter().any(ridl_core::is_release_refusal)
         || has_error(Some(DiagCode::MANI_101))
     {
@@ -140,6 +145,9 @@ pub fn run_check(path: &Path) -> ExitCode {
         }
     };
     if loaded.diagnostics.iter().any(ridl_core::is_release_refusal) {
+        if let Some(code) = crate::handoff::refusal(&loaded.diagnostics, &loaded.sources) {
+            return code;
+        }
         errprint!("{}", render(&loaded.diagnostics, &loaded.sources));
         return ExitCode::from(2);
     }

@@ -104,8 +104,40 @@ targets without published archives.
 Text output is the absolute binary path on stdout for success, or a sentence on
 stderr for a negative answer. `--json` provides the
 [schema-1 selection report](../design/toolchain-directory.md#which---json-schema-1),
-including all status, nullability and exit mappings. Selecting a binary does not
-run it; invoke the returned path explicitly in terminal workflows.
+including all status, nullability and exit mappings. `which` selects a binary
+without running it; to run the pinned release from a terminal, see the next
+section.
+
+## Running the pinned release from a terminal
+
+When the running release refuses a root pin (MANI-026) and a compatible release
+is installed, `check`, `build`, `fmt`, `lock`, `baseline`, `test`, `vendor`,
+`describe` and the source inputs of `diff` run that release instead of printing
+the refusal. The running process replaces itself with the selected binary on
+Unix. On Windows it starts the binary, waits, and exits with the binary's exit
+code.
+
+The selected release is the highest complete, undamaged installed release that
+is compatible with every MANI-026 pin of the run. The running binary is never a
+candidate. `fmt` can report several pins when it walks several roots; one
+release has to satisfy all of them. When no installed release qualifies, the
+refusal is printed and the command exits 2 as before.
+
+The selected binary receives the same arguments, working directory and
+environment, and the same three standard streams, with one addition: the
+variable `RIDL_TOOLCHAIN_HANDOFF`, whose value is the release that handed off.
+The hand-off prints nothing, and the exit status and output are the selected
+release's. If the binary cannot be started, the message
+`error: could not run ridl <version> at <path>: <error>` is printed and the
+command exits 2.
+
+A process whose environment has `RIDL_TOOLCHAIN_HANDOFF`, with any value
+including an empty one, never hands off. This stops a chain of hand-offs.
+
+Only MANI-026 hands off. A run that reports MANI-024 or MANI-025 anywhere, even
+beside a MANI-026, prints its refusals and exits 2. `ridl toolchain` commands,
+`init`, `new`, `lock merge`, snapshot-only `diff`, standalone descriptors and
+`ridl lsp` never hand off. `ridl toolchain which` still selects without running.
 
 ## Editors and agent tools
 
