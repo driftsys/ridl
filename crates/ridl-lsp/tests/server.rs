@@ -8016,7 +8016,7 @@ fn release_publications(client: &Connection) -> Vec<lt::PublishDiagnosticsParams
             Message::Notification(n) => {
                 assert_ne!(
                     n.method, "window/showMessage",
-                    "unexpected window message: {}",
+                    "unexpected window/showMessage: {}",
                     n.params
                 );
             }
@@ -8421,6 +8421,56 @@ fn root_manifest_disk_event_uses_open_buffer() {
             .iter()
             .any(|p| p.uri == manifest && p.diagnostics.is_empty())
     );
+    shut_down(&client, 903);
+    server.join().unwrap().unwrap();
+}
+
+#[test]
+#[cfg(unix)]
+fn root_manifest_inspection_error_is_reported() {
+    let dir = TempDir::new("release-manifest-inspection-error");
+    let text = release_manifest("0.23.0");
+    let manifest_path = dir.write("ridl.toml", &text);
+    let manifest = uri_of(&manifest_path);
+    let source = uri_of(&dir.write("lib.typl", "package demo\ntype Value: integer\n"));
+    let (client, server) = start_release(uri_of(dir.path()), "0.23.2");
+    release_open(&client, &manifest, &text);
+    release_publications(&client);
+    assert!(hover_at(&client, 10, source.clone(), pos(1, 6)).is_some());
+
+    std::fs::remove_file(&manifest_path).unwrap();
+    std::os::unix::fs::symlink("ridl.toml", &manifest_path).unwrap();
+    let error = std::fs::metadata(&manifest_path).expect_err("the manifest symlink loops");
+    notify::<lt::notification::DidChangeWatchedFiles>(
+        &client,
+        lt::DidChangeWatchedFilesParams {
+            changes: vec![lt::FileEvent {
+                uri: manifest.clone(),
+                typ: lt::FileChangeType::CHANGED,
+            }],
+        },
+    );
+    let shown = show_messages_before_answer(&client, 11);
+    assert_eq!(
+        shown.len(),
+        1,
+        "manifest inspection errors must be shown: {shown:?}"
+    );
+    assert_eq!(shown[0].typ, lt::MessageType::ERROR);
+    assert!(shown[0].message.contains("could not reload"), "{shown:?}");
+    assert!(
+        shown[0].message.contains(manifest_path.to_str().unwrap()),
+        "{shown:?}"
+    );
+    assert!(shown[0].message.contains(&error.to_string()), "{shown:?}");
+
+    release_change(&client, &manifest, &text);
+    assert!(show_messages_before_answer(&client, 12).is_empty());
+    std::fs::remove_file(&manifest_path).unwrap();
+    std::fs::write(&manifest_path, &text).unwrap();
+    release_change(&client, &manifest, &text);
+    release_publications(&client);
+    assert!(hover_at(&client, 13, source, pos(1, 6)).is_some());
     shut_down(&client, 903);
     server.join().unwrap().unwrap();
 }

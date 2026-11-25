@@ -2550,10 +2550,10 @@ The server publishes root
 suspends source analysis while refused. Root manifest buffer open/change/close
 events and watched disk create/change/delete events reload the workspace; an
 open manifest buffer takes precedence only while the disk file exists. Deleting
-the disk manifest unloads the workspace and clears its diagnostics. Buffer edits
-do not reload it until the disk file is restored and a watched create event is
-received, including after a save. Open source text survives the reload. An
-unpinned valid root manifest offers the code action **Pin this workspace to ridl
+the disk manifest unloads the workspace and clears its diagnostics. Once the
+disk file is restored, a watched create event or a manifest buffer change
+reloads it. Open source text survives the reload. An unpinned valid root
+manifest offers the code action **Pin this workspace to ridl
 <running release>**, without a diagnostic.
 
 **Flags.** `--stdio` and `--clientProcessId=<PID>` are accepted and change

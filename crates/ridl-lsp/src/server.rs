@@ -463,16 +463,14 @@ impl ServerState {
         next.published = std::mem::take(&mut self.published);
         next.cancelled = std::mem::take(&mut self.cancelled);
         next.shown_load_error = self.shown_load_error.clone();
-        let result = if next
-            .root_manifest
-            .as_ref()
-            .is_some_and(|path| !path.is_file())
-        {
-            // A deleted root unloads the workspace. Keep its path and buffers
-            // so a later create or save can load it again.
-            Ok(())
-        } else {
-            next.load_workspace_data(dir, manifest_overlay)
+        let result = match next.root_manifest.as_ref().map(std::fs::metadata) {
+            Some(Err(error)) if error.kind() == io::ErrorKind::NotFound => {
+                // A deleted root unloads the workspace. Keep its path and buffers
+                // so a later create or buffer change can load it again.
+                Ok(())
+            }
+            Some(Err(error)) => Err(error),
+            _ => next.load_workspace_data(dir, manifest_overlay),
         };
         if result.is_ok() && next.loaded && !next.refused {
             for (path, text) in next.source_buffers.clone() {
