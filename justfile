@@ -2863,8 +2863,8 @@ gate-parity:
 
 # Run the ignored toolchain HTTP test first (requires a local TCP listener),
 # then fixture-release checks of both installers and the Deno ZIP verifier.
-# Bash uses file://; the optional PowerShell branch needs pwsh and a local
-# Python HTTP server because Invoke-WebRequest does not support file://.
+# Bash uses file://; the optional PowerShell branch needs pwsh and uses a local
+# Python HTTP server to exercise HTTP downloads through Net.WebRequest.
 install-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -3059,11 +3059,66 @@ install-check:
         if TEST_APPEAR="$root/versions/0.23.0" PATH="$scratch/mv:$PATH" RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh 2>"$scratch/appearing.err"; then return 1; fi
         test "$(cat "$root/versions/0.23.0/sentinel")" = preserve
         test "$(find "$root/versions/0.23.0" -mindepth 1 | wc -l | tr -d ' ')" = 1
+        grep -Fq "$root/versions/0.23.0" "$scratch/appearing.err"
         test ! -e "$dest/ridl"
         test -z "$(find "$root/versions" -name '.tmp-*')"
     }
+    install_removes_only_its_own_stale_script_stage() {
+        local root="$scratch/stale script root" dest="$scratch/stale script path"
+        RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash -c '
+            set -euo pipefail
+            versions="$RIDL_TOOLCHAIN_DIR/versions"
+            mkdir -p "$versions/.tmp-script-0.23.0-$$"
+            printf "stale bytes\n" > "$versions/.tmp-script-0.23.0-$$/leftover"
+            mkdir "$versions/.tmp-script-0.23.0-0"
+            printf "preserve\n" > "$versions/.tmp-script-0.23.0-0/sentinel"
+            exec bash install.sh
+        '
+        test "$(cat "$root/versions/.tmp-script-0.23.0-0/sentinel")" = preserve
+        test "$(find "$root/versions" -name '.tmp-*' | wc -l | tr -d ' ')" = 1 || {
+            echo 'install-check: own stale script stage remains or an unexpected stage was created' >&2
+            return 1
+        }
+        test -f "$root/versions/0.23.0/.complete"
+        cmp "$root/versions/0.23.0/ridl" "$dest/ridl"
+    }
+    install_reuses_complete_directory_appearing_at_rename() {
+        local status root dest
+        mkdir -p "$scratch/race-mv"
+        cat > "$scratch/race-mv/mv" <<'MV'
+    #!/bin/sh
+    if [ "$1" = -n ]; then
+        mkdir -p "$TEST_APPEAR"
+        printf '#!/bin/sh\necho "concurrent release"\n' > "$TEST_APPEAR/ridl"
+        chmod +x "$TEST_APPEAR/ridl"
+        printf 'concurrent license\n' > "$TEST_APPEAR/LICENSE"
+        printf 'concurrent notices\n' > "$TEST_APPEAR/THIRD-PARTY-NOTICES.txt"
+        : > "$TEST_APPEAR/.complete"
+        # Model both BSD and GNU skipped-rename exit statuses, leaving source intact.
+        exit "$TEST_MV_STATUS"
+    fi
+    exec /bin/mv "$@"
+    MV
+        chmod +x "$scratch/race-mv/mv"
+        for status in 0 1; do
+            root="$scratch/complete race root $status"; dest="$scratch/complete race path $status"
+            TEST_APPEAR="$root/versions/0.23.0" TEST_MV_STATUS="$status" PATH="$scratch/race-mv:$PATH" \
+                RIDL_TOOLCHAIN_DIR="$root" RIDL_INSTALL_DIR="$dest" bash install.sh || {
+                    echo "install-check: complete concurrent directory was not reused after mv status $status" >&2
+                    return 1
+                }
+            test "$("$dest/ridl")" = 'concurrent release'
+            cmp "$root/versions/0.23.0/ridl" "$dest/ridl"
+            test "$(cat "$root/versions/0.23.0/LICENSE")" = 'concurrent license'
+            test "$(cat "$root/versions/0.23.0/THIRD-PARTY-NOTICES.txt")" = 'concurrent notices'
+            test -f "$root/versions/0.23.0/.complete"
+            test ! -s "$root/versions/0.23.0/.complete"
+            test "$(find "$root/versions/0.23.0" -mindepth 1 | wc -l | tr -d ' ')" = 4
+            test -z "$(find "$root/versions" -name '.tmp-*')"
+        done
+    }
     # Cases are functions so failures identify the behavior under test.
-    for case in install_bare_and_tag_versions_share_layout install_reuses_complete_release_without_download install_preserves_damaged_version install_tamper_leaves_no_version_or_path_copy install_ridlc_remains_flat install_older_release_remains_flat install_platform_roots_and_spaces install_rejects_invalid_archives install_preserves_directory_appearing_before_publish; do
+    for case in install_bare_and_tag_versions_share_layout install_reuses_complete_release_without_download install_preserves_damaged_version install_tamper_leaves_no_version_or_path_copy install_ridlc_remains_flat install_older_release_remains_flat install_platform_roots_and_spaces install_rejects_invalid_archives install_preserves_directory_appearing_before_publish install_removes_only_its_own_stale_script_stage install_reuses_complete_directory_appearing_at_rename; do
         echo "install-check: $case"
         "$case"
     done
@@ -3130,6 +3185,71 @@ install-check:
                 ./install.ps1
                 Assert (Test-Path (Join-Path $env:LOCALAPPDATA "ridl/versions/0.23.0/.complete")) "Windows root"
                 Assert (Test-Path (Join-Path $env:LOCALAPPDATA "Programs/ridl/ridl.exe")) "Windows PATH directory"
+            '
+        RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" RIDL_TOOLCHAIN_DIR="$scratch/ps stage root" RIDL_INSTALL_DIR="$scratch/ps stage path" \
+            pwsh -NoProfile -Command '
+                function Assert($Condition, $Message) { if (-not $Condition) { throw $Message } }
+                $env:RIDL_VERSION = "0.23.0"; $env:RIDL_INSTALL_DRY_RUN = "1"
+                . ./install.ps1 | Out-Null
+                Remove-Item Env:RIDL_INSTALL_DRY_RUN
+                $ErrorActionPreference = "Stop"
+                Write-Host "install-check: PowerShell install_removes_only_its_own_stale_script_stage"
+                $root = $env:RIDL_TOOLCHAIN_DIR; $dest = $InstallDir
+                $versions = Join-Path $root "versions"
+                $own = Join-Path $versions ".tmp-script-0.23.0-$PID"
+                $other = Join-Path $versions ".tmp-script-0.23.0-0"
+                New-Item -ItemType Directory -Path $own -Force | Out-Null
+                New-Item -ItemType Directory -Path $other | Out-Null
+                Set-Content (Join-Path $own "leftover") "stale bytes"
+                Set-Content (Join-Path $other "sentinel") "preserve"
+                Main
+                Assert (-not (Test-Path -LiteralPath $own)) "own stale stage remains"
+                Assert ((Get-Content (Join-Path $other "sentinel") -Raw).Trim() -eq "preserve") "modified unrelated stage"
+                Assert (@(Get-ChildItem -LiteralPath $versions -Force -Filter ".tmp-*").Count -eq 1) "unexpected stage"
+                Assert (Test-Path (Join-Path $versions "0.23.0/.complete")) "missing release"
+                Assert ((Get-FileHash (Join-Path $versions "0.23.0/ridl.exe")).Hash -eq (Get-FileHash (Join-Path $dest "ridl.exe")).Hash) "PATH copy"
+
+                $savedComplete = $function:Test-CompleteRelease
+                foreach ($kind in @("complete", "damaged")) {
+                    Write-Host "install-check: PowerShell install_directory_appearing_at_rename $kind"
+                    $env:RIDL_TOOLCHAIN_DIR = "$root-$kind"; $InstallDir = "$dest-$kind"
+                    $script:raceChecks = 0; $script:raceKind = $kind
+                    function Test-CompleteRelease([string]$Directory) {
+                        $script:raceChecks++
+                        if ($script:raceChecks -eq 2) {
+                            # Publish after the last check but before Directory.Move.
+                            New-Item -ItemType Directory -Path $Directory | Out-Null
+                            Set-Content (Join-Path $Directory "ridl.exe") "concurrent release"
+                            if ($script:raceKind -eq "complete") {
+                                Set-Content (Join-Path $Directory "LICENSE") "concurrent license"
+                                Set-Content (Join-Path $Directory "THIRD-PARTY-NOTICES.txt") "concurrent notices"
+                                [IO.File]::WriteAllBytes((Join-Path $Directory ".complete"), [byte[]]@())
+                            }
+                            return $false
+                        }
+                        & $savedComplete $Directory
+                    }
+                    try {
+                        $release = Join-Path $env:RIDL_TOOLCHAIN_DIR "versions/0.23.0"
+                        if ($kind -eq "complete") {
+                            Main
+                            Assert ((Get-Content (Join-Path $InstallDir "ridl.exe") -Raw).Trim() -eq "concurrent release") "did not reuse concurrent release"
+                            Assert ((Get-Content (Join-Path $release "LICENSE") -Raw).Trim() -eq "concurrent license") "modified concurrent license"
+                            Assert ((Get-Content (Join-Path $release "THIRD-PARTY-NOTICES.txt") -Raw).Trim() -eq "concurrent notices") "modified concurrent notices"
+                            Assert (@(Get-ChildItem -LiteralPath $release -Force).Count -eq 4) "modified concurrent release"
+                        } else {
+                            $failure = $null
+                            try { Main } catch { $failure = $_ }
+                            Assert ($null -ne $failure -and $failure.ToString().Contains($release)) "damage refusal must name directory"
+                            Assert (-not (Test-Path (Join-Path $InstallDir "ridl.exe"))) "published damaged release"
+                            Assert (@(Get-ChildItem -LiteralPath $release -Force).Count -eq 1) "modified damaged directory"
+                        }
+                        Assert ((Get-Content (Join-Path $release "ridl.exe") -Raw).Trim() -eq "concurrent release") "modified concurrent binary"
+                        Assert (@(Get-ChildItem -LiteralPath (Split-Path $release) -Force -Filter ".tmp-*").Count -eq 0) "stage remains after race"
+                    } finally {
+                        $function:Test-CompleteRelease = $savedComplete
+                    }
+                }
             '
         # Fresh root prevents the complete-release fast path masking corruption.
         printf 'tampered\n' > "$reldir/ridl.exe"

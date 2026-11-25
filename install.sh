@@ -181,8 +181,10 @@ main() {
   if [ -z "${source:-}" ]; then
     if [ -n "$versioned" ]; then
       mkdir -p "$root/versions"
+      # A previous directory for this PID is stale. Other script stages may be live.
+      local candidate="$root/versions/.tmp-script-$normalized-$$"
+      rm -rf "$candidate"
       # Assign cleanup ownership only after exclusively creating the stage.
-      local candidate="$root/versions/.tmp-$normalized-$$"
       mkdir "$candidate"
       stage="$candidate"
     fi
@@ -198,8 +200,7 @@ main() {
       extract_release "$payload"
       : > "$payload/.complete"
       if ! complete_release; then
-        mv -n "$payload" "$root/versions/"
-        if [ -d "$payload" ]; then
+        if ! mv -n "$payload" "$root/versions/" || [ -d "$payload" ]; then
           if ! complete_release; then
             echo "error: toolchain directory appeared: $release_dir" >&2
             return 1

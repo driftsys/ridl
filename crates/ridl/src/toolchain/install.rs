@@ -177,7 +177,8 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
         if entry
             .file_name()
             .to_str()
-            .is_some_and(|name| name.starts_with(&stage_prefix))
+            .and_then(|name| name.strip_prefix(&stage_prefix))
+            .is_some_and(|pid| !pid.is_empty() && pid.bytes().all(|byte| byte.is_ascii_digit()))
             && entry.file_type()?.is_dir()
         {
             fs::remove_dir_all(entry.path())?;

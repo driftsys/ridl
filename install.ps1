@@ -177,7 +177,11 @@ function Main {
         if (-not $source) {
             if ($versioned) {
                 New-Item -ItemType Directory -Path $versions -Force | Out-Null
-                $candidate = Join-Path $versions ".tmp-$normalized-$PID"
+                # A previous directory for this PID is stale; other stages may be live.
+                $candidate = Join-Path $versions ".tmp-script-$normalized-$PID"
+                if (Test-Path -LiteralPath $candidate) {
+                    Remove-Item -LiteralPath $candidate -Recurse -Force
+                }
                 New-Item -ItemType Directory -Path $candidate | Out-Null
                 $stage = $candidate
             }
@@ -191,11 +195,18 @@ function Main {
             if ($versioned) {
                 Expand-Release $archive $stage
                 [IO.File]::WriteAllBytes((Join-Path $stage '.complete'), [byte[]]@())
-                if (Test-CompleteRelease $directory) {
-                    Remove-Item -LiteralPath $stage -Recurse -Force
-                } else {
+                if (-not (Test-CompleteRelease $directory)) {
                     # Directory.Move refuses an existing destination atomically.
-                    [IO.Directory]::Move($stage, $directory)
+                    try {
+                        [IO.Directory]::Move($stage, $directory)
+                    } catch {
+                        if (-not (Test-CompleteRelease $directory)) {
+                            throw "toolchain directory could not be published: $directory; $($_.Exception.Message)"
+                        }
+                    }
+                }
+                if (Test-Path -LiteralPath $stage) {
+                    Remove-Item -LiteralPath $stage -Recurse -Force
                 }
                 $stage = $null
                 $source = Join-Path $directory $Binary

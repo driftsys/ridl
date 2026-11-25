@@ -648,7 +648,7 @@ fn toolchain_install_missing_asset_cleans_only_its_stage() {
 }
 
 #[test]
-fn toolchain_install_removes_stale_stages_under_lock() {
+fn toolchain_install_removes_only_stale_cli_stages_under_lock() {
     let root = TempDir::new().unwrap();
     let assets = TempDir::new().unwrap();
     support::fixture(assets.path(), &support::regular_files());
@@ -656,15 +656,27 @@ fn toolchain_install_removes_stale_stages_under_lock() {
     fs::create_dir(&versions).unwrap();
     let stale_names = [
         format!(".tmp-0.23.0-{}", std::process::id()),
-        ".tmp-0.23.0-killed".into(),
+        ".tmp-0.23.0-123456".into(),
     ];
     for name in &stale_names {
         fs::create_dir(versions.join(name)).unwrap();
         fs::write(versions.join(name).join("incomplete"), b"stale bytes").unwrap();
     }
-    for name in [".tmp-0.24.0-1", ".tmp-0.23.00-1"] {
+    let preserved_names = [
+        ".tmp-0.24.0-1",
+        ".tmp-0.23.00-1",
+        ".tmp-script-0.23.0-123456",
+        ".tmp-0.23.0-killed",
+        ".tmp-0.23.0-",
+        ".tmp-0.23.0-12x",
+    ];
+    for name in preserved_names {
         fs::create_dir(versions.join(name)).unwrap();
-        fs::write(versions.join(name).join("preserve"), b"other version").unwrap();
+        fs::write(
+            versions.join(name).join("preserve"),
+            b"live or unrelated stage",
+        )
+        .unwrap();
     }
     let result = install(
         root.path(),
@@ -680,10 +692,11 @@ fn toolchain_install_removes_stale_stages_under_lock() {
     for name in &stale_names {
         assert!(!versions.join(name).exists(), "stale stage remains: {name}");
     }
-    for name in [".tmp-0.24.0-1", ".tmp-0.23.00-1"] {
+    for name in preserved_names {
         assert_eq!(
-            fs::read(versions.join(name).join("preserve")).unwrap(),
-            b"other version"
+            fs::read(versions.join(name).join("preserve"))
+                .unwrap_or_else(|error| panic!("removed unrelated stage {name}: {error}")),
+            b"live or unrelated stage"
         );
     }
 }

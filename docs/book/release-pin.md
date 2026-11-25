@@ -81,14 +81,22 @@ Installation uses the running binary's build target to download an archive and
 its SHA-256 record from the fixed GitHub editor release origin. The record must
 name that archive and its digest must match. Only the three root-level regular
 files above are accepted; links, nested paths, duplicates and archive-provided
-completion markers are refused. A per-version file lock serializes installers.
-The installer rechecks under the lock and removes stale temporary directories
-for that version before staging. It extracts into its own temporary directory,
-then creates the marker and renames the directory into place. Failures remove
-that operation's temporary directory. Downloads have a 30-second connection
-timeout and a 10-minute overall timeout per request. Archives larger than 256
-MiB and checksum records larger than 4 KiB are refused. An existing complete
-release works offline. Unsupported release targets produce a named error.
+completion markers are refused. A per-version file lock serializes
+`ridl toolchain install` processes. The CLI rechecks under the lock and removes
+only its stale `.tmp-<version>-<digits>` directories before staging. It extracts
+into its own temporary directory, then creates the marker and renames the
+directory into place. Failures remove that operation's temporary directory.
+Downloads have a 30-second connection timeout and a 10-minute overall timeout
+per request. Archives larger than 256 MiB and checksum records larger than 4 KiB
+are refused. An existing complete release works offline. Unsupported release
+targets produce a named error.
+
+The install scripts use the same release directory without taking the CLI's
+lock. They stage in `.tmp-script-<version>-<pid>`, which CLI cleanup preserves.
+Before staging, a script removes only a leftover directory with its own exact
+stage name. At publication, a script reuses a complete release directory that
+another installer has created and removes its own stage. If the appeared
+directory is damaged, the script reports its path and preserves it.
 
 `ridl toolchain list` prints one `<version>\t<directory>` line per canonical
 version directory, in numeric order. Damaged lines end with `(damaged)`.
