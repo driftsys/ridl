@@ -1124,7 +1124,7 @@ fn toolchain_cli_streams_and_exit_codes() {
     output(&missing, 1, "", true);
     assert_eq!(
         String::from_utf8_lossy(&missing.stderr),
-        "No compatible ridl toolchain is installed; run `ridl toolchain install 0.24.0`.\n"
+        "No compatible ridl toolchain is installed; run `ridl toolchain install 0.24.0`, or set RIDL_TOOLCHAIN_AUTO_INSTALL=1 so that a workspace command installs it.\n"
     );
     for version in ["bad", "v0.23.0", "0.23.0-rc.1", "0.22.0"] {
         output(

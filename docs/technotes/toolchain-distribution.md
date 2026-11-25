@@ -121,8 +121,10 @@ owns root precedence and command usage. The
 [toolchain directory record](../design/toolchain-directory.md) owns layout,
 selection schema and installation protocol. The installer uses the build target
 exported by Cargo, and the fixed GitHub `editor-v<version>` release origin. Its
-alternate download source is a library test parameter, with no CLI, manifest or
-environment override.
+alternate download source is a library test parameter. Release builds have no
+CLI, manifest or environment override. Debug builds read
+`RIDL_TEST_RELEASE_ORIGIN` and `RIDL_TEST_RELEASE_PUBLIC_KEY` in integration
+tests, as they read `RIDL_TEST_RUNNING_RELEASE`.
 
 `just install-check` also runs the ignored
 `toolchain_ureq_path_verifies_and_installs` local HTTP test, exercising the

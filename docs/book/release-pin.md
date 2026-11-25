@@ -135,10 +135,23 @@ command exits 2.
 A process whose environment has `RIDL_TOOLCHAIN_HANDOFF`, with any value
 including an empty one, never hands off. This stops a chain of hand-offs.
 
+When no installed release qualifies, the environment variable
+`RIDL_TOOLCHAIN_AUTO_INSTALL` can install one. Automatic installation runs only
+when the variable's value is exactly `1`, the run has exactly one distinct
+MANI-026 pin, and `RIDL_TOOLCHAIN_HANDOFF` is absent. The command prints
+`installing ridl <pin>…` and then `installed ridl <pin> at <path>` on standard
+error, installs the release as `ridl toolchain install <pin>` does, and hands
+off to it. If the installation fails, the command prints `error: <cause>`, then
+the refusal, and exits 2. No manifest key enables automatic installation.
+
 Only MANI-026 hands off. A run that reports MANI-024 or MANI-025 anywhere, even
 beside a MANI-026, prints its refusals and exits 2. `ridl toolchain` commands,
 `init`, `new`, `lock merge`, snapshot-only `diff`, standalone descriptors and
 `ridl lsp` never hand off. `ridl toolchain which` still selects without running.
+`ridl mcp` is not a workspace command, but it hands off the same way, from the
+current directory's workspace root, before it reads standard input or starts the
+server. It never installs a release, even when `RIDL_TOOLCHAIN_AUTO_INSTALL` is
+`1`.
 
 ## Editors and agent tools
 

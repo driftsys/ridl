@@ -427,12 +427,13 @@ fn run_toolchain(command: ToolchainCommand) -> ExitCode {
                     Some(text) => parse_release(&text).filter(|v| *v >= MIN_PINNABLE_RELEASE).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("release must be MAJOR.MINOR.PATCH at or above {MIN_PINNABLE_RELEASE}")))?,
                     None => toolchain::workspace_pin(Path::new("."))?,
                 };
+                let (base_url, public_key) = handoff::release_origin();
                 let binary = toolchain::install(
                     &root,
                     release,
                     env!("RIDL_BUILD_TARGET"),
-                    toolchain::RELEASE_BASE_URL,
-                    toolchain::RELEASE_PUBLIC_KEY,
+                    &base_url,
+                    &public_key,
                 )?;
                 Ok((0, format!("{}\n", binary.display())))
             }
@@ -475,7 +476,7 @@ fn run_toolchain(command: ToolchainCommand) -> ExitCode {
                 } else {
                     match report.status {
                         WhichStatus::Missing => errprintln!(
-                            "No compatible ridl toolchain is installed; run `ridl toolchain install {}`.",
+                            "No compatible ridl toolchain is installed; run `ridl toolchain install {}`, or set RIDL_TOOLCHAIN_AUTO_INSTALL=1 so that a workspace command installs it.",
                             report.pin.as_deref().unwrap_or_default()
                         ),
                         WhichStatus::Invalid => {
@@ -774,6 +775,9 @@ fn run_lsp() -> ExitCode {
 /// so this builds the only Tokio runtime the binary ever has — no other
 /// subcommand is async, and none pays for this one.
 fn run_mcp() -> ExitCode {
+    if let Some(code) = handoff::mcp() {
+        return code;
+    }
     let runtime = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()

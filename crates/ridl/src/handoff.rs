@@ -8,15 +8,18 @@
 //! replaced by the release. On Windows it starts the release inside a Job
 //! Object, waits, and exits with the release's exit code.
 
-use ridl_cli::toolchain::{BUILD_TARGET, process_toolchain_root, select_installed};
+use ridl_cli::toolchain::{
+    BUILD_TARGET, RELEASE_BASE_URL, RELEASE_PUBLIC_KEY, install, process_toolchain_root,
+    select_installed,
+};
 use ridl_core::{
     DiagCode, Diagnostic, SourceMap, is_release_refusal,
-    release::{Release, parse_release_pin},
+    release::{Release, check_release_pin, parse_release_pin},
 };
 use std::{
     ffi::{OsStr, OsString},
     io,
-    path::Path,
+    path::{Path, PathBuf},
     process::{Command, ExitCode},
 };
 
@@ -24,13 +27,60 @@ use std::{
 /// release that handed off. A process that has it never hands off again.
 pub(crate) const GUARD: &str = "RIDL_TOOLCHAIN_HANDOFF";
 
+/// The variable that allows a workspace command to install the pinned release
+/// when none is installed. Only the value `1` allows it.
+pub(crate) const AUTO_INSTALL: &str = "RIDL_TOOLCHAIN_AUTO_INSTALL";
+
+/// Whether a hand-off may install a release that is not installed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Install {
+    Never,
+    WhenOptedIn,
+}
+
+/// The release origin and its public key. A debug build replaces each with the
+/// nonempty value of `RIDL_TEST_RELEASE_ORIGIN` or `RIDL_TEST_RELEASE_PUBLIC_KEY`,
+/// which integration tests use; a release build has no override.
+pub(crate) fn release_origin() -> (String, String) {
+    #[allow(unused_mut)]
+    let mut origin = (RELEASE_BASE_URL.to_owned(), RELEASE_PUBLIC_KEY.to_owned());
+    #[cfg(debug_assertions)]
+    {
+        let read = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
+        if let Some(value) = read("RIDL_TEST_RELEASE_ORIGIN") {
+            origin.0 = value;
+        }
+        if let Some(value) = read("RIDL_TEST_RELEASE_PUBLIC_KEY") {
+            origin.1 = value;
+        }
+    }
+    origin
+}
+
 /// Hands the command off when the refusals in `diagnostics` allow it. `None`
 /// means the caller prints its refusal as before.
 pub(crate) fn refusal(diagnostics: &[Diagnostic], sources: &SourceMap) -> Option<ExitCode> {
-    hand_off(diagnostics, sources)
+    hand_off(diagnostics, sources, Install::WhenOptedIn)
 }
 
-fn hand_off(diagnostics: &[Diagnostic], sources: &SourceMap) -> Option<ExitCode> {
+/// Hands `ridl mcp` off before the server starts, so that the selected release
+/// reads the client's first message. It never installs.
+pub(crate) fn mcp() -> Option<ExitCode> {
+    if guarded(std::env::var_os(GUARD).as_deref()) {
+        return None;
+    }
+    let root = ridl_core::read_root_release(Path::new("."), None).ok()?;
+    let (manifest, text) = (root.manifest?, root.text?);
+    let mut sources = SourceMap::new();
+    let file = sources.file_id(&manifest.to_string_lossy(), &text);
+    let diagnostic = check_release_pin(file, &text, ridlc::running_release())?;
+    if diagnostic.code != DiagCode::MANI_026 {
+        return None;
+    }
+    hand_off(&[diagnostic], &sources, Install::Never)
+}
+
+fn hand_off(diagnostics: &[Diagnostic], sources: &SourceMap, install: Install) -> Option<ExitCode> {
     if guarded(std::env::var_os(GUARD).as_deref()) {
         return None;
     }
@@ -39,8 +89,41 @@ fn hand_off(diagnostics: &[Diagnostic], sources: &SourceMap) -> Option<ExitCode>
         .and_then(|root| select_installed(&root, &pins, BUILD_TARGET))
         .ok()
         .flatten();
-    let (release, binary) = selected?;
-    Some(run(release, &binary))
+    if let Some((release, binary)) = selected {
+        return Some(run(release, &binary));
+    }
+    if install == Install::WhenOptedIn
+        && auto_install_enabled(std::env::var_os(AUTO_INSTALL).as_deref())
+        && let [pin] = pins[..]
+    {
+        let binary = install_pin(pin)?;
+        return Some(run(pin, &binary));
+    }
+    None
+}
+
+/// Whether the opt-in variable holds exactly `1`.
+fn auto_install_enabled(value: Option<&OsStr>) -> bool {
+    value == Some(OsStr::new("1"))
+}
+
+/// Installs `pin`, reporting progress and failure on standard error. `None`
+/// means the caller prints its refusal.
+fn install_pin(pin: Release) -> Option<PathBuf> {
+    errprintln!("installing ridl {pin}\u{2026}");
+    let (base_url, public_key) = release_origin();
+    match process_toolchain_root()
+        .and_then(|root| install(&root, pin, BUILD_TARGET, &base_url, &public_key))
+    {
+        Ok(binary) => {
+            errprintln!("installed ridl {pin} at {}", binary.display());
+            Some(binary)
+        }
+        Err(error) => {
+            errprintln!("error: {error}");
+            None
+        }
+    }
 }
 
 /// The pins of every MANI-026 in the run, read again from the manifest text.

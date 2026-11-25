@@ -18,11 +18,9 @@ mod toolchain_support;
 
 const BIN: &str = env!("CARGO_BIN_EXE_ridl");
 
-/// Installs a complete release whose binary records what it receives.
-fn fake_release(root: &Path, version: &str) -> PathBuf {
-    let dir = root.join("versions").join(version);
-    fs::create_dir_all(&dir).unwrap();
-    let script = format!(
+/// The shell script that records what it receives, as a release binary.
+fn recording_script(version: &str) -> String {
+    format!(
         "#!/bin/sh\n\
          r=\"$RIDL_TEST_RECORD\"\n\
          printf '%s\\n' \"{version}\" > \"$r/version\"\n\
@@ -32,9 +30,15 @@ fn fake_release(root: &Path, version: &str) -> PathBuf {
          printf '%s' \"${{RIDL_TOOLCHAIN_HANDOFF-unset}}\" > \"$r/guard\"\n\
          echo \"child stdout\"; echo \"child stderr\" >&2\n\
          exit 7\n"
-    );
+    )
+}
+
+/// Installs a complete release whose binary records what it receives.
+fn fake_release(root: &Path, version: &str) -> PathBuf {
+    let dir = root.join("versions").join(version);
+    fs::create_dir_all(&dir).unwrap();
     let binary = dir.join("ridl");
-    fs::write(&binary, script).unwrap();
+    fs::write(&binary, recording_script(version)).unwrap();
     fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
     fs::write(dir.join("LICENSE"), b"license").unwrap();
     fs::write(dir.join("THIRD-PARTY-NOTICES.txt"), b"notices").unwrap();
@@ -115,6 +119,17 @@ impl Fixture {
     }
     /// Runs `ridl` in `cwd`, feeding a probe to standard input.
     fn run(&self, cwd: &Path, toolchain: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
+        self.run_with_stdin(cwd, toolchain, args, envs, b"stdin probe\n")
+    }
+    /// Runs `ridl` in `cwd`, feeding `input` to standard input.
+    fn run_with_stdin(
+        &self,
+        cwd: &Path,
+        toolchain: &Path,
+        args: &[&str],
+        envs: &[(&str, &str)],
+        input: &[u8],
+    ) -> Output {
         let mut command = Command::new(BIN);
         command
             .current_dir(cwd)
@@ -125,6 +140,8 @@ impl Fixture {
             .env("HOME", self.home())
             .env_remove("RIDL_TOOLCHAIN_HANDOFF")
             .env_remove("RIDL_TOOLCHAIN_AUTO_INSTALL")
+            .env_remove("RIDL_TEST_RELEASE_ORIGIN")
+            .env_remove("RIDL_TEST_RELEASE_PUBLIC_KEY")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
@@ -134,7 +151,7 @@ impl Fixture {
         let mut child = command.spawn().unwrap();
         let mut stdin = child.stdin.take().unwrap();
         // The refused run never reads standard input; a closed pipe is fine.
-        let _ = stdin.write_all(b"stdin probe\n");
+        let _ = stdin.write_all(input);
         drop(stdin);
         child.wait_with_output().unwrap()
     }
@@ -305,4 +322,230 @@ fn handoff_reports_an_exec_failure() {
         "no refusal follows: {out:?}"
     );
     assert!(fixture.record_is_empty());
+}
+
+use ridl_cli::toolchain::BUILD_TARGET;
+
+/// A release origin that serves a signed `version` whose binary records what
+/// it receives. The result is the directory that holds the origin.
+fn origin_with(base: &Path, versions: &[&str]) -> PathBuf {
+    let origin = base.join("origin");
+    fs::create_dir_all(&origin).unwrap();
+    for version in versions {
+        let script = recording_script(version).into_bytes();
+        toolchain_support::fixture_for(
+            &origin,
+            version,
+            BUILD_TARGET,
+            &[
+                ("ridl", b'0', &script),
+                ("LICENSE", b'0', b"license"),
+                ("THIRD-PARTY-NOTICES.txt", b'0', b"notices"),
+            ],
+        );
+    }
+    origin
+}
+
+/// The environment that points the installer at `origin` with the test key.
+fn origin_env(origin: &Path) -> [(&'static str, String); 2] {
+    [
+        (
+            "RIDL_TEST_RELEASE_ORIGIN",
+            format!("file://{}", origin.display()),
+        ),
+        (
+            "RIDL_TEST_RELEASE_PUBLIC_KEY",
+            toolchain_support::test_public_key(),
+        ),
+    ]
+}
+
+/// Runs with the origin variables and `extra` variables.
+fn run_with_origin(
+    fixture: &Fixture,
+    cwd: &Path,
+    origin: &Path,
+    args: &[&str],
+    extra: &[(&str, &str)],
+    input: &[u8],
+) -> Output {
+    let origin_vars = origin_env(origin);
+    let mut envs: Vec<(&str, &str)> = origin_vars.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    envs.extend_from_slice(extra);
+    fixture.run_with_stdin(cwd, &fixture.toolchain(), args, &envs, input)
+}
+
+fn no_versions(root: &Path) -> bool {
+    fs::read_dir(root.join("versions")).map_or(true, |mut entries| entries.next().is_none())
+}
+
+#[test]
+fn mcp_hands_off_before_reading_standard_input() {
+    let fixture = Fixture::new();
+    let ws = fixture.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    fake_release(&fixture.toolchain(), "0.23.4");
+    let line = "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n";
+    let out = fixture.run_with_stdin(&ws, &fixture.toolchain(), &["mcp"], &[], line.as_bytes());
+    assert_eq!(out.status.code(), Some(7), "{out:?}");
+    assert_eq!(argv(&fixture), ["mcp"]);
+    assert_eq!(fixture.recorded("stdin"), line.as_bytes());
+}
+
+#[test]
+fn mcp_never_installs_and_respects_the_guard() {
+    let a = Fixture::new();
+    let ws = a.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    let origin = origin_with(a.base.path(), &["0.23.1"]);
+    let out = run_with_origin(
+        &a,
+        &ws,
+        &origin,
+        &["mcp"],
+        &[("RIDL_TOOLCHAIN_AUTO_INSTALL", "1")],
+        b"",
+    );
+    assert!(!a.toolchain().join("versions/0.23.1").exists(), "{out:?}");
+    assert!(a.record_is_empty(), "{out:?}");
+
+    let b = Fixture::new();
+    let ws = b.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    fake_release(&b.toolchain(), "0.23.4");
+    let out = b.run_with_stdin(
+        &ws,
+        &b.toolchain(),
+        &["mcp"],
+        &[("RIDL_TOOLCHAIN_HANDOFF", "0.23.4")],
+        b"",
+    );
+    assert!(b.record_is_empty(), "{out:?}");
+}
+
+#[test]
+fn auto_install_is_off_unless_the_variable_is_exactly_one() {
+    for value in [
+        None,
+        Some(""),
+        Some("0"),
+        Some("true"),
+        Some(" 1"),
+        Some("1 "),
+        Some("11"),
+    ] {
+        let fixture = Fixture::new();
+        let ws = fixture.base.path().join("ws");
+        workspace(&ws, "0.23.1");
+        let origin = origin_with(fixture.base.path(), &["0.23.1"]);
+        let extra: Vec<(&str, &str)> = value
+            .map(|v| ("RIDL_TOOLCHAIN_AUTO_INSTALL", v))
+            .into_iter()
+            .collect();
+        let out = run_with_origin(&fixture, &ws, &origin, &["check", "."], &extra, b"");
+        assert_refusal(&out, "MANI-026");
+        assert!(
+            !fixture.toolchain().join("versions/0.23.1").exists(),
+            "{value:?}"
+        );
+        assert!(!stderr(&out).contains("installing ridl"), "{value:?}");
+    }
+}
+
+#[test]
+fn auto_install_with_one_installs_and_hands_off() {
+    let fixture = Fixture::new();
+    let ws = fixture.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    let origin = origin_with(fixture.base.path(), &["0.23.1"]);
+    let out = run_with_origin(
+        &fixture,
+        &ws,
+        &origin,
+        &["check", "."],
+        &[("RIDL_TOOLCHAIN_AUTO_INSTALL", "1")],
+        b"",
+    );
+    let root = fixture.toolchain().canonicalize().unwrap();
+    let bin = root.join("versions/0.23.1/ridl");
+    assert_eq!(out.status.code(), Some(7), "{out:?}");
+    assert_eq!(
+        stderr(&out),
+        format!(
+            "installing ridl 0.23.1\u{2026}\ninstalled ridl 0.23.1 at {}\nchild stderr\n",
+            bin.display()
+        )
+    );
+    assert!(root.join("versions/0.23.1/.complete").exists());
+    assert_eq!(fixture.recorded("version"), b"0.23.1\n");
+}
+
+#[test]
+fn auto_install_requires_exactly_one_distinct_pin() {
+    let fixture = Fixture::new();
+    let parent = fixture.base.path().join("parent");
+    fs::create_dir(&parent).unwrap();
+    workspace(&parent.join("a"), "0.23.1");
+    workspace(&parent.join("b"), "0.23.4");
+    let origin = origin_with(fixture.base.path(), &["0.23.1", "0.23.4"]);
+    let out = run_with_origin(
+        &fixture,
+        &parent,
+        &origin,
+        &["fmt", "."],
+        &[("RIDL_TOOLCHAIN_AUTO_INSTALL", "1")],
+        b"",
+    );
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert_eq!(stderr(&out).matches("error[MANI-026]").count(), 2);
+    assert!(no_versions(&fixture.toolchain()), "{out:?}");
+    assert!(!stderr(&out).contains("installing ridl"));
+}
+
+#[test]
+fn auto_install_never_runs_under_the_guard() {
+    let fixture = Fixture::new();
+    let ws = fixture.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    let origin = origin_with(fixture.base.path(), &["0.23.1"]);
+    let out = run_with_origin(
+        &fixture,
+        &ws,
+        &origin,
+        &["check", "."],
+        &[
+            ("RIDL_TOOLCHAIN_AUTO_INSTALL", "1"),
+            ("RIDL_TOOLCHAIN_HANDOFF", "0.23.4"),
+        ],
+        b"",
+    );
+    assert_refusal(&out, "MANI-026");
+    assert!(!fixture.toolchain().join("versions/0.23.1").exists());
+}
+
+#[test]
+fn auto_install_failure_prints_the_error_before_the_refusal() {
+    let fixture = Fixture::new();
+    let ws = fixture.base.path().join("ws");
+    workspace(&ws, "0.23.1");
+    let origin = fixture.base.path().join("empty-origin");
+    fs::create_dir(&origin).unwrap();
+    let out = run_with_origin(
+        &fixture,
+        &ws,
+        &origin,
+        &["check", "."],
+        &[("RIDL_TOOLCHAIN_AUTO_INSTALL", "1")],
+        b"",
+    );
+    let text = stderr(&out);
+    let lines: Vec<_> = text.lines().collect();
+    assert_eq!(lines[0], "installing ridl 0.23.1\u{2026}");
+    assert!(lines[1].starts_with("error: "), "{text}");
+    assert!(
+        lines[2..].iter().any(|l| l.starts_with("error[MANI-026]")),
+        "{text}"
+    );
+    assert_eq!(out.status.code(), Some(2));
 }

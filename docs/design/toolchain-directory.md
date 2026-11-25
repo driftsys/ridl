@@ -69,6 +69,19 @@ each pin is parsed again from the text of the file that the diagnostic points
 to, with `parse_release_pin`. A diagnostic whose file text is missing, or any
 MANI-024 or MANI-025, ends the attempt. The pins are sorted and deduplicated.
 
+**Automatic install.** When no installed release is selected, `hand_off` can
+install the pin. It requires the `Install::WhenOptedIn` mode that every
+workspace command passes, `RIDL_TOOLCHAIN_AUTO_INSTALL` set to exactly `1`, the
+guard absent, and exactly one distinct pin. It prints `installing ridl <pin>…`,
+calls `install` with the release origin and key from `release_origin()` and the
+build target, prints `installed ridl <pin> at <path>`, and runs the binary that
+`install` returns. A failure, including a toolchain root error, prints
+`error: <cause>` and returns to the caller, which prints the refusal and exits
+2. `ridl mcp` calls `handoff::mcp()` as the first statement of `run_mcp`, before
+the Tokio runtime exists and before standard input is read. It reads the root
+manifest of the current directory, requires MANI-026, and passes
+`Install::Never`.
+
 **Guard.** `RIDL_TOOLCHAIN_HANDOFF` is set for the child to the release that
 handed off. A process with the variable present, whatever its value, does not
 hand off.
