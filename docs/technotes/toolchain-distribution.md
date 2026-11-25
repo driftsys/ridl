@@ -84,11 +84,13 @@ without a pull request.
    `npm-release.yml` and `vscode-release.yaml`. The Marketplace job then waits
    for approval in the `marketplace` environment.
 
-Before the first `editor-v` tag that contains the signing step, the repository
-secrets `RIDL_RELEASE_SIGNING_KEY` and `RIDL_RELEASE_SIGNING_KEY_PASSWORD` have
-to exist, and `RELEASE_PUBLIC_KEY` has to hold the matching public key (see
-"Signed release archives"). Without them the `release` job fails at its signing
-step and publishes nothing.
+An `editor-v` tag needs the repository secrets `RIDL_RELEASE_SIGNING_KEY` and
+`RIDL_RELEASE_SIGNING_KEY_PASSWORD`, and `RELEASE_PUBLIC_KEY` has to hold the
+matching public key (see "Signed release archives"). Without them the `release`
+job fails at its signing step and creates no GitHub release, and the
+`publish-vsce` job, which needs `release`, does not run, so the Marketplace
+receives nothing. The crates.io and npm workflows start from the `v` tag and are
+unaffected.
 
 A tag is not moved after it is pushed. A publish workflow that starts from a tag
 runs that tag's commit, and a re-run of it also uses the workflow file of that

@@ -2895,7 +2895,7 @@ that no longer matches its `tree` hash is `MANI-107` and names `ridl vendor`.
 | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 0    | `vendor/` was written, or there was nothing to change                                                                                                                                                                                                                                                                                          |
 | 1    | a diagnostic error, including MANI-102, MANI-105, MANI-106, MANI-107 and a source error in a remote unit; `vendor/` is left untouched, while `ridl.lock` may be updated, as it is by every command that reads remote units without `--frozen`: it is rewritten when every remote unit was fetched and verified, even if a source error follows |
-| 2    | a root release refusal (MANI-024 through MANI-026), a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure including a failed stdout write, or a fetch failure (MANI-101)                                                                                                                                     |
+| 2    | a root release refusal (MANI-024 through MANI-026, except a MANI-026 that is [handed off](release-pin.md#running-the-pinned-release-from-a-terminal)), a missing or unreadable path, no `ridl.toml` at or above it, a bad flag, an I/O failure including a failed stdout write, or a fetch failure (MANI-101)                                  |
 
 `ridl vendor` applies no `[lints]` levels, and a lint that is `allow` by default
 is left out of its output, as for `ridl lock`.
@@ -2915,11 +2915,11 @@ clean `vendor/`.
 
 **`ridl vendor --check` exit codes.**
 
-| Exit | Meaning                                                                                                                             |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| 0    | `vendor/` matches                                                                                                                   |
-| 1    | drift (MANI-107, MANI-109 or MANI-110), a unit that `ridl.lock` does not verify (MANI-103 or MANI-108), or another diagnostic error |
-| 2    | a root release refusal (MANI-024 through MANI-026), a missing or unreadable path, no `ridl.toml` at or above it, or a bad flag      |
+| Exit | Meaning                                                                                                                                                                                                                           |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0    | `vendor/` matches                                                                                                                                                                                                                 |
+| 1    | drift (MANI-107, MANI-109 or MANI-110), a unit that `ridl.lock` does not verify (MANI-103 or MANI-108), or another diagnostic error                                                                                               |
+| 2    | a root release refusal (MANI-024 through MANI-026, except a MANI-026 that is [handed off](release-pin.md#running-the-pinned-release-from-a-terminal)), a missing or unreadable path, no `ridl.toml` at or above it, or a bad flag |
 
 ### `ridl toolchain`
 

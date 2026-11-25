@@ -103,7 +103,7 @@ create, configure or join the job, or to start the child, prints the same
 message with the failed step named and exits 2, and no child is started without
 the job. No test job runs on Windows, so the Windows branch is compiled only by
 the release workflow's Windows build and is never tested; the follow-up is
-driftsys/ridl#TBD-windows-ci.
+driftsys/ridl#1480.
 
 **Sites.** The hand-off is called from these places in the `ridl` binary, each
 after the refusal is known and before anything is written:

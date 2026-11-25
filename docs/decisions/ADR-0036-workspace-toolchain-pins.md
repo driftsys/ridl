@@ -10,7 +10,7 @@ does not claim a separate maintainer approval of this ADR.
 
 Amended 2026-11-25 by
 [driftsys/ridl#1477](https://github.com/driftsys/ridl/issues/1477): decisions 6,
-8, 9 and 10, new decision 11, the Restricted Mode alternative, three further
+8, 9 and 10, new decision 11, the Restricted Mode alternative, four new
 alternatives and the consequences. The amendment follows the same delegation.
 Decision 8 and the Restricted Mode alternative name the earlier position where
 the difference matters.
@@ -63,25 +63,24 @@ the source of side-by-side installations without another manifest or proxy.
    receive a numeric running release explicitly; they do not read the process
    environment.
 6. **Toolchains share immutable version directories.** `ridl toolchain install`,
-   `list` and `which` operate independently of workspace compilation. The
-   [directory record](../design/toolchain-directory.md) owns the layout,
-   completion test, preservation of damage, schema-1 selection and transaction
-   ordering. Production CLI downloads use one fixed GitHub editor release origin
-   with SHA-256 verification, without a manifest, CLI or environment mirror
-   override. Checksums detect altered bytes relative to that record; they do not
-   authenticate a publisher independently of the release origin. Each `ridl`
-   archive therefore also carries a minisign signature, `<archive>.minisig`,
-   that `ridl toolchain install` verifies against a public key embedded in the
-   binary, after the checksum and before extraction. Only prehashed signatures
-   verify, and the trusted comment has to be exactly `ridl <version> <target>`,
-   which stops a signed archive of another release or target from being served
-   under the requested name. A missing or invalid signature is an install error.
-   `ridlc` archives and the install scripts are not covered: the scripts come
-   from the same origin as the archives, so a check inside them would add no
-   independent trust. Installation does not modify an existing damaged
-   directory. `ridl toolchain uninstall <version>` removes one version
-   directory, complete or damaged, and is the explicit repair path for a damaged
-   one. The toolchain root has to be an absolute path: a relative
+   `uninstall`, `list` and `which` operate independently of workspace
+   compilation. The [directory record](../design/toolchain-directory.md) owns
+   the layout, completion test, preservation of damage, schema-1 selection and
+   transaction ordering. Production CLI downloads use one fixed GitHub editor
+   release origin with SHA-256 verification, without a manifest, CLI or
+   environment mirror override. Checksums detect altered bytes relative to that
+   record; they do not authenticate a publisher independently of the release
+   origin. Each `ridl` archive therefore also carries a minisign signature that
+   `ridl toolchain
+   install` verifies against a public key embedded in the
+   binary, after the checksum and before extraction; a missing or invalid
+   signature is an install error. The directory record owns the verification
+   rules, and the
+   [distribution record](../technotes/toolchain-distribution.md#signed-release-archives)
+   owns signing, key rotation and key loss. Installation does not modify an
+   existing damaged directory. `ridl toolchain uninstall <version>` removes one
+   version directory, complete or damaged, and is the explicit repair path for a
+   damaged one. The toolchain root has to be an absolute path: a relative
    `RIDL_TOOLCHAIN_DIR` is an error in the CLI and in the scripts. Releases live
    under `<root>/versions/<version>/`; scripts use the separate
    [`.tmp-script-<version>-<pid>` stage](../design/toolchain-directory.md#install-scripts-and-the-path-copy)
@@ -104,15 +103,15 @@ the source of side-by-side installations without another manifest or proxy.
    with the bundled binary, which reads the manifest and executes no candidate,
    and shows a prompt when the pinned release is missing. The prompt has the
    buttons Install and Manage Workspace Trust, and nothing installs until the
-   user presses Install. The extension resolves a PATH binary only from absolute
-   entries and runs nothing when it has no bundled binary. Granting trust
-   enables normal activation. The first version of this decision (#1476)
-   declared no support and left Restricted Mode with VS Code's own prompt,
-   because activation could start a server and honor an untrusted workspace's
-   `ridl.serverPath`; the limited form avoids both by running no server and
-   reading neither setting. Automatic installation is an application-scoped
-   boolean, default `true`; workspace settings cannot enable or redirect
-   downloads.
+   user presses Install. It runs nothing when it has no bundled binary. In
+   normal activation the extension resolves a PATH binary only from absolute
+   entries. Granting trust enables normal activation. The first version of this
+   decision (#1476) declared no support and left Restricted Mode with VS Code's
+   own prompt, because activation could start a server and honor an untrusted
+   workspace's `ridl.serverPath`; the limited form avoids both by running no
+   server and reading neither setting. Automatic installation is an
+   application-scoped boolean, default `true`; workspace settings cannot enable
+   or redirect downloads.
 9. **The window has one MCP definition.** Its binary is selected for the first
    VS Code workspace folder, independently of document-open order, and changes
    when that selection changes. It does not provide one MCP server per RIDL
@@ -132,20 +131,22 @@ the source of side-by-side installations without another manifest or proxy.
     implemented here.
 11. **A workspace command hands off at its refusal site.** Only MANI-026 hands
     off, and only when every release refusal of the run is MANI-026. The command
-    runs the highest complete installed release that satisfies every pin of the
-    run, with its own arguments, working directory, environment and standard
-    streams, and prints nothing. The child receives `RIDL_TOOLCHAIN_HANDOFF` set
-    to the releasing parent's release; a process that has the variable never
-    hands off and never installs, so a chain of hand-offs cannot form. On Unix
-    the process replaces itself with the release by `exec`. On Windows it joins
-    a Job Object that ends the child when the job closes, ignores console
-    Ctrl+C, waits and exits with the child's code. With
-    `RIDL_TOOLCHAIN_AUTO_INSTALL=1`, the guard absent and exactly one distinct
-    pin, a command with no installed release installs the pinned release and
-    then hands off; `ridl mcp` and `ridl lsp` never install, and no manifest key
-    enables it. The [release pin chapter](../book/release-pin.md) owns the user
-    rules and the [directory record](../design/toolchain-directory.md) owns the
-    mechanism and its sites.
+    runs the highest complete installed release that is compatible with every
+    pin among the run's MANI-026 refusals, with its own arguments, working
+    directory, environment and standard streams. The hand-off itself prints
+    nothing, so output and exit status are the selected release's, except for
+    the lines of an automatic install. The child receives
+    `RIDL_TOOLCHAIN_HANDOFF` set to the releasing parent's release; a process
+    that has the variable never hands off and never installs, so a chain of
+    hand-offs cannot form. With `RIDL_TOOLCHAIN_AUTO_INSTALL=1`, the guard
+    absent and exactly one distinct pin, a command with no installed release
+    installs the pinned release and then hands off. `ridl mcp` hands off from
+    its current directory before it serves and never installs. `ridl lsp`
+    neither hands off nor installs. No manifest key enables an install. The
+    [release pin chapter](../book/release-pin.md#running-the-pinned-release-from-a-terminal)
+    owns the user rules, and the
+    [directory record](../design/toolchain-directory.md#terminal-hand-off) owns
+    the mechanism on each platform and the sites.
 
 ## Alternatives considered
 
@@ -182,17 +183,14 @@ the source of side-by-side installations without another manifest or proxy.
 
 - A pin gives a checked release boundary to workspace consumers, while several
   releases can remain installed on one machine, and a terminal command that the
-  running release refuses runs the compatible installed one itself. The Windows
-  branch of the hand-off, and the Windows paths of the toolchain tests, are
-  compiled by the release workflow's Windows build but run by no test; the
-  follow-up is driftsys/ridl#TBD-windows-ci.
+  running release refuses runs the compatible installed one itself. The release
+  workflow's Windows build compiles the Windows branch of the hand-off, but no
+  test compiles or runs it or the Windows paths of the toolchain tests; the
+  follow-up is driftsys/ridl#1480.
 - Every `ridl` archive of a pinnable release needs a signature, so a release
-  cannot ship without the signing secrets. A lost signing key means a new key
-  for the next release: a binary verifies only releases signed with the key it
-  embeds, so older binaries keep verifying older releases and no release carries
-  two signatures. The
+  cannot ship without the signing secrets. The
   [distribution record](../technotes/toolchain-distribution.md#signed-release-archives)
-  owns the procedure.
+  owns the procedure and the key rotation.
 - Damaged installations need an explicit user action to preserve or move them;
   an installer does not repair them automatically.
 - New manifest keys, diagnostic codes and CLI/schema entries extend frozen

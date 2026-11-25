@@ -132,12 +132,14 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      checked source (`check`, `build`, `baseline`).
    - **2** — the tool could not answer: a missing or unreadable path, a bad
      flag, an I/O failure while reading or writing, or a root release refusal
-     (MANI-024, MANI-025 or MANI-026).
+     (MANI-024, MANI-025 or MANI-026), except a MANI-026 refusal that is handed
+     off to another release (the paragraph below).
 
    A command that hands off to another release (ADR-0036 decision 11) is
    replaced by that release or waits for it, so its exit code and output are the
-   selected release's. When the hand-off cannot start the release, the command
-   prints `error: could not run ridl <version> at <path>: <error>` and exits 2.
+   selected release's, except for the lines of an automatic install. When the
+   hand-off cannot start the release, the command prints
+   `error: could not run ridl <version> at <path>: <error>` and exits 2.
 
    In `ridl check`, `ridl build`, `ridlc check` and `ridlc build`, a lint raised
    to `deny` in `[lints]` is a diagnostic error, so it exits 1. The other
