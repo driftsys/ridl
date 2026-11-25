@@ -107,6 +107,10 @@ pub fn select_installed(
         .find(|installed| {
             !installed.damaged && pins.iter().all(|pin| compatible(installed.release, *pin))
         });
+    if selected.is_some() {
+        // Same rule as `which`: a candidate needs a target with a published archive.
+        release_target(target)?;
+    }
     Ok(selected.map(|installed| {
         let binary = installed.directory.join(binary_name(target));
         (installed.release, binary)

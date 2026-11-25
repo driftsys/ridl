@@ -79,11 +79,13 @@ and the guard variable. It sets no working directory and no stream, so the child
 inherits them. On Unix the process calls `exec`, so nothing remains of it and no
 output is produced. If `exec` returns, the process prints
 `error: could not run ridl <version> at <path>: <error>` and exits 2. On Windows
-the process creates a Job Object that kills its processes when the job closes,
-starts the child, assigns it to the job, ignores Ctrl+C for itself, waits, and
-exits with the child's exit code. A start failure prints the same message and
-exits 2. The Windows branch is not compiled by any gate; no Windows job exists
-yet.
+the process first creates a Job Object that kills its processes when the job
+closes and joins it, so the child it starts afterwards inherits the job. It then
+ignores Ctrl+C for itself, starts the child, waits, and exits with the child's
+exit code. A failure to create, configure or join the job, or to start the
+child, prints the same message with the failed step named and exits 2, and no
+child is started without the job. The Windows branch is not compiled by any
+gate; no Windows job exists yet.
 
 **Sites.** The hand-off is called from these places in the `ridl` binary, each
 after the refusal is known and before anything is written:
@@ -93,8 +95,9 @@ after the refusal is known and before anything is written:
 - The shared preflight of the root manifests, used by `describe`, `baseline` and
   both root checks of `fmt`.
 - The report of a source side of `diff`, when the side failed to compile.
-- `ridl lock`, `ridl test`, `ridl vendor` and `ridl vendor --check`, on the
-  diagnostics of the frozen workspace load.
+- `ridl lock`, `ridl test` and `ridl vendor`, on the diagnostics of the
+  workspace compile, which loads remote units without the frozen mode.
+- `ridl vendor --check`, on the diagnostics of the frozen workspace load.
 
 `ridlc` keeps its refusals, and no site reads standard input.
 
@@ -182,8 +185,10 @@ host probes do not substitute another triple. Archives are published for:
 
 Install rejects another target with its name in the error before publication.
 Selection can still use a compatible running binary on an unsupported target; if
-an installed candidate would be needed there, it returns an error instead.
-Binary naming follows the supplied target, including `ridl.exe` for Windows.
+an installed candidate would be needed there, it returns an error instead. The
+terminal hand-off treats that error as no selection and prints the refusal
+unchanged. Binary naming follows the supplied target, including `ridl.exe` for
+Windows.
 
 Production requests use
 `https://github.com/driftsys/ridl/releases/download/editor-v<version>/ridl-<target>.tar.gz`

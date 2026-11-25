@@ -131,7 +131,9 @@ deployment out of the system. The workspace root's `.ridl/baseline/` and
 `ridl.lock` serve a member entry too. `--frozen` is the same flag
 [`ridlc check --frozen`](#ridlc-check) documents, forwarded unchanged; the two
 commands share one implementation and render byte-identical diagnostics on the
-same input. It now carries this description word for word under `ridl` too —
+same input, except for a MANI-026 refusal that `ridl`
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal) and
+`ridlc` prints. It now carries this description word for word under `ridl` too —
 before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank line
 where the description belongs.
 
@@ -198,7 +200,9 @@ or `MANI-104` (the pin is neither in `vendor/` nor in the cache). A `ridl.lock`
 written before the `tree` hash existed gives them `MANI-108` too, and the same
 `ridl check` adds the hash.
 
-A [release refusal](release-pin.md) exits 2 without writing files.
+A [release refusal](release-pin.md) exits 2 without writing files, except a
+MANI-026 refusal that is
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal).
 
 **Exit codes.** 0 when nothing is wrong — a clean run prints nothing at all, to
 either stream. 1 when an ordinary diagnostic is an error, for example a range
@@ -724,7 +728,9 @@ publication because it is the directory being written. RIDL-411 still refuses a
 first publication that holds a provisional interface number, because RIDL-411
 reads the fresh snapshot alone.
 
-A [release refusal](release-pin.md) exits 2 without writing files.
+A [release refusal](release-pin.md) exits 2 without writing files, except a
+MANI-026 refusal that is
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal).
 
 **Exit codes.** 0 on a clean publish. 1 when an ordinary diagnostic is an error,
 or when the publication gate above refuses the replacement — in both cases the
@@ -1410,7 +1416,9 @@ out/speed.ir.json
 out/speed.rs
 ```
 
-A [release refusal](release-pin.md) exits 2 without writing files.
+A [release refusal](release-pin.md) exits 2 without writing files, except a
+MANI-026 refusal that is
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal).
 
 **Exit codes.** 0 when the build compiles clean and every requested artifact is
 written. 1 when an ordinary diagnostic is an error — nothing is written for a
@@ -3095,7 +3103,8 @@ workspace, renders diagnostics to stderr, and touches no file.
 
 **Exit codes.** 0 clean, 1 an ordinary diagnostic is an error, 2 a release
 refusal, input/output or usage error — identical in shape to `ridl check`, and,
-on the same input, identical in rendered text:
+on the same input, identical in rendered text (except for a MANI-026 refusal
+that `ridl` hands off and `ridlc` prints):
 
 ```sh
 ridlc check .
@@ -3208,7 +3217,8 @@ and add nothing to the compile itself; what they add is humane defaults (`PATH`
 defaults to `.`, `ridl build`'s `--out-dir` defaults to `out`) and, on `check`
 only, the baseline desk check described [above](#ridl-check), which has no
 `ridlc` equivalent. On identical input the two render byte-identical
-diagnostics, confirmed earlier on this page.
+diagnostics, confirmed earlier on this page, except for a MANI-026 refusal that
+`ridl` hands off and `ridlc` prints.
 
 `ridl baseline`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lock`,
 `ridl describe`, and `ridl vendor` have no `ridlc` counterpart at all —

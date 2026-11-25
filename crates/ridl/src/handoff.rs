@@ -2,9 +2,11 @@
 //! release.
 //!
 //! A workspace pin that the running release does not satisfy (MANI-026) is
-//! refused today. When an installed release satisfies every pin of the run, the
-//! process is replaced by that release, given the same arguments, directory,
-//! environment and standard streams, and nothing is printed by this one.
+//! refused today. When an installed release satisfies every pin of the run, that
+//! release runs with the same arguments, directory, environment and standard
+//! streams, and nothing is printed by this process. On Unix this process is
+//! replaced by the release. On Windows it starts the release inside a Job
+//! Object, waits, and exits with the release's exit code.
 
 use ridl_cli::toolchain::{BUILD_TARGET, process_toolchain_root, select_installed};
 use ridl_core::{
@@ -96,20 +98,69 @@ fn run(release: Release, binary: &Path) -> ExitCode {
     ExitCode::from(2)
 }
 
+/// The error that names the Job Object step that failed.
+#[cfg(any(windows, test))]
+fn job_error(step: &str, error: io::Error) -> io::Error {
+    io::Error::new(error.kind(), format!("cannot {step}: {error}"))
+}
+
+/// Puts this process in a Job Object that kills its processes when the job
+/// closes. The handle is never closed, so the job lives as long as this
+/// process, and a child started afterwards inherits the job. Doing this before
+/// the child starts leaves no moment at which a killed parent leaves a child
+/// outside the job.
+#[cfg(windows)]
+fn join_kill_on_close_job() -> io::Result<()> {
+    use windows_sys::Win32::System::{
+        JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+            SetInformationJobObject,
+        },
+        Threading::GetCurrentProcess,
+    };
+    // SAFETY: the limit structure is zeroed and sized for the class named, and
+    // the handles are valid for the calls.
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return Err(job_error("create a job object", io::Error::last_os_error()));
+        }
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            std::ptr::addr_of!(limits).cast(),
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        ) == 0
+        {
+            return Err(job_error(
+                "configure the job object",
+                io::Error::last_os_error(),
+            ));
+        }
+        if AssignProcessToJobObject(job, GetCurrentProcess()) == 0 {
+            return Err(job_error("join the job object", io::Error::last_os_error()));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(windows)]
 fn run(release: Release, binary: &Path) -> ExitCode {
-    use std::os::windows::io::AsRawHandle;
-    use windows_sys::Win32::{
-        Foundation::HANDLE,
-        System::{
-            Console::SetConsoleCtrlHandler,
-            JobObjects::{
-                AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-                JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
-                SetInformationJobObject,
-            },
-        },
-    };
+    use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+    // Without the job the child could outlive a killed parent, so no job means
+    // no child.
+    if let Err(error) = join_kill_on_close_job() {
+        errprintln!("{}", exec_failure(release, binary, &error));
+        return ExitCode::from(2);
+    }
+    // The child handles Ctrl+C; this process ignores it and waits.
+    // SAFETY: a null handler with `true` only sets this process's own flag.
+    unsafe {
+        SetConsoleCtrlHandler(None, 1);
+    }
     let mut child = match child_command(
         binary,
         std::env::args_os().skip(1),
@@ -123,25 +174,6 @@ fn run(release: Release, binary: &Path) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    // SAFETY: the job handle stays open until this process exits, the limit
-    // structure is zeroed and sized for the class named, and the child handle
-    // is owned by `child`, which outlives the calls.
-    unsafe {
-        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-        if !job.is_null() {
-            let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
-            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-            SetInformationJobObject(
-                job,
-                JobObjectExtendedLimitInformation,
-                std::ptr::addr_of!(limits).cast(),
-                std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
-            );
-            AssignProcessToJobObject(job, child.as_raw_handle() as HANDLE);
-        }
-        // The child handles Ctrl+C; this process ignores it and waits.
-        SetConsoleCtrlHandler(None, 1);
-    }
     match child.wait() {
         Ok(status) => std::process::exit(status.code().unwrap_or(2)),
         Err(error) => {
@@ -187,6 +219,21 @@ mod tests {
 
         // The same diagnostic against a map that does not hold its file.
         assert_eq!(pins(&[first], &SourceMap::new()), None);
+    }
+
+    #[test]
+    fn job_error_names_the_step_and_keeps_the_cause() {
+        let error = job_error(
+            "join the job object",
+            io::Error::new(io::ErrorKind::PermissionDenied, "denied"),
+        );
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(error.to_string(), "cannot join the job object: denied");
+        let message = exec_failure(release("0.23.4"), Path::new("/x/ridl"), &error);
+        assert_eq!(
+            message,
+            "error: could not run ridl 0.23.4 at /x/ridl: cannot join the job object: denied"
+        );
     }
 
     #[test]

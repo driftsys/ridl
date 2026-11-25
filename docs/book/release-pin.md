@@ -37,9 +37,10 @@ The diagnostic points to the value. MANI-026 names both releases and the command
 MANI-024 through MANI-026 stop loading before members, source parsing, headers,
 remote imports, lockfiles or lint directives. They are the only diagnostics
 reported for that root. The batch commands listed below exit **2** without
-writing workspace or output files. Invalid TOML syntax remains MANI-001.
-MANI-027 raised to `deny` is an ordinary diagnostic error and exits **1** in
-commands that apply levels.
+writing workspace or output files, unless a MANI-026 refusal is
+[handed off](#running-the-pinned-release-from-a-terminal). Invalid TOML syntax
+remains MANI-001. MANI-027 raised to `deny` is an ordinary diagnostic error and
+exits **1** in commands that apply levels.
 
 `check`, `build`, `fmt`, `lock`, source inputs to `diff`, `baseline`, `test`,
 `vendor`, `describe`, and `ridlc check/build` enforce the root pin. Formatting

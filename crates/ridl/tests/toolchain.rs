@@ -415,6 +415,15 @@ fn toolchain_select_installed_requires_every_pin() {
     assert_eq!(select(&["0.23.1", "0.24.0"]), None);
     assert_eq!(select(&["0.23.1"]), Some((release("0.23.6"), bin_0_23_6)));
     assert_eq!(select(&[]), None);
+
+    // A selected candidate on a target with no published archive is an error,
+    // as it is for `which`; with no candidate the answer is still none.
+    let unsupported = "x86_64-unknown-linux-musl";
+    assert!(select_installed(t.path(), &[release("0.23.1")], unsupported).is_err());
+    assert_eq!(
+        select_installed(t.path(), &[release("0.23.7")], unsupported).unwrap(),
+        None
+    );
 }
 
 #[allow(dead_code)]
