@@ -149,17 +149,26 @@ fn join_kill_on_close_job() -> io::Result<()> {
 
 #[cfg(windows)]
 fn run(release: Release, binary: &Path) -> ExitCode {
-    use windows_sys::Win32::System::Console::SetConsoleCtrlHandler;
+    use windows_sys::Win32::System::Console::{
+        CTRL_BREAK_EVENT, CTRL_C_EVENT, SetConsoleCtrlHandler,
+    };
+    /// Consumes Ctrl+C and Ctrl+Break in this process. The child receives the
+    /// same event through the console and handles it as it would on its own.
+    unsafe extern "system" fn consume_interrupt(event: u32) -> i32 {
+        i32::from(event == CTRL_C_EVENT || event == CTRL_BREAK_EVENT)
+    }
     // Without the job the child could outlive a killed parent, so no job means
     // no child.
     if let Err(error) = join_kill_on_close_job() {
         errprintln!("{}", exec_failure(release, binary, &error));
         return ExitCode::from(2);
     }
-    // The child handles Ctrl+C; this process ignores it and waits.
-    // SAFETY: a null handler with `true` only sets this process's own flag.
+    // A registered handler is not inherited, unlike the "ignore" attribute that
+    // a null handler sets, so the child keeps its default Ctrl+C behaviour.
+    // SAFETY: the routine is a valid `extern "system"` function that touches no
+    // state, and it stays valid for the life of the process.
     unsafe {
-        SetConsoleCtrlHandler(None, 1);
+        SetConsoleCtrlHandler(Some(consume_interrupt), 1);
     }
     let mut child = match child_command(
         binary,

@@ -81,11 +81,13 @@ output is produced. If `exec` returns, the process prints
 `error: could not run ridl <version> at <path>: <error>` and exits 2. On Windows
 the process first creates a Job Object that kills its processes when the job
 closes and joins it, so the child it starts afterwards inherits the job. It then
-ignores Ctrl+C for itself, starts the child, waits, and exits with the child's
-exit code. A failure to create, configure or join the job, or to start the
-child, prints the same message with the failed step named and exits 2, and no
-child is started without the job. The Windows branch is not compiled by any
-gate; no Windows job exists yet.
+registers a console handler that consumes Ctrl+C and Ctrl+Break in the parent (a
+registered handler is not inherited, so the child receives the event normally),
+starts the child, waits, and exits with the child's exit code. A failure to
+create, configure or join the job, or to start the child, prints the same
+message with the failed step named and exits 2, and no child is started without
+the job. The Windows branch is not compiled by any gate; no Windows job exists
+yet.
 
 **Sites.** The hand-off is called from these places in the `ridl` binary, each
 after the refusal is known and before anything is written:

@@ -3249,9 +3249,9 @@ stable, default-free flags.
 
 A [root release pin](release-pin.md) is checked before workspace analysis.
 MANI-024, MANI-025 and MANI-026 exit 2 and suppress other diagnostics for that
-root. A command that
-[hands off](release-pin.md#running-the-pinned-release-from-a-terminal) a
-MANI-026 refusal to an installed release exits with that release's code. Source
+root, except that a MANI-026 refusal which is
+[handed off](release-pin.md#running-the-pinned-release-from-a-terminal) to an
+installed release gives that release's exit code and output. Otherwise source
 and output files are preserved. `fmt` checks all discovered roots before
 writing, and `describe` follows the descriptor input path rather than the
 current directory. Snapshot-only `diff`, standalone descriptors, `init`, `new`
