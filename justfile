@@ -3149,7 +3149,7 @@ install-check:
                 ./install.ps1
                 $release = Join-Path $root "versions/0.23.0"
                 $marker = Join-Path $release ".complete"
-                Assert ((Test-Path -LiteralPath $marker -PathType Leaf) -and (Get-Item -LiteralPath $marker).Length -eq 0) "marker"
+                Assert ((Test-Path -LiteralPath $marker -PathType Leaf) -and (Get-Item -LiteralPath $marker -Force).Length -eq 0) "marker"
                 Assert ((Get-FileHash (Join-Path $release "ridl.exe")).Hash -eq (Get-FileHash (Join-Path $dest "ridl.exe")).Hash) "PATH copy"
                 Assert ((Get-Content (Join-Path $dest "ridl.exe") -Raw).Trim() -eq "ridl 0.23.0") "binary content"
                 Assert (-not (Get-Item (Join-Path $dest "ridl.exe")).LinkType) "PATH symlink"
@@ -3167,7 +3167,8 @@ install-check:
                 Assert ($ErrorActionPreference -eq $savedError -and $ProgressPreference -eq $savedProgress -and [Net.ServicePointManager]::SecurityProtocol -eq $savedTls) "preference restoration"
                 $env:RIDL_INSTALL_BASE_URL = $source
                 Write-Host "install-check: PowerShell install_preserves_damaged_version"
-                Remove-Item -LiteralPath $marker
+                Remove-Item -LiteralPath $marker -Force
+                Assert (-not (Test-Path -LiteralPath $marker)) "damage fixture still has marker"
                 $before = (Get-FileHash (Join-Path $release "ridl.exe")).Hash
                 try { ./install.ps1; throw "accepted damage" } catch { Assert ($_.ToString().Contains($release)) "damage must name directory" }
                 Assert ((Get-FileHash (Join-Path $release "ridl.exe")).Hash -eq $before) "modified damage"
