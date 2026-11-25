@@ -120,6 +120,17 @@ class RidlLanguageClient extends LanguageClient {
 let clients: WorkspaceClients<RidlLanguageClient> | undefined;
 let disposeActivation: (() => void) | undefined;
 
+/** A regular file that the process can run; bare execFile skips anything else on PATH. */
+function isUsableBinary(file: string): boolean {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    if (process.platform !== "win32") fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isRidlDocument(document: vscode.TextDocument): boolean {
   return document.uri.scheme === "file" &&
     (shouldStartClientForLanguage(document.languageId) || path.basename(document.uri.fsPath) === "ridl.toml");
@@ -162,7 +173,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (granted) return;
       granted = true;
       try {
-        await activateTrusted(context);
+        await activateTrusted(context, output);
       } catch (error) {
         output.error(String(error));
       }
@@ -174,9 +185,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   await Promise.all(vscode.workspace.textDocuments.map(checkDocument));
 }
 
-async function activateTrusted(context: vscode.ExtensionContext): Promise<void> {
-  const output = vscode.window.createOutputChannel("RIDL Language Server", { log: true });
-  context.subscriptions.push(output);
+async function activateTrusted(
+  context: vscode.ExtensionContext,
+  existingOutput?: vscode.LogOutputChannel,
+): Promise<void> {
+  // A trust grant reuses the Restricted Mode channel, which is already disposed with the context.
+  const output = existingOutput ?? vscode.window.createOutputChannel("RIDL Language Server", { log: true });
+  if (!existingOutput) context.subscriptions.push(output);
   const active = new Map<RidlLanguageClient, Selection>();
   const offerStaleCopyOnce = runOnce(() => void offerRefreshOfStaleCopy(context));
   const mcpChanged = new vscode.EventEmitter<void>();
@@ -197,6 +212,7 @@ async function activateTrusted(context: vscode.ExtensionContext): Promise<void> 
       pathValue: process.env.PATH ?? process.env.Path,
       platform: process.platform,
       exists: fs.existsSync,
+      usable: isUsableBinary,
     });
   const selector = new ToolchainSelector(runner, {
     progress: async (title, work) =>
@@ -384,6 +400,7 @@ async function activateTrusted(context: vscode.ExtensionContext): Promise<void> 
           pathValue: process.env.PATH ?? process.env.Path,
           platform: process.platform,
           exists: fs.existsSync,
+          usable: isUsableBinary,
           extensionVersion: String(context.extension.packageJSON.version),
           workspaceFolder: folder,
           selectedCommand: mcpSelection?.command,

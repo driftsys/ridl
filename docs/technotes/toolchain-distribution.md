@@ -136,12 +136,12 @@ pinnable `ridl` releases.
 ## Editor toolchain selection
 
 `editors/vscode/src/binaryResolution.ts` resolves the bootstrap binary from
-`ridl.serverPath`, the bundled `bin/ridl` (`bin/ridl.exe` on Windows), or PATH.
-The pure `toolchainSelection.ts` validates the CLI selection report and manages
-installation through that bootstrap binary. `workspaceClients.ts` associates
-document directories with discovered roots and owns their client lifecycles.
-`extension.ts` connects these modules to VS Code document events, manifest
-watching, notifications and the MCP registry.
+`ridl.serverPath`, the bundled `bin/ridl` (`bin/ridl.exe` on Windows), or an
+absolute PATH entry. The pure `toolchainSelection.ts` validates the CLI
+selection report and manages installation through that bootstrap binary.
+`workspaceClients.ts` associates document directories with discovered roots and
+owns their client lifecycles. `extension.ts` connects these modules to VS Code
+document events, manifest watching, notifications and the MCP registry.
 
 The [release pin chapter](../book/release-pin.md#editors-and-agent-tools) owns
 the editor's selection, installation policy, routing, override and trust

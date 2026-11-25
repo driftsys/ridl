@@ -197,16 +197,17 @@ or edits.
 A RIDL source activates the extension through its language contribution. A
 `ridl.toml` found inside an opened VS Code folder activates it through
 `workspaceContains:**/ridl.toml`; opening a manifest alone in a window without a
-folder does not activate it. Once the extension is active, opening a RIDL source
-or a manifest starts its client. The manifest is selected by filename in any
-language mode, so the pin action works before a source is opened and without a
-separate TOML extension. Other TOML files do not start clients. Saved manifest
-create/change/delete events are forwarded to the servers and run discovery
-again. A client is replaced when its selected binary or discovery key changes,
-including when a manifestless document acquires a root manifest. Unsaved
-manifest changes reload the current server without selecting a release from
-unsaved text. Removing a VS Code folder stops clients no longer used by another
-mapping, and deactivation stops every client.
+folder does not activate it. In a trusted workspace, once the extension is
+active, opening a RIDL source or a manifest starts its client. In Restricted
+Mode it only checks for a missing pinned release. The manifest is selected by
+filename in any language mode, so the pin action works before a source is opened
+and without a separate TOML extension. Other TOML files do not start clients.
+Saved manifest create/change/delete events are forwarded to the servers and run
+discovery again. A client is replaced when its selected binary or discovery key
+changes, including when a manifestless document acquires a root manifest.
+Unsaved manifest changes reload the current server without selecting a release
+from unsaved text. Removing a VS Code folder stops clients no longer used by
+another mapping, and deactivation stops every client.
 
 The extension supports untrusted workspaces in a limited way. In Restricted Mode
 it starts no language client and registers no MCP definition, and it never

@@ -64,6 +64,36 @@ test("path_lookup_uses_only_absolute_entries", () => {
   );
   assert.equal(findOnPath(".;relative", "win32", () => true), undefined);
   assert.equal(findOnPath(undefined, "linux", () => true), undefined);
+  // Drive-less rooted and drive-relative Windows entries depend on the current drive or directory.
+  assert.equal(findOnPath("\\tools;C:tools;\\\\host\\share\\bin", "win32", () => true), "\\\\host\\share\\bin\\ridl.exe");
+  assert.equal(findOnPath("\\tools;C:tools", "win32", () => true), undefined);
+  assert.equal(findOnPath("C:/tools", "win32", () => true), "C:\\tools\\ridl.exe");
+});
+
+test("path_lookup_skips_candidates_that_are_not_usable", () => {
+  // A directory or a non-executable file named ridl earlier on PATH is skipped.
+  const usable = (file: string) => file === "/c/ridl";
+  assert.equal(findOnPath("/a:/b:/c", "linux", usable), "/c/ridl");
+  const resolved = resolveBinary({
+    configuredPath: undefined,
+    extensionPath: EXT,
+    pathValue: "/a:/c",
+    platform: "linux",
+    exists: () => true,
+    usable,
+  });
+  assert.deepEqual(resolved, { command: bundledBinaryPath(EXT, "linux"), source: "bundled" });
+  assert.deepEqual(
+    resolveBinary({
+      configuredPath: undefined,
+      extensionPath: EXT,
+      pathValue: "/a:/c",
+      platform: "linux",
+      exists: (file) => file !== bundledBinaryPath(EXT, "linux"),
+      usable,
+    }),
+    { command: "/c/ridl", source: "path" },
+  );
   const base = {
     configuredPath: undefined,
     extensionPath: EXT,

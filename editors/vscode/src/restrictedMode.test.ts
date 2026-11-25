@@ -56,11 +56,14 @@ test("restricted_prompt_is_shown_once_per_release_across_roots", async () => {
   });
   await h.prompter.check("/a");
   await h.prompter.check("/b");
-  h.answers[0](INSTALL);
+  await h.prompter.check("/a");
+  await h.prompter.check("/b");
+  // Answer every pending prompt, so a regression fails on the counts below.
+  for (const answer of h.answers) answer(INSTALL);
   await h.prompter.settled();
   await h.prompter.check("/a");
   await h.prompter.check("/b");
-  for (const answer of h.answers.slice(1)) answer(INSTALL);
+  for (const answer of h.answers) answer(INSTALL);
   await h.prompter.settled();
   assert.equal(h.prompts.length, 1);
   assert.equal(h.installs.length, 1);

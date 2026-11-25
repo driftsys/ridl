@@ -16,6 +16,8 @@ export interface ResolveInput {
   readonly pathValue: string | undefined;
   readonly platform: NodeJS.Platform;
   readonly exists: (file: string) => boolean;
+  /** Whether a PATH candidate is a regular, executable file; defaults to `exists`. */
+  readonly usable?: (file: string) => boolean;
 }
 
 export type BinarySource = "setting" | "bundled" | "path" | "none";
@@ -35,22 +37,27 @@ export function bundledBinaryPath(extensionPath: string, platform: NodeJS.Platfo
   return path.join(extensionPath, "bin", file);
 }
 
+// A Windows entry is anchored when it names a drive and a separator or a UNC
+// share. `\\tools` and `C:tools` depend on the current drive or directory.
+const WINDOWS_ANCHORED = /^(?:[A-Za-z]:[\\/]|\\\\[^\\/]+[\\/][^\\/]+)/;
+
 /**
- * The first `ridl` that an absolute PATH entry holds. An empty or relative
- * entry would resolve against the working directory, so it is skipped.
+ * The first `ridl` that an anchored PATH entry holds and `usable` accepts. An
+ * empty, relative or drive-relative entry would resolve against the working
+ * directory, so it is skipped, as is a candidate that `usable` rejects.
  */
 export function findOnPath(
   pathValue: string | undefined,
   platform: NodeJS.Platform,
-  exists: (file: string) => boolean,
+  usable: (file: string) => boolean,
 ): string | undefined {
   if (!pathValue) return undefined;
   const flavor = platform === "win32" ? path.win32 : path.posix;
   const name = platform === "win32" ? `${BINARY_NAME}.exe` : BINARY_NAME;
   for (const entry of pathValue.split(platform === "win32" ? ";" : ":")) {
-    if (!flavor.isAbsolute(entry)) continue;
+    if (platform === "win32" ? !WINDOWS_ANCHORED.test(entry) : !path.posix.isAbsolute(entry)) continue;
     const candidate = flavor.join(entry, name);
-    if (exists(candidate)) return candidate;
+    if (usable(candidate)) return candidate;
   }
   return undefined;
 }
@@ -64,7 +71,7 @@ export function resolveBinary(input: ResolveInput): { command: string; source: B
   if (input.exists(bundled)) {
     return { command: bundled, source: "bundled" };
   }
-  const found = findOnPath(input.pathValue, input.platform, input.exists);
+  const found = findOnPath(input.pathValue, input.platform, input.usable ?? input.exists);
   if (found) return { command: found, source: "path" };
   // A bare "ridl" would make a spawn search the working directory.
   return { command: bundled, source: "none" };

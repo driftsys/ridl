@@ -58,8 +58,10 @@ Install ridl to PATH** to use `ridl` from a terminal, Claude Code, or Codex too.
 ## Build from source
 
 `ridl` in an absolute `PATH` entry is enough for a development launch (F5 in
-`editors/vscode`). The extension skips empty and relative `PATH` entries, so it
-never runs a `ridl` from the working directory:
+`editors/vscode`). The extension skips empty, relative and drive-relative `PATH`
+entries and any `ridl` that is not an executable file, so it never runs a `ridl`
+from the working directory. On Windows, an entry must start with a drive letter
+and a separator, or with a UNC share:
 
 ```sh
 cargo install --path crates/ridl

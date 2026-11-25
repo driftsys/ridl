@@ -99,7 +99,7 @@ const whichBinaries: string[] = [];
 const restrictedPrompts: string[][] = [];
 const executedCommands: any[][] = [];
 const pathDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "ridl-host-path-"));
-fs.writeFileSync(path.join(pathDirectory, process.platform === "win32" ? "ridl.exe" : "ridl"), "");
+fs.writeFileSync(path.join(pathDirectory, process.platform === "win32" ? "ridl.exe" : "ridl"), "", { mode: 0o755 });
 const ridlOnPath = path.join(pathDirectory, process.platform === "win32" ? "ridl.exe" : "ridl");
 process.env.PATH = pathDirectory;
 process.env.Path = pathDirectory;
