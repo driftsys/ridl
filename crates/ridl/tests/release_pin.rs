@@ -76,6 +76,55 @@ fn assert_refusal(output: &Output, code: &str) {
     assert_eq!(codes.len(), 1, "{output:?}");
     assert!(codes[0].contains(code), "{output:?}");
 }
+
+#[test]
+fn release_member_directory_refuses_incompatible_root() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("member")).unwrap();
+    fs::write(
+        dir.path().join("ridl.toml"),
+        "[workspace]\nmembers = [\"member\"]\nridl-version = \"0.24.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("member/ridl.toml"),
+        "[package]\nname = \"member\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    let before = tree(dir.path());
+    assert_refusal(&run(dir.path(), &["check", "member"], "0.23.2"), "MANI-026");
+    assert_eq!(tree(dir.path()), before);
+}
+
+#[test]
+fn release_fmt_reports_both_refusing_roots_before_writing() {
+    let dir = tempfile::tempdir().unwrap();
+    for (name, pin) in [("a", "0.24.0"), ("b", "0.25.0")] {
+        let root = dir.path().join(name);
+        fs::create_dir(&root).unwrap();
+        fs::write(
+            root.join("ridl.toml"),
+            format!(
+                "[package]\nname = \"{name}\"\nversion = \"1.0.0\"\nridl-version = \"{pin}\"\n"
+            ),
+        )
+        .unwrap();
+        fs::write(
+            root.join("a.typl"),
+            format!("package {name}\ntype A:integer[0..1]\n"),
+        )
+        .unwrap();
+    }
+    let before = tree(dir.path());
+    let output = run(dir.path(), &["fmt", "."], "0.23.2");
+    assert_eq!(output.status.code(), Some(2), "{output:?}");
+    let text = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(text.matches("error[MANI-026]").count(), 2, "{output:?}");
+    for name in ["a", "b"] {
+        assert!(text.contains(&format!("{name}/ridl.toml")), "{output:?}");
+    }
+    assert_eq!(tree(dir.path()), before);
+}
 #[test]
 fn release_refusal_exits_two_and_preserves_outputs() {
     for (pin, code) in [

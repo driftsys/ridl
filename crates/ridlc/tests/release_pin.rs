@@ -64,6 +64,25 @@ fn assert_refusal(output: &Output, code: &str) {
     assert_eq!(codes.len(), 1, "{output:?}");
     assert!(codes[0].contains(code), "{output:?}");
 }
+
+#[test]
+fn release_member_path_refuses_incompatible_root() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::create_dir(dir.path().join("member")).unwrap();
+    fs::write(
+        dir.path().join("ridl.toml"),
+        "[workspace]\nmembers = [\"member\"]\nridl-version = \"0.24.0\"\n",
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("member/ridl.toml"),
+        "[package]\nname = \"member\"\nversion = \"1.0.0\"\n",
+    )
+    .unwrap();
+    let before = tree(dir.path());
+    assert_refusal(&run(dir.path(), &["check", "member"], "0.23.2"), "MANI-026");
+    assert_eq!(tree(dir.path()), before);
+}
 #[test]
 fn release_refusal_exits_two_and_preserves_outputs() {
     for (pin, code) in [

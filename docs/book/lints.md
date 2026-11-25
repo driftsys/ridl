@@ -87,9 +87,9 @@ a directory that holds `.git`.
 **Language server configuration.** Edits to the root `[lints]` table take effect
 through the
 [root manifest reload contract](release-pin.md#editors-and-agent-tools). Edits
-to a member's table require a server restart. The language server publishes the
-diagnostics of every loaded member, also when the editor is opened on one
-member.
+to a member's table take effect at the next workspace reload (a root `ridl.toml`
+event) or a server restart. The language server publishes the diagnostics of
+every loaded member, also when the editor is opened on one member.
 
 ## Where levels apply
 
@@ -298,7 +298,8 @@ and the default ceilings. It publishes the diagnostics of a `[limits]` table
 when it loads the workspace. Edits to root `[limits]` and `[backend.<name>]`
 tables take effect through the
 [root manifest reload contract](release-pin.md#editors-and-agent-tools). Edits
-to a member's `[limits]` table require a server restart.
+to a member's `[limits]` table take effect at the next workspace reload (a root
+`ridl.toml` event) or a server restart.
 
 `podbuf-padding-order` (RIDL-156) reports a struct whose declared field order
 lays out in a larger podbuf head than the same fields sorted by descending

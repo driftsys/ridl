@@ -12,9 +12,10 @@ Scope: root release requirements, their enforcement by workspace consumers,
 versioned toolchain management and VS Code selection. Amends
 [ADR-0002](ADR-0002-module-system.md) §4,
 [ADR-0010](ADR-0010-cli-conventions.md),
-[ADR-0025](ADR-0025-workspace-aware-mcp-tools.md) decisions 2, 5 and 7, and
-[the MCP workspace tools record](../design/mcp-workspace-tools.md). The as-built
-toolchain protocol is in
+[ADR-0024](ADR-0024-lint-registry-and-levels.md)'s language server reload
+consequence, [ADR-0025](ADR-0025-workspace-aware-mcp-tools.md) decisions 2, 5
+and 7, and [the MCP workspace tools record](../design/mcp-workspace-tools.md).
+The as-built toolchain protocol is in
 [the toolchain directory record](../design/toolchain-directory.md).
 
 ## Context

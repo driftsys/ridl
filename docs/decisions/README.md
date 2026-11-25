@@ -748,7 +748,8 @@ other entry below is Accepted.
 - **[ADR-0036 — Workspace toolchain pins](ADR-0036-workspace-toolchain-pins.md).**
   _Accepted 2026-11-25._ Records the root release requirement, exclusive
   refusal, shared versions directory and direct per-root editor selection.
-  Amends ADR-0002 §4, ADR-0010, ADR-0025 decisions 2, 5 and 7, and
+  Amends ADR-0002 §4, ADR-0010, ADR-0024's language server reload consequence,
+  ADR-0025 decisions 2, 5 and 7, and
   [the MCP workspace tools record](../design/mcp-workspace-tools.md); the record
   links the deferred work and minimum-release extension CI follow-up.
 

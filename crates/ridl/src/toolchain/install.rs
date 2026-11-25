@@ -60,7 +60,7 @@ fn download_config(url: &str) -> ureq::config::Config {
         .build()
 }
 
-fn download(url: &str, limit: u64) -> io::Result<Vec<u8>> {
+fn download(base_url: &str, url: &str, limit: u64) -> io::Result<Vec<u8>> {
     if let Some(path) = url.strip_prefix("file://") {
         if !Path::new(path).is_absolute() {
             return Err(io::Error::other("file source must be absolute"));
@@ -69,7 +69,7 @@ fn download(url: &str, limit: u64) -> io::Result<Vec<u8>> {
             File::open(path).map_err(|e| io::Error::new(e.kind(), format!("{path}: {e}")))?;
         return read_download(file, url, limit);
     }
-    let config = download_config(url);
+    let config = download_config(base_url);
     let mut response = ureq::Agent::new_with_config(config)
         .get(url)
         .call()
@@ -197,8 +197,8 @@ pub fn install(root: &Path, release: Release, target: &str, base_url: &str) -> i
         "{}/editor-v{release}/{archive}",
         base_url.trim_end_matches('/')
     );
-    let bytes = download(&url, ARCHIVE_LIMIT)?;
-    let checksum = download(&format!("{url}.sha256"), CHECKSUM_LIMIT)?;
+    let bytes = download(base_url, &url, ARCHIVE_LIMIT)?;
+    let checksum = download(base_url, &format!("{url}.sha256"), CHECKSUM_LIMIT)?;
     verify(&bytes, &checksum, &archive)?;
     extract(&bytes, &stage.0, binary)?;
     File::create_new(stage.0.join(".complete"))?;
@@ -221,18 +221,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn https_download_policy_refuses_http_including_redirect_targets() {
-        let config = download_config("https://github.com/driftsys/ridl/releases/download");
+    fn https_download_refuses_plain_http_url_before_connecting() {
+        let error = download(
+            "https://github.com/driftsys/ridl/releases/download",
+            "http://127.0.0.1:1/archive",
+            ARCHIVE_LIMIT,
+        )
+        .unwrap_err();
         assert!(
-            config.https_only(),
-            "HTTPS origins must prohibit a redirect downgrade"
-        );
-        let result = ureq::Agent::new_with_config(config)
-            .get("http://127.0.0.1:1/archive")
-            .call();
-        assert!(
-            matches!(result, Err(ureq::Error::RequireHttpsOnly(_))),
-            "{result:?}"
+            error.to_string().contains("configured for https only"),
+            "{error:?}"
         );
         assert!(
             !download_config("http://127.0.0.1:1").https_only(),

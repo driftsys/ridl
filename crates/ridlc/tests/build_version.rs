@@ -15,6 +15,18 @@ fn release_stamp_normalises_binary_tags() {
 }
 
 #[test]
+fn build_stamp_normalises_optional_environment_value() {
+    for (input, expected) in [
+        (Some("editor-v0.23.0"), "0.23.0"),
+        (Some("v0.23.0"), "0.23.0"),
+        (Some("  "), env!("CARGO_PKG_VERSION")),
+        (None, env!("CARGO_PKG_VERSION")),
+    ] {
+        assert_eq!(ridlc_version::build_version(input), expected, "{input:?}");
+    }
+}
+
+#[test]
 fn compiled_build_stamp_is_the_normalised_plain_release() {
     let stamp = env!("RIDL_BUILD_VERSION");
     let release = ridl_core::release::parse_release(stamp);
@@ -23,5 +35,5 @@ fn compiled_build_stamp_is_the_normalised_plain_release() {
         "compiled build stamp must be a plain release: {stamp:?}"
     );
     let input = env!("RIDL_BUILD_VERSION_INPUT");
-    assert_eq!(stamp, ridlc_version::normalise_version(input));
+    assert_eq!(stamp, ridlc_version::build_version(Some(input)));
 }

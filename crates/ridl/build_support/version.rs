@@ -1,3 +1,8 @@
+/// Chooses the build stamp from an optional workflow value.
+pub fn build_version(value: Option<&str>) -> &str {
+    normalise_version(value.unwrap_or_default())
+}
+
 /// Trims a workflow stamp and removes one tag prefix. Blank input uses the crate version.
 pub fn normalise_version(value: &str) -> &str {
     let value = value.trim();
