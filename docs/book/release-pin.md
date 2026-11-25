@@ -49,8 +49,10 @@ checks every discovered root before any write, without compiling sources.
 `describe` and a `diff` directory input report a root release refusal before an
 I/O error of the input. Explicit snapshot inputs to `diff`, standalone
 descriptors, `init`, `new` and `lock merge` keep their existing contracts,
-independent of the current directory's pin. `lsp` and `mcp` still start their
-servers and report refusals through their protocols, as described below.
+independent of the current directory's pin. `lsp` starts its server and reports
+refusals through its protocol. `mcp` hands off a MANI-026 refusal of the current
+directory's root to a compatible installed release, and otherwise starts its
+server and reports refusals through its protocol, as described below.
 
 Releases before 0.23.0 cannot enforce pins: they read the key as unknown
 (MANI-005) and may continue. Pin support begins with 0.23.0.
@@ -121,14 +123,16 @@ code.
 The selected release is the highest complete, undamaged installed release that
 is compatible with every MANI-026 pin of the run. The running binary is never a
 candidate. `fmt` can report several pins when it walks several roots; one
-release has to satisfy all of them. When no installed release qualifies, the
-refusal is printed and the command exits 2 as before.
+release has to satisfy all of them. When no installed release qualifies and
+automatic installation (below) does not apply, the refusal is printed and the
+command exits 2.
 
 The selected binary receives the same arguments, working directory and
 environment, and the same three standard streams, with one addition: the
 variable `RIDL_TOOLCHAIN_HANDOFF`, whose value is the release that handed off.
-The hand-off prints nothing, and the exit status and output are the selected
-release's. If the binary cannot be started, the message
+The hand-off itself prints nothing, and the exit status and output are the
+selected release's; only an automatic installation before it prints the two
+lines described below. If the binary cannot be started, the message
 `error: could not run ridl <version> at <path>: <error>` is printed and the
 command exits 2.
 

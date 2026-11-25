@@ -77,10 +77,11 @@ calls `install` with the release origin and key from `release_origin()` and the
 build target, prints `installed ridl <pin> at <path>`, and runs the binary that
 `install` returns. A failure, including a toolchain root error, prints
 `error: <cause>` and returns to the caller, which prints the refusal and exits
-2. `ridl mcp` calls `handoff::mcp()` as the first statement of `run_mcp`, before
-the Tokio runtime exists and before standard input is read. It reads the root
-manifest of the current directory, requires MANI-026, and passes
-`Install::Never`.
+2. A selection error counts as nothing selected, so under the opt-in with one
+pin it leads to the installation attempt. `ridl mcp` calls `handoff::mcp()` as
+the first statement of `run_mcp`, before the Tokio runtime exists and before
+standard input is read. It reads the root manifest of the current directory,
+requires MANI-026, and passes `Install::Never`.
 
 **Guard.** `RIDL_TOOLCHAIN_HANDOFF` is set for the child to the release that
 handed off. A process with the variable present, whatever its value, does not
@@ -113,6 +114,9 @@ after the refusal is known and before anything is written:
 - `ridl lock`, `ridl test` and `ridl vendor`, on the diagnostics of the
   workspace compile, which loads remote units without the frozen mode.
 - `ridl vendor --check`, on the diagnostics of the frozen workspace load.
+- `ridl mcp`, in its start-up decision (see "Automatic install" above): it reads
+  the root manifest of the current directory, not diagnostics of a command run,
+  and never installs.
 
 `ridlc` keeps its refusals, and no site reads standard input.
 
@@ -201,18 +205,22 @@ host probes do not substitute another triple. Archives are published for:
 Install rejects another target with its name in the error before publication.
 Selection can still use a compatible running binary on an unsupported target; if
 an installed candidate would be needed there, it returns an error instead. The
-terminal hand-off treats that error as no selection and prints the refusal
-unchanged. Binary naming follows the supplied target, including `ridl.exe` for
-Windows.
+terminal hand-off treats that error as no selection. Without the automatic
+install opt-in, or with more than one distinct pin, it then prints the refusal
+unchanged. With the opt-in and one pin, it attempts the installation, and the
+install error of an unsupported target is printed before the refusal. Binary
+naming follows the supplied target, including `ridl.exe` for Windows.
 
 Production requests use
 `https://github.com/driftsys/ridl/releases/download/editor-v<version>/ridl-<target>.tar.gz`
 and the same URL with `.sha256` and with `.minisig` appended. The library's
-`base_url` parameter allows fixture `file://` and local HTTP sources; the CLI
-always passes its constant origin and exposes no override. Each HTTP request has
-a 30-second connect timeout and a 10-minute overall timeout. Downloads are
-bounded to 256 MiB for the archive, 4 KiB for the checksum record and 4 KiB for
-the signature file.
+`base_url` parameter allows fixture `file://` and local HTTP sources; a release
+build of the CLI always passes its constant origin. A debug build replaces the
+origin with the nonempty value of `RIDL_TEST_RELEASE_ORIGIN`, which integration
+tests use; no release build, manifest key or command-line option exposes an
+override. Each HTTP request has a 30-second connect timeout and a 10-minute
+overall timeout. Downloads are bounded to 256 MiB for the archive, 4 KiB for the
+checksum record and 4 KiB for the signature file.
 
 The checksum record is one UTF-8 line: 64 hexadecimal SHA-256 digits, then two
 spaces or a space followed by `*`, then the exact archive name, with an optional
@@ -221,13 +229,14 @@ verifies consistency with the origin's record only.
 
 The `.minisig` file is a minisign signature of the archive. Only prehashed
 signatures verify; a legacy signature is refused. The library takes the public
-key as a parameter (`public_key`), and the CLI passes `RELEASE_PUBLIC_KEY`. An
-undecodable key is an error before any download of a release that is not yet
-installed, and the error does not name the origin. The signature's trusted
-comment must equal `ridl <version> <target>` exactly, with the version in
-`MAJOR.MINOR.PATCH` form. This stops a signed archive of an older release, or of
-another target, from being served under the requested name. Archives of `ridlc`
-are not signed.
+key as a parameter (`public_key`), and a release build of the CLI passes
+`RELEASE_PUBLIC_KEY`. A debug build replaces it with the nonempty value of
+`RIDL_TEST_RELEASE_PUBLIC_KEY`. An undecodable key is an error before any
+download of a release that is not yet installed, and the error does not name the
+origin. The signature's trusted comment must equal `ridl <version> <target>`
+exactly, with the version in `MAJOR.MINOR.PATCH` form. This stops a signed
+archive of an older release, or of another target, from being served under the
+requested name. Archives of `ridlc` are not signed.
 
 ## CLI installation transaction
 
