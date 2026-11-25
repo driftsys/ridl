@@ -135,8 +135,10 @@ member; rsdl is the apex.
     just gate-parity     CI invokes every member of just build, and the members
                          of build match the expected list in the recipe
     just install-check   end-to-end test of install.sh and, where pwsh
-                         is installed, install.ps1 (dry run, good install,
-                         corrupted download), against a fixture release;
+                         is installed, install.ps1 against a fixture release
+                         (dry run, shared layout, offline reuse, preserved damage,
+                         checksum refusal, platform roots and paths with spaces,
+                         flat ridlc and historical ridl installs);
                          it also runs scripts/verify-deno-zip.sh against a
                          temporary pin file: a matching zip passes, and a
                          different zip, an absent target and a malformed pin

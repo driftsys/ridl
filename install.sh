@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Installs a binary from the newest editor-v* GitHub Release (or the one named
 # in RIDL_VERSION): downloads <binary>-<target>.tar.gz and its .sha256,
-# verifies the checksum, and places it in RIDL_INSTALL_DIR (default
-# ~/.local/bin). Usage:
+# verifies the checksum, stores pinnable ridl releases in the shared toolchain
+# directory, and copies the binary to RIDL_INSTALL_DIR (default ~/.local/bin).
+# Older ridl releases and ridlc retain flat installation. Usage:
 #   curl -fsSL https://raw.githubusercontent.com/driftsys/ridl/main/install.sh | bash
 #
 # RIDL_INSTALL_BINARY selects which binary the release carries to install:
@@ -19,7 +20,7 @@ set -eu
 
 REPO="driftsys/ridl"
 TAG_PREFIX="editor-v"
-INSTALL_DIR="${RIDL_INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${RIDL_INSTALL_DIR:-${HOME:-}/.local/bin}"
 BINARY="${RIDL_INSTALL_BINARY:-ridl}"
 case "$BINARY" in
   ridl | ridlc) ;;
@@ -66,53 +67,164 @@ get_version() {
   printf '%s\n' "$version"
 }
 
+# Accept decimal release components in the same u32 range as the CLI.
+normalise_version() {
+  local value="${1#editor-v}" part result="" IFS=.
+  [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  for part in $value; do
+    while [ "${#part}" -gt 1 ] && [ "${part#0}" != "$part" ]; do part="${part#0}"; done
+    [ "${#part}" -le 10 ] || return 1
+    [ "$part" -le 4294967295 ] || return 1
+    result="${result:+$result.}$part"
+  done
+  printf '%s\n' "$result"
+}
+
+toolchain_root() {
+  local root
+  if [ -n "${RIDL_TOOLCHAIN_DIR:-}" ]; then
+    root="$RIDL_TOOLCHAIN_DIR"
+  else
+    case "$(uname -s)" in
+      Linux)
+        if [ -n "${XDG_DATA_HOME:-}" ]; then root="$XDG_DATA_HOME/ridl"
+        else root="${HOME:?toolchain directory requires HOME}/.local/share/ridl"; fi ;;
+      Darwin) root="${HOME:?toolchain directory requires HOME}/Library/Application Support/ridl" ;;
+      *) echo "error: unsupported toolchain platform" >&2; return 1 ;;
+    esac
+  fi
+  case "$root" in /*) ;; *) root="$PWD/$root" ;; esac
+  printf '%s\n' "$root"
+}
+
+# An existing directory is never repaired or replaced.
+complete_release() {
+  [ -e "$release_dir" ] || [ -L "$release_dir" ] || return 1
+  if [ -d "$release_dir" ] && [ ! -L "$release_dir" ] &&
+     [ -f "$release_dir/ridl" ] && [ ! -L "$release_dir/ridl" ] &&
+     [ -f "$release_dir/.complete" ] && [ ! -L "$release_dir/.complete" ] &&
+     [ ! -s "$release_dir/.complete" ]; then
+    return 0
+  fi
+  echo "error: damaged toolchain directory $release_dir; preserve or move it before installing again" >&2
+  exit 1
+}
+
+download() {
+  local url="$1" output="$2" limit="$3" size
+  curl -fsSL --connect-timeout 30 --max-time 600 --max-filesize "$limit" "$url" -o "$output"
+  size="$(wc -c < "$output" | tr -d ' ')"
+  [ "$size" -le "$limit" ] || { echo "error: download exceeds $limit bytes" >&2; return 1; }
+}
+
+verify_checksum() {
+  local hash tail record
+  record="$(cat "$tmpdir/$tarball.sha256"; printf '.')"
+  record="${record%.}"
+  record="${record%$'\n'}"
+  record="${record%$'\r'}"
+  hash="${record:0:64}"; tail="${record:64}"
+  if ! [[ "$hash" =~ ^[a-fA-F0-9]{64}$ ]] ||
+     { [ "$tail" != "  $tarball" ] && [ "$tail" != " *$tarball" ]; }; then
+    echo "error: invalid checksum record for $tarball" >&2; return 1
+  fi
+  (cd "$tmpdir" && if command -v sha256sum >/dev/null; then sha256sum -c "$tarball.sha256"; else shasum -a 256 -c "$tarball.sha256"; fi)
+}
+
+extract_release() {
+  local archive="$tmpdir/$tarball" destination="$1" name count=0 names="|"
+  # Check names and types before extraction. Only three root-level regular
+  # files are allowed; duplicates, links and archive markers are refused.
+  tar tzf "$archive" > "$tmpdir/names"
+  tar tvzf "$archive" > "$tmpdir/types"
+  while IFS= read -r name; do
+    case "$name" in "$BINARY" | LICENSE | THIRD-PARTY-NOTICES.txt) ;; *) echo "error: unsafe archive entry $name" >&2; return 1 ;; esac
+    case "$names" in *"|$name|"*) echo "error: duplicate archive entry $name" >&2; return 1 ;; esac
+    names="$names$name|"; count=$((count + 1))
+  done < "$tmpdir/names"
+  [ "$count" -eq 3 ] || { echo "error: archive missing required files" >&2; return 1; }
+  if LC_ALL=C grep -qv '^-' "$tmpdir/types"; then echo "error: unsafe archive entry type" >&2; return 1; fi
+  gzip -t "$archive"
+  tar xzf "$archive" -C "$destination"
+  for name in "$BINARY" LICENSE THIRD-PARTY-NOTICES.txt; do
+    [ -f "$destination/$name" ] && [ ! -L "$destination/$name" ] || return 1
+  done
+  chmod +x "$destination/$BINARY"
+}
+
 main() {
-  local target version tarball url
+  local target version raw normalized="" versioned="" root="" release_dir="" source=""
   target="$(detect_target)"
-  version="$(get_version)"
+  raw="$(get_version)"
+  version="$raw"
+  if normalized="$(normalise_version "$raw")"; then
+    version="$TAG_PREFIX$normalized"
+    local major minor rest
+    major="${normalized%%.*}"; rest="${normalized#*.}"; minor="${rest%%.*}"
+    if [ "$BINARY" = ridl ] && { [ "$major" -gt 0 ] || [ "$minor" -ge 23 ]; }; then versioned=1; fi
+
+  fi
   tarball="${BINARY}-${target}.tar.gz"
   url="$RIDL_INSTALL_BASE_URL/$version/$tarball"
+  if [ -n "${RIDL_INSTALL_DRY_RUN:-}" ]; then echo "$url"; return; fi
 
-  if [ -n "${RIDL_INSTALL_DRY_RUN:-}" ]; then
-    echo "$url"
-    return
+  if [ -z "${RIDL_INSTALL_DIR:-}" ]; then INSTALL_DIR="${HOME:?PATH directory requires HOME}/.local/bin"; fi
+  tmpdir=""; tmpbin=""; stage=""
+  trap 'rm -rf "${tmpdir:-}" "${tmpbin:-}" "${stage:-}"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  if [ -n "$versioned" ]; then
+    root="$(toolchain_root)"
+    release_dir="$root/versions/$normalized"
+    if complete_release; then source="$release_dir/ridl"; fi
+  fi
+  if [ -z "${source:-}" ]; then
+    if [ -n "$versioned" ]; then
+      mkdir -p "$root/versions"
+      # Assign cleanup ownership only after exclusively creating the stage.
+      local candidate="$root/versions/.tmp-$normalized-$$"
+      mkdir "$candidate"
+      stage="$candidate"
+    fi
+    tmpdir="$(mktemp -d)"
+    download "$url" "$tmpdir/$tarball" 268435456
+    download "$url.sha256" "$tmpdir/$tarball.sha256" 4096
+    verify_checksum
+    if [ -n "$versioned" ]; then
+      # A version-named child lets both BSD and GNU mv address the versions
+      # parent. They refuse an existing child without nesting the source in it.
+      local payload="$stage/$normalized"
+      mkdir "$payload"
+      extract_release "$payload"
+      : > "$payload/.complete"
+      if ! complete_release; then
+        mv -n "$payload" "$root/versions/"
+        if [ -d "$payload" ]; then
+          if ! complete_release; then
+            echo "error: toolchain directory appeared: $release_dir" >&2
+            return 1
+          fi
+        fi
+      fi
+      rm -rf "$stage"; stage=""
+      source="$release_dir/ridl"
+    else
+      # Historical archives retain their original flat extraction behavior.
+      tar xzf "$tmpdir/$tarball" -C "$tmpdir"
+      source="$tmpdir/$BINARY"
+    fi
   fi
 
-  echo "Installing $BINARY $version ($target) to $INSTALL_DIR" >&2
-  tmpdir="$(mktemp -d)"
-  tmpbin=""
-  # Cleans up the download staging directory and, if the atomic install below
-  # was interrupted after claiming a temporary name inside INSTALL_DIR, that
-  # temporary file too. INT and TERM are trapped as well as EXIT: without
-  # them, an interrupt (Ctrl-C) between the mktemp that claims the temporary
-  # name and the final rename would kill the script by the signal's default
-  # disposition, which bypasses the EXIT trap entirely and leaves the hidden
-  # temporary file behind.
-  trap 'rm -rf "${tmpdir:-}" "${tmpbin:-}"' EXIT INT TERM
-  curl -fsSL "$url" -o "$tmpdir/$tarball"
-  curl -fsSL "$url.sha256" -o "$tmpdir/$tarball.sha256"
-  (cd "$tmpdir" && if command -v sha256sum >/dev/null; then sha256sum -c "$tarball.sha256"; else shasum -a 256 -c "$tarball.sha256"; fi)
-  tar xzf "$tmpdir/$tarball" -C "$tmpdir"
-
-  # Install by renaming into place rather than moving the extracted binary
-  # straight onto INSTALL_DIR/BINARY. tmpdir is usually a different
-  # filesystem from INSTALL_DIR, so a direct `mv` there is a copy-and-unlink:
-  # it fails with ETXTBSY while a previous ridl is still running — the normal
-  # case for someone upgrading ridl while `ridl mcp` is running under Claude
-  # Code or Codex, not a corner case. Claiming a temporary name inside
-  # INSTALL_DIR first, making it executable there, and then renaming it over
-  # BINARY keeps both operations within one filesystem, where a rename is
-  # atomic and succeeds even while the old inode is still executing.
+  # Rename a temporary PATH file on the same filesystem so an executing old
+  # binary can be replaced without truncating it or failing with ETXTBSY.
   mkdir -p "$INSTALL_DIR"
   tmpbin="$(mktemp "$INSTALL_DIR/.$BINARY.XXXXXX")"
-  mv "$tmpdir/$BINARY" "$tmpbin"
+  cp "$source" "$tmpbin"
   chmod +x "$tmpbin"
   mv "$tmpbin" "$INSTALL_DIR/$BINARY"
   tmpbin=""
-
   echo "Installed $INSTALL_DIR/$BINARY ($("$INSTALL_DIR/$BINARY" --version))" >&2
   if ! printf '%s\n' "$PATH" | tr ':' '\n' | grep -qxF "$INSTALL_DIR"; then
-    echo "" >&2
     echo "Add to your PATH:" >&2
     echo "  export PATH=\"$INSTALL_DIR:\$PATH\"" >&2
   fi

@@ -85,11 +85,33 @@ irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex
 
 Both scripts read the same environment variables:
 
-| Variable              | Effect                                                                                         |
-| --------------------- | ---------------------------------------------------------------------------------------------- |
-| `RIDL_INSTALL_DIR`    | Directory to install into. Default `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows). |
-| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                                   |
-| `RIDL_VERSION`        | The release tag to install, instead of the newest `editor-v*` one.                             |
+| Variable              | Effect                                                                                           |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| `RIDL_INSTALL_DIR`    | Directory for the PATH copy. Default `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows). |
+| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                                     |
+| `RIDL_VERSION`        | A release such as `0.23.0` or `editor-v0.23.0`, instead of the newest editor release.            |
+
+For `ridl` 0.23.0 and later, both scripts first install into the shared
+[toolchain directory](release-pin.md#installing-and-selecting-toolchains), then
+copy the binary to the PATH directory. That chapter owns the platform roots,
+`RIDL_TOOLCHAIN_DIR` override, side-by-side layout and `.complete` marker rules.
+Complete releases are reused without downloading. Older `ridl` releases and
+`RIDL_INSTALL_BINARY=ridlc` keep a flat install in the PATH directory.
+
+Set an explicit version in CI so a newly published release does not change the
+compiler used by the job:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/driftsys/ridl/main/install.sh | RIDL_VERSION=0.23.0 bash
+```
+
+```powershell
+$env:RIDL_VERSION = '0.23.0'
+irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex
+```
+
+See [workspace release pins](release-pin.md) for the manifest compatibility
+rule.
 
 When the install directory is not on your `PATH`, the script prints the command
 that adds it.

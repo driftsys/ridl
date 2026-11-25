@@ -118,8 +118,8 @@ library test parameter, with no CLI, manifest or environment override.
 `toolchain_ureq_path_verifies_and_installs` local HTTP test, exercising the
 actual ureq path and checksum refusal. File-based fixture tests cover
 extraction, cleanup, damaged directories and concurrent installers without a
-network listener. The install scripts below retain their existing flat layout
-independently of these subcommands.
+network listener. The install scripts below produce the shared layout for
+pinnable `ridl` releases.
 
 ## The extension resolves one binary, spawns it in two roles
 
@@ -165,14 +165,26 @@ reason:
 ## The install scripts
 
 `install.sh` and `install.ps1` install the binary without the extension, which
-is what Claude Code and Codex need — they read their own MCP configuration and
-only require `ridl` on `PATH`. Each downloads `ridl-<target>.tar.gz` and its
-`.sha256` from the resolved release, verifies the checksum, and places `ridl` in
-`RIDL_INSTALL_DIR` (default `$HOME/.local/bin`; `install.ps1` uses
-`%LOCALAPPDATA%\Programs\ridl`, the folder the extension uses on Windows).
-`RIDL_VERSION` pins a specific `editor-v*` tag; `RIDL_INSTALL_DRY_RUN=1` prints
-the resolved URL and exits without downloading. `just install-check` runs
-`install.sh` end to end against a `file://` fixture release: one good install, a
-reinstall over the existing binary, and one tampered tarball that the checksum
-must reject with nothing installed. When `pwsh` and `python3` are present, it
-runs the same cases for `install.ps1` against a local HTTP server on 127.0.0.1.
+is what Claude Code and Codex need for their MCP configuration. They discover
+the newest editor release or use `RIDL_VERSION`, accepting `0.23.0` and
+`editor-v0.23.0`. Explicit historical tags remain supported. Dry runs print the
+resolved URL without creating directories or downloading.
+
+For `ridl` 0.23.0 and later, the scripts download the target archive and SHA-256
+record, verify the digest and archive contents, and install into the shared
+[toolchain directory](../book/release-pin.md#installing-and-selecting-toolchains).
+That chapter owns the roots, directory layout and completion rules. Complete
+releases are reused offline; damaged directories are preserved and named in the
+error. The scripts then copy the binary to `RIDL_INSTALL_DIR`, defaulting to
+`$HOME/.local/bin` or `%LOCALAPPDATA%\Programs\ridl`. PATH entries are regular
+files. Older releases, historical tags without a plain release version, and
+`RIDL_INSTALL_BINARY=ridlc` retain flat installation in that PATH directory.
+
+`just install-check` first runs the ignored toolchain HTTP test, then checks the
+scripts with fixture releases at `editor-v0.23.0`: bare/tag normalization,
+shared layout, offline reuse, damaged-directory preservation, checksum and
+archive refusal, platform roots and paths containing spaces. It also checks flat
+`ridlc` and historical `ridl` installation, invalid binary selection, dry runs
+and Deno ZIP verification. Bash fixtures use `file://`; the optional PowerShell
+branch uses a local HTTP server. The full recipe requires permission to bind
+local TCP listeners, including when `pwsh` is absent.
