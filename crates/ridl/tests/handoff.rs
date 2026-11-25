@@ -576,7 +576,7 @@ fn auto_install_failure_prints_the_error_before_the_refusal() {
     assert_eq!(out.status.code(), Some(2));
 }
 
-/// A snapshot input never hands off: an unreadable snapshot under a workspace
+/// A snapshot input never hands off: an unreadable snapshot directory under a workspace
 /// that pins another release reports the refusal and exits 2, runs no installed
 /// release, and installs nothing, even with the opt-in set.
 #[test]

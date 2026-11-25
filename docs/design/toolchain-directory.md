@@ -257,12 +257,12 @@ return exit 2.
 2. Open `.<version>.lock`, creating it when absent, and acquire its OS file
    lock; waiting for another installer or an uninstall is part of this step. The
    lock file is opened even when the release is already installed, so an install
-   needs write access to `versions/` in every case. Then inspect the
-   destination. Reuse a complete entry without downloading; the lock guarantees
-   only that the destination is not inspected or reused while an uninstall holds
-   it. An uninstall that runs after install releases the lock can still remove
-   the entry before the caller uses the path. Refuse an existing damaged entry
-   without modifying it.
+   needs to be able to create that file, or to open an existing one for writing,
+   in every case. Then inspect the destination. Reuse a complete entry without
+   downloading; the lock guarantees only that the destination is not inspected
+   or reused while an uninstall holds it. An uninstall that runs after install
+   releases the lock can still remove the entry before the caller uses the path.
+   Refuse an existing damaged entry without modifying it.
 3. While holding that version's lock, remove only directories named
    `.tmp-<version>-<digits>`, with a nonempty ASCII decimal suffix. Preserve
    other versions, script stages, similarly prefixed names and non-directories.
@@ -301,9 +301,9 @@ is complete or damaged. The root must be an absolute path: a relative
 3. Inspect the entry without following symbolic links. An absent entry means the
    release is not installed, and no lock file is created.
 4. Open `.<version>.lock` and acquire its OS file lock, as the CLI installer
-   does, then inspect the entry again, because another process can have removed
-   it while this one waited. Remove the stale `.tmp-<version>-<digits>` stages
-   under that lock.
+   does. Remove the stale `.tmp-<version>-<digits>` stages under that lock, then
+   inspect the entry again, because another process can have removed it while
+   this one waited.
 5. Rename the entry to `.tmp-<version>-<pid>`, so no reader sees a partly
    removed release, then remove the stage. A real directory is removed
    recursively; a symbolic link or a regular file is removed itself, and the
@@ -351,9 +351,10 @@ completion check. When the rename fails and no destination appeared, the script
 reports `could not move the staged release` with the `mv` exit status.
 `install.ps1` throws `toolchain directory could not be published` instead.
 Failure cleanup removes only the operation's claimed paths. Removing an old
-stage is best effort in both scripts: a failure prints a warning on standard
-error and the install continues. `install.sh` skips symbolic links and
-`install.ps1` skips reparse points when it removes old stages.
+stage is best effort in both scripts: a failure prints a warning and the install
+continues: `install.sh` writes it to standard error, and `install.ps1` writes it
+with `Write-Warning`, to the warning stream. `install.sh` skips symbolic links
+and `install.ps1` skips reparse points when it removes old stages.
 
 For a versioned install (`ridl` 0.23.0 or later) the scripts require an absolute
 `RIDL_TOOLCHAIN_DIR` and refuse a relative value with

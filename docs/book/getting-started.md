@@ -85,12 +85,12 @@ irm https://raw.githubusercontent.com/driftsys/ridl/main/install.ps1 | iex
 
 Both scripts read the same environment variables:
 
-| Variable              | Effect                                                                                           |
-| --------------------- | ------------------------------------------------------------------------------------------------ |
-| `RIDL_INSTALL_DIR`    | Directory for the PATH copy. Default `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows). |
-| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                                     |
-| `RIDL_VERSION`        | A release such as `0.23.0` or `editor-v0.23.0`, instead of the newest editor release.            |
-| `RIDL_TOOLCHAIN_DIR`  | Toolchain root, an absolute path. Both scripts refuse a relative value.                          |
+| Variable              | Effect                                                                                                   |
+| --------------------- | -------------------------------------------------------------------------------------------------------- |
+| `RIDL_INSTALL_DIR`    | Directory for the PATH copy. Default `~/.local/bin` (`%LOCALAPPDATA%\Programs\ridl` on Windows).         |
+| `RIDL_INSTALL_BINARY` | `ridl` (default) or `ridlc`.                                                                             |
+| `RIDL_VERSION`        | A release such as `0.23.0` or `editor-v0.23.0`, instead of the newest editor release.                    |
+| `RIDL_TOOLCHAIN_DIR`  | Toolchain root, an absolute path. A versioned `ridl` install (0.23.0 or later) refuses a relative value. |
 
 For `ridl` 0.23.0 and later, both scripts first install into the shared
 [toolchain directory](release-pin.md#installing-and-selecting-toolchains), then

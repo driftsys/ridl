@@ -154,9 +154,9 @@ the refusal, and exits 2. No manifest key enables automatic installation.
 Only MANI-026 hands off. A run that reports MANI-024 or MANI-025 anywhere, even
 beside a MANI-026, prints its refusals and exits 2. `ridl toolchain` commands,
 `init`, `new`, `lock merge`, snapshot-only `diff`, standalone descriptors and
-`ridl lsp` never hand off. A snapshot input that cannot be read, in a workspace
-whose root the running release refuses, reports that refusal and exits 2: the
-refusal never reaches a hand-off and never starts an installation.
+`ridl lsp` never hand off. A snapshot directory that cannot be read, in a
+workspace whose root the running release refuses, reports that refusal and exits
+2: the refusal never reaches a hand-off and never starts an installation.
 `ridl toolchain which` still selects without running. `ridl mcp` is not a
 workspace command, but it hands off the same way, from the current directory's
 workspace root, before it reads standard input or starts the server. It never
