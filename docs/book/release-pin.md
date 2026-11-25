@@ -28,9 +28,7 @@ commands retain their existing behavior.
 | MANI-027 | A member manifest's pin is ignored; warning by default. |
 
 The diagnostic points to the value. MANI-026 names both releases and the command
-`ridl toolchain install <pin>` for obtaining the required release. Toolchain
-management is tracked in
-[driftsys/ridl#1476](https://github.com/driftsys/ridl/issues/1476).
+`ridl toolchain install <pin>` for obtaining the required release.
 
 MANI-024 through MANI-026 stop loading before members, source parsing, headers,
 remote imports, lockfiles or lint directives. They are the only diagnostics
@@ -54,6 +52,72 @@ Releases before 0.23.0 cannot enforce pins: they read the key as unknown
 The
 [toolchain distribution record](../technotes/toolchain-distribution.md#how-the-binary-learns-its-version)
 defines build-version normalization and the release used by pin checks.
+
+## Installing and selecting toolchains
+
+`ridl toolchain install [VERSION]` installs an exact release of at least 0.23.0.
+Without `VERSION`, it reads the root pin above the current directory. No pin, an
+invalid pin or invalid TOML is an input error, exit 2. This command reads the
+pin without enforcing compatibility with the running binary.
+
+The toolchain root is the nonempty `RIDL_TOOLCHAIN_DIR` environment variable, or
+the platform data directory below. A relative override is resolved against the
+current directory. Empty environment values count as unset.
+
+| Platform | Default root                                                                |
+| -------- | --------------------------------------------------------------------------- |
+| Linux    | `$XDG_DATA_HOME/ridl`, or `~/.local/share/ridl` when XDG_DATA_HOME is unset |
+| macOS    | `~/Library/Application Support/ridl`                                        |
+| Windows  | `%LOCALAPPDATA%\ridl`                                                       |
+
+A missing home directory or required Windows variable is an error. Each release
+lives in `<root>/versions/<MAJOR.MINOR.PATCH>/`, containing `ridl` (`ridl.exe`
+on Windows), `LICENSE`, `THIRD-PARTY-NOTICES.txt` and an empty `.complete` file.
+A missing binary or missing, non-file or nonempty marker makes the directory
+damaged. Installation reports that path and preserves it; it does not repair or
+delete existing directories.
+
+Installation uses the running binary's build target to download an archive and
+its SHA-256 record from the fixed GitHub editor release origin. The record must
+name that archive and its digest must match. Only the three root-level regular
+files above are accepted; links, nested paths, duplicates and archive-provided
+completion markers are refused. A per-version file lock serializes installers.
+The installer rechecks under the lock, extracts into its own temporary
+directory, then creates the marker and renames the directory into place.
+Failures remove only that operation's temporary directory. An existing complete
+release works offline. Unsupported release targets produce a named error.
+
+`ridl toolchain list` prints one `<version>\t<directory>` line per canonical
+version directory, in numeric order. Damaged lines end with `(damaged)`.
+Temporary directories, lock files and unrelated names are ignored. An empty
+inventory exits 0; read errors exit 2.
+
+`ridl toolchain which [PATH] [--json]` defaults to the current directory. It
+selects the highest compatible complete installed release or the running binary,
+using the running binary on an equal-version tie. It never downloads. Unpinned
+workspaces use the running binary. Compatible running binaries remain usable on
+targets without published archives.
+
+Text output is the absolute binary path on stdout for success, or a sentence on
+stderr for a negative answer. `--json` writes a schema-1 object with eight keys:
+`schema`, `manifest`, `pin`, `running`, `status`, `path`, `source`,
+`diagnostic`. Manifest and binary paths are canonical absolute paths. Absent
+values are null.
+
+| Status       | Exit | Path and source                           | Diagnostic                                 |
+| ------------ | ---- | ----------------------------------------- | ------------------------------------------ |
+| `compatible` | 0    | selected binary; `installed` or `running` | null                                       |
+| `unpinned`   | 0    | running binary; `running`                 | null                                       |
+| `missing`    | 1    | null                                      | null                                       |
+| `invalid`    | 1    | null                                      | `code` and `message`, MANI-024 or MANI-025 |
+
+An invalid string has a null pin. A parsed below-floor pin retains its canonical
+string. No manifest means a null manifest; an unpinned manifest remains present.
+A missing entry, unreadable manifest, invalid TOML or wrong-type mode table
+exits 2, with no successful JSON on stdout. These management commands do not
+enforce the running binary's pin compatibility and never report MANI-026 as an
+invalid selection answer. Selecting a binary does not run it; invoke the
+returned path explicitly in terminal workflows.
 
 ## Editors and agent tools
 

@@ -212,6 +212,31 @@ ridl test -h switch
 ridl test arg 1 <PATH> optional
 ridl test arg 1 default .
 ridl test requires
+ridl toolchain
+ridl toolchain --help optional
+ridl toolchain --help switch
+ridl toolchain -h switch
+ridl toolchain install
+ridl toolchain install --help optional
+ridl toolchain install --help switch
+ridl toolchain install -h switch
+ridl toolchain install arg 1 <VERSION> optional
+ridl toolchain install requires
+ridl toolchain list
+ridl toolchain list --help optional
+ridl toolchain list --help switch
+ridl toolchain list -h switch
+ridl toolchain list requires
+ridl toolchain requires <COMMAND>
+ridl toolchain which
+ridl toolchain which --help optional
+ridl toolchain which --help switch
+ridl toolchain which --json optional
+ridl toolchain which --json switch
+ridl toolchain which -h switch
+ridl toolchain which arg 1 <PATH> optional
+ridl toolchain which arg 1 default .
+ridl toolchain which requires
 ridl vendor
 ridl vendor --check optional
 ridl vendor --check switch
@@ -319,3 +344,13 @@ sarif /runs/*/tool/driver/rules/*/shortDescription
 sarif /runs/*/tool/driver/rules/*/shortDescription/text
 sarif /runs/*/tool/driver/version
 sarif /version
+which-json /diagnostic
+which-json /diagnostic/code
+which-json /diagnostic/message
+which-json /manifest
+which-json /path
+which-json /pin
+which-json /running
+which-json /schema
+which-json /source
+which-json /status

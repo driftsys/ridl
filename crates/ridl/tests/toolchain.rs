@@ -1,0 +1,896 @@
+use ridl_cli::toolchain::*;
+use ridl_core::release::{Release, parse_release};
+use std::{
+    collections::BTreeMap,
+    ffi::OsString,
+    fs,
+    path::{Path, PathBuf},
+};
+use tempfile::TempDir;
+
+const TARGET: &str = "aarch64-apple-darwin";
+fn release(s: &str) -> Release {
+    parse_release(s).unwrap()
+}
+fn binary_name() -> &'static str {
+    if cfg!(windows) { "ridl.exe" } else { "ridl" }
+}
+fn installed(root: &Path, version: &str) -> PathBuf {
+    let dir = root.join("versions").join(version);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join(binary_name()), b"installed binary").unwrap();
+    fs::write(dir.join("LICENSE"), b"installed license").unwrap();
+    fs::write(dir.join("THIRD-PARTY-NOTICES.txt"), b"installed notices").unwrap();
+    fs::write(dir.join(".complete"), b"").unwrap();
+    dir.join(binary_name()).canonicalize().unwrap()
+}
+fn directory_bytes(path: &Path) -> BTreeMap<OsString, Vec<u8>> {
+    fs::read_dir(path)
+        .unwrap()
+        .map(|entry| {
+            let entry = entry.unwrap();
+            (entry.file_name(), fs::read(entry.path()).unwrap())
+        })
+        .collect()
+}
+fn manifest(dir: &Path, text: &str) {
+    fs::write(dir.join("ridl.toml"), text).unwrap();
+}
+fn pin(dir: &Path, value: &str) {
+    manifest(
+        dir,
+        &format!("[package]\nname = 'fixture'\nridl-version = '{value}'\n"),
+    );
+}
+fn running() -> PathBuf {
+    std::env::current_exe().unwrap().canonicalize().unwrap()
+}
+
+#[test]
+fn toolchain_roots_follow_platform_precedence() {
+    let home = TempDir::new().unwrap();
+    let home = home.path();
+    let mut env = BTreeMap::new();
+    assert_eq!(
+        toolchain_root("linux", &env, Some(home)).unwrap(),
+        home.join(".local/share/ridl")
+    );
+    assert_eq!(
+        toolchain_root("macos", &env, Some(home)).unwrap(),
+        home.join("Library/Application Support/ridl")
+    );
+    env.insert("XDG_DATA_HOME".into(), home.join("data").into_os_string());
+    assert_eq!(
+        toolchain_root("linux", &env, None).unwrap(),
+        home.join("data/ridl")
+    );
+    env.insert(
+        "LOCALAPPDATA".into(),
+        home.join("local data").into_os_string(),
+    );
+    assert_eq!(
+        toolchain_root("windows", &env, None).unwrap(),
+        home.join("local data/ridl")
+    );
+    env.insert(
+        "RIDL_TOOLCHAIN_DIR".into(),
+        home.join("override with spaces").into_os_string(),
+    );
+    for platform in ["linux", "macos", "windows"] {
+        assert_eq!(
+            toolchain_root(platform, &env, None).unwrap(),
+            home.join("override with spaces")
+        );
+    }
+    env.insert(
+        "RIDL_TOOLCHAIN_DIR".into(),
+        OsString::from("relative tools"),
+    );
+    assert_eq!(
+        toolchain_root("linux", &env, None).unwrap(),
+        std::env::current_dir().unwrap().join("relative tools")
+    );
+    env.insert("RIDL_TOOLCHAIN_DIR".into(), OsString::new());
+    env.insert("XDG_DATA_HOME".into(), OsString::new());
+    env.insert("LOCALAPPDATA".into(), OsString::new());
+    for (platform, name) in [
+        ("linux", "home"),
+        ("macos", "home"),
+        ("windows", "LOCALAPPDATA"),
+    ] {
+        let error = toolchain_root(platform, &env, None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains(name), "{error}");
+    }
+}
+
+#[test]
+fn toolchain_which_selects_highest_compatible_including_running() {
+    let t = TempDir::new().unwrap();
+    let workspace = TempDir::new().unwrap();
+    pin(workspace.path(), "0.23.2");
+    for v in ["0.23.0", "0.23.4", "0.23.10", "0.24.0"] {
+        installed(t.path(), v);
+    }
+    let expected = t
+        .path()
+        .join("versions/0.23.10")
+        .join(binary_name())
+        .canonicalize()
+        .unwrap();
+    let select = |v, target| which(workspace.path(), t.path(), release(v), &running(), target);
+    let selected = select("0.23.2", TARGET).unwrap();
+    assert_eq!(selected.pin.as_deref(), Some("0.23.2"));
+    assert_eq!(selected.path.as_deref(), Some(expected.as_path()));
+    assert_eq!(selected.source, Some(WhichSource::Installed));
+    for v in ["0.23.10", "0.23.12"] {
+        let selected = select(v, TARGET).unwrap();
+        assert_eq!(selected.path, Some(running()));
+        assert_eq!(selected.source, Some(WhichSource::Running));
+    }
+    installed(t.path(), "0.23.99");
+    fs::remove_file(t.path().join("versions/0.23.99").join(binary_name())).unwrap();
+    assert_eq!(select("0.23.2", TARGET).unwrap().path, Some(expected));
+    assert!(
+        select("0.22.0", "x86_64-unknown-linux-musl")
+            .unwrap_err()
+            .to_string()
+            .contains("x86_64-unknown-linux-musl")
+    );
+    assert_eq!(
+        select("0.23.2", "x86_64-unknown-linux-musl")
+            .unwrap()
+            .source,
+        Some(WhichSource::Running)
+    );
+    let empty = TempDir::new().unwrap();
+    assert_eq!(
+        which(
+            workspace.path(),
+            empty.path(),
+            release("0.23.2"),
+            &running(),
+            "unsupported"
+        )
+        .unwrap()
+        .source,
+        Some(WhichSource::Running)
+    );
+    // A broken versions path is an input error, never an empty inventory.
+    fs::write(empty.path().join("versions"), b"not a directory").unwrap();
+    assert!(
+        which(
+            workspace.path(),
+            empty.path(),
+            release("0.22.0"),
+            &running(),
+            TARGET
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn toolchain_which_schema_one_covers_all_statuses() {
+    let t = TempDir::new().unwrap();
+    let w = TempDir::new().unwrap();
+    let query = || {
+        which(
+            w.path(),
+            &t.path().join("absent"),
+            release("0.23.2"),
+            &running(),
+            TARGET,
+        )
+        .unwrap()
+    };
+    for (content, status, code, pin_value, has_manifest) in [
+        (None, "unpinned", 0, None, false),
+        (Some("[package]\nname='x'\n"), "unpinned", 0, None, true),
+        (
+            Some("[workspace]\nridl-version='0.24.0'\n"),
+            "missing",
+            1,
+            Some("0.24.0"),
+            true,
+        ),
+        (
+            Some("[workspace]\nridl-version='bad'\n"),
+            "invalid",
+            1,
+            None,
+            true,
+        ),
+        (
+            Some("[package]\nridl-version=7\n"),
+            "invalid",
+            1,
+            None,
+            true,
+        ),
+        (
+            Some("[package]\nridl-version='0.22.1'\n"),
+            "invalid",
+            1,
+            Some("0.22.1"),
+            true,
+        ),
+        (
+            Some("[workspace]\nridl-version='0.23.0'\n"),
+            "compatible",
+            0,
+            Some("0.23.0"),
+            true,
+        ),
+    ] {
+        if let Some(s) = content {
+            manifest(w.path(), s);
+        }
+        let r = query();
+        let json = serde_json::to_value(&r).unwrap();
+        let mut keys: Vec<_> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "diagnostic",
+                "manifest",
+                "path",
+                "pin",
+                "running",
+                "schema",
+                "source",
+                "status"
+            ]
+        );
+        assert_eq!(json["schema"], 1);
+        assert_eq!(json["running"], "0.23.2");
+        assert_eq!(json["status"], status);
+        assert_eq!(r.exit_code(), code);
+        assert_eq!(r.pin.as_deref(), pin_value);
+        assert_eq!(
+            r.manifest,
+            has_manifest.then(|| w.path().join("ridl.toml").canonicalize().unwrap())
+        );
+        if matches!(status, "compatible" | "unpinned") {
+            assert_eq!(r.path, Some(running()));
+            assert_eq!(json["source"], "running");
+        } else {
+            assert!(json["path"].is_null());
+            assert!(json["source"].is_null());
+        }
+        if status == "invalid" {
+            assert_eq!(
+                json["diagnostic"]["code"],
+                if pin_value.is_some() {
+                    "MANI-025"
+                } else {
+                    "MANI-024"
+                }
+            );
+            assert!(!json["diagnostic"]["message"].as_str().unwrap().is_empty());
+        } else {
+            assert!(json["diagnostic"].is_null());
+        }
+    }
+    for text in ["not = [", "workspace=7", "package='wrong'"] {
+        manifest(w.path(), text);
+        assert!(
+            which(w.path(), t.path(), release("0.23.2"), &running(), TARGET).is_err(),
+            "{text}"
+        );
+    }
+    assert!(
+        which(
+            &w.path().join("missing"),
+            t.path(),
+            release("0.23.2"),
+            &running(),
+            TARGET
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn toolchain_list_sorts_numerically_and_marks_damage() {
+    let t = TempDir::new().unwrap();
+    assert!(list(t.path()).unwrap().is_empty());
+    for v in ["0.24.0", "0.23.10", "0.23.4", "0.23.0"] {
+        installed(t.path(), v);
+    }
+    let versions = t.path().join("versions");
+    for name in [".tmp-0.23.0-1", "unrelated", "00.23.0"] {
+        fs::create_dir(versions.join(name)).unwrap();
+    }
+    fs::write(versions.join(".0.23.0.lock"), b"").unwrap();
+    fs::write(versions.join("0.23.90"), b"not a directory").unwrap();
+    fs::remove_file(versions.join("0.23.4/.complete")).unwrap();
+    fs::create_dir(versions.join("0.23.4/.complete")).unwrap();
+    fs::remove_file(versions.join("0.23.10").join(binary_name())).unwrap();
+    let items = list(t.path()).unwrap();
+    assert_eq!(
+        items
+            .iter()
+            .map(|i| i.release.to_string())
+            .collect::<Vec<_>>(),
+        ["0.23.0", "0.23.4", "0.23.10", "0.24.0"]
+    );
+    assert!(items[0].complete && !items[0].damaged);
+    assert!(!items[1].complete && items[1].damaged);
+    assert!(items[2].complete && items[2].damaged);
+    fs::remove_dir(versions.join("0.23.4/.complete")).unwrap();
+    fs::write(versions.join("0.23.4/.complete"), b"not empty").unwrap();
+    assert!(list(t.path()).unwrap()[1].damaged);
+    let broken = TempDir::new().unwrap();
+    fs::write(broken.path().join("versions"), b"file").unwrap();
+    assert!(list(broken.path()).is_err());
+}
+
+#[test]
+fn toolchain_target_rejects_unpublished_triples() {
+    for target in [
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+    ] {
+        assert_eq!(release_target(target).unwrap(), target);
+    }
+    assert!(
+        release_target("x86_64-unknown-linux-musl")
+            .unwrap_err()
+            .to_string()
+            .contains("x86_64-unknown-linux-musl")
+    );
+}
+
+#[allow(dead_code)]
+mod toolchain_support;
+use toolchain_support as support;
+
+#[test]
+fn toolchain_install_verifies_and_publishes_complete_release() {
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    support::fixture(assets.path(), &support::regular_files());
+    let p = install(
+        root.path(),
+        release("0.23.0"),
+        support::TARGET,
+        &support::source(assets.path()),
+    )
+    .unwrap();
+    assert_eq!(
+        p,
+        root.path()
+            .canonicalize()
+            .unwrap()
+            .join("versions/0.23.0")
+            .join(binary_name())
+    );
+    support::assert_complete(&p);
+    support::assert_no_stage(root.path());
+    fs::remove_dir_all(assets.path()).unwrap();
+    assert_eq!(
+        install(
+            root.path(),
+            release("0.23.0"),
+            support::TARGET,
+            &support::source(assets.path())
+        )
+        .unwrap(),
+        p
+    );
+    assert!(
+        install(
+            root.path(),
+            release("0.22.9"),
+            support::TARGET,
+            &support::source(assets.path())
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn toolchain_install_rejects_checksum_and_unsafe_archive() {
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    let sentinel = root.path().join("outside");
+    fs::write(&sentinel, b"unchanged").unwrap();
+    let reject = || {
+        assert!(
+            install(
+                root.path(),
+                release("0.23.0"),
+                support::TARGET,
+                &support::source(assets.path())
+            )
+            .is_err()
+        );
+        assert!(!root.path().join("versions/0.23.0").exists());
+        support::assert_no_stage(root.path());
+        assert_eq!(fs::read(&sentinel).unwrap(), b"unchanged");
+    };
+    let dir = support::fixture(assets.path(), &support::regular_files());
+    let sha = dir.join(format!("{}.sha256", support::archive_name()));
+    use sha2::{Digest, Sha256};
+    let correct_hash = format!(
+        "{:x}",
+        Sha256::digest(fs::read(dir.join(support::archive_name())).unwrap())
+    );
+    for record in [
+        "bad checksum".to_string(),
+        format!("{correct_hash}  wrong.tar.gz\n"),
+        format!("{}  {}\n", "0".repeat(64), support::archive_name()),
+    ] {
+        fs::write(&sha, record).unwrap();
+        reject();
+    }
+    support::write_asset(&dir, b"corrupt gzip");
+    reject();
+    support::fixture(assets.path(), &[("LICENSE", b'0', support::LICENSE)]);
+    reject();
+    for (name, kind) in [
+        (".complete", b'0'),
+        ("../outside", b'0'),
+        ("/absolute", b'0'),
+        ("nested/ridl", b'0'),
+        ("LICENSE", b'0'),
+        ("unknown", b'0'),
+    ] {
+        let mut entries = support::regular_files();
+        entries.push((name, kind, b"unsafe"));
+        support::fixture(assets.path(), &entries);
+        reject();
+    }
+    for kind in *b"12" {
+        let mut entries = support::regular_files();
+        entries.retain(|(name, _, _)| *name != binary_name());
+        entries.push((binary_name(), kind, b""));
+        support::fixture(assets.path(), &entries);
+        reject();
+    }
+    // Even an empty completion marker must be created by the installer itself.
+    let mut entries = support::regular_files();
+    entries.push((".complete", b'0', b""));
+    support::fixture(assets.path(), &entries);
+    reject();
+}
+
+#[test]
+fn toolchain_install_missing_asset_cleans_only_its_stage() {
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    let other = installed(root.path(), "0.24.0");
+    let before = directory_bytes(other.parent().unwrap());
+    assert!(
+        install(
+            root.path(),
+            release("0.23.0"),
+            support::TARGET,
+            &support::source(assets.path())
+        )
+        .is_err()
+    );
+    support::assert_no_stage(root.path());
+    assert_eq!(directory_bytes(other.parent().unwrap()), before);
+    let dir = support::fixture(assets.path(), &support::regular_files());
+    fs::remove_file(dir.join(support::archive_name())).unwrap();
+    assert!(
+        install(
+            root.path(),
+            release("0.23.0"),
+            support::TARGET,
+            &support::source(assets.path())
+        )
+        .is_err()
+    );
+    support::assert_no_stage(root.path());
+    support::fixture(assets.path(), &support::regular_files());
+    let stage = root
+        .path()
+        .join(format!("versions/.tmp-0.23.0-{}", std::process::id()));
+    fs::create_dir(&stage).unwrap();
+    fs::write(stage.join("owned-by-someone-else"), b"preserve").unwrap();
+    let stage_before = directory_bytes(&stage);
+    assert!(
+        install(
+            root.path(),
+            release("0.23.0"),
+            support::TARGET,
+            &support::source(assets.path())
+        )
+        .is_err()
+    );
+    assert_eq!(
+        fs::read(stage.join("owned-by-someone-else")).unwrap(),
+        b"preserve"
+    );
+    assert_eq!(directory_bytes(&stage), stage_before);
+    assert!(!root.path().join("versions/0.23.0").exists());
+}
+
+// Child processes exercise OS file locking, rather than thread-local serialization.
+#[test]
+fn toolchain_install_child() {
+    let Some(root) = std::env::var_os("RIDL_TEST_INSTALL_ROOT") else {
+        return;
+    };
+    fs::write(std::env::var_os("RIDL_TEST_READY").unwrap(), b"ready").unwrap();
+    let path = install(
+        Path::new(&root),
+        release("0.23.0"),
+        support::TARGET,
+        &std::env::var("RIDL_TEST_SOURCE").unwrap(),
+    )
+    .unwrap();
+    fs::write(
+        std::env::var_os("RIDL_TEST_RESULT").unwrap(),
+        path.to_str().unwrap(),
+    )
+    .unwrap();
+}
+struct Child(std::process::Child);
+impl Drop for Child {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+fn child(root: &Path, source: &str, ready: &Path, result: &Path) -> Child {
+    Child(
+        std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "toolchain_install_child", "--nocapture"])
+            .env("RIDL_TEST_INSTALL_ROOT", root)
+            .env("RIDL_TEST_SOURCE", source)
+            .env("RIDL_TEST_READY", ready)
+            .env("RIDL_TEST_RESULT", result)
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .unwrap(),
+    )
+}
+fn wait_until(mut predicate: impl FnMut() -> bool) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !predicate() {
+        assert!(std::time::Instant::now() < deadline, "child timed out");
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+}
+fn finish(child: &mut Child) {
+    wait_until(|| child.0.try_wait().unwrap().is_some());
+    assert!(child.0.wait().unwrap().success());
+}
+
+#[test]
+fn toolchain_install_waits_rechecks_and_preserves_damage() {
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    let versions = root.path().join("versions");
+    fs::create_dir(&versions).unwrap();
+    let lock = fs::File::create(versions.join(".0.23.0.lock")).unwrap();
+    lock.lock().unwrap();
+    let ready = root.path().join("ready");
+    let result = root.path().join("result");
+    let mut c = child(
+        root.path(),
+        &support::source(assets.path()),
+        &ready,
+        &result,
+    );
+    wait_until(|| ready.exists());
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    assert!(
+        c.0.try_wait().unwrap().is_none(),
+        "installer did not wait for the lock"
+    );
+    let expected = installed(root.path(), "0.23.0");
+    fs::remove_dir_all(assets.path()).unwrap();
+    lock.unlock().unwrap();
+    finish(&mut c);
+    assert_eq!(
+        fs::read_to_string(&result).unwrap(),
+        expected.to_str().unwrap()
+    );
+    fs::remove_file(expected.parent().unwrap().join(".complete")).unwrap();
+    let before = directory_bytes(expected.parent().unwrap());
+    let error = install(
+        root.path(),
+        release("0.23.0"),
+        support::TARGET,
+        "file:///missing",
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(
+        error.contains(expected.parent().unwrap().to_str().unwrap()),
+        "{error}"
+    );
+    assert_eq!(directory_bytes(expected.parent().unwrap()), before);
+    assert!(!expected.parent().unwrap().join(".complete").exists());
+    support::assert_no_stage(root.path());
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    support::fixture(assets.path(), &support::regular_files());
+    let mut a = child(
+        root.path(),
+        &support::source(assets.path()),
+        &root.path().join("ready-a"),
+        &root.path().join("result-a"),
+    );
+    let mut b = child(
+        root.path(),
+        &support::source(assets.path()),
+        &root.path().join("ready-b"),
+        &root.path().join("result-b"),
+    );
+    finish(&mut a);
+    finish(&mut b);
+    assert_eq!(
+        fs::read(root.path().join("result-a")).unwrap(),
+        fs::read(root.path().join("result-b")).unwrap()
+    );
+    let p = PathBuf::from(fs::read_to_string(root.path().join("result-a")).unwrap());
+    support::assert_complete(&p);
+    support::assert_no_stage(root.path());
+}
+
+fn cli(cwd: &Path, root: &Path, args: &[&str]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_ridl"))
+        .current_dir(cwd)
+        .env("RIDL_TOOLCHAIN_DIR", root)
+        .env("RIDL_TEST_RUNNING_RELEASE", "0.23.2")
+        .args(args)
+        .output()
+        .unwrap()
+}
+fn output(output: &std::process::Output, code: i32, stdout: &str, has_error: bool) {
+    assert_eq!(
+        output.status.code(),
+        Some(code),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout), stdout);
+    assert_eq!(
+        !output.stderr.is_empty(),
+        has_error,
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+#[test]
+fn toolchain_cli_streams_and_exit_codes() {
+    let root = TempDir::new().unwrap();
+    let w = TempDir::new().unwrap();
+    output(
+        &cli(w.path(), root.path(), &["toolchain", "list"]),
+        0,
+        "",
+        false,
+    );
+    output(
+        &cli(w.path(), root.path(), &["toolchain", "install"]),
+        2,
+        "",
+        true,
+    );
+    let exe = Path::new(env!("CARGO_BIN_EXE_ridl"))
+        .canonicalize()
+        .unwrap();
+    output(
+        &cli(w.path(), root.path(), &["toolchain", "which"]),
+        0,
+        &format!("{}\n", exe.display()),
+        false,
+    );
+    pin(w.path(), "0.24.0");
+    let o = cli(w.path(), root.path(), &["toolchain", "which", "--json"]);
+    assert_eq!(o.status.code(), Some(1));
+    assert!(o.stderr.is_empty());
+    let json: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+    assert_eq!(json["status"], "missing");
+    output(
+        &cli(w.path(), root.path(), &["toolchain", "which"]),
+        1,
+        "",
+        true,
+    );
+    for version in ["bad", "v0.23.0", "0.23.0-rc.1", "0.22.0"] {
+        output(
+            &cli(w.path(), root.path(), &["toolchain", "install", version]),
+            2,
+            "",
+            true,
+        );
+    }
+    for text in [
+        "[package]\nridl-version='bad'",
+        "[workspace]\nridl-version='0.22.0'",
+        "not=[",
+        "workspace=7",
+        "package='bad'",
+    ] {
+        manifest(w.path(), text);
+        output(
+            &cli(w.path(), root.path(), &["toolchain", "install"]),
+            2,
+            "",
+            true,
+        );
+        if text.contains("ridl-version") {
+            let o = cli(w.path(), root.path(), &["toolchain", "which", "--json"]);
+            assert_eq!(o.status.code(), Some(1));
+            assert!(o.stderr.is_empty());
+            let value: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+            assert_eq!(value["status"], "invalid");
+            output(
+                &cli(w.path(), root.path(), &["toolchain", "which"]),
+                1,
+                "",
+                true,
+            );
+        } else {
+            output(
+                &cli(w.path(), root.path(), &["toolchain", "which", "--json"]),
+                2,
+                "",
+                true,
+            );
+        }
+    }
+    output(
+        &cli(
+            w.path(),
+            root.path(),
+            &["toolchain", "which", "missing", "--json"],
+        ),
+        2,
+        "",
+        true,
+    );
+    let expected = installed(root.path(), "0.23.0");
+    pin(w.path(), "0.23.0");
+    output(
+        &cli(w.path(), root.path(), &["toolchain", "install"]),
+        0,
+        &format!("{}\n", expected.display()),
+        false,
+    );
+    output(
+        &cli(w.path(), root.path(), &["toolchain", "install", "0.23.0"]),
+        0,
+        &format!("{}\n", expected.display()),
+        false,
+    );
+    let damaged = installed(root.path(), "0.23.4");
+    fs::remove_file(damaged.parent().unwrap().join(".complete")).unwrap();
+    let listing = cli(w.path(), root.path(), &["toolchain", "list"]);
+    assert!(listing.status.success());
+    assert!(listing.stderr.is_empty());
+    let listing = String::from_utf8(listing.stdout).unwrap();
+    assert!(listing.lines().last().unwrap().ends_with("(damaged)"));
+    output(
+        &cli(
+            w.path(),
+            root.path(),
+            &["toolchain", "install", "--base-url", "file:///missing"],
+        ),
+        2,
+        "",
+        true,
+    );
+    // Selection reads the root pin rather than a member's conflicting pin.
+    let member = w.path().join("member");
+    fs::create_dir(&member).unwrap();
+    pin(&member, "0.24.0");
+    manifest(
+        w.path(),
+        "[workspace]\nmembers=['member']\nridl-version='0.23.0'\n",
+    );
+    let selected = cli(&member, root.path(), &["toolchain", "which", "--json"]);
+    assert!(selected.status.success());
+    let selected: serde_json::Value = serde_json::from_slice(&selected.stdout).unwrap();
+    assert_eq!(selected["pin"], "0.23.0");
+    assert_eq!(
+        selected["manifest"],
+        w.path()
+            .join("ridl.toml")
+            .canonicalize()
+            .unwrap()
+            .to_str()
+            .unwrap()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn toolchain_cli_unreadable_inputs_and_broken_stdout_exit_two() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = TempDir::new().unwrap();
+    let w = TempDir::new().unwrap();
+    pin(w.path(), "0.23.0");
+    let m = w.path().join("ridl.toml");
+    fs::set_permissions(&m, fs::Permissions::from_mode(0o000)).unwrap();
+    output(
+        &cli(w.path(), root.path(), &["toolchain", "which", "--json"]),
+        2,
+        "",
+        true,
+    );
+    output(
+        &cli(w.path(), root.path(), &["toolchain", "install"]),
+        2,
+        "",
+        true,
+    );
+    fs::set_permissions(&m, fs::Permissions::from_mode(0o600)).unwrap();
+    installed(root.path(), "0.23.0");
+    let (read, write) = std::io::pipe().unwrap();
+    drop(read);
+    let o = std::process::Command::new(env!("CARGO_BIN_EXE_ridl"))
+        .current_dir(w.path())
+        .env("RIDL_TOOLCHAIN_DIR", root.path())
+        .args(["toolchain", "install", "0.23.0"])
+        .stdout(write)
+        .stderr(std::process::Stdio::piped())
+        .output()
+        .unwrap();
+    assert_eq!(o.status.code(), Some(2));
+    let versions = root.path().join("versions");
+    fs::set_permissions(&versions, fs::Permissions::from_mode(0o000)).unwrap();
+    assert!(list(root.path()).is_err());
+    fs::set_permissions(&versions, fs::Permissions::from_mode(0o700)).unwrap();
+}
+
+#[test]
+fn toolchain_install_rechecks_the_requested_target_binary() {
+    use sha2::{Digest, Sha256};
+    let root = TempDir::new().unwrap();
+    let assets = TempDir::new().unwrap();
+    let (target, binary) = if cfg!(windows) {
+        ("aarch64-apple-darwin", "ridl")
+    } else {
+        ("x86_64-pc-windows-msvc", "ridl.exe")
+    };
+    let entries = [
+        (binary, b'0', support::BINARY),
+        ("LICENSE", b'0', support::LICENSE),
+        ("THIRD-PARTY-NOTICES.txt", b'0', support::NOTICES),
+    ];
+    let dir = support::fixture(assets.path(), &entries);
+    let bytes = fs::read(dir.join(support::archive_name())).unwrap();
+    let archive = format!("ridl-{target}.tar.gz");
+    fs::write(dir.join(&archive), &bytes).unwrap();
+    fs::write(
+        dir.join(format!("{archive}.sha256")),
+        format!("{:x}  {archive}\n", Sha256::digest(&bytes)),
+    )
+    .unwrap();
+    let first = install(
+        root.path(),
+        release("0.23.0"),
+        target,
+        &support::source(assets.path()),
+    )
+    .unwrap();
+    support::assert_complete(&first);
+    fs::remove_dir_all(assets.path()).unwrap();
+    let repeated = install(
+        root.path(),
+        release("0.23.0"),
+        target,
+        &support::source(assets.path()),
+    );
+    assert!(repeated.is_ok(), "{repeated:?}");
+    assert_eq!(repeated.unwrap(), first);
+}

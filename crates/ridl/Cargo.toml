@@ -39,6 +39,12 @@ ridl-syntax.workspace = true
 ridlc.workspace = true
 rowan.workspace = true
 serde_json.workspace = true
+serde.workspace = true
+flate2 = "1"
+ureq.workspace = true
+sha2.workspace = true
+tar.workspace = true
+toml.workspace = true
 # `ridl-mcp`'s `serve_stdio_with_version` is async, so `ridl mcp` builds the process's one
 # Tokio runtime and blocks on it. No other subcommand is async.
 tokio.workspace = true
@@ -46,16 +52,12 @@ tokio.workspace = true
 [dev-dependencies]
 # Fixture directories that are removed even when a test panics.
 tempfile = "3.15.0"
-# `remote_units` builds the tar a stub serves as a remote unit.
-tar.workspace = true
-toml.workspace = true
 # `describe_cli` snapshots the JSON `ridl describe` prints.
 insta.workspace = true
 jsonschema.workspace = true
 pulldown-cmark.workspace = true
 # `skill_gates` finds the diagnostic codes and reference links a skill cites.
 regex.workspace = true
-sha2.workspace = true
 # The end-to-end server tests speak MCP to a spawned `ridl mcp`: `client` is
 # the caller half of the SDK, `transport-child-process` the child-process
 # transport that spawns the binary and frames JSON-RPC over its stdio.

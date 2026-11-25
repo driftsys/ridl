@@ -88,6 +88,11 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Install and select versioned RIDL toolchains.
+    Toolchain {
+        #[command(subcommand)]
+        command: ToolchainCommand,
+    },
     /// Type-check a file, package, or workspace (defaults to the current
     /// directory).
     Check {
@@ -386,9 +391,107 @@ enum CheckFormat {
     Sarif,
 }
 
+#[derive(clap::Subcommand)]
+enum ToolchainCommand {
+    /// Install a release, or the current workspace pin when VERSION is omitted.
+    Install {
+        /// The exact MAJOR.MINOR.PATCH release to install.
+        version: Option<String>,
+    },
+    /// List version directories in ascending release order, including damaged copies.
+    List,
+    /// Select the highest compatible installed or running release for a workspace.
+    Which {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Print the schema-1 selection report as JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+fn run_toolchain(command: ToolchainCommand) -> ExitCode {
+    use ridl_cli::toolchain::{self, WhichStatus};
+    use ridl_core::release::{MIN_PINNABLE_RELEASE, parse_release};
+    let execute = || -> std::io::Result<(u8, String)> {
+        let environment = std::env::vars_os()
+            .filter_map(|(key, value)| key.into_string().ok().map(|key| (key, value)))
+            .collect::<BTreeMap<_, _>>();
+        let home = environment.get("HOME").map(PathBuf::from);
+        let root = toolchain::toolchain_root(std::env::consts::OS, &environment, home.as_deref())?;
+        match command {
+            ToolchainCommand::Install { version } => {
+                let release = match version {
+                    Some(text) => parse_release(&text).filter(|v| *v >= MIN_PINNABLE_RELEASE).ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("release must be MAJOR.MINOR.PATCH at or above {MIN_PINNABLE_RELEASE}")))?,
+                    None => toolchain::workspace_pin(Path::new("."))?,
+                };
+                let binary = toolchain::install(
+                    &root,
+                    release,
+                    env!("RIDL_BUILD_TARGET"),
+                    toolchain::RELEASE_BASE_URL,
+                )?;
+                Ok((0, format!("{}\n", binary.display())))
+            }
+            ToolchainCommand::List => {
+                let mut text = String::new();
+                for installed in toolchain::list(&root)? {
+                    text.push_str(&format!(
+                        "{}\t{}{}\n",
+                        installed.release,
+                        installed.directory.display(),
+                        if installed.damaged { " (damaged)" } else { "" }
+                    ));
+                }
+                Ok((0, text))
+            }
+            ToolchainCommand::Which { path, json } => {
+                let report = toolchain::which(
+                    &path,
+                    &root,
+                    ridlc::running_release(),
+                    &std::env::current_exe()?,
+                    env!("RIDL_BUILD_TARGET"),
+                )?;
+                let text = if json {
+                    format!("{}\n", serde_json::to_string(&report)?)
+                } else if let Some(path) = &report.path {
+                    format!("{}\n", path.display())
+                } else {
+                    match report.status {
+                        WhichStatus::Missing => errprintln!(
+                            "No compatible ridl toolchain is installed; run `ridl toolchain install {}`.",
+                            report.pin.as_deref().unwrap_or_default()
+                        ),
+                        WhichStatus::Invalid => {
+                            if let Some(diagnostic) = &report.diagnostic {
+                                errprintln!("{}: {}", diagnostic.code, diagnostic.message);
+                            }
+                        }
+                        _ => {}
+                    }
+                    String::new()
+                };
+                Ok((report.exit_code(), text))
+            }
+        }
+    };
+    match execute() {
+        Ok((code, text)) => match out::write(&text) {
+            Ok(()) => ExitCode::from(code),
+            Err(code) => code,
+        },
+        Err(error) => {
+            errprintln!("error: {error}");
+            ExitCode::from(2)
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
+        Command::Toolchain { command } => run_toolchain(command),
         Command::Check {
             path,
             frozen,

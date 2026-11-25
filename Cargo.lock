@@ -2066,6 +2066,7 @@ name = "ridl-cli"
 version = "0.22.0"
 dependencies = [
  "clap",
+ "flate2",
  "insta",
  "jsonschema",
  "lsp-server",
@@ -2086,12 +2087,14 @@ dependencies = [
  "ridlc",
  "rmcp",
  "rowan",
+ "serde",
  "serde_json",
  "sha2",
  "tar",
  "tempfile",
  "tokio",
  "toml",
+ "ureq",
 ]
 
 [[package]]

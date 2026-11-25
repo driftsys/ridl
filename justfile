@@ -2885,6 +2885,7 @@ gate-parity:
 install-check:
     #!/usr/bin/env bash
     set -euo pipefail
+    cargo test --locked -p ridl-cli --test toolchain_http -- --ignored
     scratch="$(mktemp -d)"
     http_pid=""
     trap 'rm -rf "$scratch"; [ -n "$http_pid" ] && kill "$http_pid" 2>/dev/null; true' EXIT

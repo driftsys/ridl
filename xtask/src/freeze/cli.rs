@@ -275,6 +275,54 @@ fn report_pointers(root: &Path, kind: &str) -> Result<Vec<String>, String> {
     Ok(out.into_iter().map(|p| format!("{kind} {p}")).collect())
 }
 
+/// All schema-1 selection fields, including the invalid pin diagnostic object.
+fn which_report_pointers(root: &Path) -> Result<Vec<String>, String> {
+    let ridl = bin::binary(root, "ridl")?;
+    struct Scratch(std::path::PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    static COUNT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let count = COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let directory =
+        std::env::temp_dir().join(format!("xtask-freeze-which-{}-{count}", std::process::id()));
+    std::fs::create_dir(&directory).map_err(|e| e.to_string())?;
+    let fixtures = Scratch(directory);
+    let mut out = Vec::new();
+    for (name, text, expected) in [
+        ("unpinned", "[package]\nname='fixture'\n", 0),
+        (
+            "invalid",
+            "[package]\nname='fixture'\nridl-version='invalid'\n",
+            1,
+        ),
+    ] {
+        let dir = fixtures.0.join(name);
+        std::fs::create_dir(&dir).map_err(|e| e.to_string())?;
+        std::fs::write(dir.join("ridl.toml"), text).map_err(|e| e.to_string())?;
+        let output = std::process::Command::new(&ridl)
+            .current_dir(&dir)
+            .env("RIDL_TOOLCHAIN_DIR", fixtures.0.join("tools"))
+            .args(["toolchain", "which", "--json"])
+            .output()
+            .map_err(|e| e.to_string())?;
+        if output.status.code() != Some(expected) {
+            return Err(format!(
+                "toolchain which on {name} exited {:?}: {}",
+                output.status.code(),
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+        let report: Value = serde_json::from_slice(&output.stdout).map_err(|e| e.to_string())?;
+        pointers(&report, "", &mut out);
+    }
+    out.sort();
+    out.dedup();
+    Ok(out.into_iter().map(|p| format!("which-json {p}")).collect())
+}
+
 /// The exit codes ADR-0010 decision 1 lists, each with a command line that
 /// produces it: an accepted package, a package with an error, and an unknown
 /// flag.
@@ -316,6 +364,7 @@ pub fn dump(root: &Path) -> Result<Vec<String>, String> {
         walk(&exe, root, program, &[], &mut lines)?;
     }
     lines.extend(exit_lines(root)?);
+    lines.extend(which_report_pointers(root)?);
     for kind in ["json", "sarif"] {
         lines.extend(report_pointers(root, kind)?);
     }
@@ -333,6 +382,50 @@ mod tests {
             let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
             dump(root).unwrap()
         })
+    }
+
+    #[test]
+    fn cli_dump_lists_toolchain_commands() {
+        let committed = include_str!("../../../freeze/cli.txt");
+        for line in [
+            "ridl toolchain install",
+            "ridl toolchain list",
+            "ridl toolchain which",
+            "ridl toolchain which --json switch",
+            "ridl toolchain which arg 1 <PATH> optional",
+        ] {
+            assert!(has(lines(), line), "generated dump missing {line}");
+            assert!(
+                committed.lines().any(|l| l == line),
+                "committed dump missing {line}"
+            );
+        }
+    }
+
+    #[test]
+    fn cli_dump_covers_which_json_fields() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
+        let generated = which_report_pointers(root).unwrap();
+        let committed = include_str!("../../../freeze/cli.txt");
+        for key in [
+            "schema",
+            "manifest",
+            "pin",
+            "running",
+            "status",
+            "path",
+            "source",
+            "diagnostic",
+            "diagnostic/code",
+            "diagnostic/message",
+        ] {
+            let line = format!("which-json /{key}");
+            assert!(has(&generated, &line), "generated dump missing {line}");
+            assert!(
+                committed.lines().any(|l| l == line),
+                "committed dump missing {line}"
+            );
+        }
     }
 
     #[test]

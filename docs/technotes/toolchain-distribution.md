@@ -104,6 +104,23 @@ MCP server info share that display string. Pin checks use the crate version if
 the display string is not a plain release. See
 [workspace release pins](../book/release-pin.md).
 
+## Versioned toolchains
+
+`ridl toolchain install`, `list` and `which` manage and inspect a shared
+versions directory independently of workspace compilation. The
+[release pin chapter](../book/release-pin.md#installing-and-selecting-toolchains)
+owns the root precedence, directory layout, integrity rules and selection
+contract. The installer uses the build target exported by Cargo, and the fixed
+GitHub `editor-v<version>` release origin. Its alternate download source is a
+library test parameter, with no CLI, manifest or environment override.
+
+`just install-check` also runs the ignored
+`toolchain_ureq_path_verifies_and_installs` local HTTP test, exercising the
+actual ureq path and checksum refusal. File-based fixture tests cover
+extraction, cleanup, damaged directories and concurrent installers without a
+network listener. The install scripts below retain their existing flat layout
+independently of these subcommands.
+
 ## The extension resolves one binary, spawns it in two roles
 
 `editors/vscode/src/binaryResolution.ts` is pure — it does not import `vscode` —
