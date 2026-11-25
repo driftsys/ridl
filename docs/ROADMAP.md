@@ -205,8 +205,8 @@ was added on 2026-10-27 with the schedule, as driftsys/ridl#1093.
 
 **Filed 2026-11-02, with the deployment descriptor.** Epic 19 is new, with its
 own milestone; its stories are driftsys/ridl#1184 to driftsys/ridl#1198 (E19.0
-to E19.14). They come from driftsys/ridl#1176; E19.1 is built on
-driftsys/ridl#1179.
+to E19.14). They come from driftsys/ridl#1176; E19.1 is built in
+driftsys/ridl#1179 (merged).
 
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
@@ -935,7 +935,7 @@ removed. The projections themselves landed; see the landed record.
 
 | ID    | Story                                                                                                                                                                                                                                                                 | Done when                                                | Size |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---- |
-| E9.10 | The **schema hash over the IR**, not over the emitted schema                                                                                                                                                                                                          | two targets of one IR agree on identity                  | M    |
+| E9.10 | The **schema hash over the IR**, not over the emitted schema. **Landed (driftsys/ridl#676, with E16.2; issue #275 closed with it).**                                                                                                                                  | two targets of one IR agree on identity                  | M    |
 | E9.12 | Drift the design surfaced: general-form R5 puts `@timing` before attributes (maintainer decision D-4), and `family.ungram` and ridl Appendix C now match it; `InterfaceDef`/`ServiceDef` gain the `AttrBlock` the deferred `labels`/`deprecated` promotion also needs | R5 matches `family.ungram`; one grammar edit serves both | S    |
 
 ---
@@ -965,13 +965,13 @@ asked (§3.5).
 **Four stories keep their E12 identifiers**, because identifiers are identity —
 they are re-homed here, not renumbered.
 
-| ID     | Story                                                                                                                                                                       | Done when                                                                          | Size |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---- |
-| E12.1  | The TypeScript surface — generated types and faces, the codec reached through the package's own generated Rust compiled to `wasm32` against `ridl-rt` (ADR-0020 decision 7) | a Deno program constructs and validates a payload without a TypeScript codec       | L    |
-| E12.4  | Emulator — a hand-written provider standing in for a component, driven by the contract                                                                                      | a consumer cannot distinguish the emulator from the real provider                  | M    |
-| E12.2  | Observability server — subscribe by ordinal, render value, provenance and envelope                                                                                          | a live signal is displayed with its provenance distinguishable                     | L    |
-| E12.5  | Test-harness drivers — drive a system under test, assert against contract terms                                                                                             | a `require` violation is reported against the contract, not the transport          | M    |
-| E12.11 | The TypeScript WebSocket transport package — the §11.1 WebSocket binding in TypeScript, for Deno and the browser, carrying payload bytes unread                             | a Deno program and a browser page each receive a live signal from the E11.9 server | M    |
+| ID     | Story                                                                                                                                                                                                                                                                                                   | Done when                                                                          | Size |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---- |
+| E12.1  | The TypeScript surface — generated types and faces, the codec reached through the package's own generated Rust compiled to `wasm32` against `ridl-rt` (ADR-0020 decision 7). **Landed in driftsys/ridl#1017, driftsys/ridl#1018 and driftsys/ridl#1027; issue driftsys/ridl#287 closed on 2026-11-08.** | a Deno program constructs and validates a payload without a TypeScript codec       | L    |
+| E12.4  | Emulator — a hand-written provider standing in for a component, driven by the contract                                                                                                                                                                                                                  | a consumer cannot distinguish the emulator from the real provider                  | M    |
+| E12.2  | Observability server — subscribe by ordinal, render value, provenance and envelope                                                                                                                                                                                                                      | a live signal is displayed with its provenance distinguishable                     | L    |
+| E12.5  | Test-harness drivers — drive a system under test, assert against contract terms                                                                                                                                                                                                                         | a `require` violation is reported against the contract, not the transport          | M    |
+| E12.11 | The TypeScript WebSocket transport package — the §11.1 WebSocket binding in TypeScript, for Deno and the browser, carrying payload bytes unread                                                                                                                                                         | a Deno program and a browser page each receive a live signal from the E11.9 server | M    |
 
 **E12.2 and E12.5 were reopened on 2026-10-19.** Both depend on E11.9, the
 WebSocket transport (driftsys/ridl#265), on E12.11, its TypeScript package, and
@@ -1124,15 +1124,18 @@ needed for the first Kotlin demo.
 
 ---
 
-# The next release
+# The release after 0.17.0
 
-**Scheduled on 2026-11-09 by the maintainer.** The release after 0.17.0 carries
-one story of Epic 11. It adds two provided methods to a port, so it does not
-depend on the items of the next breaking release.
+**Scheduled on 2026-11-09 by the maintainer; shipped in 0.18.0.** The release
+after 0.17.0 carried one story of Epic 11. It added two provided methods to a
+port, so it did not depend on the items of the next breaking release. E11.23
+landed in driftsys/ridl#1298 (f1007e0bd). The release 0.23.0 shipped the
+workspace toolchain pin (driftsys/ridl#1479 and driftsys/ridl#1481); the
+features that were planned for it moved to 0.24.0.
 
-| ID     | Story                                                                                                                                                                                                                     | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Size |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
-| E11.23 | Two provided methods of `StreamHandler`: `claim_forget` answers per claim whether the caller forgot the call, with no push and no pull, and `wake_on_claim_forget` registers a waker for that forget (driftsys/ridl#1170) | the generated `serve` releases a member whose reply source or upload consumer is `Pending` when the caller forgets the call, before that source or consumer makes progress; `ridl-rt-conformance` covers the forget on a reply stream, on a call with only a stream parameter, on a command already acknowledged, and on a stream parameter that already ended; the test `a_call_dropped_while_its_source_is_pending_keeps_the_member_busy_until_the_next_element` is replaced by one that pins the release, and `docs/design/interaction-face.md` no longer states that `serve` learns of a forget only through the next push | M    |
+| ID     | Story                                                                                                                                                                                                                                                                           | Done when                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | Size |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
+| E11.23 | Two provided methods of `StreamHandler`: `claim_forget` answers per claim whether the caller forgot the call, with no push and no pull, and `wake_on_claim_forget` registers a waker for that forget (driftsys/ridl#1170). **Landed in driftsys/ridl#1298; shipped in 0.18.0.** | the generated `serve` releases a member whose reply source or upload consumer is `Pending` when the caller forgets the call, before that source or consumer makes progress; `ridl-rt-conformance` covers the forget on a reply stream, on a call with only a stream parameter, on a command already acknowledged, and on a stream parameter that already ended; the test `a_call_dropped_while_its_source_is_pending_keeps_the_member_busy_until_the_next_element` is replaced by one that pins the release, and `docs/design/interaction-face.md` no longer states that `serve` learns of a forget only through the next push | M    |
 
 A forget already wakes the provider's `Interest::ClaimStream` waker on a stream
 that is still open. The contract of the two methods serves the Rust face and the
@@ -1159,9 +1162,9 @@ today, on a runtime that overrides `claim_forget`.
 
 # The next breaking release
 
-**Scheduled on 2026-10-26 by the maintainer.** The next release marked breaking,
-the first after 0.14.0, carries three items, and it is cut when all three have
-landed:
+**Scheduled on 2026-10-26 by the maintainer; status updated on 2026-11-25.** The
+release marked breaking that this section describes was to carry three items and
+to be cut when all three had landed:
 
 - **LIM3, the transport's limits** (driftsys/ridl#1059): `ridl-transport-ws`
   gets a fixed message limit and a per-request limit check. It is the last stage
@@ -1169,9 +1172,15 @@ landed:
   [`2026-10-24-lane-limits-driver.md`](archive/2026-10-24-lane-limits-driver.md).
   LIM1 and LIM2 shipped in 0.14.0. LIM3 landed on 2026-10-28
   (driftsys/ridl#1098), and LIM4 gardened the lane the same day
-  (driftsys/ridl#1106).
-- **E2.14, nested interface members** (driftsys/ridl#1084).
-- **E6.20, a partition under `machine`** (driftsys/ridl#1085).
+  (driftsys/ridl#1106). LIM3 shipped in 0.15.0.
+- **E2.14, nested interface members** (driftsys/ridl#1084). Not built. Later
+  breaking releases shipped without it. The maintainer decided on 2026-11-25
+  that E2.14 is scheduled for 0.24.0.
+- **E6.20, a partition under `machine`** (driftsys/ridl#1085). Not built, and no
+  release is assigned to it.
+
+The maintainer also decided on 2026-11-25 that the `.rxdl` profile (E7.1,
+driftsys/ridl#68) is scheduled for 0.24.0.
 
 | ID    | Story                                                                                                                                                                                                                                        | Done when                                                                                                                                                                        | Size |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
@@ -1378,26 +1387,26 @@ replace it are below.
 | MVP 1 | what a debug socket needs: the twin and the listener in the runtime, and a WebSocket gateway                        | E19.7                               |
 | Later | the file per machine, several deployments, the node's checks, platform principals, service numbers, failover, ports | E19.4, E19.8 to E19.14, unscheduled |
 
-PR driftsys/ridl#1179 holds E19.1, E19.2, E19.3, E19.5 and E19.6. E19.0, the
-design, was approved by the owner on 2026-11-02. Its test debt is
-driftsys/ridl#1180.
+PR driftsys/ridl#1179, merged as 0b0146195, built E19.1, E19.2, E19.3, E19.5 and
+E19.6. E19.0, the design, was approved by the owner on 2026-11-02. Its test debt
+is driftsys/ridl#1180.
 
 | ID     | Story                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Done when                                                                                                                                                                             | Size |
 | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | E19.0  | The design of MVP 0: the lock file (its name, its place and the command that writes it), the number's range, the instances of a component declared in a dependency unit, and the crate that holds the constants; it replaces the placement key of the deployment descriptor design record and amends ADR-0022 decision 12. **Done: approved by the owner on 2026-11-02 and gardened into the deployment descriptor record, the rsdl reference and ADR-0022.** | the design is approved by the owner and merged with its "Alternatives considered"                                                                                                     | M    |
-| E19.1  | The deployment descriptor: the `RDLD` schema, its lowering from the system artifact, `ridlc build --emit deployment`, the bounded verifier and `ridl describe`. **Built on driftsys/ridl#1179, unmerged.**                                                                                                                                                                                                                                                    | a corpus deployment writes a descriptor that verifies, its embedded catalogs carry their region hashes, and `ridl describe` prints it                                                 | L    |
-| E19.2  | The instance lock: one lock file of instance numbers at the workspace root, written by the lock command, keyed by the component's qualified name and the instance name, with a removed number retired; an instance with no entry gets a number marked provisional. **Built on driftsys/ridl#1179, unmerged.**                                                                                                                                                 | reordering the sources keeps every number, removing an instance and adding another never gives the new one the old number, and an instance with no lock entry is reported provisional | L    |
-| E19.3  | The number in the artifacts: the system artifact of the IR, `Instance` of the deployment descriptor and `Instance` of the codegen deployment section carry the locked number and its provisional flag; the placement key is removed from the record and the tests. **Built on driftsys/ridl#1179, unmerged.**                                                                                                                                                 | for every instance of the corpus, the descriptor and the codegen section carry the same number, and that number is the lock's                                                         | M    |
+| E19.1  | The deployment descriptor: the `RDLD` schema, its lowering from the system artifact, `ridlc build --emit deployment`, the bounded verifier and `ridl describe`. **Built in driftsys/ridl#1179 (merged).**                                                                                                                                                                                                                                                     | a corpus deployment writes a descriptor that verifies, its embedded catalogs carry their region hashes, and `ridl describe` prints it                                                 | L    |
+| E19.2  | The instance lock: one lock file of instance numbers at the workspace root, written by the lock command, keyed by the component's qualified name and the instance name, with a removed number retired; an instance with no entry gets a number marked provisional. **Built in driftsys/ridl#1179 (merged).**                                                                                                                                                  | reordering the sources keeps every number, removing an instance and adding another never gives the new one the old number, and an instance with no lock entry is reported provisional | L    |
+| E19.3  | The number in the artifacts: the system artifact of the IR, `Instance` of the deployment descriptor and `Instance` of the codegen deployment section carry the locked number and its provisional flag; the placement key is removed from the record and the tests. **Built in driftsys/ridl#1179 (merged).**                                                                                                                                                  | for every instance of the corpus, the descriptor and the codegen section carry the same number, and that number is the lock's                                                         | M    |
 | E19.4  | One deployment descriptor per machine, beside the one per deployment: a gateway reads the whole deployment to dispatch to the machines, and the node of a machine reads a file that holds its instances, every link with an endpoint on it, and only the catalogs that its instances offer or map, so that it can allow only the transactions of its machine; built when a cybersecurity or a deployment requirement needs the filtered file                  | each machine of the corpus deployment gets one file that verifies and holds no instance and no catalog of another machine                                                             | M    |
-| E19.5  | The Rust constants: one constant per declared instance in an `instances` module of the crate that `ridl build` writes for the root workspace, the same in every deployment; the crate of an interface unit is unchanged. **Built on driftsys/ridl#1179, unmerged.**                                                                                                                                                                                           | a program reads its instance's number from the generated constant, the constant equals the lock's number, and every catalog hash is unchanged                                         | M    |
-| E19.6  | The rules around the number: `ridl diff` reports a changed or a reused instance number as breaking; the rsdl reference states that 0 is not valid, that negative numbers are reserved for the runtime, and that the number travels at attach only. **Built on driftsys/ridl#1179, unmerged.**                                                                                                                                                                 | `ridl diff` reports both changes as breaking, and the rsdl reference and the design record state the three rules                                                                      | S    |
+| E19.5  | The Rust constants: one constant per declared instance in an `instances` module of the crate that `ridl build` writes for the root workspace, the same in every deployment; the crate of an interface unit is unchanged. **Built in driftsys/ridl#1179 (merged).**                                                                                                                                                                                            | a program reads its instance's number from the generated constant, the constant equals the lock's number, and every catalog hash is unchanged                                         | M    |
+| E19.6  | The rules around the number: `ridl diff` reports a changed or a reused instance number as breaking; the rsdl reference states that 0 is not valid, that negative numbers are reserved for the runtime, and that the number travels at attach only. **Built in driftsys/ridl#1179 (merged).**                                                                                                                                                                  | `ridl diff` reports both changes as breaking, and the rsdl reference and the design record state the three rules                                                                      | S    |
 | E19.7  | The debug socket: the twin and the listener in `ridl-rt` behind a `debug` feature, in `ridl-loopback` and in the conformance tests, and a debug gateway that serves listening and injection over `ridl-transport-ws` (see "MVP 1 in detail"). **Parts 1 and 2 built in driftsys/ridl#1220, part 3 in driftsys/ridl#1227, part 4 in driftsys/ridl#1232.**                                                                                                      | every "Done when" of "MVP 1 in detail" holds                                                                                                                                          | L    |
 | E19.8  | Several deployments and variants: how a debug or staging system that adds diagnostic components is written beside the production one, and how each variant's descriptor lists only what it places                                                                                                                                                                                                                                                             | a production deployment and a debug variant of one system build from one workspace, and each instance has the same number in both                                                     | M    |
 | E19.9  | The node's checks: a node refuses an attach whose number, or an interface that the client claims, is not placed on its machine, and a production build refuses every negative number                                                                                                                                                                                                                                                                          | a conformance test attaches each refused case and sees it refused, and a production build of the loopback runtime has no code path that accepts a negative number                     | M    |
 | E19.10 | Platform principals: the Android package or APEX name and the Linux SELinux domain derived from the qualified name by a fixed transform per platform, with a backend attribute on the component to override it                                                                                                                                                                                                                                                | the transform is specified per platform, and the descriptor carries the derived or overridden principal of every component                                                            | M    |
 | E19.11 | Service numbers, for a transport that puts a service id on the wire                                                                                                                                                                                                                                                                                                                                                                                           | a transport that needs one reads a locked number per service from the descriptor                                                                                                      | M    |
 | E19.12 | The active instance of a redundant provider set: the runtime's rule that chooses the instance that writes and how a standby takes over; RSDL-409 is relaxed for a runtime that enforces it                                                                                                                                                                                                                                                                    | a standby takes over in a conformance test, and RSDL-409 is not drawn for a set that such a runtime serves                                                                            | L    |
-| E19.13 | The instance constants for TypeScript, and notice to the Kotlin plugin maintainers                                                                                                                                                                                                                                                                                                                                                                            | the TypeScript codec module exports the same constants as the Rust crate                                                                                                              | S    |
+| E19.13 | The instance constants for TypeScript, and notice to the Kotlin plugin maintainers. **The TypeScript half is built in driftsys/ridl#1269; the Kotlin notice is not confirmed.**                                                                                                                                                                                                                                                                               | the TypeScript codec module exports the same constants as the Rust crate                                                                                                              | S    |
 | E19.14 | A manifest claim for the attribute namespace of a runtime outside the toolchain (ADR-0022 open item 3)                                                                                                                                                                                                                                                                                                                                                        | a claimed namespace draws no RSDL-804                                                                                                                                                 | S    |
 
 ## MVP 1 in detail
@@ -1501,28 +1510,6 @@ reopening is an observation rather than an argument.
 
 # Milestone summary
 
-| Epic | Milestone                       | Step                                                                                    |
-| ---- | ------------------------------- | --------------------------------------------------------------------------------------- |
-| E0   | walking skeleton                | landed — internal                                                                       |
-| E1   | typl schema language            | landed — **v0.1 preview**                                                               |
-| E2   | ridl contract boundary          | landed — v0.x                                                                           |
-| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed      |
-| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                           |
-| E16  | the catalog descriptor          | **step 1**, landed — an engine reads a catalog without decoding the IR                  |
-| E17  | layout inputs for plugins       | **step 1**, landed                                                                      |
-| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                                |
-| E11  | the runtime library             | **step 1** — generated code links a library                                             |
-| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                           |
-| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                                    |
-| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                                  |
-| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                               |
-| E8   | agent enablement                | closed 2026-11-22 by the maintainer — a skill, rules and the MCP tools; the rest parked |
-| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                         |
-| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                            |
-| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                                   |
-| none | Kotlin, the first plugin        | after step 2                                                                            |
-| none | the next breaking release       | after 0.14.0 — LIM3, E2.14 and E6.20                                                    |
-
 | Epic   | Milestone                        | Step                                                                                    |
 | ------ | -------------------------------- | --------------------------------------------------------------------------------------- |
 | E0     | walking skeleton                 | landed — internal                                                                       |
@@ -1545,12 +1532,13 @@ reopening is an observation rather than an argument.
 | none   | Kotlin, the first plugin         | after step 2                                                                            |
 | E18    | exact numerics                   | the next two breaking releases — the design and the policy, then the type and the wire  |
 | E19    | deployment and instance identity | MVP 0 with #1179, then MVP 1 — production, then the debug socket                        |
-| E11.23 | the stream forget signal         | landed in #1298; ships in the next release, after 0.17.0                                |
+| E11.23 | the stream forget signal         | landed in #1298; shipped in 0.18.0                                                      |
+| none   | the next breaking release        | LIM3 shipped in 0.15.0; E2.14 and E7.1 are scheduled for 0.24.0; E6.20 has no release   |
 
-Rows are in step order, not numeric order, except the last, which is a release
-rather than a step — the numbering is identity, as the tracker section above
-explains. Three rows have no epic: the Rust codegen section is a section of this
-page holding three Epic 11 stories (E11.7, E11.8, E11.12), and Kotlin is a
-plugin written outside this workspace with no story identifier here, and the row
-for the next breaking release groups the last limits stage and two stories, of
-Epics 2 and 6.
+Rows are in step order, not numeric order, except the last two, which are
+releases rather than steps — the numbering is identity, as the tracker section
+above explains. Three rows have no epic: the Rust codegen section is a section
+of this page holding three Epic 11 stories (E11.7, E11.8, E11.12), and Kotlin is
+a plugin written outside this workspace with no story identifier here, and the
+row for the next breaking release groups the last limits stage and two stories,
+of Epics 2 and 6.
