@@ -667,8 +667,11 @@ fn run_describe(path: &Path) -> ExitCode {
             .skip(1)
             .find(|ancestor| !ancestor.as_os_str().is_empty() && ancestor.is_dir())
             .unwrap_or(Path::new("."));
-        if let Some(code) = release_preflight_exit(&[ancestor.to_path_buf()]) {
-            return code;
+        // Only a release refusal replaces the input's own error; a failure of
+        // the probe itself leaves that error unchanged.
+        if let Ok(Some((diagnostics, sources))) = release_preflight(&[ancestor.to_path_buf()]) {
+            errprint!("{}", render(&diagnostics, &sources));
+            return ExitCode::from(2);
         }
         errprintln!("error: {}: {err}", path.display());
         return ExitCode::from(2);
