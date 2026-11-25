@@ -16,6 +16,7 @@ import {
 import {
   bundledBinaryPath,
   isLegacyServerName,
+  isUsableBinary,
   resolveBinary,
   resolveMcpDefinition,
   shouldStartClientForLanguage,
@@ -119,17 +120,6 @@ class RidlLanguageClient extends LanguageClient {
 }
 let clients: WorkspaceClients<RidlLanguageClient> | undefined;
 let disposeActivation: (() => void) | undefined;
-
-/** A regular file that the process can run; bare execFile skips anything else on PATH. */
-function isUsableBinary(file: string): boolean {
-  try {
-    if (!fs.statSync(file).isFile()) return false;
-    if (process.platform !== "win32") fs.accessSync(file, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function isRidlDocument(document: vscode.TextDocument): boolean {
   return document.uri.scheme === "file" &&

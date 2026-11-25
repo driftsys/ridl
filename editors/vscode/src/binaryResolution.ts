@@ -8,6 +8,7 @@
 //      bundled, which is the unpackaged extension-development launch. When
 //      nothing is found either, the source is "none".
 
+import * as fs from "node:fs";
 import * as path from "node:path";
 
 export interface ResolveInput {
@@ -60,6 +61,17 @@ export function findOnPath(
     if (usable(candidate)) return candidate;
   }
   return undefined;
+}
+
+/** A regular file that the process can run; bare execFile skips anything else on PATH. */
+export function isUsableBinary(file: string): boolean {
+  try {
+    if (!fs.statSync(file).isFile()) return false;
+    if (process.platform !== "win32") fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function resolveBinary(input: ResolveInput): { command: string; source: BinarySource } {

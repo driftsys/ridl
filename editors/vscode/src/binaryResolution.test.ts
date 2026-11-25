@@ -1,4 +1,6 @@
 import { strict as assert } from "node:assert";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { test } from "node:test";
 import {
@@ -6,6 +8,7 @@ import {
   clientDocumentSelector,
   findOnPath,
   isLegacyServerName,
+  isUsableBinary,
   normalizeAbsolutePath,
   resolveBinary,
   resolveLspCommand,
@@ -202,4 +205,38 @@ test("mcp_selected_command_passes_through", () => {
 test("windows_verbatim_paths_match_editor_drive_and_unc_paths", () => {
   assert.equal(normalizeAbsolutePath("\\\\?\\C:\\work\\ridl.toml", "win32"), "C:\\work\\ridl.toml");
   assert.equal(normalizeAbsolutePath("\\\\?\\UNC\\host\\share\\ridl.toml", "win32"), "\\\\host\\share\\ridl.toml");
+});
+
+test("is_usable_binary_checks_the_real_filesystem", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "ridl-usable-"));
+  try {
+    const directory = path.join(base, "dir"), plain = path.join(base, "plain"), runnable = path.join(base, "run");
+    fs.mkdirSync(directory);
+    fs.writeFileSync(plain, "", { mode: 0o644 });
+    fs.writeFileSync(runnable, "", { mode: 0o755 });
+    assert.equal(isUsableBinary(path.join(base, "missing")), false);
+    assert.equal(isUsableBinary(directory), false);
+    assert.equal(isUsableBinary(runnable), true);
+    if (process.platform !== "win32") assert.equal(isUsableBinary(plain), false);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
+test("path_lookup_through_the_real_predicate_skips_a_directory_and_a_plain_file", () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "ridl-lookup-"));
+  try {
+    const name = process.platform === "win32" ? "ridl.exe" : "ridl";
+    const [first, second, third] = ["a", "b", "c"].map((d) => path.join(base, d));
+    for (const d of [first, second, third]) fs.mkdirSync(d);
+    fs.mkdirSync(path.join(first, name));
+    fs.writeFileSync(path.join(second, name), "", { mode: 0o644 });
+    fs.writeFileSync(path.join(third, name), "", { mode: 0o755 });
+    const pathValue = [first, second, third].join(process.platform === "win32" ? ";" : ":");
+    const found = findOnPath(pathValue, process.platform, isUsableBinary);
+    // On Windows a file without the execute bit is still usable, so the second entry wins there.
+    assert.equal(found, path.join(process.platform === "win32" ? second : third, name));
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });
