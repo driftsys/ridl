@@ -8,7 +8,14 @@ pub use paths::{process_toolchain_root, release_target, toolchain_root};
 pub use selection::*;
 pub use uninstall::uninstall;
 pub const RELEASE_BASE_URL: &str = "https://github.com/driftsys/ridl/releases/download";
-/// A placeholder that fails every download. The release workflow refuses to
-/// sign while the marker in this value is present, and the value must be
-/// replaced with the release minisign public key before the change is merged.
-pub const RELEASE_PUBLIC_KEY: &str = "RIDL-RELEASE-KEY-PLACEHOLDER: the owner replaces this with the release minisign public key before merge";
+/// The minisign public key of the release signing key. `ridl toolchain install`
+/// verifies every release archive against it.
+pub const RELEASE_PUBLIC_KEY: &str = "RWSIXzkszArAWT0wSHqsRJyxVp7NvZHNFhPmgJo49DBvXZS40DgAmSjn";
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn release_public_key_is_a_minisign_public_key() {
+        assert!(minisign_verify::PublicKey::from_base64(super::RELEASE_PUBLIC_KEY).is_ok());
+    }
+}
