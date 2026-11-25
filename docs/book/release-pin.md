@@ -132,6 +132,54 @@ returned path explicitly in terminal workflows.
 
 ## Editors and agent tools
 
+The VS Code extension selects a release for each discovered RIDL root. It runs
+`ridl toolchain which --json <document directory>` through its bundled binary,
+or through `ridl` on PATH in a development launch without a bundled binary. It
+starts the validated result directly as `ridl lsp`, without a proxy. Compatible
+and unpinned results use the selected path. Invalid pins use the resolver binary
+so that its server reports the manifest diagnostic.
+
+When a valid pin is missing, `ridl.toolchain.autoInstall` controls installation.
+This boolean defaults to `true` and has application scope: workspace settings
+cannot change it. Automatic installation runs `ridl toolchain install <pin>`
+under a progress notification, then queries selection again. Concurrent roots
+requiring the same release share the installation. With automatic installation
+disabled, the resolver server starts immediately and a notification offers an
+**Install** button. Accepting it installs and selects that release.
+
+An installation failure keeps the resolver server, which reports MANI-026 when
+its release is incompatible. The extension reports the installation error once
+per release during the activation; a later open can retry. An unsupported JSON
+schema, malformed response, unsupported toolchain command or failed discovery
+also keeps the resolver binary and logs a warning. Discovery notifications are
+shown once during the activation. A successful installation with no usable
+selection is treated as a failure, without an installation loop.
+
+`ridl.serverPath` is an explicit developer override, read for the applicable VS
+Code folder. It bypasses discovery and installation and uses that folder as the
+server boundary. Its server still enforces pins. Otherwise, the root manifest
+returned by discovery defines the boundary, including two RIDL roots inside one
+VS Code folder and documents inside workspace members. Manifestless documents
+share a separate client. Temporary folder boundaries used after a failed probe
+are replaced when valid discovery succeeds. Routing prevents a parent or
+manifestless client from handling a nested root's document traffic, diagnostics
+or edits.
+
+Opening a RIDL source or `ridl.toml` starts its client. The manifest is selected
+by filename in any language mode, so the pin action works before a source is
+opened and without a separate TOML extension. Other TOML files do not start
+clients. Saved manifest create/change/delete events are forwarded to the servers
+and run discovery again; a client is replaced only when its binary changes.
+Unsaved manifest changes reload the current server without selecting a release
+from unsaved text. Removing a VS Code folder stops clients no longer used by
+another mapping, and deactivation stops every client.
+
+The extension declares no support for untrusted workspaces. VS Code therefore
+keeps it inactive in Restricted Mode: no server or installer runs. Granting
+Workspace Trust enables normal activation. The MCP definition uses the release
+selected for the first VS Code workspace folder, independently of document-open
+order. There is one MCP definition per window; a selection change updates it.
+
 The language server publishes MANI-024, MANI-025 or MANI-026 on the root
 `ridl.toml` value. It stays running and clears earlier source diagnostics, quick
 fixes and navigation results. Source analysis, completion, formatting and rename

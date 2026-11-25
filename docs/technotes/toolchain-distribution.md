@@ -121,28 +121,21 @@ extraction, cleanup, damaged directories and concurrent installers without a
 network listener. The install scripts below produce the shared layout for
 pinnable `ridl` releases.
 
-## The extension resolves one binary, spawns it in two roles
+## Editor toolchain selection
 
-`editors/vscode/src/binaryResolution.ts` is pure — it does not import `vscode` —
-so it is unit-tested directly. It picks the binary in three tiers, first match
-wins:
+`editors/vscode/src/binaryResolution.ts` resolves the bootstrap binary from
+`ridl.serverPath`, the bundled `bin/ridl` (`bin/ridl.exe` on Windows), or PATH.
+The pure `toolchainSelection.ts` validates the CLI selection report and manages
+installation through that bootstrap binary. `workspaceClients.ts` associates
+document directories with discovered roots and owns their client lifecycles.
+`extension.ts` connects these modules to VS Code document events, manifest
+watching, notifications and the MCP registry.
 
-1. the `ridl.serverPath` setting, a developer override;
-2. the binary bundled in the extension at `bin/ridl` (`bin/ridl.exe` on
-   Windows);
-3. `ridl` resolved from `PATH`.
-
-Tier 3 is reached only when nothing is bundled, which in practice means an
-unpackaged extension-development launch: every VSIX the release train produces
-carries a binary. The module also recognises a `ridl.serverPath` still naming
-`ridl-lsp`, the separate binary that no longer exists, and the extension shows a
-warning that names the change. It still spawns the configured path, so the
-warning explains the spawn failure that follows rather than preventing it.
-
-The same resolved command backs both roles: `ridl lsp` for the language client
-and `ridl mcp` for the MCP server definition the extension registers. The
-language client appends `--stdio`, so the server runs as `ridl lsp --stdio`
-(ADR-0010).
+The [release pin chapter](../book/release-pin.md#editors-and-agent-tools) owns
+the editor's selection, installation policy, routing, override and trust
+behavior, including the first-folder MCP limitation. Language clients run the
+selected binary as `ridl lsp --stdio`; the MCP definition runs its selection as
+`ridl mcp` (ADR-0010).
 
 ## "Install ridl to PATH"
 

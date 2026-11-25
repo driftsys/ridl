@@ -112,6 +112,12 @@
           ],
           "default": "off",
           "description": "Trace the JSON-RPC communication between VS Code and the ridl language server."
+        },
+        "ridl.toolchain.autoInstall": {
+          "type": "boolean",
+          "default": true,
+          "scope": "application",
+          "description": "Automatically install a missing workspace RIDL release."
         }
       }
     }
@@ -120,7 +126,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js out/clientLifecycle.test.js out/runOnce.test.js"
+    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js out/clientLifecycle.test.js out/runOnce.test.js out/toolchainSelection.test.js out/workspaceClients.test.js out/extension.test.js"
   },
   "dependencies": {
     "vscode-languageclient": "10.1.0"
@@ -130,5 +136,8 @@
     "@types/vscode": "1.109.0",
     "@vscode/vsce": "3.9.2",
     "typescript": "5.9.2"
-  }
+  },
+  "activationEvents": [
+    "workspaceContains:**/ridl.toml"
+  ]
 }
