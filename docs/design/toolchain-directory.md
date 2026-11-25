@@ -151,9 +151,11 @@ return exit 2.
 1. Validate release and target, create `versions/` and canonicalize it.
 2. Open `.<version>.lock` and acquire its OS file lock; waiting for another
    installer or an uninstall is part of this step. Then inspect the destination.
-   Reuse a complete entry without downloading, so a reported path is never one
-   that a concurrent uninstall removes afterwards; refuse an existing damaged
-   entry without modifying it.
+   Reuse a complete entry without downloading; the lock guarantees only that the
+   destination is not inspected or reused while an uninstall holds it. An
+   uninstall that runs after install releases the lock can still remove the
+   entry before the caller uses the path. Refuse an existing damaged entry
+   without modifying it.
 3. While holding that version's lock, remove only directories named
    `.tmp-<version>-<digits>`, with a nonempty ASCII decimal suffix. Preserve
    other versions, script stages, similarly prefixed names and non-directories.
