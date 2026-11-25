@@ -224,26 +224,24 @@ pub fn load_diff_side(
     }
     if entry.is_dir() {
         let direct_source = is_source_dir(entry);
-        let snapshots = if direct_source {
-            source_release_preflight(entry, overlays)?;
-            snapshot_files(entry)?
-        } else {
-            let snapshots = snapshot_files(entry)?;
-            let context_path = entry.join(crate::baseline_context::CONTEXT_FILE);
-            if snapshots.is_empty()
-                && !ridl_core::fs_probe::exists(&context_path).map_err(|error| {
+        let snapshots = snapshot_files(entry)?;
+        if snapshots.is_empty() {
+            if direct_source {
+                source_release_preflight(entry, overlays)?;
+            } else {
+                let context_path = entry.join(crate::baseline_context::CONTEXT_FILE);
+                if !ridl_core::fs_probe::exists(&context_path).map_err(|error| {
                     DiffSideError::SourceIo {
                         path: context_path,
                         error,
                     }
-                })?
-                && first_non_json_ir_in(entry).is_none()
-                && first_nested_snapshot_dir(entry)?.is_none()
-            {
-                source_release_preflight(entry, overlays)?;
+                })? && first_non_json_ir_in(entry).is_none()
+                    && first_nested_snapshot_dir(entry)?.is_none()
+                {
+                    source_release_preflight(entry, overlays)?;
+                }
             }
-            snapshots
-        };
+        }
         crate::baseline_context::refuse_interrupted_publication(entry)
             .map_err(DiffSideError::InterruptedPublication)?;
         if !snapshots.is_empty() {
@@ -257,7 +255,7 @@ pub fn load_diff_side(
                 remote_context,
             });
         }
-        if !is_source_dir(entry) {
+        if !direct_source {
             if let Some(context) = read_context(entry, &[]).map_err(DiffSideError::Context)? {
                 let remote_context = context.remote_context();
                 return Ok(DiffSide {

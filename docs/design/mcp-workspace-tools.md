@@ -144,12 +144,14 @@ The behaviour that is not in the README:
 2. One overlay may substitute the root `ridl.toml` text. Root discovery still
    uses the disk. The root release pin is checked before source overlays or
    other workspace validation; a refusal returns an empty workspace and the root
-   diagnostic only. Other manifest overlays remain unsupported. A source overlay
-   path must end in `.typl`, `.ridl`, `.rsdl`, `.rxdl` or `.rmdl`. A `.rxdl` or
-   `.rmdl` overlay in a package directory is accepted, reported with the warning
-   RIDL-417 (`unsupported-source-file`) on its path, and not compiled, as the
-   same file on disk is. Its text is interned for the span of that warning and
-   is not parsed; rules 4 to 6 apply to it as to any other overlay.
+   diagnostic only. Other manifest overlays remain unsupported.
+
+   A source path must end in `.typl`, `.ridl`, `.rsdl`, `.rxdl` or `.rmdl`. A
+   `.rxdl` or `.rmdl` overlay in a package directory is accepted, reported with
+   the warning RIDL-417 (`unsupported-source-file`) on its path, and not
+   compiled, as the same file on disk is. Its text is interned for the span of
+   that warning and is not parsed; rules 4 to 6 apply to it as to any other
+   overlay.
 3. A source file whose key matches an overlay is read from the overlay text,
    which is what is parsed, checked and interned for spans.
 4. A package directory listing adds every overlay whose parent is that directory
@@ -233,18 +235,18 @@ to change. The cases: a `path` that does not exist; a directory with no
 `ridl.toml` at or above it (the message says a workspace root holds one);
 `ridl_check` given both modes, neither, a source without a profile, a path with
 a profile, or a source with overlays (the message gives the two accepted input
-forms); an overlay outside the workspace or neither a source file nor the root
-manifest; a name with no match (the message lists up to 10 declared canonical
-names that contain it, ignoring case, sorted, and ends after the name when there
-are none); a bare name with several matches (every canonical name, and that
-`pkg.Name` or `from` selects one); `ridl_describe_type` given an interface or
-service; `ridl_list_interactions` given a list-form service (the message lists
-its interfaces to query separately), or a declaration that is neither an
-interface nor a service (the message points to `ridl_describe_type`);
-inline-shape services are accepted; a `from` or `ridl_dependencies` `package`
-that names no workspace package (the message lists the packages); a declaration
-with no kind (the message advises `ridl_check`); an unknown code or category
-(the five namespaces, and that diff category words are accepted); a `ridl_diff`
+forms); an overlay outside the workspace or an unsupported path; a name with no
+match (the message lists up to 10 declared canonical names that contain it,
+ignoring case, sorted, and ends after the name when there are none); a bare name
+with several matches (every canonical name, and that `pkg.Name` or `from`
+selects one); `ridl_describe_type` given an interface or service;
+`ridl_list_interactions` given a list-form service (the message lists its
+interfaces to query separately), or a declaration that is neither an interface
+nor a service (the message points to `ridl_describe_type`); inline-shape
+services are accepted; a `from` or `ridl_dependencies` `package` that names no
+workspace package (the message lists the packages); a declaration with no kind
+(the message advises `ridl_check`); an unknown code or category (the five
+namespaces, and that diff category words are accepted); a `ridl_diff`
 `encodings` name outside the three (the message lists them); a `ridl_diff` side
 that cannot be loaded (the `DiffSideError` message, the text the CLI prints) —
 among them a snapshot directory whose publication by `ridl baseline` was

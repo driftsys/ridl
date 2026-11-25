@@ -399,11 +399,11 @@ them.
 
 ## Conventions
 
-The `ridl-core` loaders take the running release explicitly. A root release
-refusal (MANI-024 through MANI-026) returns an empty workspace and only the root
-diagnostic before source overlays, members, lockfiles or remotes. The root
-manifest overlay is read before this check. `docs/book/release-pin.md` documents
-the compatibility rule and command coverage.
+- The `ridl-core` loaders take the running release explicitly. A root release
+  refusal (MANI-024 through MANI-026) returns an empty workspace and only the
+  root diagnostic before source overlays, members, lockfiles or remotes. The
+  root manifest overlay is read before this check. `docs/book/release-pin.md`
+  documents the compatibility rule and command coverage.
 
 - **Conventional Commits**, linted by git-std against `.git-std.toml` — types
   and scopes are enumerated there. Never push directly to `main`; use a PR.

@@ -50,7 +50,6 @@ handling is tracked in the same issue.
 Releases before 0.23.0 cannot enforce pins: they read the key as unknown
 (MANI-005) and may continue. Pin support begins with 0.23.0.
 
-Both binaries normalize `RIDL_BUILD_VERSION` at build time: trim surrounding
-whitespace and remove one leading `editor-v` or `v`. Blank input uses the crate
-version. Their version output therefore uses `0.23.0` for either tag form. If a
-build stamp is not a plain release, pin checks use the crate version.
+The
+[toolchain distribution record](../technotes/toolchain-distribution.md#how-the-binary-learns-its-version)
+defines build-version normalization and the release used by pin checks.

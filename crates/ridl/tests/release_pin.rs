@@ -400,3 +400,42 @@ fn release_diff_checks_a_refusing_new_side_after_a_valid_old_side() {
     );
     assert_eq!(tree(refusing.path()), before);
 }
+
+#[test]
+fn release_diff_snapshot_directory_with_stray_source_ignores_parent_pin() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("original.typl"),
+        "package p\ntype A: integer [0..1]\n",
+    )
+    .unwrap();
+    let built = run(
+        dir.path(),
+        &[
+            "build",
+            "original.typl",
+            "--emit",
+            "ir-json",
+            "--out-dir",
+            "snapshots",
+        ],
+        "0.23.2",
+    );
+    assert!(built.status.success(), "{built:?}");
+    fs::rename(
+        dir.path().join("original.typl"),
+        dir.path().join("snapshots/original.typl"),
+    )
+    .unwrap();
+    fs::write(
+        dir.path().join("ridl.toml"),
+        "[workspace]\nmembers = []\nridl-version = \"0.24.0\"\n",
+    )
+    .unwrap();
+    let before = tree(dir.path());
+    let output = run(dir.path(), &["diff", "snapshots", "snapshots"], "0.23.2");
+    assert_eq!(output.status.code(), Some(0), "{output:?}");
+    assert_eq!(output.stdout, b"identical\n");
+    assert!(output.stderr.is_empty(), "{output:?}");
+    assert_eq!(tree(dir.path()), before);
+}

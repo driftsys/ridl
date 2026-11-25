@@ -583,13 +583,11 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    written. The workspace version is now set once, in `[workspace.package]` of
    the root `Cargo.toml`, and `just release` bumps it
    ([ADR-0007](ADR-0007-e1-execution.md) decision 14, amendment of 2026-09-21).
-   Both `ridl --version` and `ridlc --version` print `RIDL_BUILD_VERSION`,
-   normalized by their build scripts: trim whitespace, remove one leading
-   `editor-v` or `v`, and use the crate version when input is blank. LSP and MCP
-   server version metadata from `ridl` uses that same display string. Pin checks
-   fall back to the crate version when the stamp cannot be parsed as a plain
-   release. The build-metadata suffix above is still not implemented, so the
-   version still does not name a commit.
+   Both binaries and `ridl`'s server metadata use the version defined by the
+   [toolchain distribution record](../technotes/toolchain-distribution.md#how-the-binary-learns-its-version),
+   which owns build-version normalization and the release used by pin checks.
+   The build-metadata suffix above is still not implemented, so the version
+   still does not name a commit.
 
    _Amended (2026-11-25, driftsys/ridl#1476)._ The root `ridl-version` pin is
    checked before other workspace validation. MANI-024 through MANI-026 are

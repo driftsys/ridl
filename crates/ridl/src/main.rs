@@ -5,7 +5,7 @@
 //! `ridl fmt` formats `.typl`, `.ridl` and `.rsdl` files, resolving the width
 //! from `.editorconfig` per file. The exit
 //! code is 0 clean, 1 on a diagnostic error (or, for `fmt --check`, a file that
-//! would change), and 2 on an input/output or usage error.
+//! would change), and 2 on a release refusal, input/output or usage error.
 //!
 //! `ridl diff` compares two IR snapshots or source trees through the
 //! `ridl-diff` engine. It carries its own exit contract — 0 compatible
@@ -167,7 +167,8 @@ enum Command {
     },
     /// Run the property suite over a workspace: the range self-corpora and the
     /// contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on
-    /// a self-corpus failure or an evaluation error, 2 on a compile error.
+    /// a self-corpus failure or an evaluation error, 2 on a release refusal or
+    /// a compile error.
     Test {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -218,9 +219,9 @@ enum Command {
     /// unit's `interfaces.lock`, and to every instance of the system that has
     /// none and write the root `instances.lock`; with `--rename` or
     /// `--retire`, rewrite entries in place instead. Exit 0 when the files
-    /// are written or nothing changes, 1 on a diagnostic error, 2 on a bad
-    /// flag or a path or I/O failure. `ridl lock merge` is the git merge
-    /// driver for both files.
+    /// are written or nothing changes, 1 on a diagnostic error, 2 on a release
+    /// refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the
+    /// git merge driver for both files.
     #[command(args_conflicts_with_subcommands = true)]
     Lock {
         /// A unit directory, a workspace root, or a file. A directory
@@ -534,6 +535,12 @@ fn release_preflight_exit(entries: &[PathBuf]) -> Option<ExitCode> {
 /// cause named (ADR-0010 decision 1;
 /// `docs/archive/2026-09-13-runtime-descriptors-design.md`, D-8).
 fn run_describe(path: &Path) -> ExitCode {
+    // Preserve describe's input-path I/O message before the shared root reader
+    // can wrap a metadata error. Descriptor bytes are still read after preflight.
+    if let Err(err) = std::fs::metadata(path) {
+        errprintln!("error: {}: {err}", path.display());
+        return ExitCode::from(2);
+    }
     if let Some(code) = release_preflight_exit(&[path.to_path_buf()]) {
         return code;
     }
@@ -3285,9 +3292,10 @@ fn dotted_text(node: &ridl_syntax::SyntaxNode) -> Option<String> {
 }
 
 /// The exit-code rule every `check`/`build` run turns its outcome into: 2 on a
-/// bad flag value (ADR-0010 decision 1), 1 when any diagnostic is an error, 0
-/// otherwise. Shared by [`finish`] and [`finish_check`]'s JSON arm so the rule
-/// is stated once. `check` never reports a bad flag value this way.
+/// release refusal or bad flag value (ADR-0010 decision 1), 1 when an ordinary
+/// diagnostic is an error, 0 otherwise. Shared by [`finish`] and
+/// [`finish_check`]'s JSON arm so the rule is stated once. `check` never reports
+/// a bad flag value this way.
 fn exit_code(run: &CliRun) -> ExitCode {
     if run.diagnostics.iter().any(ridl_core::is_release_refusal) || run.usage_error {
         ExitCode::from(2)

@@ -44,8 +44,9 @@ ridl X.Y.Z
 
 `X.Y.Z` stands for the build's version: the crate version for a local build, or
 the normalized release stamp when the release workflow sets `RIDL_BUILD_VERSION`
-(one leading `editor-v` or `v` is removed after trimming whitespace). The
-version does not name a commit, so it cannot answer "which commit is this" —
+(see the
+[build-version normalization rule](../technotes/toolchain-distribution.md#how-the-binary-learns-its-version)).
+The version does not name a commit, so it cannot answer "which commit is this" —
 recorded as a known gap in [ADR-0010][adr-0010] decision 8, which also records a
 deferred fix.
 
@@ -64,10 +65,10 @@ Commands:
   check     Type-check a file, package, or workspace (defaults to the current directory)
   baseline  Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package and one `<unit>.catalogs` file per unit with an interface, written to `.ridl/baseline/` at the workspace root. A replacement that would lose the record of an interaction's ordinal (RIDL-408) is refused and leaves the published snapshots as they were
   build     Compile to the selected artifacts (defaults to the current directory)
-  test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
+  test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal or a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
-  lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
+  lock      Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
   lsp       Run the language server over stdio: exit 0 after `shutdown` then `exit`, 1 when the client ends the session without `shutdown`, 2 on a transport error. Editors spawn this. Stdio is the only transport
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   init      Scaffold a new unit in a directory that exists (defaults to the current directory): a package, or with `--workspace` a workspace and one member. Writes `ridl.toml` and one source file, and exits 2 without writing anything when a target file exists, the name is not a legal package name or holds a reserved word, or a `ridl.toml` above or below the directory would make a manifest inside a unit (MANI-013)
@@ -195,9 +196,11 @@ or `MANI-104` (the pin is neither in `vendor/` nor in the cache). A `ridl.lock`
 written before the `tree` hash existed gives them `MANI-108` too, and the same
 `ridl check` adds the hash.
 
+A [release refusal](release-pin.md) exits 2 without writing files.
+
 **Exit codes.** 0 when nothing is wrong — a clean run prints nothing at all, to
-either stream. 1 when a diagnostic is an error, for example a range whose
-minimum exceeds its maximum:
+either stream. 1 when an ordinary diagnostic is an error, for example a range
+whose minimum exceeds its maximum:
 
 ```sh
 ridl check
@@ -719,10 +722,12 @@ publication because it is the directory being written. RIDL-411 still refuses a
 first publication that holds a provisional interface number, because RIDL-411
 reads the fresh snapshot alone.
 
-**Exit codes.** 0 on a clean publish. 1 when a diagnostic is an error, or when
-the publication gate above refuses the replacement — in both cases the existing
-baseline is left exactly as it was, because a re-publish must never destroy a
-good baseline with a broken one:
+A [release refusal](release-pin.md) exits 2 without writing files.
+
+**Exit codes.** 0 on a clean publish. 1 when an ordinary diagnostic is an error,
+or when the publication gate above refuses the replacement — in both cases the
+existing baseline is left exactly as it was, because a re-publish must never
+destroy a good baseline with a broken one:
 
 ```sh
 ridl baseline
@@ -1403,11 +1408,13 @@ out/speed.ir.json
 out/speed.rs
 ```
 
+A [release refusal](release-pin.md) exits 2 without writing files.
+
 **Exit codes.** 0 when the build compiles clean and every requested artifact is
-written. 1 when a diagnostic is an error — nothing is written for a package that
-fails to compile. An RSDL-7xx error is the one exception: it blocks only its own
-deployment (rsdl reference §13), so the build writes every artifact, leaves that
-deployment out of the lowered system, and still exits 1:
+written. 1 when an ordinary diagnostic is an error — nothing is written for a
+package that fails to compile. An RSDL-7xx error is the one exception: it blocks
+only its own deployment (rsdl reference §13), so the build writes every
+artifact, leaves that deployment out of the lowered system, and still exits 1:
 
 ```sh
 ridl build --out-dir out
@@ -1438,7 +1445,7 @@ ridl test --help
 ```
 
 ```text
-Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
+Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a release refusal or a compile error
 
 Usage: ridl test [OPTIONS] [PATH]
 
@@ -2235,7 +2242,7 @@ ridl lock --help
 ```
 
 ```text
-Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
+Allocate a number to every interface that has none and write each unit's `interfaces.lock`, and to every instance of the system that has none and write the root `instances.lock`; with `--rename` or `--retire`, rewrite entries in place instead. Exit 0 when the files are written or nothing changes, 1 on a diagnostic error, 2 on a release refusal, a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for both files
 
 Usage: ridl lock [OPTIONS] [PATH]
        ridl lock <COMMAND>
@@ -2957,9 +2964,9 @@ no error — because `ridl check` calls this very function (`ridlc::run_check`)
 directly, forwarding its own `PATH` and `--frozen`. Otherwise it reads the
 workspace, renders diagnostics to stderr, and touches no file.
 
-**Exit codes.** 0 clean, 1 a diagnostic is an error, 2 an input/output or usage
-error — identical in shape to `ridl check`, and, on the same input, identical in
-rendered text:
+**Exit codes.** 0 clean, 1 an ordinary diagnostic is an error, 2 a release
+refusal, input/output or usage error — identical in shape to `ridl check`, and,
+on the same input, identical in rendered text:
 
 ```sh
 ridlc check .

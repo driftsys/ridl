@@ -5,9 +5,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct OverlayInput {
-    /// The .typl, .ridl, .rsdl, .rxdl or .rmdl file path whose parent directory exists, relative to the server's working directory unless absolute. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.
+    /// The source file path or root ridl.toml path whose parent directory exists, relative to the server's working directory unless absolute. Source paths must end in .typl, .ridl, .rsdl, .rxdl or .rmdl. Other manifest overlays are unsupported. A .rxdl or .rmdl overlay in a package directory draws the warning RIDL-417 and is not compiled.
     pub path: String,
-    /// The full unsaved text of the source file.
+    /// The full unsaved text of the source file or root manifest.
     pub source: String,
 }
 

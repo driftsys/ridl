@@ -426,6 +426,28 @@ fn describe_reports_a_missing_path_with_exit_2() {
     assert_eq!(stderr, format!("error: {missing}: {cause}\n"));
 }
 
+#[cfg(unix)]
+#[test]
+fn describe_reports_an_unreadable_path_with_exit_2() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = TempDir::new("unreadable");
+    let private = dir.path().join("private");
+    std::fs::create_dir(&private).unwrap();
+    let file = private.join("x.catalog.binfb");
+    std::fs::write(&file, b"unreadable").unwrap();
+    std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let cause = std::fs::read(&file);
+    let output = ridl(&["describe".as_ref(), file.as_os_str()]);
+    std::fs::set_permissions(&private, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let cause = cause.expect_err("the descriptor directory is unreadable");
+    assert_eq!(cause.kind(), std::io::ErrorKind::PermissionDenied);
+    let (code, stdout, stderr) = output;
+    assert_eq!(code, 2);
+    assert!(stdout.is_empty());
+    assert_eq!(stderr, format!("error: {}: {cause}\n", file.display()));
+}
+
 /// Runs `ridl describe` on `path` and asserts that it is rejected as the
 /// tool being unable to answer: exit 2, nothing on stdout, and a stderr
 /// message that names `path` and contains `cause`.
