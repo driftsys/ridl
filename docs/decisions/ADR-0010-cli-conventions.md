@@ -66,7 +66,7 @@ the entry first. The probes that decide whether a path exists use
 treating the path as absent.
 
 Amended 2026-11-25 by [ADR-0036](ADR-0036-workspace-toolchain-pins.md): decision
-1 gains the three `ridl toolchain` rows and the root release refusal clause.
+1 gains the four `ridl toolchain` rows and the root release refusal clause.
 Their dated construction and tests are recorded under that decision.
 
 Amended 2026-11-25 by [ADR-0036](ADR-0036-workspace-toolchain-pins.md) decision

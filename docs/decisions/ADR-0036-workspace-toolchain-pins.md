@@ -81,8 +81,9 @@ the source of side-by-side installations without another manifest or proxy.
    existing damaged directory. `ridl toolchain uninstall <version>` removes one
    version directory, complete or damaged, and is the explicit repair path for a
    damaged one. The toolchain root has to be an absolute path: a relative
-   `RIDL_TOOLCHAIN_DIR` is an error in the CLI and in the scripts. Releases live
-   under `<root>/versions/<version>/`; scripts use the separate
+   `RIDL_TOOLCHAIN_DIR` is an error in the CLI, and in the scripts when they
+   install a versioned `ridl` release (0.23.0 or later). Releases live under
+   `<root>/versions/<version>/`; scripts use the separate
    [`.tmp-script-<version>-<pid>` stage](../design/toolchain-directory.md#install-scripts-and-the-path-copy)
    and do not take the CLI lock.
 7. **The extension selects and directly starts one server per RIDL root.** The
