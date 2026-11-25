@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.23.0] (2026-11-25)
+
+### Refactoring
+
+- **ridl-diff:** carry the old ordinal and tombstone flag on Change ([#1473])
+  ([7e6e96b]), closes [#542], refs [#797], [#1341]
+
+### Documentation
+
+- **ridl:** share the context hint and state the legacy snapshot rule once
+  ([#1474]) ([f618443]), refs [#342], closes [#1341], refs [#342]
+
+### Features
+
+- hand off refused commands to the pinned release and sign release archives
+  ([#1481]) ([cfa96eb]), refs [#1477], [#1477], [#1477], [#1477]
+- pin the ridl release per workspace and install it with ridl toolchain
+  ([#1479]) ([376e80c]), refs [#1476], [#1476], [#1476], [#1476], [#1476],
+  [#1476], [#1476], [#1476], [#1476], [#1476], [#1476], [#1476], [#1476],
+  [#1476], [#1476], [#1476], [#1476], [#1476]
+
+### BREAKING CHANGES
+
+- A workspace whose root `ridl.toml` pins an incompatible release with
+  `ridl-version` now fails every command with exit 2. A workspace without the
+  key is unchanged ([#1479]).
+- `ridl --version`, `ridlc --version` and the LSP and MCP
+  `serverInfo.version` now print the plain release (`0.23.0`), without the
+  `editor-v` prefix ([#1479]).
+- `ridl-core`: the `load_workspace*` functions take the running release as a
+  new parameter ([#1479]).
+
+[0.23.0]: https://github.com/driftsys/ridl/compare/v0.22.0...v0.23.0
+[7e6e96b]: https://github.com/driftsys/ridl/commit/7e6e96b
+[#1473]: https://github.com/driftsys/ridl/issues/1473
+[#542]: https://github.com/driftsys/ridl/issues/542
+[#797]: https://github.com/driftsys/ridl/issues/797
+[#1341]: https://github.com/driftsys/ridl/issues/1341
+[f618443]: https://github.com/driftsys/ridl/commit/f618443
+[#1474]: https://github.com/driftsys/ridl/issues/1474
+[#342]: https://github.com/driftsys/ridl/issues/342
+[cfa96eb]: https://github.com/driftsys/ridl/commit/cfa96eb
+[#1481]: https://github.com/driftsys/ridl/issues/1481
+[#1477]: https://github.com/driftsys/ridl/issues/1477
+[376e80c]: https://github.com/driftsys/ridl/commit/376e80c
+[#1479]: https://github.com/driftsys/ridl/issues/1479
+[#1476]: https://github.com/driftsys/ridl/issues/1476
+
 ## [0.22.0] (2026-11-22)
 
 ### Bug Fixes
