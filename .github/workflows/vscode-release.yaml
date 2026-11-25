@@ -283,7 +283,8 @@ jobs:
           # The embedded public key has to decode to a minisign public key: 42
           # bytes, the algorithm `Ed`, an 8-byte key id and the 32-byte key.
           public_key="$(sed -n 's/^pub const RELEASE_PUBLIC_KEY: &str = "\(.*\)";$/\1/p' crates/ridl/src/toolchain/mod.rs)"
-          if [ "$(printf '%s' "$public_key" | base64 -d 2>/dev/null | wc -c | tr -d ' ')" != 42 ] || [ "${public_key:0:2}" != RW ]; then
+          decoded="$(printf '%s' "$public_key" | base64 -d 2>/dev/null | od -An -tx1 | tr -d ' \n' || true)"
+          if [ "${#decoded}" != 84 ] || [ "${decoded:0:4}" != 4564 ]; then
             echo "error: the RELEASE_PUBLIC_KEY in crates/ridl/src/toolchain/mod.rs is not a minisign public key; a release signed now could not be verified" >&2
             exit 1
           fi

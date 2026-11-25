@@ -220,6 +220,10 @@ fn signing_step_fails_when_the_public_key_is_not_a_minisign_key() {
         "RWQexamplekey",
         // 42 bytes, but not the `Ed` algorithm.
         "AAAf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
+        // 42 bytes that start with `RW`, but the algorithm bytes are `Ea`.
+        "RWEf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3",
+        // More than 42 bytes, the algorithm `Ed` and the prefix `RW`.
+        "RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3AAAA",
     ] {
         let mod_rs = format!("pub const RELEASE_PUBLIC_KEY: &str = \"{value}\";\n");
         let run = run(&Setup {
